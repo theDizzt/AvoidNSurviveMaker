@@ -9,6 +9,7 @@ import { FONT_TASKS, runPreload, type PreloadTask } from './preload';
 import { LiquidBackground } from './liquid';
 import { Account } from './auth/account';
 import { AuthUI, showToast } from './auth/auth-ui';
+import { PlayTimeTracker } from './auth/playtime';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -191,6 +192,9 @@ play.onExit = () => (testing ? showEditor() : show('menu'));
 // ───────────────────────── Accounts ─────────────────────────
 
 const account = new Account();
+const playTime = new PlayTimeTracker(account);
+play.onRunEnd = (ms) => playTime.add(ms);
+account.beforeSignOut = () => playTime.flush();
 new AuthUI(account, (screen) => show(screen));
 for (const s of [screens.auth, screens.verify]) {
   s.addEventListener('keydown', (e) => {

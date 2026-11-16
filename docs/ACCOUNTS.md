@@ -16,6 +16,7 @@ Without this setup the game still runs; the account screen just says accounts ar
 | Email verified at | `auth.users.email_confirmed_at` | set when the link is clicked |
 | Nickname | `profiles.nickname` | 1–32 bytes UTF-8 (e.g. 10 Korean characters), no `#` |
 | Tag | `profiles.discriminator` | 1–9999, shown as 4 digits (`0042`) |
+| Total play time | `profiles.total_play_ms` (ms) and `profiles.play_time` (`hh:mm:ss`) | sum of all runs (START → clear / fail) |
 
 Tag rules (enforced in the database, not just the UI):
 
@@ -26,8 +27,10 @@ Tag rules (enforced in the database, not just the UI):
 
 ## 1. Run the database migration
 
-Supabase Dashboard → **SQL Editor** → paste and run
-[`supabase/migrations/20261117000000_profiles.sql`](../supabase/migrations/20261117000000_profiles.sql).
+Supabase Dashboard → **SQL Editor** → paste and run each file, in this order:
+
+1. [`supabase/migrations/20261117000000_profiles.sql`](../supabase/migrations/20261117000000_profiles.sql) — profiles, nickname tags
+2. [`supabase/migrations/20261117010000_play_time.sql`](../supabase/migrations/20261117010000_play_time.sql) — total play time
 
 (With the Supabase CLI linked to the project, `supabase db push` does the same.)
 
@@ -43,6 +46,16 @@ Supabase Dashboard → **Authentication**:
     The verification email sends players back to the page they signed up from.
 - **Emails → SMTP**: the built-in mailer is rate-limited to a handful of emails per hour and is
   meant for testing. Set up a custom SMTP provider before real players sign up.
+
+### Email deliverability (staying out of spam)
+
+- **Template**: Authentication → Emails → Templates → *Confirm signup*. Subject
+  `Confirm your Avoid N Survive account`, body from
+  [`supabase/templates/confirm-signup.html`](../supabase/templates/confirm-signup.html).
+- **Sender name**: use the game name (`Avoid N Survive`) so it matches the email content.
+- **Sender**: a personal Gmail account works for testing but is often filtered as spam.
+  For real players use a transactional email service (Resend, Brevo, Amazon SES, …) with
+  **your own domain** and its SPF, DKIM and DMARC DNS records set up as the provider describes.
 
 ## 3. CAPTCHA (Cloudflare Turnstile)
 
@@ -73,6 +86,16 @@ The publishable (anon) key is meant to be public; row level security protects th
 **Never** put the `service_role` / secret key in the game.
 
 Restart `run-dev.bat` (or `npm run dev`) after changing `.env.local`.
+
+## Play time
+
+Every run (START click → clear, fail, leaving the play screen or pressing R) adds its length to the
+signed-in player's total. The game batches runs and calls `add_play_time(ms)` when 15 s have piled
+up, every 30 s, and when the page is hidden; unsent time is kept in the browser and sent on the next
+visit. The menu shows the total under the player's tag.
+
+Reports come from the browser, so the database caps them: a report can't add more than the real
+time elapsed since the previous one (+5 s), nor more than 1 hour at once.
 
 ## Flow
 

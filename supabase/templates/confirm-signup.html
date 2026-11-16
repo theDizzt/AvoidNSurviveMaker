@@ -1,0 +1,46 @@
+<!--
+  Supabase → Authentication → Emails → Templates → "Confirm signup"
+  Subject: Confirm your Avoid N Survive account
+  Paste everything below into the message body.
+
+  Kept deliverability-friendly on purpose: plain layout, real sentences, one link,
+  a visible fallback URL, no images, no tracking, an explanation of why the email was sent.
+-->
+<div style="margin:0;padding:24px 12px;background:#eef5fc;font-family:Arial,Helvetica,sans-serif;color:#243450;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;border:1px solid #d7e3f2;">
+    <tr>
+      <td style="padding:32px 28px 8px;">
+        <p style="margin:0 0 4px;font-size:13px;color:#687a95;">Avoid N Survive</p>
+        <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:#243450;">Confirm your email address</h1>
+        <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
+          Hi {{ .Data.nickname }},
+        </p>
+        <p style="margin:0 0 24px;font-size:15px;line-height:1.6;">
+          Thanks for creating an Avoid N Survive account with {{ .Email }}.
+          Please confirm this address to finish signing up.
+        </p>
+        <p style="margin:0 0 24px;text-align:center;">
+          <a href="{{ .ConfirmationURL }}"
+             style="display:inline-block;padding:12px 28px;border-radius:999px;background:#3a9ff0;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;">
+            Confirm my email
+          </a>
+        </p>
+        <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#687a95;">
+          If the button doesn't work, copy this link into your browser:
+        </p>
+        <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;color:#3a9ff0;">
+          {{ .ConfirmationURL }}
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:16px 28px 28px;border-top:1px solid #e6eef8;">
+        <p style="margin:0;font-size:12px;line-height:1.6;color:#8796ab;">
+          You received this email because someone signed up for Avoid N Survive
+          ({{ .SiteURL }}) with this address. If that wasn't you, you can ignore it —
+          no account will be activated.
+        </p>
+      </td>
+    </tr>
+  </table>
+</div>

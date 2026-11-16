@@ -7,6 +7,8 @@ export interface Profile {
   nickname: string;
   discriminator: number;
   created_at: string;
+  /** Total time spent in runs (ms) */
+  total_play_ms: number;
 }
 
 export type AuthResult = { ok: true } | { ok: false; code: string; message: string };
@@ -33,6 +35,14 @@ function explain(e: AuthError | Error | null | undefined, fallback = 'Something 
     signup_disabled: 'Sign-ups are currently disabled.',
     email_address_invalid: 'Enter a valid email address.',
   };
+  // Per-address cooldown ("…only request this after 42 seconds") vs. the project-wide hourly cap
+  const wait = /after (\d+) seconds?/i.exec(text);
+  if (code.startsWith('over_') && wait) {
+    return { ok: false, code, message: `Please wait ${wait[1]} seconds before requesting another email for this address.` };
+  }
+  if (code === 'over_email_send_rate_limit') {
+    return { ok: false, code, message: 'The server has hit its hourly email limit. Please try again later.' };
+  }
   if (messages[code]) return { ok: false, code, message: messages[code] };
   // Errors raised by the sign-up trigger surface as a generic database error
   if (/NICKNAME_FULL/.test(text)) return { ok: false, code: 'nickname_full', message: 'All 9999 tags for this nickname are taken. Try another nickname.' };
@@ -59,6 +69,13 @@ export class Account {
 
   get tag(): string | null {
     return this.profile ? formatTag(this.profile.nickname, this.profile.discriminator) : null;
+  }
+
+  /** Update the cached total after the server accepted a play-time report */
+  setPlayTotal(totalMs: number): void {
+    if (!this.profile) return;
+    this.profile = { ...this.profile, total_play_ms: totalMs };
+    this.emit();
   }
 
   onChange(fn: () => void): void {
@@ -113,7 +130,7 @@ export class Account {
 
   private async fetchProfile(id: string): Promise<Profile | null> {
     if (!supabase) return null;
-    const { data } = await supabase.from('profiles').select('id, nickname, discriminator, created_at').eq('id', id).maybeSingle();
+    const { data } = await supabase.from('profiles').select('id, nickname, discriminator, created_at, total_play_ms').eq('id', id).maybeSingle();
     return (data as Profile | null) ?? null;
   }
 
@@ -152,7 +169,11 @@ export class Account {
     return error ? explain(error) : { ok: true };
   }
 
+  /** Runs before signing out while the session is still valid (e.g. send pending play time) */
+  beforeSignOut: (() => Promise<void>) | null = null;
+
   async signOut(): Promise<void> {
+    await this.beforeSignOut?.().catch(() => {});
     await supabase?.auth.signOut();
   }
 }

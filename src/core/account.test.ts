@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byteLength, emailError, formatTag, nicknameError, passwordError } from './account';
+import { byteLength, emailError, formatPlayTime, formatTag, nicknameError, passwordError } from './account';
 
 describe('account rules', () => {
   it('formats nickname#discriminator with 4 digits', () => {
@@ -34,5 +34,13 @@ describe('account rules', () => {
     expect(passwordError('abc1234')).not.toBeNull(); // too short
     expect(passwordError('abcdefgh')).not.toBeNull(); // no number
     expect(passwordError('a1'.repeat(37))).not.toBeNull(); // 74 bytes > bcrypt's 72
+  });
+
+  it('formats play time as hours, minutes and seconds', () => {
+    expect(formatPlayTime(0)).toBe('0m 00s');
+    expect(formatPlayTime(59_999)).toBe('0m 59s');
+    expect(formatPlayTime(95_501)).toBe('1m 35s');
+    expect(formatPlayTime(4_115_501)).toBe('1h 08m 35s');
+    expect(formatPlayTime(100 * 3600_000 + 61_000)).toBe('100h 01m 01s');
   });
 });

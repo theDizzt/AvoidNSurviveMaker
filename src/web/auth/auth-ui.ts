@@ -1,4 +1,4 @@
-import { byteLength, emailError, NICKNAME_MAX_BYTES, nicknameError, passwordError } from '../../core/account';
+import { byteLength, emailError, formatPlayTime, NICKNAME_MAX_BYTES, nicknameError, passwordError } from '../../core/account';
 import type { Account, AuthResult } from './account';
 import { Captcha } from './captcha';
 import { TURNSTILE_SITE_KEY } from './supabase';
@@ -203,9 +203,15 @@ export class AuthUI {
     const bar = $('account-bar');
     const top = $('topbar-account');
     if (tag) {
+      const playTime = `Play time ${formatPlayTime(this.account.profile?.total_play_ms ?? 0)}`;
       const name = document.createElement('span');
       name.className = 'account-tag';
-      name.textContent = tag;
+      const tagText = document.createElement('strong');
+      tagText.textContent = tag;
+      const time = document.createElement('small');
+      time.className = 'account-time';
+      time.textContent = playTime;
+      name.append(tagText, time);
       const out = document.createElement('button');
       out.type = 'button';
       out.className = 'link-btn';
@@ -216,6 +222,7 @@ export class AuthUI {
       });
       bar.replaceChildren(name, out);
       top.textContent = tag;
+      top.title = playTime;
     } else {
       const signIn = document.createElement('button');
       signIn.type = 'button';
@@ -229,6 +236,7 @@ export class AuthUI {
       join.addEventListener('click', () => this.open('signup'));
       bar.replaceChildren(signIn, join);
       top.textContent = '';
+      top.title = '';
     }
   }
 
