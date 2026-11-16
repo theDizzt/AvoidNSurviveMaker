@@ -203,7 +203,7 @@ export class AuthUI {
     const bar = $('account-bar');
     const top = $('topbar-account');
     if (tag) {
-      const playTime = `Play time ${formatPlayTime(this.account.profile?.total_play_ms ?? 0)}`;
+      const playTime = `Play time ${formatPlayTime(this.account.profile?.total_play_seconds ?? 0)}`;
       const name = document.createElement('span');
       name.className = 'account-tag';
       const tagText = document.createElement('strong');

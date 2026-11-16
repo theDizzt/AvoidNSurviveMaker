@@ -38,9 +38,9 @@ describe('account rules', () => {
 
   it('formats play time as hours, minutes and seconds', () => {
     expect(formatPlayTime(0)).toBe('0m 00s');
-    expect(formatPlayTime(59_999)).toBe('0m 59s');
-    expect(formatPlayTime(95_501)).toBe('1m 35s');
-    expect(formatPlayTime(4_115_501)).toBe('1h 08m 35s');
-    expect(formatPlayTime(100 * 3600_000 + 61_000)).toBe('100h 01m 01s');
+    expect(formatPlayTime(59)).toBe('0m 59s');
+    expect(formatPlayTime(95)).toBe('1m 35s');
+    expect(formatPlayTime(4115)).toBe('1h 08m 35s');
+    expect(formatPlayTime(100 * 3600 + 61)).toBe('100h 01m 01s');
   });
 });

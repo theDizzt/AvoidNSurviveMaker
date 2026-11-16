@@ -16,7 +16,7 @@ Without this setup the game still runs; the account screen just says accounts ar
 | Email verified at | `auth.users.email_confirmed_at` | set when the link is clicked |
 | Nickname | `profiles.nickname` | 1–32 bytes UTF-8 (e.g. 10 Korean characters), no `#` |
 | Tag | `profiles.discriminator` | 1–9999, shown as 4 digits (`0042`) |
-| Total play time | `profiles.total_play_ms` (ms) and `profiles.play_time` (`hh:mm:ss`) | total time the game has been open (signed in, tab visible) |
+| Total play time | `profiles.total_play_seconds` (seconds) and `profiles.play_time` (`hh:mm:ss`) | total time the game has been open (signed in, tab visible) |
 
 Tag rules (enforced in the database, not just the UI):
 
@@ -31,6 +31,7 @@ Supabase Dashboard → **SQL Editor** → paste and run each file, in this order
 
 1. [`supabase/migrations/20261117000000_profiles.sql`](../supabase/migrations/20261117000000_profiles.sql) — profiles, nickname tags
 2. [`supabase/migrations/20261117010000_play_time.sql`](../supabase/migrations/20261117010000_play_time.sql) — total play time
+3. [`supabase/migrations/20261117020000_play_time_seconds.sql`](../supabase/migrations/20261117020000_play_time_seconds.sql) — store play time in seconds
 
 (With the Supabase CLI linked to the project, `supabase db push` does the same.)
 
@@ -91,8 +92,9 @@ Restart `run-dev.bat` (or `npm run dev`) after changing `.env.local`.
 
 While a player is signed in and the game tab is visible (menus, editor and play alike), the time
 is added to their total. It pauses while the tab is hidden or minimized, so a forgotten background
-tab doesn't pile up. The game calls `add_play_time(ms)` every 30 s and when the tab is hidden or
-closed; unsent time is kept in the browser and sent on the next visit. The menu shows the total
+tab doesn't pile up. The game calls `add_play_time(seconds)` with the whole seconds counted every
+30 s and when the tab is hidden or closed (the sub-second remainder carries over); unsent time is
+kept in the browser and sent on the next visit. The menu shows the total
 under the player's tag.
 
 Reports come from the browser, so the database caps them: a report can't add more than the real

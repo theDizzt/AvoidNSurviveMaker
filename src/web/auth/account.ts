@@ -7,8 +7,8 @@ export interface Profile {
   nickname: string;
   discriminator: number;
   created_at: string;
-  /** Total time spent in runs (ms) */
-  total_play_ms: number;
+  /** Total time the game has been open (seconds) */
+  total_play_seconds: number;
 }
 
 export type AuthResult = { ok: true } | { ok: false; code: string; message: string };
@@ -72,9 +72,9 @@ export class Account {
   }
 
   /** Update the cached total after the server accepted a play-time report */
-  setPlayTotal(totalMs: number): void {
+  setPlayTotal(totalSeconds: number): void {
     if (!this.profile) return;
-    this.profile = { ...this.profile, total_play_ms: totalMs };
+    this.profile = { ...this.profile, total_play_seconds: totalSeconds };
     this.emit();
   }
 
@@ -130,7 +130,7 @@ export class Account {
 
   private async fetchProfile(id: string): Promise<Profile | null> {
     if (!supabase) return null;
-    const { data } = await supabase.from('profiles').select('id, nickname, discriminator, created_at, total_play_ms').eq('id', id).maybeSingle();
+    const { data } = await supabase.from('profiles').select('id, nickname, discriminator, created_at, total_play_seconds').eq('id', id).maybeSingle();
     return (data as Profile | null) ?? null;
   }
 

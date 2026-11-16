@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 /** Count and report on this rhythm while the game is open */
 const TICK_MS = 30_000;
 /** The server accepts at most 1 h per report */
-const MAX_REPORT_MS = 3_600_000;
+const MAX_REPORT_SECONDS = 3600;
 const STORAGE_PREFIX = 'avoid-n-survive:pending-play:';
 
 /**
@@ -12,8 +12,9 @@ const STORAGE_PREFIX = 'avoid-n-survive:pending-play:';
  *
  * Time counts while the player is signed in and the game tab is visible (menus, editor and play
  * alike); it pauses while the tab is hidden or minimized, so a forgotten background tab doesn't
- * pile up days. Every 30 s, and whenever the tab is hidden or closed, the counted time is sent to
- * the database (`add_play_time` RPC). Unsent time is kept in localStorage per account and sent on
+ * pile up days. Every 30 s, and whenever the tab is hidden or closed, the whole seconds counted so
+ * far are sent to the database (`add_play_time` RPC); the sub-second remainder carries over to the
+ * next report. Unsent time is kept in localStorage per account and sent on
  * the next visit. The server never credits more than real elapsed time, so several open tabs
  * don't double count.
  */
@@ -41,14 +42,14 @@ export class PlayTimeTracker {
   /** Send everything counted so far (also called right before signing out) */
   async flush(): Promise<void> {
     this.collect();
-    if (!supabase || !this.userId || this.sending || this.pending < 1000) return;
+    const seconds = Math.min(MAX_REPORT_SECONDS, Math.floor(this.pending / 1000));
+    if (!supabase || !this.userId || this.sending || seconds < 1) return;
     const userId = this.userId;
-    const amount = Math.min(MAX_REPORT_MS, Math.round(this.pending));
     this.sending = true;
     try {
-      const { data, error } = await supabase.rpc('add_play_time', { p_ms: amount });
+      const { data, error } = await supabase.rpc('add_play_time', { p_seconds: seconds });
       if (error || typeof data !== 'number' || this.userId !== userId) return; // keep it, retry next tick
-      this.pending = Math.max(0, this.pending - amount);
+      this.pending = Math.max(0, this.pending - seconds * 1000);
       this.persist();
       this.account.setPlayTotal(data);
     } finally {

@@ -43,9 +43,9 @@ export function passwordError(password: string): string | null {
   return null;
 }
 
-/** 4115501 → "1h 08m 35s" (seconds truncated; hours keep growing past 24) */
-export function formatPlayTime(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
+/** 4115 (seconds) → "1h 08m 35s" (hours keep growing past 24) */
+export function formatPlayTime(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
