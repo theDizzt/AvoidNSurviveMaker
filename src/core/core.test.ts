@@ -278,13 +278,13 @@ describe('Simulation', () => {
     const lerp = (a: number, b: number, f: number) => a + (b - a) * f;
     // [t0, t1, from, to] straight moves; the platform ride follows the platform itself
     const legs: [number, number, [number, number], [number, number]][] = [
-      [0, 300, [50, 250], [360, 250]], // along the wavy path onto the platform
-      [2500, 2560, [540, 250], [600, 250]], // platform arrives (1s wait + 1.5s trip): step off onto the island
-      [2560, 2860, [600, 250], [600, 310]], // around the spinning bar…
-      [2860, 3360, [600, 310], [750, 310]],
-      [3360, 3560, [750, 310], [750, 260]], // …and up into GOAL (bottom edge y=280)
+      [0, 300, [102, 270], [437, 270]], // along the wavy path onto the platform
+      [2500, 2560, [631, 270], [696, 270]], // platform arrives (1s wait + 1.5s trip): step off onto the island
+      [2560, 2860, [696, 270], [696, 335]], // around the spinning bar…
+      [2860, 3360, [696, 335], [858, 335]],
+      [3360, 3560, [858, 335], [858, 281]], // …and up into GOAL (bottom edge y=302)
     ];
-    sim.start(50, 250);
+    sim.start(102, 270);
     for (let t = 1; t <= 3560 && sim.status === 'playing'; t++) {
       let x: number;
       let y: number;
@@ -296,8 +296,8 @@ describe('Simulation', () => {
       } else {
         // riding: stay at the same spot on the platform
         platform.offsetAt(t, off);
-        x = 360 + off.x;
-        y = 250;
+        x = 437 + off.x;
+        y = 270;
       }
       sim.feed(t, x, y);
     }

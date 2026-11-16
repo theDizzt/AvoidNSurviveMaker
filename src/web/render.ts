@@ -3,6 +3,8 @@ import type { Fill, MapData, Point, Rect } from '../core/types';
 
 export const COLORS = {
   bg: '#f6fbff',
+  /** Bars around maps that aren't 16:9 */
+  letterbox: '#dfe8f3',
   /** Outside the paths: deadly, so noticeably darker than the floor */
   void: '#cbd6e6',
   floor: '#ffffff',
@@ -34,36 +36,87 @@ export const FONT_TITLE = "'GSHyejaroun', 'MangoDdobak', system-ui, sans-serif";
 const tmp: Point = { x: 0, y: 0 };
 const tf: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
 
-/** Size the canvas to the map's aspect ratio, with backing resolution scaled by devicePixelRatio */
+/** The game screen is always 16:9. Maps of another ratio are centered with bars around them. */
+export const SCREEN_ASPECT = 16 / 9;
+/** Largest on-screen width of the game canvas (CSS px) */
+const MAX_CSS_WIDTH = 1280;
+/** Space kept free for the top bar and toolbar when fitting to the window height */
+const RESERVED_HEIGHT = 190;
+
+/** Where the map sits inside its canvas, in CSS px */
+interface View {
+  cssW: number;
+  /** CSS px per map unit */
+  s: number;
+  ox: number;
+  oy: number;
+}
+const views = new WeakMap<HTMLCanvasElement, View>();
+
+function viewOf(canvas: HTMLCanvasElement, map: MapData): View {
+  return views.get(canvas) ?? { cssW: map.width, s: 1, ox: 0, oy: 0 };
+}
+
+/**
+ * Size the canvas to a 16:9 box that fits the parent's width and the window's height,
+ * and place the map inside it (scaled to fit, centered). Backing resolution follows devicePixelRatio.
+ */
 export function fitCanvas(canvas: HTMLCanvasElement, map: MapData): void {
-  const avail = canvas.parentElement?.clientWidth ?? map.width;
-  const cssW = Math.max(100, Math.min(avail, map.width));
-  const cssH = (cssW * map.height) / map.width;
+  const avail = canvas.parentElement?.clientWidth || map.width;
+  const byHeight = Math.max(320, (window.innerHeight - RESERVED_HEIGHT) * SCREEN_ASPECT);
+  const cssW = Math.max(160, Math.floor(Math.min(avail, MAX_CSS_WIDTH, byHeight)));
+  const cssH = Math.round(cssW / SCREEN_ASPECT);
   const dpr = window.devicePixelRatio || 1;
   canvas.style.width = `${cssW}px`;
   canvas.style.height = `${cssH}px`;
   canvas.width = Math.round(cssW * dpr);
   canvas.height = Math.round(cssH * dpr);
+  const s = Math.min(cssW / map.width, cssH / map.height);
+  views.set(canvas, { cssW, s, ox: (cssW - map.width * s) / 2, oy: (cssH - map.height * s) / 2 });
 }
 
-/** Make subsequent drawing use map coordinates */
+/** Clear the frame (bars included) and make subsequent drawing use map coordinates, clipped to the map */
 export function beginFrame(ctx: CanvasRenderingContext2D, map: MapData): void {
-  const s = ctx.canvas.width / map.width;
-  ctx.setTransform(s, 0, 0, s, 0, 0);
+  const canvas = ctx.canvas;
+  const v = viewOf(canvas, map);
+  const k = canvas.width / v.cssW; // device px per CSS px
+  // restore() pops last frame's save() (a no-op on the first frame), so the clip never stacks up
+  ctx.restore();
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = COLORS.letterbox;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(k * v.s, 0, 0, k * v.s, k * v.ox, k * v.oy);
+  ctx.beginPath();
+  ctx.rect(0, 0, map.width, map.height);
+  ctx.clip();
 }
 
 /** How many map units one on-screen CSS px covers */
 export function unitsPerPx(canvas: HTMLCanvasElement, map: MapData): number {
-  const w = canvas.getBoundingClientRect().width;
-  return w > 0 ? map.width / w : 1;
+  const v = viewOf(canvas, map);
+  const shown = canvas.getBoundingClientRect().width || v.cssW;
+  return 1 / (v.s * (shown / v.cssW));
+}
+
+/**
+ * Converter from client (mouse) coordinates to map coordinates. Measures the canvas once,
+ * so it's cheap to call for every input sample in a batch.
+ */
+export function mapPointer(canvas: HTMLCanvasElement, map: MapData): (clientX: number, clientY: number, out: Point) => Point {
+  const v = viewOf(canvas, map);
+  const r = canvas.getBoundingClientRect();
+  const zoom = (r.width || v.cssW) / v.cssW; // CSS transforms / browser zoom
+  const scale = 1 / (v.s * zoom);
+  return (clientX, clientY, out) => {
+    out.x = (clientX - r.left - v.ox * zoom) * scale;
+    out.y = (clientY - r.top - v.oy * zoom) * scale;
+    return out;
+  };
 }
 
 export function clientToMap(canvas: HTMLCanvasElement, map: MapData, clientX: number, clientY: number): Point {
-  const r = canvas.getBoundingClientRect();
-  return {
-    x: ((clientX - r.left) * map.width) / (r.width || 1),
-    y: ((clientY - r.top) * map.height) / (r.height || 1),
-  };
+  return mapPointer(canvas, map)(clientX, clientY, { x: 0, y: 0 });
 }
 
 function zone(ctx: CanvasRenderingContext2D, r: Rect, fill: string, edge: string, label: string): void {

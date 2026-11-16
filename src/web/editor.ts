@@ -76,6 +76,8 @@ type Drag =
   | { type: 'handle'; h: Handle; before: string; moved: boolean; orig: MapObject | Rect };
 
 const STORAGE_KEY = 'avoid-n-survive:editor';
+/** Map sizes offered in the editor, all 16:9 */
+const MAP_SIZES: [number, number][] = [[640, 360], [960, 540], [1280, 720], [1600, 900], [1920, 1080]];
 const GRID = 10;
 const HISTORY_LIMIT = 200;
 const HANDLE_PX = 7;
@@ -97,8 +99,7 @@ export interface EditorElements {
   redo: HTMLButtonElement;
   name: HTMLInputElement;
   author: HTMLInputElement;
-  width: HTMLInputElement;
-  height: HTMLInputElement;
+  size: HTMLSelectElement;
   props: HTMLElement;
   messages: HTMLElement;
   verify: HTMLElement;
@@ -168,7 +169,9 @@ export class Editor {
     el.canvas.addEventListener('dblclick', (e) => this.onDoubleClick(e));
     el.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('keydown', (e) => this.onKey(e));
-    new ResizeObserver(() => fitCanvas(el.canvas, this.map)).observe(el.canvas.parentElement!);
+    const refit = () => fitCanvas(el.canvas, this.map);
+    new ResizeObserver(refit).observe(el.canvas.parentElement!);
+    window.addEventListener('resize', refit);
 
     el.undo.addEventListener('click', () => this.undo());
     el.redo.addEventListener('click', () => this.redo());
@@ -177,15 +180,15 @@ export class Editor {
       input.addEventListener('change', () => this.edit(() => (this.map[key] = input.value.slice(0, LIMITS.maxText))));
     textField(el.name, 'name');
     textField(el.author, 'author');
-    const sizeField = (input: HTMLInputElement, key: 'width' | 'height') =>
-      input.addEventListener('change', () => {
-        const v = Math.round(Number(input.value));
-        if (!Number.isFinite(v)) return this.syncInputs();
-        this.edit(() => (this.map[key] = Math.min(LIMITS.maxSize, Math.max(LIMITS.minSize, v))));
-        fitCanvas(el.canvas, this.map);
+    el.size.addEventListener('change', () => {
+      const [w, h] = el.size.value.split('x').map(Number);
+      if (!(w > 0 && h > 0)) return this.syncInputs();
+      this.edit(() => {
+        this.map.width = w;
+        this.map.height = h;
       });
-    sizeField(el.width, 'width');
-    sizeField(el.height, 'height');
+      fitCanvas(el.canvas, this.map);
+    });
 
     el.test.addEventListener('click', () => {
       this.finishModes();
@@ -419,8 +422,11 @@ export class Editor {
     };
     set(this.el.name, this.map.name);
     set(this.el.author, this.map.author);
-    set(this.el.width, String(this.map.width));
-    set(this.el.height, String(this.map.height));
+    // 16:9 sizes; a map made in another ratio keeps its size as a "custom" entry
+    const current = `${this.map.width}x${this.map.height}`;
+    const sizes = MAP_SIZES.map(([w, h]) => [`${w}x${h}`, `${w} × ${h}${w === 960 ? ' (default)' : ''}`]);
+    if (!sizes.some(([v]) => v === current)) sizes.push([current, `${this.map.width} × ${this.map.height} (not 16:9)`]);
+    this.el.size.replaceChildren(...sizes.map(([v, t]) => new Option(t, v, false, v === current)));
   }
 
   private updateHint(): void {

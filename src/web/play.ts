@@ -2,7 +2,7 @@ import { formatTime, Simulation, type EndReason, type Replay } from '../core/sim
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
 import { options } from './options';
-import { beginFrame, clientToMap, COLORS, drawBanner, drawMap, drawTrail, fitCanvas } from './render';
+import { beginFrame, clientToMap, COLORS, drawBanner, drawMap, drawTrail, fitCanvas, mapPointer } from './render';
 
 /**
  * When the mouse is idle and no events arrive, the simulation advances "in place",
@@ -40,6 +40,7 @@ export class PlayController {
   private readonly stats = new InputStats();
   private t0 = 0;
   private trail: number[] = [];
+  private readonly point = { x: 0, y: 0 };
   private notified = false;
   private visible = false;
   private best = new Map<string, number>();
@@ -71,7 +72,9 @@ export class PlayController {
       if (e.key === 'r' || e.key === 'R') this.reset();
       else if (e.key === 'Escape') this.onExit?.();
     });
-    new ResizeObserver(() => this.map && fitCanvas(el.canvas, this.map)).observe(el.canvas.parentElement!);
+    const refit = () => this.map && fitCanvas(el.canvas, this.map);
+    new ResizeObserver(refit).observe(el.canvas.parentElement!);
+    window.addEventListener('resize', refit);
 
     const loop = () => {
       this.frame();
@@ -124,11 +127,11 @@ export class PlayController {
     this.stats.record(list);
     const sim = this.sim;
     if (!sim || sim.status !== 'playing') return;
-    const r = this.el.canvas.getBoundingClientRect();
-    const sx = this.map.width / (r.width || 1);
-    const sy = this.map.height / (r.height || 1);
+    const toMap = mapPointer(this.el.canvas, this.map);
+    const p = this.point;
     for (const ev of list) {
-      sim.feed(ev.timeStamp - this.t0, (ev.clientX - r.left) * sx, (ev.clientY - r.top) * sy);
+      toMap(ev.clientX, ev.clientY, p);
+      sim.feed(ev.timeStamp - this.t0, p.x, p.y);
       this.trail.push(sim.x, sim.y);
       if (sim.status !== 'playing') break;
     }

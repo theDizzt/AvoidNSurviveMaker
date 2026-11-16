@@ -86,6 +86,8 @@ Every object is a **shape** (rectangle, circle, polygon, freeform) with a **role
 - **Moving** — follows a route of markers: straight, curve (smooth spline through the markers) or circle (orbit around a center marker). Options: repeat (loop / ping-pong / once), speed, smooth start/end (easing per leg), start delay (negative = start partway through).
 - **Rotating** — spins around a draggable pivot. Options: speed, angle per cycle (360 + loop = continuous spin), direction, repeat, smooth start/end, start delay. Rotating objects can also have a route.
 
+The game screen is always **16:9**. New maps are 960×540; the editor offers 640×360 up to 1920×1080. Maps made in another ratio still open, centered with bars around them.
+
 The palette lists all 26 tools by number:
 
 | # | Tools |

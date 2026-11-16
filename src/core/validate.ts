@@ -245,6 +245,7 @@ function overlapsRect(m: MapObject, r: Rect, t: number): boolean {
 export function mapWarnings(map: MapData): string[] {
   const out: string[] = [];
   const inside = (r: Rect) => r.x >= 0 && r.y >= 0 && r.x + r.w <= map.width && r.y + r.h <= map.height;
+  if (Math.abs(map.width / map.height - 16 / 9) > 0.01) out.push('This map is not 16:9, so it is shown with bars around it.');
   if (!inside(map.start)) out.push('The START area extends outside the map.');
   if (!inside(map.goal)) out.push('The GOAL area extends outside the map.');
   if (overlapsRect({ role: 'wall', shape: { type: 'rect', ...map.start } }, map.goal, 0)) out.push('START and GOAL overlap.');
@@ -264,10 +265,10 @@ export function createEmptyMap(): MapData {
     v: MAP_VERSION,
     name: 'New map',
     author: '',
-    width: 800,
-    height: 500,
-    start: { x: 20, y: 220, w: 60, h: 60 },
-    goal: { x: 720, y: 220, w: 60, h: 60 },
+    width: 960,
+    height: 540,
+    start: { x: 30, y: 240, w: 60, h: 60 },
+    goal: { x: 870, y: 240, w: 60, h: 60 },
     objects: [],
   };
 }
