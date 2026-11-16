@@ -6,6 +6,9 @@ import { Editor } from './editor';
 import { onOptionsChange, options, resetOptions, setOption, type Options } from './options';
 import { PlayController } from './play';
 import { FONT_TASKS, runPreload, type PreloadTask } from './preload';
+import { LiquidBackground } from './liquid';
+import { Account } from './auth/account';
+import { AuthUI, showToast } from './auth/auth-ui';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -15,12 +18,14 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
 
 // ───────────────────────── Screens ─────────────────────────
 
-type Screen = 'preload' | 'menu' | 'options' | 'play' | 'editor';
+type Screen = 'preload' | 'menu' | 'options' | 'auth' | 'verify' | 'play' | 'editor';
 
 const screens: Record<Screen, HTMLElement> = {
   preload: $('preload-screen'),
   menu: $('menu-screen'),
   options: $('options-screen'),
+  auth: $('auth-screen'),
+  verify: $('verify-screen'),
   play: $('play-view'),
   editor: $('editor-view'),
 };
@@ -63,6 +68,9 @@ const editor = new Editor({
   newBtn: $<HTMLButtonElement>('btn-new'),
 });
 
+const liquid = new LiquidBackground($<HTMLCanvasElement>('liquid-bg'));
+liquid.setActive(true);
+
 let current: Screen = 'preload';
 let sharedMap: MapData | null = null;
 let currentMap: MapData = BUILTIN_LEVELS[0];
@@ -72,7 +80,11 @@ function show(next: Screen): void {
   if (current === 'play' && next !== 'play') play.hide();
   if (current === 'editor' && next !== 'editor') editor.hide();
   for (const [name, el] of Object.entries(screens)) el.hidden = name !== next;
-  topbar.hidden = next !== 'play' && next !== 'editor';
+  const inGame = next === 'play' || next === 'editor';
+  topbar.hidden = !inGame;
+  // The liquid animation only runs on menu screens, so gameplay keeps the whole frame budget
+  document.body.classList.toggle('in-game', inGame);
+  liquid.setActive(!inGame);
   navPlay.setAttribute('aria-pressed', String(next === 'play'));
   navEdit.setAttribute('aria-pressed', String(next === 'editor'));
   current = next;
@@ -176,6 +188,16 @@ play.onClear = (map) => {
 };
 play.onExit = () => (testing ? showEditor() : show('menu'));
 
+// ───────────────────────── Accounts ─────────────────────────
+
+const account = new Account();
+new AuthUI(account, (screen) => show(screen));
+for (const s of [screens.auth, screens.verify]) {
+  s.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') show('menu');
+  });
+}
+
 // ───────────────────────── Boot ─────────────────────────
 
 function sharedMapTask(): PreloadTask | null {
@@ -197,7 +219,8 @@ async function boot(): Promise<void> {
   const bar = $('preload-bar');
   const text = $('preload-text');
   const shared = sharedMapTask();
-  const tasks = shared ? [...FONT_TASKS, shared] : FONT_TASKS;
+  const accountTask: PreloadTask = { label: 'Account', run: () => account.init() };
+  const tasks = [...FONT_TASKS, accountTask, ...(shared ? [shared] : [])];
 
   await runPreload(tasks, (done, total, label) => {
     bar.style.width = `${Math.round((done / total) * 100)}%`;
@@ -212,6 +235,9 @@ async function boot(): Promise<void> {
   // A share link goes straight to that map; otherwise land on the main menu
   if (sharedMap) showPlay(sharedMap);
   else show('menu');
+
+  // Result of an email verification link, if the player just came back from one
+  if (account.notice) showToast(account.notice.text, account.notice.kind);
 }
 
 window.addEventListener('hashchange', async () => {

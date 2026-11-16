@@ -6,6 +6,8 @@
     <title>Avoid N Survive</title>
   </head>
   <body>
+    <canvas id="liquid-bg" class="liquid-bg" aria-hidden="true"></canvas>
+
     <!-- Preloading screen -->
     <div id="preload-screen" class="screen preload" role="status" aria-live="polite">
       <div class="preload-inner">
@@ -17,9 +19,7 @@
 
     <!-- Main menu -->
     <div id="menu-screen" class="screen menu" hidden>
-      <div class="menu-bg" aria-hidden="true">
-        <span></span><span></span><span></span><span></span><span></span><span></span>
-      </div>
+      <div id="account-bar" class="account-bar"></div>
       <div class="menu-inner">
         <h1 class="logo">Avoid <span>N</span> Survive</h1>
         <p class="tagline">Dodge with your mouse. Survive to the goal.</p>
@@ -31,6 +31,69 @@
         <p class="menu-foot">v0.1.0</p>
       </div>
     </div>
+
+    <!-- Account: sign in / create account -->
+    <div id="auth-screen" class="screen menu" hidden>
+      <div class="menu-inner auth-card">
+        <h2 class="logo logo-sm">Account</h2>
+        <div class="auth-tabs" role="tablist" aria-label="Account">
+          <button type="button" role="tab" id="tab-signin" aria-selected="true">Sign In</button>
+          <button type="button" role="tab" id="tab-signup" aria-selected="false">Create Account</button>
+        </div>
+        <p id="auth-unconfigured" class="form-note" hidden>
+          Accounts aren't set up on this server yet. You can still play and make maps offline.
+        </p>
+
+        <form id="signin-form" class="auth-form" novalidate>
+          <label class="field wide"><span>Email</span><input type="email" name="email" autocomplete="email" maxlength="254" /></label>
+          <label class="field wide"><span>Password</span><input type="password" name="password" autocomplete="current-password" /></label>
+          <div id="signin-captcha" class="captcha"></div>
+          <p class="form-error" role="alert"></p>
+          <button type="submit" class="menu-btn primary">Sign In</button>
+          <button type="button" id="signin-resend" class="link-btn" hidden>Resend verification email</button>
+        </form>
+
+        <form id="signup-form" class="auth-form" novalidate hidden>
+          <label class="field wide"><span>Email</span><input type="email" name="email" autocomplete="email" maxlength="254" /></label>
+          <label class="field wide"><span>Password</span><input type="password" name="password" autocomplete="new-password" /></label>
+          <label class="field wide"><span>Confirm password</span><input type="password" name="confirm" autocomplete="new-password" /></label>
+          <label class="field wide">
+            <span>Nickname</span>
+            <input type="text" name="nickname" autocomplete="nickname" spellcheck="false" />
+          </label>
+          <p class="nick-hint">
+            <span>You'll appear as <strong id="nick-preview">Nickname#????</strong></span>
+            <span id="nick-bytes" class="nick-bytes">0/32 bytes</span>
+          </p>
+          <p class="form-note">At least 8 characters with letters and numbers. Your 4-digit tag is picked at random.</p>
+          <div id="signup-captcha" class="captcha"></div>
+          <p class="form-error" role="alert"></p>
+          <button type="submit" class="menu-btn primary">Create Account</button>
+        </form>
+
+        <button type="button" id="auth-back" class="menu-btn subtle">Back to menu</button>
+      </div>
+    </div>
+
+    <!-- After sign-up: verify email -->
+    <div id="verify-screen" class="screen menu" hidden>
+      <div class="menu-inner auth-card">
+        <h2 class="logo logo-sm">Check your email</h2>
+        <p class="verify-text">
+          We sent a verification link to <strong id="verify-email"></strong>.
+          Open it to activate your account, then sign in.
+        </p>
+        <p class="form-note">Didn't get it? Check your spam folder, or send it again.</p>
+        <div id="verify-captcha" class="captcha"></div>
+        <p class="form-error" role="alert"></p>
+        <div class="menu-buttons">
+          <button type="button" id="verify-signin" class="menu-btn primary">Go to Sign In</button>
+          <button type="button" id="verify-resend" class="menu-btn">Resend email</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
     <!-- Options -->
     <div id="options-screen" class="screen menu" hidden>
@@ -60,6 +123,7 @@
     <header id="topbar" class="topbar" hidden>
       <button type="button" id="nav-menu" class="brand" title="Main menu">Avoid <span>N</span> Survive</button>
       <nav>
+        <span id="topbar-account" class="topbar-account"></span>
         <button type="button" id="nav-play" aria-pressed="true">Play</button>
         <button type="button" id="nav-edit" aria-pressed="false">Map Editor</button>
         <button type="button" id="nav-menu-btn">Main Menu</button>

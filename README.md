@@ -28,6 +28,8 @@ src/
     motion.ts      # Routes (straight, curve, circle), repeat, easing, rotation — closed-form in time
     object.ts      # Compiled objects and their pose (translate + rotate around a pivot) at time t
     simulation.ts  # Fixed 1 ms tick simulation and replays
+    account.ts     # Nickname / email / password rules, Name#0042 formatting
+    theme.ts       # Theme presets and color helpers
     validate.ts    # Validation and warnings for external maps
     share.ts       # Map <-> URL share code (deflate-raw + base64url)
     levels.ts      # Built-in levels
@@ -36,7 +38,10 @@ src/
     play.ts        # Play screen
     editor.ts      # Map editor
     render.ts      # Canvas rendering
-    preload.ts     # Loading screen tasks (fonts, shared map) with progress and timeout
+    preload.ts     # Loading screen tasks (fonts, account, shared map) with progress and timeout
+    liquid.ts      # Pastel liquid pouring background (metaballs) on menu screens
+    theme-panel.ts # Map theme editor (solid / gradient / pattern fills)
+    auth/          # Supabase sign-up / sign-in, email verification, Turnstile CAPTCHA
     options.ts     # Player options (cursor trail, run timer, debug panel), saved per browser
     main.ts        # Screen flow: preload → main menu → play / options / map editor
   assets/
@@ -63,6 +68,14 @@ const audio = new Audio(hitSound);
 ```
 
 Use a root-level `public/` folder only for files that must keep a fixed URL (e.g. `favicon.ico`, `robots.txt`); those are copied to `dist/` as-is.
+
+## Accounts
+
+Players can create an account (email, password, nickname, CAPTCHA), verify their email, and sign in.
+Names are shown as `Nickname#1234`: a random 4-digit tag keeps `nickname + tag` unique, so up to 9999
+players can share a nickname. Backed by Supabase; setup steps (database migration, auth settings,
+Turnstile, `.env.local`) are in [docs/ACCOUNTS.md](docs/ACCOUNTS.md). Without that setup the game runs
+offline and the account screen says so.
 
 ## Map editor
 
@@ -119,4 +132,5 @@ The real sample interval is capped by the mouse's polling rate (1000 Hz → 1 ms
 - [x] High-precision input and debug display
 - [x] Map editor: 26 tools (paths/walls × rectangle/circle/polygon/freeform × static/moving/rotating, START/GOAL), routes with markers, easing, undo/redo, autosave, JSON import/export
 - [x] URL sharing (no server)
-- [ ] Phase 2: Supabase integration — map browser/search/likes, leaderboards, server-side replay verification
+- [x] Accounts: Supabase sign-up / sign-in with email verification, CAPTCHA, `Nickname#tag`
+- [ ] Map browser/search/likes, leaderboards, server-side replay verification

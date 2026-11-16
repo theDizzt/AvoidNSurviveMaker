@@ -179,7 +179,7 @@ export class PlayController {
       ctx.fill();
       if (options.showTimer) {
         const elapsed = Math.max(0, now - this.t0);
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillStyle = COLORS.ink;
         ctx.font = '600 16px ui-monospace, monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'top';
@@ -201,10 +201,10 @@ export class PlayController {
       ctx.moveTo(sim.x + 8, sim.y - 8);
       ctx.lineTo(sim.x - 8, sim.y + 8);
       ctx.stroke();
-      drawBanner(ctx, map, `Failed · ${formatTime(sim.endTime)}s`, `${REASON_TEXT[sim.endReason!]} — click START to retry`, '#ff8090');
+      drawBanner(ctx, map, `Failed · ${formatTime(sim.endTime)}s`, `${REASON_TEXT[sim.endReason!]} — click START to retry`, '#e2486c');
     } else {
       const best = this.best.get(JSON.stringify(map));
-      drawBanner(ctx, map, `Cleared! ${formatTime(sim.endTime)}s`, best !== undefined ? `Best ${formatTime(best)}s — click START to try again` : '', '#ffd166');
+      drawBanner(ctx, map, `Cleared! ${formatTime(sim.endTime)}s`, best !== undefined ? `Best ${formatTime(best)}s — click START to try again` : '', '#d48f00');
     }
   }
 

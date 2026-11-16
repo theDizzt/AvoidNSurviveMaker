@@ -1053,7 +1053,7 @@ export class Editor {
     // While previewing, show where dynamic objects rest (their editing position)
     if (preview) {
       ctx.setLineDash([4 * u, 3 * u]);
-      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.strokeStyle = 'rgba(36,52,80,0.45)';
       ctx.lineWidth = 1.2 * u;
       for (const o of objs) {
         if (!o.dynamic) continue;
@@ -1109,7 +1109,7 @@ export class Editor {
     let markerNo = 0;
     for (const { h, p } of this.handles()) {
       ctx.lineWidth = 1.2 * u;
-      ctx.strokeStyle = '#000';
+      ctx.strokeStyle = COLORS.ink;
       if (h.kind === 'pivot') {
         ctx.fillStyle = COLORS.pivot;
         ctx.beginPath();
@@ -1153,19 +1153,19 @@ export class Editor {
       const pts = this.hover ? [...this.draft.points, this.snapPoint(this.hover)] : this.draft.points;
       if (pts.length >= 3) {
         const ring = polyOutline(pts);
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillStyle = 'rgba(58,159,240,0.1)';
         ctx.beginPath();
         for (let k = 0; k < ring.length; k += 2) ctx.lineTo(ring[k], ring[k + 1]);
         ctx.closePath();
         ctx.fill();
       }
-      ctx.strokeStyle = '#fff';
+      ctx.strokeStyle = COLORS.ink;
       ctx.lineWidth = 1.2 * u;
       ctx.beginPath();
       pts.forEach((p, k) => (k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
       ctx.stroke();
       this.draft.points.forEach((p, k) => {
-        ctx.fillStyle = k === 0 ? COLORS.routeSelected : '#fff';
+        ctx.fillStyle = k === 0 ? COLORS.routeSelected : COLORS.ink;
         ctx.beginPath();
         ctx.arc(p.x, p.y, (k === 0 ? 6 : 3.5) * u, 0, Math.PI * 2);
         ctx.fill();
@@ -1180,8 +1180,8 @@ export class Editor {
         const s = Math.max(r.w, r.h);
         r = { x: d.x1 < d.x0 ? d.x0 - s : d.x0, y: d.y1 < d.y0 ? d.y0 - s : d.y0, w: s, h: s };
       }
-      ctx.fillStyle = 'rgba(255,255,255,0.15)';
-      ctx.strokeStyle = '#fff';
+      ctx.fillStyle = 'rgba(58,159,240,0.12)';
+      ctx.strokeStyle = COLORS.ink;
       ctx.lineWidth = 1 * u;
       ctx.beginPath();
       if (this.tool.kind === 'object' && this.tool.shape === 'ellipse') {
@@ -1191,7 +1191,7 @@ export class Editor {
       }
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = COLORS.ink;
       ctx.font = `${12 * u}px ui-monospace, monospace`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';

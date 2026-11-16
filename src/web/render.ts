@@ -2,27 +2,29 @@ import { toWorld, transformAt, type CompiledObject, type Transform } from '../co
 import type { Fill, MapData, Point, Rect } from '../core/types';
 
 export const COLORS = {
-  bg: '#10141b',
-  void: '#07090c',
-  floor: '#253246',
-  floorEdge: '#4d6382',
-  floorMoving: '#173041',
-  floorMovingEdge: '#4fb3e8',
-  grid: 'rgba(255,255,255,0.045)',
-  wall: '#56667d',
-  wallEdge: '#7f93ad',
-  mover: '#ff5468',
-  start: 'rgba(64,196,120,0.28)',
-  startEdge: '#46c878',
+  bg: '#f6fbff',
+  /** Outside the paths: deadly, so noticeably darker than the floor */
+  void: '#cbd6e6',
+  floor: '#ffffff',
+  floorEdge: '#9cc3e6',
+  floorMoving: '#e0f2ff',
+  floorMovingEdge: '#3a9ff0',
+  grid: 'rgba(60,100,160,0.08)',
+  wall: '#8fa3bf',
+  wallEdge: '#6a809f',
+  mover: '#ff7d9c',
+  start: 'rgba(63,196,166,0.22)',
+  startEdge: '#22b08f',
   goal: 'rgba(255,196,60,0.28)',
-  goalEdge: '#ffc43c',
-  trail: 'rgba(110,196,255,0.75)',
-  cursor: '#8fd3ff',
-  hit: '#ff2d45',
-  select: '#ffffff',
-  route: 'rgba(255,200,90,0.6)',
-  routeSelected: '#ffc85a',
-  pivot: '#b28dff',
+  goalEdge: '#e09a00',
+  trail: 'rgba(58,159,240,0.75)',
+  cursor: '#2b86e0',
+  hit: '#e2365f',
+  ink: '#243450',
+  select: '#243450',
+  route: 'rgba(240,150,40,0.65)',
+  routeSelected: '#f08c1e',
+  pivot: '#8a6cf0',
 };
 
 /** Same families as --font-main / --font-title in style.css */
@@ -65,8 +67,8 @@ export function clientToMap(canvas: HTMLCanvasElement, map: MapData, clientX: nu
 }
 
 function zone(ctx: CanvasRenderingContext2D, r: Rect, fill: string, edge: string, label: string): void {
-  // Dark underlay keeps zones readable on light theme floors
-  ctx.fillStyle = 'rgba(8,10,14,0.55)';
+  // Light underlay keeps zones readable on dark or busy theme floors
+  ctx.fillStyle = 'rgba(255,255,255,0.65)';
   ctx.fillRect(r.x, r.y, r.w, r.h);
   ctx.fillStyle = fill;
   ctx.fillRect(r.x, r.y, r.w, r.h);
@@ -255,22 +257,27 @@ export function drawTrail(ctx: CanvasRenderingContext2D, pts: readonly number[])
   ctx.stroke();
 }
 
-export function drawBanner(ctx: CanvasRenderingContext2D, map: MapData, title: string, sub = '', color = '#fff'): void {
+export function drawBanner(ctx: CanvasRenderingContext2D, map: MapData, title: string, sub = '', color = COLORS.ink): void {
   const w = Math.min(map.width - 40, 460);
   const h = sub ? 76 : 50;
   const x = (map.width - w) / 2;
   const y = 16;
-  ctx.fillStyle = 'rgba(8,10,14,0.82)';
+  ctx.save();
+  ctx.shadowColor = 'rgba(58,96,150,0.25)';
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 4;
+  ctx.fillStyle = 'rgba(255,255,255,0.94)';
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, 10);
+  ctx.roundRect(x, y, w, h, 14);
   ctx.fill();
+  ctx.restore();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = color;
   ctx.font = `700 22px ${FONT_TITLE}`;
   ctx.fillText(title, map.width / 2, y + (sub ? 26 : h / 2));
   if (sub) {
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillStyle = 'rgba(36,52,80,0.65)';
     ctx.font = `400 15px ${FONT_MAIN}`;
     ctx.fillText(sub, map.width / 2, y + 54);
   }
