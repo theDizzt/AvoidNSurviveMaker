@@ -14,6 +14,7 @@ const TRAIL_POINTS = 800;
 const REASON_TEXT: Record<EndReason, string> = {
   wall: 'Touched a wall',
   mover: 'Hit a moving obstacle',
+  void: 'Fell off the path',
   bounds: 'Left the map',
   left: 'Cursor left the window',
   blur: 'Window lost focus',
@@ -168,7 +169,7 @@ export class PlayController {
   private draw(now: number): void {
     const { ctx, map, sim } = this;
     beginFrame(ctx, map);
-    drawMap(ctx, map, sim.movers, sim.status === 'ready' ? 0 : sim.time);
+    drawMap(ctx, map, sim.objects, sim.status === 'ready' ? 0 : sim.time);
     if (options.showTrail) drawTrail(ctx, this.trail);
 
     if (sim.status === 'playing') {
@@ -185,7 +186,12 @@ export class PlayController {
         ctx.fillText(`${formatTime(elapsed)}s`, map.width - 10, 8);
       }
     } else if (sim.status === 'ready') {
-      drawBanner(ctx, map, 'Click the START area to begin', 'Reach GOAL without touching walls, obstacles, or the map edge');
+      drawBanner(
+        ctx, map, 'Click the START area to begin',
+        sim.objects.some((o) => o.role === 'path')
+          ? 'Stay on the paths and reach GOAL without touching walls'
+          : 'Reach GOAL without touching walls, obstacles, or the map edge',
+      );
     } else if (sim.status === 'dead') {
       ctx.strokeStyle = COLORS.hit;
       ctx.lineWidth = 3;

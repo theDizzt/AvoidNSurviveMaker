@@ -89,19 +89,13 @@
 
       <section id="editor-view" hidden>
         <div class="toolbar">
-          <div class="tools" role="group" aria-label="Tools">
-            <button type="button" data-tool="select">1 Select</button>
-            <button type="button" data-tool="wall">2 Wall</button>
-            <button type="button" data-tool="mover">3 Obstacle</button>
-            <button type="button" data-tool="start">4 START</button>
-            <button type="button" data-tool="goal">5 GOAL</button>
-          </div>
           <label class="check"><input type="checkbox" id="opt-snap" checked /> Snap to grid</label>
           <label class="check"><input type="checkbox" id="opt-preview" /> Preview motion</label>
           <button type="button" id="btn-undo" title="Ctrl+Z">Undo</button>
           <button type="button" id="btn-redo" title="Ctrl+Y">Redo</button>
         </div>
         <div class="editor-layout">
+          <aside id="palette" class="palette" aria-label="Tools"></aside>
           <div>
             <div class="stage"><canvas id="editor-canvas"></canvas></div>
             <p id="editor-hint" class="status"></p>
@@ -116,6 +110,10 @@
                 <label class="field"><span>Height</span><input id="map-height" type="number" step="10" /></label>
               </div>
             </section>
+            <details class="theme-section">
+              <summary><h3>Theme</h3></summary>
+              <div id="theme-panel"></div>
+            </details>
             <section>
               <h3>Selected object</h3>
               <div id="props"></div>

@@ -77,7 +77,7 @@ body {
 .topbar .brand span { color: var(--accent); }
 .topbar nav { display: flex; flex-wrap: wrap; gap: 6px; }
 
-main { max-width: 1240px; margin: 0 auto; padding: 16px; }
+main { max-width: 1400px; margin: 0 auto; padding: 16px; }
 
 button, select, input {
   font: inherit;
@@ -119,8 +119,69 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 .debug dt { color: var(--muted); }
 .debug dd { margin: 0; }
 
-.editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
-@media (max-width: 900px) { .editor-layout { grid-template-columns: 1fr; } }
+.editor-layout { display: grid; grid-template-columns: 196px minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) {
+  .editor-layout { grid-template-columns: 196px minmax(0, 1fr); }
+  .editor-layout > .panel { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) { .editor-layout { grid-template-columns: 1fr; } }
+
+/* Tool palette */
+.palette {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pal-title { margin: 8px 0 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.pal-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.pal-btn {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+}
+.pal-btn svg { width: 24px; height: 24px; stroke-width: 1.5; }
+.pal-btn[aria-pressed="true"] { background: var(--surface-2); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: inherit; }
+.pal-select { grid-column: 1 / -1; aspect-ratio: auto; display: flex; gap: 8px; padding: 6px 10px; justify-content: center; }
+.pal-select svg { width: 18px; height: 18px; fill: currentColor; }
+.pal-text { font-size: 13px; }
+.pal-num { position: absolute; left: 3px; top: 1px; font-size: 9px; color: var(--muted); line-height: 1.2; }
+.pal-badge { position: absolute; right: 3px; bottom: 1px; font-size: 11px; line-height: 1; color: var(--text); }
+.pal-path svg { fill: #2a3a4f; stroke: #6aa6d8; }
+.pal-wall svg { fill: #56667d; stroke: #9fb2cc; }
+.pal-wall.pal-moving svg, .pal-wall.pal-rotating svg { fill: #c9475a; stroke: #ff8090; }
+.pal-path.pal-moving svg, .pal-path.pal-rotating svg { fill: #173041; stroke: #4fb3e8; }
+.pal-zone { font-weight: 700; font-size: 16px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 4px; border: 2px solid; }
+.pal-start .pal-zone { color: #46c878; background: rgba(64, 196, 120, 0.2); }
+.pal-goal .pal-zone { color: #ffc43c; background: rgba(255, 196, 60, 0.2); }
+
+.theme-section summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
+.theme-section summary::-webkit-details-marker { display: none; }
+.theme-section summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+.theme-section[open] summary::before { transform: rotate(45deg); }
+.theme-section summary h3 { margin: 0; }
+#theme-panel { margin-top: 10px; }
+.theme-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.theme-swatch { width: 44px; height: 18px; border-radius: 4px; border: 1px solid var(--border); flex: none; margin-top: 6px; }
+input[type="color"] { width: 100%; height: 32px; padding: 2px 3px; cursor: pointer; }
+.panel h5 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+.toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; }
+.toggle input { padding: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+#props .fields + .muted, #props .muted { margin: 6px 0; font-size: 12px; }
 
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; }
 .panel h3 { margin: 0 0 8px; font-family: var(--font-title); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }

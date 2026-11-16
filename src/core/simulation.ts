@@ -1,10 +1,11 @@
-import { pointInRect, segmentRectEntry } from './geometry';
-import { compileMover, moverPos, type CompiledMover } from './mover';
+import { pointInPoly, pointInRect, segmentPolyCrossings, segmentRectEntry } from './geometry';
+import { compileMap, compileZone, toLocal, transformAt, type CompiledObject, type Transform } from './object';
 import type { MapData, Point } from './types';
 
 export type SimStatus = 'ready' | 'playing' | 'dead' | 'cleared';
 export type AbortReason = 'left' | 'blur' | 'pointer';
-export type EndReason = 'wall' | 'mover' | 'bounds' | AbortReason;
+/** wall: static wall · mover: moving/rotating wall · void: left the paths · bounds: left the map */
+export type EndReason = 'wall' | 'mover' | 'void' | 'bounds' | AbortReason;
 
 /** t: ms since the run started (START click), sub-millisecond precision preserved */
 export interface ReplaySample {
@@ -19,24 +20,27 @@ export interface Replay {
   abort?: { reason: AbortReason };
 }
 
-const tmp: Point = { x: 0, y: 0 };
+const tfA: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
+const tfB: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
+const pA: Point = { x: 0, y: 0 };
+const pB: Point = { x: 0, y: 0 };
 
 /**
  * Deterministic fixed 1 ms tick simulation.
  *
- * - The cursor path between input samples (time + position) is treated as line segments
- *   and split at every 1 ms boundary before checking.
- * - Static walls: exact intersection against each sub-segment, so no move is ever fast
- *   enough to skip over a wall.
- * - Moving obstacles: positions are interpolated linearly between tick k and k+1 and checked
- *   as a relative-motion segment in the obstacle's frame, so even when the cursor and the
- *   obstacle both move and pass through each other, the hit is caught.
- * - The same sample list always produces the same result, so replays can be used for
- *   verification and leaderboard anti-cheat.
+ * - The cursor path between input samples is treated as line segments, split at every 1 ms boundary.
+ * - Each piece is tested against every object in that object's own local frame: the cursor
+ *   endpoints are mapped through the inverse of the object's pose at the start and end of the
+ *   piece. That turns moving and rotating objects into static polygons and the cursor's motion
+ *   into a relative-motion segment, so nothing can be skipped over no matter how fast either moves.
+ * - All boundary crossings along the segment are collected and the segment is checked
+ *   interval by interval: safe = (inside some path, or the map has no paths) and inside no wall.
+ * - The same sample list always produces the same result, so replays can be verified on a server.
  */
 export class Simulation {
   readonly map: MapData;
-  readonly movers: readonly CompiledMover[];
+  /** Map objects (for drawing) */
+  readonly objects: readonly CompiledObject[];
 
   status: SimStatus = 'ready';
   /** Time (ms) up to which everything has been checked */
@@ -47,18 +51,26 @@ export class Simulation {
   /** Exact time (ms, fractional) of death or clear */
   endTime = 0;
 
+  private readonly hasPaths: boolean;
+  /** Objects used for collision: map objects + START/GOAL as safe floor when the map has paths */
+  private readonly solids: readonly CompiledObject[];
+  /** Per object: local segment endpoints [ax, ay, bx, by] for the segment being checked */
+  private readonly local: Float64Array;
+  private readonly relevant: Int32Array;
+  private relevantCount = 0;
+  private readonly crossings: number[] = [];
+
   private tick = 0;
-  /** Obstacle positions at tick k / k+1 as [x0,y0,x1,y1,...] */
-  private mA: Float64Array;
-  private mB: Float64Array;
   private samples: ReplaySample[] = [];
   private abortReason: AbortReason | null = null;
 
   constructor(map: MapData) {
     this.map = map;
-    this.movers = map.movers.map(compileMover);
-    this.mA = new Float64Array(this.movers.length * 2);
-    this.mB = new Float64Array(this.movers.length * 2);
+    this.objects = compileMap(map);
+    this.hasPaths = this.objects.some((o) => o.role === 'path');
+    this.solids = this.hasPaths ? [...this.objects, compileZone(map.start), compileZone(map.goal)] : this.objects;
+    this.local = new Float64Array(this.solids.length * 4);
+    this.relevant = new Int32Array(this.solids.length);
   }
 
   /** Number of 1 ms ticks processed */
@@ -78,8 +90,7 @@ export class Simulation {
     this.endTime = 0;
     this.abortReason = null;
     this.samples = [{ t: 0, x, y }];
-    this.loadMovers(0);
-    // Check whether we already overlap an obstacle at the moment of starting
+    // Check whether we already overlap something at the moment of starting
     this.checkSegment(0, x, y, 0, x, y);
     return true;
   }
@@ -116,7 +127,6 @@ export class Simulation {
       this.x = bx;
       this.y = by;
       this.tick = boundary;
-      this.advanceMovers(boundary);
       if (t === boundary) return;
     }
   }
@@ -141,77 +151,100 @@ export class Simulation {
     return r;
   }
 
-  private loadMovers(k: number): void {
-    for (let i = 0; i < this.movers.length; i++) {
-      moverPos(this.movers[i], k, tmp);
-      this.mA[i * 2] = tmp.x;
-      this.mA[i * 2 + 1] = tmp.y;
-      moverPos(this.movers[i], k + 1, tmp);
-      this.mB[i * 2] = tmp.x;
-      this.mB[i * 2 + 1] = tmp.y;
+  /** Map the segment into every object's local frame and gather boundary crossings */
+  private prepare(ta: number, xa: number, ya: number, tb: number, xb: number, yb: number): void {
+    const { solids, local, relevant, crossings } = this;
+    crossings.length = 0;
+    this.relevantCount = 0;
+    for (let i = 0; i < solids.length; i++) {
+      const o = solids[i];
+      let ax = xa;
+      let ay = ya;
+      let bx = xb;
+      let by = yb;
+      if (o.dynamic) {
+        toLocal(o, transformAt(o, ta, tfA), xa, ya, pA);
+        toLocal(o, transformAt(o, tb, tfB), xb, yb, pB);
+        ax = pA.x;
+        ay = pA.y;
+        bx = pB.x;
+        by = pB.y;
+      }
+      if (Math.max(ax, bx) < o.minX || Math.min(ax, bx) > o.maxX || Math.max(ay, by) < o.minY || Math.min(ay, by) > o.maxY) {
+        continue; // segment never comes near this object
+      }
+      local[i * 4] = ax;
+      local[i * 4 + 1] = ay;
+      local[i * 4 + 2] = bx;
+      local[i * 4 + 3] = by;
+      relevant[this.relevantCount++] = i;
+      if (ax !== bx || ay !== by) segmentPolyCrossings(ax, ay, bx, by, o.poly, crossings);
     }
+    crossings.sort((p, q) => p - q);
   }
 
-  private advanceMovers(k: number): void {
-    const prev = this.mA;
-    this.mA = this.mB;
-    this.mB = prev;
-    for (let i = 0; i < this.movers.length; i++) {
-      moverPos(this.movers[i], k + 1, tmp);
-      this.mB[i * 2] = tmp.x;
-      this.mB[i * 2 + 1] = tmp.y;
+  /** What the cursor is touching at fraction u of the prepared segment: null = safe */
+  private hazardAt(u: number): 'wall' | 'mover' | 'void' | null {
+    const { solids, local, relevant } = this;
+    let onPath = !this.hasPaths;
+    for (let k = 0; k < this.relevantCount; k++) {
+      const i = relevant[k];
+      const o = solids[i];
+      if (o.role === 'path' && onPath) continue;
+      const x = local[i * 4] + (local[i * 4 + 2] - local[i * 4]) * u;
+      const y = local[i * 4 + 1] + (local[i * 4 + 3] - local[i * 4 + 1]) * u;
+      if (!pointInPoly(x, y, o.poly)) continue;
+      if (o.role === 'wall') return o.dynamic ? 'mover' : 'wall';
+      onPath = true;
     }
+    return onPath ? null : 'void';
   }
 
-  /** Check the cursor's movement segment over [ta,tb] ⊂ [tick, tick+1] */
+  /** Check the cursor's movement over [ta,tb] (within one 1 ms tick) */
   private checkSegment(ta: number, xa: number, ya: number, tb: number, xb: number, yb: number): void {
     const { map } = this;
-    let best = Infinity;
-    let reason: EndReason | null = null;
+    this.prepare(ta, xa, ya, tb, xb, yb);
 
-    for (const w of map.walls) {
-      const e = segmentRectEntry(xa, ya, xb, yb, w.x, w.y, w.w, w.h);
-      if (e >= 0 && e < best) {
-        best = e;
-        reason = 'wall';
+    let deathU = Infinity;
+    let reason: 'wall' | 'mover' | 'void' | 'bounds' | null = this.hazardAt(0);
+    if (reason) {
+      deathU = 0;
+    } else {
+      // Between consecutive crossings the state can't change, so test one point per interval
+      let prev = 0;
+      const cs = this.crossings;
+      for (let k = 0; k <= cs.length; k++) {
+        const c = k < cs.length ? cs[k] : 1;
+        if (c > prev) {
+          const hazard = this.hazardAt((prev + c) / 2);
+          if (hazard) {
+            deathU = prev;
+            reason = hazard;
+            break;
+          }
+          prev = c;
+        }
       }
     }
 
-    const fa = ta - this.tick;
-    const fb = tb - this.tick;
-    const { mA, mB } = this;
-    for (let i = 0; i < this.movers.length; i++) {
-      const m = this.movers[i].src;
-      const ax = mA[i * 2] + (mB[i * 2] - mA[i * 2]) * fa;
-      const ay = mA[i * 2 + 1] + (mB[i * 2 + 1] - mA[i * 2 + 1]) * fa;
-      const bx = mA[i * 2] + (mB[i * 2] - mA[i * 2]) * fb;
-      const by = mA[i * 2 + 1] + (mB[i * 2 + 1] - mA[i * 2 + 1]) * fb;
-      // Convert to the obstacle's frame → the obstacle is a rectangle fixed at the origin
-      const e = segmentRectEntry(xa - ax, ya - ay, xb - bx, yb - by, 0, 0, m.w, m.h);
-      if (e >= 0 && e < best) {
-        best = e;
-        reason = 'mover';
-      }
-    }
-
-    // Point where the segment leaves the map bounds
+    // Leaving the map bounds
     let exit = Infinity;
     if (xb < 0) exit = Math.min(exit, xa / (xa - xb));
     if (xb > map.width) exit = Math.min(exit, (map.width - xa) / (xb - xa));
     if (yb < 0) exit = Math.min(exit, ya / (ya - yb));
     if (yb > map.height) exit = Math.min(exit, (map.height - ya) / (yb - ya));
-    if (exit < best) {
-      best = Math.max(0, exit);
+    if (exit < deathU) {
+      deathU = Math.max(0, exit);
       reason = 'bounds';
     }
 
     const g = map.goal;
     const goal = segmentRectEntry(xa, ya, xb, yb, g.x, g.y, g.w, g.h);
     // On a tie, death wins
-    if (goal >= 0 && goal < best) {
+    if (goal >= 0 && goal < deathU) {
       this.finish('cleared', null, goal, ta, xa, ya, tb, xb, yb);
     } else if (reason) {
-      this.finish('dead', reason, best, ta, xa, ya, tb, xb, yb);
+      this.finish('dead', reason, deathU, ta, xa, ya, tb, xb, yb);
     }
   }
 

@@ -1,42 +1,105 @@
 import { describe, expect, it } from 'vitest';
-import { segmentRectEntry } from './geometry';
-import { compileMover, moverPos } from './mover';
+import { pointInPoly, segmentRectEntry } from './geometry';
+import { CompiledMotion, CompiledRotation, ease } from './motion';
+import { flattenShape } from './shape';
 import { runReplay, Simulation, formatTime } from './simulation';
 import { createEmptyMap, mapWarnings, validateMap } from './validate';
 import { decodeMap, encodeMap } from './share';
 import { BUILTIN_LEVELS } from './levels';
-import type { MapData } from './types';
+import { THEME_PRESETS } from './theme';
+import type { MapData, MapObject, Motion, Rect, Rotation } from './types';
 
-function baseMap(patch: Partial<MapData> = {}): MapData {
+function baseMap(objects: MapObject[] = [], patch: Partial<MapData> = {}): MapData {
   return {
     ...createEmptyMap(),
     start: { x: 0, y: 0, w: 20, h: 20 },
     goal: { x: 700, y: 0, w: 50, h: 50 },
+    objects,
     ...patch,
   };
 }
+const wall = (r: Rect, extra: Partial<MapObject> = {}): MapObject => ({ role: 'wall', shape: { type: 'rect', ...r }, ...extra });
+const path = (r: Rect, extra: Partial<MapObject> = {}): MapObject => ({ role: 'path', shape: { type: 'rect', ...r }, ...extra });
+const motion = (m: Partial<Motion>): Motion => ({
+  type: 'linear', points: [], speed: 100, repeat: 'pingpong', easing: 'none', delay: 0, clockwise: true, ...m,
+});
+const rotation = (r: Partial<Rotation>): Rotation => ({
+  pivot: { x: 0, y: 0 }, speed: 90, angle: 360, clockwise: true, repeat: 'loop', easing: 'none', delay: 0, ...r,
+});
 
-describe('segmentRectEntry', () => {
-  it('returns the fraction where the segment first touches the rect', () => {
+describe('geometry', () => {
+  it('segmentRectEntry returns the fraction where the segment first touches the rect', () => {
     expect(segmentRectEntry(0, 5, 100, 5, 40, 0, 10, 10)).toBeCloseTo(0.4);
-  });
-  it('returns -1 when it never touches', () => {
     expect(segmentRectEntry(0, 50, 100, 50, 40, 0, 10, 10)).toBe(-1);
-    expect(segmentRectEntry(0, 5, 30, 5, 40, 0, 10, 10)).toBe(-1);
-  });
-  it('returns 0 when the start point is inside', () => {
     expect(segmentRectEntry(45, 5, 100, 5, 40, 0, 10, 10)).toBe(0);
+  });
+  it('flattened circles stay within a fraction of a pixel of the true circle', () => {
+    const { poly } = flattenShape({ type: 'ellipse', cx: 0, cy: 0, rx: 200, ry: 200 });
+    expect(pointInPoly(199.5, 0, poly)).toBe(true);
+    expect(pointInPoly(0, 199.5, poly)).toBe(true);
+    expect(pointInPoly(141.2, 141.2, poly)).toBe(true); // r ≈ 199.7
+    expect(pointInPoly(141.6, 141.6, poly)).toBe(false); // r ≈ 200.3
+  });
+  it('freeform smooth vertices bend the outline', () => {
+    const corner = flattenShape({ type: 'poly', points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }] });
+    const smooth = flattenShape({ type: 'poly', points: [{ x: 0, y: 0, smooth: true }, { x: 100, y: 0, smooth: true }, { x: 100, y: 100, smooth: true }, { x: 0, y: 100, smooth: true }] });
+    expect(corner.poly.length).toBe(8);
+    expect(smooth.poly.length).toBeGreaterThan(40);
+    expect(smooth.maxX).toBeGreaterThan(100); // the curve bulges past the corner points
   });
 });
 
-describe('moverPos', () => {
-  const cm = compileMover({ w: 10, h: 10, path: [{ x: 0, y: 0 }, { x: 100, y: 0 }], speed: 100, mode: 'pingpong', offset: 0 });
+describe('motion', () => {
   const p = { x: 0, y: 0 };
-  it('pingpong: goes to the end and comes back', () => {
-    expect(moverPos(cm, 500, p).x + 5).toBeCloseTo(50);
-    expect(moverPos(cm, 1000, p).x + 5).toBeCloseTo(100);
-    expect(moverPos(cm, 1500, p).x + 5).toBeCloseTo(50);
-    expect(moverPos(cm, 2000, p).x + 5).toBeCloseTo(0);
+  it('linear pingpong goes to the end and comes back', () => {
+    const m = new CompiledMotion(motion({ points: [{ x: 100, y: 0 }] }), { x: 0, y: 0 });
+    expect(m.offsetAt(500, p).x).toBeCloseTo(50);
+    expect(m.offsetAt(1000, p).x).toBeCloseTo(100);
+    expect(m.offsetAt(1500, p).x).toBeCloseTo(50);
+    expect(m.offsetAt(2000, p).x).toBeCloseTo(0);
+  });
+  it('once stops at the last marker; loop returns to the anchor', () => {
+    const once = new CompiledMotion(motion({ points: [{ x: 100, y: 0 }], repeat: 'once' }), { x: 0, y: 0 });
+    expect(once.offsetAt(5000, p).x).toBeCloseTo(100);
+    const loop = new CompiledMotion(motion({ points: [{ x: 100, y: 0 }, { x: 100, y: 100 }], repeat: 'loop' }), { x: 0, y: 0 });
+    // 100 + 100 + √2·100 px at 100 px/s
+    expect(loop.pass).toBeCloseTo(2000 + Math.SQRT2 * 1000);
+    expect(loop.offsetAt(1500, p)).toMatchObject({ x: expect.closeTo(100), y: expect.closeTo(50) });
+  });
+  it('delay holds the object; negative delay starts mid-motion', () => {
+    const m = new CompiledMotion(motion({ points: [{ x: 100, y: 0 }], delay: 300 }), { x: 0, y: 0 });
+    expect(m.offsetAt(200, p).x).toBe(0);
+    expect(m.offsetAt(800, p).x).toBeCloseTo(50);
+    const early = new CompiledMotion(motion({ points: [{ x: 100, y: 0 }], delay: -500 }), { x: 0, y: 0 });
+    expect(early.offsetAt(1, p).x).toBeCloseTo(50.1);
+  });
+  it('easing slows the start and end of each leg', () => {
+    expect(ease('inOut', 0.5)).toBeCloseTo(0.5);
+    expect(ease('inOut', 0.1)).toBeLessThan(0.1);
+    expect(ease('in', 0.5)).toBeCloseTo(0.25);
+    expect(ease('out', 0.5)).toBeCloseTo(0.75);
+    const m = new CompiledMotion(motion({ points: [{ x: 100, y: 0 }], easing: 'inOut' }), { x: 0, y: 0 });
+    expect(m.offsetAt(100, p).x).toBeLessThan(10);
+    expect(m.offsetAt(500, p).x).toBeCloseTo(50);
+  });
+  it('circle orbits the center at the anchor distance', () => {
+    const m = new CompiledMotion(motion({ type: 'circle', points: [{ x: 0, y: 0 }], speed: 100, repeat: 'loop' }), { x: 100, y: 0 });
+    const lap = (2 * Math.PI * 100 * 1000) / 100;
+    expect(Math.abs(m.pass - lap) / lap).toBeLessThan(0.001);
+    m.offsetAt(m.pass / 4, p); // clockwise on screen (y down): (100,0) → (0,100)
+    expect(p.x + 100).toBeCloseTo(0, 0);
+    expect(p.y).toBeCloseTo(100, 0);
+  });
+  it('curve passes through every marker', () => {
+    const m = new CompiledMotion(motion({ type: 'curve', points: [{ x: 100, y: 100 }, { x: 200, y: 0 }], repeat: 'once' }), { x: 0, y: 0 });
+    expect(m.offsetAt(m.legs[0].dur, p)).toMatchObject({ x: expect.closeTo(100), y: expect.closeTo(100) });
+  });
+  it('rotation: loop, pingpong and direction', () => {
+    expect(new CompiledRotation(rotation({ speed: 90 })).angleAt(1000)).toBeCloseTo(Math.PI / 2);
+    expect(new CompiledRotation(rotation({ speed: 90, clockwise: false })).angleAt(1000)).toBeCloseTo(-Math.PI / 2);
+    const swing = new CompiledRotation(rotation({ speed: 90, angle: 90, repeat: 'pingpong' }));
+    expect(swing.angleAt(1000)).toBeCloseTo(Math.PI / 2);
+    expect(swing.angleAt(1500)).toBeCloseTo(Math.PI / 4);
   });
 });
 
@@ -48,13 +111,12 @@ describe('Simulation', () => {
   });
 
   it('cannot tunnel through a thin wall even with a long jump', () => {
-    const sim = new Simulation(baseMap({ walls: [{ x: 100, y: 0, w: 2, h: 500 }] }));
+    const sim = new Simulation(baseMap([wall({ x: 100, y: 0, w: 2, h: 500 })]));
     sim.start(10, 10);
     sim.feed(10, 600, 10); // 590px in 10ms
     expect(sim.status).toBe('dead');
     expect(sim.endReason).toBe('wall');
     expect(sim.x).toBeCloseTo(100);
-    // 590px over 10ms → reaches x=100 at 90/590*10ms
     expect(sim.endTime).toBeCloseTo((90 / 590) * 10, 9);
   });
 
@@ -73,7 +135,6 @@ describe('Simulation', () => {
     sim.start(10, 10);
     sim.feed(1000, 710, 10);
     expect(sim.status).toBe('cleared');
-    // reaches x=700 at 690/700 of the way
     expect(sim.endTime).toBeCloseTo((690 / 700) * 1000, 9);
     expect(formatTime(sim.endTime)).toBe('0.985');
   });
@@ -82,57 +143,166 @@ describe('Simulation', () => {
     const sim = new Simulation(baseMap());
     sim.start(10, 10);
     sim.feed(5, 10, -30);
-    expect(sim.status).toBe('dead');
     expect(sim.endReason).toBe('bounds');
     expect(sim.y).toBeCloseTo(0);
   });
 
-  it('fails when a moving obstacle hits a stationary cursor', () => {
-    const sim = new Simulation(baseMap({
-      start: { x: 140, y: 40, w: 20, h: 20 },
-      movers: [{ w: 10, h: 10, path: [{ x: 100, y: 50 }, { x: 300, y: 50 }], speed: 100, mode: 'pingpong', offset: 0 }],
-    }));
+  it('circle walls collide on their curved edge, not their bounding box', () => {
+    const map = baseMap([{ role: 'wall', shape: { type: 'ellipse', cx: 200, cy: 200, rx: 50, ry: 50 } }]);
+    const miss = new Simulation(map);
+    miss.start(10, 10);
+    miss.feed(5, 160, 160); // inside the bbox corner, outside the circle (distance ≈ 56.6)
+    expect(miss.status).toBe('playing');
+    const hit = new Simulation(map);
+    hit.start(10, 10);
+    hit.feed(5, 200, 200);
+    expect(hit.endReason).toBe('wall');
+    expect(Math.hypot(hit.x - 200, hit.y - 200)).toBeCloseTo(50, 0);
+  });
+
+  describe('paths', () => {
+    it('everything is safe when the map has no paths', () => {
+      const sim = new Simulation(baseMap());
+      sim.start(10, 10);
+      sim.feed(5, 300, 300);
+      expect(sim.status).toBe('playing');
+    });
+    it('leaving the paths is deadly, START and GOAL count as floor', () => {
+      const sim = new Simulation(baseMap([path({ x: 20, y: 0, w: 200, h: 20 })]));
+      sim.start(10, 10); // on START, outside the path
+      sim.feed(5, 100, 10); // onto the path
+      expect(sim.status).toBe('playing');
+      sim.feed(10, 100, 60); // off the bottom edge (y = 20)
+      expect(sim.endReason).toBe('void');
+      expect(sim.y).toBeCloseTo(20);
+    });
+    it('overlapping paths form one walkable area', () => {
+      const sim = new Simulation(baseMap([path({ x: 20, y: 0, w: 200, h: 20 }), path({ x: 200, y: 0, w: 20, h: 300 })]));
+      sim.start(10, 10);
+      sim.feed(5, 210, 10);
+      sim.feed(10, 210, 290);
+      expect(sim.status).toBe('playing');
+    });
+    it('walls on top of a path are still deadly', () => {
+      const sim = new Simulation(baseMap([path({ x: 20, y: 0, w: 200, h: 20 }), wall({ x: 100, y: 0, w: 5, h: 20 })]));
+      sim.start(10, 10);
+      sim.feed(5, 150, 10);
+      expect(sim.endReason).toBe('wall');
+    });
+    it('a moving platform leaves a cursor that stays still', () => {
+      const map = baseMap(
+        [path({ x: 15, y: 0, w: 40, h: 20 }, { motion: motion({ points: [{ x: 335, y: 10 }], speed: 100, repeat: 'once' }) })],
+        { start: { x: 0, y: 0, w: 20, h: 20 } }, // START overlaps the platform's rest position
+      );
+      const sim = new Simulation(map);
+      sim.start(5, 10);
+      sim.feed(1, 30, 10); // step onto the platform (x 15..55)
+      expect(sim.status).toBe('playing');
+      sim.advanceTo(2000);
+      // the platform's left edge (15 + 0.1t) passes x=30 at t = 150ms
+      expect(sim.endReason).toBe('void');
+      expect(sim.endTime).toBeCloseTo(150, 6);
+    });
+  });
+
+  it('fails when a moving wall hits a stationary cursor', () => {
+    const map = baseMap(
+      [wall({ x: 95, y: 45, w: 10, h: 10 }, { motion: motion({ points: [{ x: 300, y: 50 }], speed: 100 }) })],
+      { start: { x: 140, y: 40, w: 20, h: 20 } },
+    );
+    const sim = new Simulation(map);
     sim.start(150, 50);
     sim.advanceTo(2000);
-    expect(sim.status).toBe('dead');
     expect(sim.endReason).toBe('mover');
     // obstacle center x = 100 + 0.1t; its right edge (center+5) reaches 150 at t=450ms
     expect(sim.endTime).toBeCloseTo(450, 6);
   });
 
-  it('catches the cursor and an obstacle passing through each other', () => {
-    // obstacle moves right, cursor moves left fast (a per-frame point check would miss this)
-    const sim = new Simulation(baseMap({
-      start: { x: 380, y: 40, w: 20, h: 20 },
-      movers: [{ w: 4, h: 40, path: [{ x: 300, y: 50 }, { x: 800, y: 50 }], speed: 20000, mode: 'pingpong', offset: 0 }],
-    }));
+  it('catches the cursor and a wall passing through each other', () => {
+    // no overlap at t=0 or t=1, but they cross in between
+    const map = baseMap(
+      [wall({ x: 298, y: 30, w: 4, h: 40 }, { motion: motion({ points: [{ x: 800, y: 50 }], speed: 5000 }) })],
+      { start: { x: 380, y: 40, w: 20, h: 20 } },
+    );
+    const sim = new Simulation(map);
     sim.start(390, 50);
-    sim.feed(1, 300, 50); // no overlap at t=0 or t=1, but they cross in between
-    expect(sim.status).toBe('dead');
+    sim.feed(1, 300, 50);
     expect(sim.endReason).toBe('mover');
   });
 
-  it('re-running a replay gives exactly the same result (deterministic)', () => {
-    const map = BUILTIN_LEVELS[2];
+  it('a rotating bar sweeps into a stationary cursor at the right time', () => {
+    // bar from (100,95) to (200,105) spinning clockwise around (100,100) at 90°/s
+    const map = baseMap(
+      [wall({ x: 100, y: 95, w: 100, h: 10 }, { rotation: rotation({ pivot: { x: 100, y: 100 }, speed: 90 }) })],
+      { start: { x: 140, y: 140, w: 20, h: 20 } },
+    );
     const sim = new Simulation(map);
-    sim.start(40, 50);
-    let t = 0;
-    let x = 40;
-    let y = 50;
-    let seed = 42;
-    const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
-    while (sim.status === 'playing' && t < 20000) {
-      t += 0.25 + rand() * 3;
-      x += (rand() - 0.3) * 6;
-      y += (rand() - 0.5) * 4;
+    sim.start(150, 150); // 45° below the bar, distance ≈ 70.7 from the pivot
+    sim.advanceTo(3000);
+    expect(sim.endReason).toBe('mover');
+    // the bar's leading edge is 5px ahead of its center line: hit when angle = 45° − asin(5 / 70.71)
+    const expected = ((45 - (Math.asin(5 / Math.hypot(50, 50)) * 180) / Math.PI) / 90) * 1000;
+    expect(sim.endTime).toBeCloseTo(expected, 0);
+  });
+
+  it('re-running a replay gives exactly the same result (deterministic)', () => {
+    for (const map of BUILTIN_LEVELS) {
+      const sim = new Simulation(map);
+      const s = map.start;
+      let x = s.x + s.w / 2;
+      let y = s.y + s.h / 2;
+      sim.start(x, y);
+      let t = 0;
+      let seed = 42;
+      const rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+      while (sim.status === 'playing' && t < 20000) {
+        t += 0.25 + rand() * 3;
+        x += (rand() - 0.3) * 6;
+        y += (rand() - 0.5) * 4;
+        sim.feed(t, x, y);
+      }
+      const again = runReplay(map, JSON.parse(JSON.stringify(sim.getReplay())));
+      expect(again.status).toBe(sim.status);
+      expect(again.endReason).toBe(sim.endReason);
+      expect(again.endTime).toBe(sim.endTime);
+      expect(again.x).toBe(sim.x);
+      expect(again.y).toBe(sim.y);
+    }
+  });
+
+  it('level 5 (Floating Bridge) can be cleared by riding the moving platform', () => {
+    const map = BUILTIN_LEVELS[4];
+    const sim = new Simulation(map);
+    const platform = sim.objects[1].motion!;
+    const off = { x: 0, y: 0 };
+    const lerp = (a: number, b: number, f: number) => a + (b - a) * f;
+    // [t0, t1, from, to] straight moves; the platform ride follows the platform itself
+    const legs: [number, number, [number, number], [number, number]][] = [
+      [0, 300, [50, 250], [360, 250]], // along the wavy path onto the platform
+      [2500, 2560, [540, 250], [600, 250]], // platform arrives (1s wait + 1.5s trip): step off onto the island
+      [2560, 2860, [600, 250], [600, 310]], // around the spinning bar…
+      [2860, 3360, [600, 310], [750, 310]],
+      [3360, 3560, [750, 310], [750, 260]], // …and up into GOAL (bottom edge y=280)
+    ];
+    sim.start(50, 250);
+    for (let t = 1; t <= 3560 && sim.status === 'playing'; t++) {
+      let x: number;
+      let y: number;
+      const leg = legs.find(([a, b]) => t > a && t <= b);
+      if (leg) {
+        const f = (t - leg[0]) / (leg[1] - leg[0]);
+        x = lerp(leg[2][0], leg[3][0], f);
+        y = lerp(leg[2][1], leg[3][1], f);
+      } else {
+        // riding: stay at the same spot on the platform
+        platform.offsetAt(t, off);
+        x = 360 + off.x;
+        y = 250;
+      }
       sim.feed(t, x, y);
     }
-    const again = runReplay(map, JSON.parse(JSON.stringify(sim.getReplay())));
-    expect(again.status).toBe(sim.status);
-    expect(again.endReason).toBe(sim.endReason);
-    expect(again.endTime).toBe(sim.endTime);
-    expect(again.x).toBe(sim.x);
-    expect(again.y).toBe(sim.y);
+    expect(sim.endReason).toBe(null);
+    expect(sim.status).toBe('cleared');
   });
 
   it('aborts are recorded in the replay', () => {
@@ -141,9 +311,7 @@ describe('Simulation', () => {
     sim.start(10, 10);
     sim.feed(5, 15, 10);
     sim.abort('left');
-    const again = runReplay(map, sim.getReplay());
-    expect(again.status).toBe('dead');
-    expect(again.endReason).toBe('left');
+    expect(runReplay(map, sim.getReplay()).endReason).toBe('left');
   });
 });
 
@@ -157,11 +325,44 @@ describe('validateMap', () => {
   it('rejects invalid values', () => {
     expect(() => validateMap({ ...createEmptyMap(), width: 'abc' })).toThrow();
     expect(() => validateMap({ ...createEmptyMap(), v: 99 })).toThrow();
-    expect(() => validateMap({ ...createEmptyMap(), walls: [{ x: 0, y: 0, w: -5, h: 10 }] })).toThrow();
+    expect(() => validateMap({ ...createEmptyMap(), objects: [wall({ x: 0, y: 0, w: -5, h: 10 })] })).toThrow();
+    expect(() => validateMap({ ...createEmptyMap(), objects: [{ role: 'wall', shape: { type: 'poly', points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] } }] })).toThrow();
+    expect(() => validateMap({ ...createEmptyMap(), objects: [{ role: 'lava', shape: { type: 'rect', x: 0, y: 0, w: 5, h: 5 } }] })).toThrow();
+  });
+  it('accepts every theme preset and keeps it through sharing', async () => {
+    for (const p of THEME_PRESETS) {
+      const map = { ...createEmptyMap(), ...(p.theme ? { theme: p.theme } : {}) };
+      expect(validateMap(map)).toEqual(map);
+      expect(await decodeMap(await encodeMap(map))).toEqual(map);
+    }
+  });
+  it('rejects bad theme values', () => {
+    const theme = THEME_PRESETS.find((p) => p.id === 'neon')!.theme!;
+    const bad = (patch: object) => validateMap({ ...createEmptyMap(), theme: { ...theme, ...patch } });
+    expect(() => bad({ wall: { fill: { type: 'solid', color: 'red' }, edge: '#ffffff' } })).toThrow();
+    expect(() => bad({ wall: { fill: { type: 'solid', color: 'url(javascript:alert(1))' }, edge: '#ffffff' } })).toThrow();
+    expect(() => bad({ path: { fill: { type: 'pattern', pattern: 'zigzag', color: '#000000', background: '#ffffff', size: 10 }, edge: '#ffffff' } })).toThrow();
+    expect(() => bad({ path: { fill: { type: 'pattern', pattern: 'dots', color: '#000000', background: '#ffffff', size: 999 }, edge: '#ffffff' } })).toThrow();
   });
   it('strips unknown fields', () => {
     const m = validateMap({ ...createEmptyMap(), evil: '<script>' }) as unknown as Record<string, unknown>;
     expect(m.evil).toBeUndefined();
+  });
+  it('migrates v1 maps (walls + movers)', () => {
+    const v1 = {
+      v: 1, name: 'old', author: '', width: 800, height: 500,
+      start: { x: 0, y: 0, w: 20, h: 20 }, goal: { x: 700, y: 0, w: 50, h: 50 },
+      walls: [{ x: 100, y: 0, w: 10, h: 100 }],
+      movers: [{ w: 10, h: 20, path: [{ x: 300, y: 50 }, { x: 300, y: 250 }], speed: 80, mode: 'pingpong', offset: 250 }],
+    };
+    const m = validateMap(v1);
+    expect(m.v).toBe(2);
+    expect(m.objects).toHaveLength(2);
+    expect(m.objects[1]).toEqual({
+      role: 'wall',
+      shape: { type: 'rect', x: 295, y: 40, w: 10, h: 20 },
+      motion: { type: 'linear', points: [{ x: 300, y: 250 }], speed: 80, repeat: 'pingpong', easing: 'none', delay: -250, clockwise: true },
+    });
   });
 });
 

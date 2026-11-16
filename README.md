@@ -22,9 +22,11 @@ npm run build     # static site in dist/ — deploy as-is to GitHub Pages, Verce
 ```
 src/
   core/            # No DOM dependencies — reusable on a server later (replay verification)
-    types.ts       # Map schema (MapData v1)
-    geometry.ts    # Segment–rectangle intersection (Liang–Barsky)
-    mover.ts       # Moving obstacle position as a closed-form function of time (deterministic)
+    types.ts       # Map schema (MapData v2): objects = shape × role × motion/rotation
+    geometry.ts    # Segment/polygon crossings, point-in-polygon, rect helpers
+    shape.ts       # Rect / circle / polygon / freeform → one polygon used for both drawing and collision
+    motion.ts      # Routes (straight, curve, circle), repeat, easing, rotation — closed-form in time
+    object.ts      # Compiled objects and their pose (translate + rotate around a pivot) at time t
     simulation.ts  # Fixed 1 ms tick simulation and replays
     validate.ts    # Validation and warnings for external maps
     share.ts       # Map <-> URL share code (deflate-raw + base64url)
@@ -62,12 +64,44 @@ const audio = new Audio(hitSound);
 
 Use a root-level `public/` folder only for files that must keep a fixed URL (e.g. `favicon.ico`, `robots.txt`); those are copied to `dist/` as-is.
 
+## Map editor
+
+Every object is a **shape** (rectangle, circle, polygon, freeform) with a **role** and an optional **behavior**:
+
+- **Path** — safe floor. Once a map has any path, everything outside the paths is deadly void. START and GOAL always count as floor.
+- **Wall** — deadly everywhere.
+- **Moving** — follows a route of markers: straight, curve (smooth spline through the markers) or circle (orbit around a center marker). Options: repeat (loop / ping-pong / once), speed, smooth start/end (easing per leg), start delay (negative = start partway through).
+- **Rotating** — spins around a draggable pivot. Options: speed, angle per cycle (360 + loop = continuous spin), direction, repeat, smooth start/end, start delay. Rotating objects can also have a route.
+
+The palette lists all 26 tools by number:
+
+| # | Tools |
+|---|---|
+| 1–4 | Rectangle / circle / polygon / freeform **path** |
+| 5–8 | Rectangle / circle / polygon / freeform **wall** |
+| 9–10 | START area, GOAL area |
+| 11–14 | Moving paths |
+| 15–18 | Rotating paths |
+| 19–22 | Moving walls |
+| 23–26 | Rotating walls |
+
+Editing: drag to draw rectangles/circles (Shift = square/circle), click to place polygon points (freeform: click = curved point, Shift+click = sharp corner; click the first point or Enter to close). With Select (V): drag to move, drag handles to reshape, double-click a polygon vertex to toggle curve, double-click an edge to add a vertex, Alt+click a vertex to remove it. Ctrl+Z / Ctrl+Y undo/redo, Ctrl+D duplicate, Delete removes. Maps saved in the older v1 format are migrated automatically.
+
+### Themes
+
+Each map can carry its own look (Map Editor → **Theme**), saved with the map and kept in share links. Two surfaces are styled separately:
+
+- **Walls & obstacles** (static, moving and rotating walls)
+- **Paths**
+
+Each surface gets an outline color and a fill: **solid**, **gradient** (linear with an angle, or radial; two colors) or **pattern** (stripes, diagonal, dots, grid, checker; color, background, tile size). Gradients and patterns are laid out in each object's own frame, so they move and rotate with it. Presets: Default, Neon, Lava, Forest, Candy, Mono — pick one and tweak it, or build your own.
+
 ## How 1 ms hit detection works
 
 1. **Input**: Listens to `pointerrawupdate` (when supported) or `pointermove`, and uses `getCoalescedEvents()` to recover every raw sample batched between frames. Each sample's `timeStamp` is used as its time.
 2. **Simulation**: The cursor path between samples is treated as line segments, split at every 1 ms boundary, and checked continuously.
-   - Walls: exact segment intersection, so you can't tunnel through a wall no matter how fast you move.
-   - Moving obstacles: checked as a relative-motion segment in the obstacle's frame, so collisions where the cursor and obstacle pass through each other are caught.
+   - Each piece is mapped into every object's own frame (undoing its movement and rotation), so moving and rotating objects become static polygons and the cursor's path becomes a relative-motion segment. Nothing can be skipped over, no matter how fast the cursor or the object moves.
+   - All boundary crossings along the piece are collected and each interval between them is checked: safe = on a path (or the map has none) and inside no wall.
    - If the mouse is idle, the render loop still advances time, so an obstacle running into a stationary cursor counts as a hit (with a 40 ms margin for input latency).
 3. **Deterministic**: The same input samples always produce the same result. `getReplay()` / `runReplay()` let a server re-verify a recorded run.
 
@@ -83,6 +117,6 @@ The real sample interval is capped by the mouse's polling rate (1000 Hz → 1 ms
 
 - [x] 1 ms simulation with continuous collision detection
 - [x] High-precision input and debug display
-- [x] Map editor (walls, obstacles and paths, START/GOAL, undo/redo, autosave, JSON import/export)
+- [x] Map editor: 26 tools (paths/walls × rectangle/circle/polygon/freeform × static/moving/rotating, START/GOAL), routes with markers, easing, undo/redo, autosave, JSON import/export
 - [x] URL sharing (no server)
 - [ ] Phase 2: Supabase integration — map browser/search/likes, leaderboards, server-side replay verification

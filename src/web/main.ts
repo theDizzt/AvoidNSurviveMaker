@@ -41,7 +41,8 @@ const play = new PlayController({
 const editor = new Editor({
   canvas: $<HTMLCanvasElement>('editor-canvas'),
   hint: $('editor-hint'),
-  tools: [...screens.editor.querySelectorAll<HTMLButtonElement>('[data-tool]')],
+  palette: $('palette'),
+  theme: $('theme-panel'),
   snap: $<HTMLInputElement>('opt-snap'),
   preview: $<HTMLInputElement>('opt-preview'),
   undo: $<HTMLButtonElement>('btn-undo'),
