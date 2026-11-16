@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Avoid N Survive Maker</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Avoid <span>N</span> Survive</h1>
+      <nav>
+        <button type="button" id="nav-play" aria-pressed="true">플레이</button>
+        <button type="button" id="nav-edit" aria-pressed="false">맵 에디터</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="play-view">
+        <div class="toolbar">
+          <select id="level-select" aria-label="맵 선택"></select>
+          <button type="button" id="btn-back-editor" hidden>← 에디터로 돌아가기</button>
+          <button type="button" id="btn-play-edit">이 맵을 에디터에서 열기</button>
+          <span class="muted">R: 초기화</span>
+        </div>
+        <div class="stage"><canvas id="play-canvas"></canvas></div>
+        <p id="play-status" class="status"></p>
+        <details class="debug" open>
+          <summary>입력 정밀도 디버그</summary>
+          <dl id="debug-stats"></dl>
+          <p class="muted">
+            마우스를 계속 움직이면 실제 샘플 간격이 측정돼요. 1000Hz 마우스라면 약 1.000ms,
+            일반 125Hz 마우스라면 약 8ms가 나와요. 판정은 샘플 사이를 1ms 단위로 잘라 연속 충돌 검사로 처리합니다.
+          </p>
+        </details>
+      </section>
+
+      <section id="editor-view" hidden>
+        <div class="toolbar">
+          <div class="tools" role="group" aria-label="도구">
+            <button type="button" data-tool="select">1 선택</button>
+            <button type="button" data-tool="wall">2 벽</button>
+            <button type="button" data-tool="mover">3 장애물</button>
+            <button type="button" data-tool="start">4 START</button>
+            <button type="button" data-tool="goal">5 GOAL</button>
+          </div>
+          <label class="check"><input type="checkbox" id="opt-snap" checked /> 격자 맞춤</label>
+          <label class="check"><input type="checkbox" id="opt-preview" /> 움직임 미리보기</label>
+          <button type="button" id="btn-undo" title="Ctrl+Z">되돌리기</button>
+          <button type="button" id="btn-redo" title="Ctrl+Y">다시 실행</button>
+        </div>
+        <div class="editor-layout">
+          <div>
+            <div class="stage"><canvas id="editor-canvas"></canvas></div>
+            <p id="editor-hint" class="status"></p>
+          </div>
+          <aside class="panel">
+            <section>
+              <h3>맵 정보</h3>
+              <div class="fields">
+                <label class="field wide"><span>이름</span><input id="map-name" maxlength="60" /></label>
+                <label class="field wide"><span>제작자</span><input id="map-author" maxlength="60" /></label>
+                <label class="field"><span>너비</span><input id="map-width" type="number" step="10" /></label>
+                <label class="field"><span>높이</span><input id="map-height" type="number" step="10" /></label>
+              </div>
+            </section>
+            <section>
+              <h3>선택한 오브젝트</h3>
+              <div id="props"></div>
+            </section>
+            <ul id="messages" class="messages"></ul>
+            <section>
+              <h3>테스트 &amp; 공유</h3>
+              <button type="button" id="btn-test" class="primary">▶ 테스트 플레이</button>
+              <p id="verify-status" class="verify"></p>
+              <button type="button" id="btn-share" disabled>🔗 공유 링크 만들기</button>
+              <input id="share-url" readonly placeholder="공유 링크가 여기에 표시돼요" />
+            </section>
+            <section class="actions">
+              <button type="button" id="btn-export">JSON 내보내기</button>
+              <button type="button" id="btn-import">JSON 불러오기</button>
+              <input type="file" id="import-file" accept=".json,application/json" hidden />
+              <button type="button" id="btn-new" class="danger">새 맵</button>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/web/main.ts"></script>
+  </body>
+</html>

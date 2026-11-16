@@ -1,0 +1,105 @@
+:root {
+  --bg: #0b0e13;
+  --surface: #151a22;
+  --surface-2: #1d2430;
+  --border: #2a3342;
+  --text: #e6ebf2;
+  --muted: #8a96a8;
+  --accent: #6cc4ff;
+  --accent-ink: #06121c;
+  --danger: #ff6b7d;
+  --warn: #ffc857;
+  --ok: #5ed39a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.topbar h1 { margin: 0; font-size: 18px; letter-spacing: 0.02em; }
+.topbar h1 span { color: var(--accent); }
+nav { display: flex; gap: 6px; }
+
+main { max-width: 1240px; margin: 0 auto; padding: 16px; }
+
+button, select, input {
+  font: inherit;
+  color: inherit;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.danger { color: var(--danger); }
+input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.tools { display: flex; flex-wrap: wrap; gap: 4px; }
+.check { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.check input { padding: 0; }
+
+.stage { width: 100%; }
+.stage canvas {
+  display: block;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  touch-action: none;
+  user-select: none;
+}
+#play-canvas { cursor: crosshair; }
+
+.status { margin: 8px 0; color: var(--muted); min-height: 1.5em; }
+.muted { color: var(--muted); }
+
+.debug { margin-top: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+.debug summary { cursor: pointer; font-weight: 600; }
+.debug dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 10px 0; font-family: ui-monospace, monospace; font-size: 13px; }
+.debug dt { color: var(--muted); }
+.debug dd { margin: 0; }
+
+.editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .editor-layout { grid-template-columns: 1fr; } }
+
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; }
+.panel h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.panel h4 { margin: 0 0 8px; }
+.panel section > button, #share-url { width: 100%; }
+#share-url { margin-top: 6px; font-size: 12px; }
+
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.field { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.field.wide { grid-column: 1 / -1; }
+.field input, .field select { width: 100%; color: var(--text); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+.panel section.actions > button { width: auto; }
+.actions p { width: 100%; margin: 0; }
+
+.messages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.messages:empty { display: none; }
+.messages li { padding: 6px 8px; border-radius: 6px; font-size: 12px; }
+.messages li.warn { background: rgba(255, 200, 87, 0.12); color: var(--warn); }
+.messages li.error { background: rgba(255, 107, 125, 0.14); color: var(--danger); }
+
+.verify { margin: 8px 0; font-size: 12px; color: var(--muted); }
+.verify.ok { color: var(--ok); }
