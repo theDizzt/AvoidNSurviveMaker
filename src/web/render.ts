@@ -22,20 +22,6 @@ export const COLORS = {
 export const FONT_MAIN = "'MangoDdobak', system-ui, sans-serif";
 export const FONT_TITLE = "'GSHyejaroun', 'MangoDdobak', system-ui, sans-serif";
 
-/**
- * Canvas text doesn't trigger @font-face downloads by itself, so request the faces
- * the canvas uses up front. The render loops redraw every frame, so text switches
- * to the real font as soon as it's loaded.
- */
-export function preloadCanvasFonts(): void {
-  if (!('fonts' in document)) return;
-  for (const f of [`400 16px ${FONT_MAIN}`, `700 16px ${FONT_MAIN}`, `700 16px ${FONT_TITLE}`]) {
-    document.fonts.load(f).catch(() => {
-      /* fall back to system fonts */
-    });
-  }
-}
-
 const tmp: Point = { x: 0, y: 0 };
 
 /** Size the canvas to the map's aspect ratio, with backing resolution scaled by devicePixelRatio */

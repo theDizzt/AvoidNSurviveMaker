@@ -3,28 +3,80 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Avoid N Survive Maker</title>
+    <title>Avoid N Survive</title>
   </head>
   <body>
-    <header class="topbar">
-      <h1>Avoid <span>N</span> Survive</h1>
+    <!-- Preloading screen -->
+    <div id="preload-screen" class="screen preload" role="status" aria-live="polite">
+      <div class="preload-inner">
+        <div class="logo">Avoid <span>N</span> Survive</div>
+        <div class="progress" aria-hidden="true"><div id="preload-bar" class="progress-bar"></div></div>
+        <p id="preload-text" class="preload-text">Loading…</p>
+      </div>
+    </div>
+
+    <!-- Main menu -->
+    <div id="menu-screen" class="screen menu" hidden>
+      <div class="menu-bg" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="menu-inner">
+        <h1 class="logo">Avoid <span>N</span> Survive</h1>
+        <p class="tagline">Dodge with your mouse. Survive to the goal.</p>
+        <nav class="menu-buttons" aria-label="Main menu">
+          <button type="button" id="menu-start" class="menu-btn primary">Start Game</button>
+          <button type="button" id="menu-options" class="menu-btn">Options</button>
+          <button type="button" id="menu-editor" class="menu-btn">Map Editor</button>
+        </nav>
+        <p class="menu-foot">v0.1.0</p>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div id="options-screen" class="screen menu" hidden>
+      <div class="menu-inner">
+        <h2 class="logo logo-sm">Options</h2>
+        <div class="option-list">
+          <label class="option">
+            <input type="checkbox" id="opt-trail" />
+            <span><strong>Cursor trail</strong><small>Draw the path your cursor took during a run</small></span>
+          </label>
+          <label class="option">
+            <input type="checkbox" id="opt-timer" />
+            <span><strong>Run timer</strong><small>Show elapsed time in the corner while playing</small></span>
+          </label>
+          <label class="option">
+            <input type="checkbox" id="opt-debug" />
+            <span><strong>Input precision panel</strong><small>Show sample interval and polling rate below the game</small></span>
+          </label>
+        </div>
+        <div class="menu-buttons">
+          <button type="button" id="options-back" class="menu-btn primary">Back</button>
+          <button type="button" id="options-reset" class="menu-btn subtle">Reset to defaults</button>
+        </div>
+      </div>
+    </div>
+
+    <header id="topbar" class="topbar" hidden>
+      <button type="button" id="nav-menu" class="brand" title="Main menu">Avoid <span>N</span> Survive</button>
       <nav>
         <button type="button" id="nav-play" aria-pressed="true">Play</button>
         <button type="button" id="nav-edit" aria-pressed="false">Map Editor</button>
+        <button type="button" id="nav-menu-btn">Main Menu</button>
       </nav>
     </header>
 
     <main>
-      <section id="play-view">
+      <section id="play-view" hidden>
         <div class="toolbar">
           <select id="level-select" aria-label="Select map"></select>
           <button type="button" id="btn-back-editor" hidden>← Back to editor</button>
           <button type="button" id="btn-play-edit">Open this map in the editor</button>
-          <span class="muted">R: reset</span>
+          <span class="muted">R: reset · Esc: main menu</span>
         </div>
         <div class="stage"><canvas id="play-canvas"></canvas></div>
         <p id="play-status" class="status"></p>
-        <details class="debug" open>
+        <details id="debug-panel" class="debug" open>
           <summary>Input precision debug</summary>
           <dl id="debug-stats"></dl>
           <p class="muted">

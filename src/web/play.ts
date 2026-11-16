@@ -1,6 +1,7 @@
 import { formatTime, Simulation, type EndReason, type Replay } from '../core/simulation';
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
+import { options } from './options';
 import { beginFrame, clientToMap, COLORS, drawBanner, drawMap, drawTrail, fitCanvas } from './render';
 
 /**
@@ -28,6 +29,8 @@ export interface PlayElements {
 export class PlayController {
   /** Called on clear (used to verify editor test plays) */
   onClear: ((map: MapData, replay: Replay, time: number) => void) | null = null;
+  /** Called when the player presses Esc */
+  onExit: (() => void) | null = null;
 
   private map!: MapData;
   private sim!: Simulation;
@@ -63,7 +66,9 @@ export class PlayController {
     });
     window.addEventListener('pointercancel', () => this.abort('pointer'));
     window.addEventListener('keydown', (e) => {
-      if (this.visible && (e.key === 'r' || e.key === 'R') && !(e.target instanceof HTMLInputElement)) this.reset();
+      if (!this.visible || e.target instanceof HTMLInputElement) return;
+      if (e.key === 'r' || e.key === 'R') this.reset();
+      else if (e.key === 'Escape') this.onExit?.();
     });
     new ResizeObserver(() => this.map && fitCanvas(el.canvas, this.map)).observe(el.canvas.parentElement!);
 
@@ -164,19 +169,21 @@ export class PlayController {
     const { ctx, map, sim } = this;
     beginFrame(ctx, map);
     drawMap(ctx, map, sim.movers, sim.status === 'ready' ? 0 : sim.time);
-    drawTrail(ctx, this.trail);
+    if (options.showTrail) drawTrail(ctx, this.trail);
 
     if (sim.status === 'playing') {
       ctx.fillStyle = COLORS.cursor;
       ctx.beginPath();
       ctx.arc(sim.x, sim.y, 3, 0, Math.PI * 2);
       ctx.fill();
-      const elapsed = Math.max(0, now - this.t0);
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.font = '600 16px ui-monospace, monospace';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'top';
-      ctx.fillText(`${formatTime(elapsed)}s`, map.width - 10, 8);
+      if (options.showTimer) {
+        const elapsed = Math.max(0, now - this.t0);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.font = '600 16px ui-monospace, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`${formatTime(elapsed)}s`, map.width - 10, 8);
+      }
     } else if (sim.status === 'ready') {
       drawBanner(ctx, map, 'Click the START area to begin', 'Reach GOAL without touching walls, obstacles, or the map edge');
     } else if (sim.status === 'dead') {

@@ -30,7 +30,9 @@ src/
     play.ts        # Play screen
     editor.ts      # Map editor
     render.ts      # Canvas rendering
-    main.ts        # View switching, loading shared links
+    preload.ts     # Loading screen tasks (fonts, shared map) with progress and timeout
+    options.ts     # Player options (cursor trail, run timer, debug panel), saved per browser
+    main.ts        # Screen flow: preload → main menu → play / options / map editor
   assets/
     fonts/         # Web fonts (.woff2)
     images/        # Sprites, backgrounds, icons
