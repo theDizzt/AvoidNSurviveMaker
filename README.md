@@ -4,6 +4,10 @@ A web-based "avoid the walls with your mouse" maze game, with a built-in map edi
 
 ## Getting started
 
+**Windows, quickest way:** double-click `run-dev.bat`. It installs dependencies on first run, starts the dev server, and opens the game in your browser. Saving any file reloads the page automatically (CSS changes apply instantly without a reload). Press Ctrl+C in the console window to stop.
+
+Or from a terminal:
+
 ```bash
 npm install
 npm run dev       # dev server (http://localhost:5173)
