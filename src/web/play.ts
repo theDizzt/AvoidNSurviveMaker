@@ -32,8 +32,6 @@ export class PlayController {
   onClear: ((map: MapData, replay: Replay, time: number) => void) | null = null;
   /** Called when the player presses Esc */
   onExit: (() => void) | null = null;
-  /** Called once per run when it ends (clear, fail, leaving the screen or reset), with its length in ms */
-  onRunEnd: ((ms: number) => void) | null = null;
 
   private map!: MapData;
   private sim!: Simulation;
@@ -43,8 +41,6 @@ export class PlayController {
   private t0 = 0;
   private trail: number[] = [];
   private notified = false;
-  /** true once the current run's time has been reported (or there is no run yet) */
-  private runReported = true;
   private visible = false;
   private best = new Map<string, number>();
   private lastDebug = 0;
@@ -91,10 +87,6 @@ export class PlayController {
   }
 
   reset(): void {
-    if (this.sim?.status === 'playing') {
-      this.sim.abort('blur');
-      this.reportRun();
-    }
     this.sim = new Simulation(this.map);
     this.trail = [];
     this.notified = false;
@@ -113,16 +105,7 @@ export class PlayController {
   }
 
   private abort(reason: 'left' | 'blur' | 'pointer'): void {
-    if (this.sim?.status !== 'playing') return;
-    this.sim.abort(reason);
-    this.reportRun();
-  }
-
-  private reportRun(): void {
-    const { status, endTime } = this.sim;
-    if (this.runReported || status === 'playing' || status === 'ready') return;
-    this.runReported = true;
-    this.onRunEnd?.(endTime);
+    if (this.sim?.status === 'playing') this.sim.abort(reason);
   }
 
   private onDown(e: PointerEvent): void {
@@ -135,9 +118,6 @@ export class PlayController {
     this.t0 = e.timeStamp;
     this.trail = [p.x, p.y];
     this.notified = false;
-    this.runReported = false;
-    // Starting inside an obstacle ends the run immediately
-    this.reportRun();
   }
 
   private onSamples(list: readonly PointerEvent[]): void {
@@ -164,7 +144,6 @@ export class PlayController {
       const target = now - this.t0 - IDLE_MARGIN_MS;
       if (target > sim.time) sim.advanceTo(target);
     }
-    this.reportRun();
     if (sim.status === 'cleared' && !this.notified) {
       this.notified = true;
       const key = JSON.stringify(this.map);

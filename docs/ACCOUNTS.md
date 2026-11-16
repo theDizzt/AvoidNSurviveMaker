@@ -16,7 +16,7 @@ Without this setup the game still runs; the account screen just says accounts ar
 | Email verified at | `auth.users.email_confirmed_at` | set when the link is clicked |
 | Nickname | `profiles.nickname` | 1–32 bytes UTF-8 (e.g. 10 Korean characters), no `#` |
 | Tag | `profiles.discriminator` | 1–9999, shown as 4 digits (`0042`) |
-| Total play time | `profiles.total_play_ms` (ms) and `profiles.play_time` (`hh:mm:ss`) | sum of all runs (START → clear / fail) |
+| Total play time | `profiles.total_play_ms` (ms) and `profiles.play_time` (`hh:mm:ss`) | total time the game has been open (signed in, tab visible) |
 
 Tag rules (enforced in the database, not just the UI):
 
@@ -89,13 +89,15 @@ Restart `run-dev.bat` (or `npm run dev`) after changing `.env.local`.
 
 ## Play time
 
-Every run (START click → clear, fail, leaving the play screen or pressing R) adds its length to the
-signed-in player's total. The game batches runs and calls `add_play_time(ms)` when 15 s have piled
-up, every 30 s, and when the page is hidden; unsent time is kept in the browser and sent on the next
-visit. The menu shows the total under the player's tag.
+While a player is signed in and the game tab is visible (menus, editor and play alike), the time
+is added to their total. It pauses while the tab is hidden or minimized, so a forgotten background
+tab doesn't pile up. The game calls `add_play_time(ms)` every 30 s and when the tab is hidden or
+closed; unsent time is kept in the browser and sent on the next visit. The menu shows the total
+under the player's tag.
 
 Reports come from the browser, so the database caps them: a report can't add more than the real
-time elapsed since the previous one (+5 s), nor more than 1 hour at once.
+time elapsed since the previous one (+5 s), nor more than 1 hour at once. That also keeps several
+open tabs from counting the same minutes twice.
 
 ## Flow
 

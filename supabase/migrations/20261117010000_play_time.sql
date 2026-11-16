@@ -1,7 +1,7 @@
 -- Total play time per player.
 --
--- "Play time" = time spent in runs (START click → clear / fail), summed over every run.
--- The client batches finished runs and reports them with add_play_time(ms).
+-- "Play time" = total time the game is open (signed in, tab visible), summed over all sessions.
+-- The client reports the counted time every 30 s and when the tab is hidden, via add_play_time(ms).
 --
 --   total_play_ms        running total in milliseconds (source of truth)
 --   play_time            same total as an interval, e.g. 76:05:06 (hours:minutes:seconds),
@@ -15,7 +15,7 @@ alter table public.profiles
     generated always as (((total_play_ms / 1000)::double precision) * interval '1 second') stored,
   add column last_play_report_at timestamptz;
 
-comment on column public.profiles.total_play_ms is 'Total time spent in runs, in milliseconds.';
+comment on column public.profiles.total_play_ms is 'Total time the game has been open (tab visible), in milliseconds.';
 comment on column public.profiles.play_time is 'total_play_ms as hours:minutes:seconds.';
 
 -- Adds play time for the signed-in player and returns the new total (ms).

@@ -192,8 +192,8 @@ play.onExit = () => (testing ? showEditor() : show('menu'));
 // ───────────────────────── Accounts ─────────────────────────
 
 const account = new Account();
+// Total time the game is open, saved to the player's profile
 const playTime = new PlayTimeTracker(account);
-play.onRunEnd = (ms) => playTime.add(ms);
 account.beforeSignOut = () => playTime.flush();
 new AuthUI(account, (screen) => show(screen));
 for (const s of [screens.auth, screens.verify]) {
