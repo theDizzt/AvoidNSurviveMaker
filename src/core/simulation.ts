@@ -4,7 +4,7 @@ import type { MapData, Point } from './types';
 
 export type SimStatus = 'ready' | 'playing' | 'dead' | 'cleared';
 export type AbortReason = 'left' | 'blur' | 'pointer';
-/** wall: static wall · mover: moving/rotating wall · void: left the paths · bounds: left the map */
+/** wall: static wall · mover: moving/rotating wall · void: outside the paths (counts as wall) · bounds: left the map */
 export type EndReason = 'wall' | 'mover' | 'void' | 'bounds' | AbortReason;
 
 /** t: ms since the run started (START click), sub-millisecond precision preserved */

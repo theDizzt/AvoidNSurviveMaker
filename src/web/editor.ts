@@ -1,6 +1,6 @@
 import { pointInPoly, pointInRect } from '../core/geometry';
 import { CompiledMotion } from '../core/motion';
-import { compileObject, type CompiledObject, type Transform } from '../core/object';
+import { compileObject, transformAt, type CompiledObject, type Transform } from '../core/object';
 import { polyOutline, shapeBounds, shapeCenter, translateShape } from '../core/shape';
 import { encodeMap } from '../core/share';
 import type {
@@ -76,6 +76,7 @@ type Drag =
   | { type: 'handle'; h: Handle; before: string; moved: boolean; orig: MapObject | Rect };
 
 const STORAGE_KEY = 'avoid-n-survive:editor';
+const GRID_TOP_KEY = 'avoid-n-survive:editor-grid-top';
 /** Map sizes offered in the editor, all 16:9 */
 const MAP_SIZES: [number, number][] = [[640, 360], [960, 540], [1280, 720], [1600, 900], [1920, 1080]];
 const GRID = 10;
@@ -95,6 +96,7 @@ export interface EditorElements {
   theme: HTMLElement;
   snap: HTMLInputElement;
   preview: HTMLInputElement;
+  gridTop: HTMLInputElement;
   undo: HTMLButtonElement;
   redo: HTMLButtonElement;
   name: HTMLInputElement;
@@ -173,6 +175,19 @@ export class Editor {
     new ResizeObserver(refit).observe(el.canvas.parentElement!);
     window.addEventListener('resize', refit);
 
+    // "Grid on top" is a per-browser preference
+    try {
+      el.gridTop.checked = localStorage.getItem(GRID_TOP_KEY) === '1';
+    } catch {
+      /* storage unavailable */
+    }
+    el.gridTop.addEventListener('change', () => {
+      try {
+        localStorage.setItem(GRID_TOP_KEY, el.gridTop.checked ? '1' : '0');
+      } catch {
+        /* storage unavailable */
+      }
+    });
     el.undo.addEventListener('click', () => this.undo());
     el.redo.addEventListener('click', () => this.redo());
 
@@ -1054,7 +1069,21 @@ export class Editor {
     const objs = this.compiled;
     const preview = this.el.preview.checked;
     beginFrame(ctx, map);
-    drawMap(ctx, map, objs, preview ? performance.now() - this.previewStart : 0);
+    const t = preview ? performance.now() - this.previewStart : 0;
+    drawMap(ctx, map, objs, t, { gridOnTop: this.el.gridTop.checked });
+
+    // The map is drawn as one seamless floor and one wall mass, so overlapping pieces (or a wall
+    // on the wall-colored area outside the paths) would be invisible while editing. Outline each one.
+    ctx.lineWidth = 1.2 * u;
+    ctx.setLineDash([5 * u, 4 * u]);
+    const pose: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
+    for (const role of ['path', 'wall'] as const) {
+      ctx.strokeStyle = role === 'path' ? COLORS.outlinePath : COLORS.outlineWall;
+      ctx.beginPath();
+      for (const o of objs) if (o.role === role) traceObject(ctx, o, transformAt(o, t, pose));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
 
     // While previewing, show where dynamic objects rest (their editing position)
     if (preview) {

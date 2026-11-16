@@ -201,7 +201,6 @@ export class AuthUI {
   private renderBadges(): void {
     const tag = this.account.tag;
     const bar = $('account-bar');
-    const top = $('topbar-account');
     if (tag) {
       const playTime = `Play time ${formatPlayTime(this.account.profile?.total_play_seconds ?? 0)}`;
       const name = document.createElement('span');
@@ -221,8 +220,6 @@ export class AuthUI {
         showToast('Signed out');
       });
       bar.replaceChildren(name, out);
-      top.textContent = tag;
-      top.title = playTime;
     } else {
       const signIn = document.createElement('button');
       signIn.type = 'button';
@@ -235,8 +232,6 @@ export class AuthUI {
       join.textContent = 'Create Account';
       join.addEventListener('click', () => this.open('signup'));
       bar.replaceChildren(signIn, join);
-      top.textContent = '';
-      top.title = '';
     }
   }
 

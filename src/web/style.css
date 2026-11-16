@@ -29,6 +29,15 @@
   font-display: swap;
 }
 
+/* Stopwatch font (src/assets/fonts/timer) */
+@font-face {
+  font-family: 'GameTimer';
+  src: url('../assets/fonts/timer/HS두꺼비체.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ───────────────────────── Tokens: light, cool, pastel ───────────────────────── */
 
 :root {
@@ -147,42 +156,6 @@ input[type="color"] { width: 100%; height: 34px; padding: 3px 4px; cursor: point
 }
 .pill-btn.ghost { background: rgba(255, 255, 255, 0.8); color: var(--text); border-color: var(--border); box-shadow: var(--shadow-sm); }
 
-/* ───────────────────────── Top bar (play / editor) ───────────────────────── */
-
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: var(--glass);
-  -webkit-backdrop-filter: var(--glass);
-  border-bottom: 1px solid var(--border);
-}
-.topbar .brand {
-  padding: 0;
-  border: 0;
-  background: none;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 23px;
-  letter-spacing: 0.01em;
-}
-.topbar .brand:hover { box-shadow: none; }
-.topbar .brand span, .logo span {
-  background: var(--gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.topbar nav { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.topbar-account { font-weight: 700; color: var(--accent); margin-right: 6px; }
-.topbar-account:empty { display: none; }
-
 main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 18px 16px 40px; }
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
@@ -203,6 +176,49 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 
 .status { margin: 10px 0; color: var(--muted); min-height: 1.5em; }
 
+/* ───────────────────────── Play: full-window 16:9 ───────────────────────── */
+
+.play-view {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.35), rgba(220, 232, 246, 0.6));
+}
+.play-stage { width: auto; }
+.play-stage canvas { border-radius: 0; border: 0; box-shadow: 0 0 40px rgba(58, 96, 150, 0.18); }
+/* Bottom-left, so the result banner and timer at the top stay visible */
+.play-hud {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  max-width: calc(100% - 24px);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: opacity 0.2s ease;
+}
+.hud-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.hud-keys { margin: 6px 2px 0; font-size: 12px; color: var(--muted); }
+.play-hud .status { margin: 2px 2px 0; font-size: 13px; min-height: 0; }
+.play-debug {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  max-width: min(420px, calc(100% - 24px));
+  margin: 0;
+  font-size: 13px;
+  transition: opacity 0.2s ease;
+}
+/* While a run is in progress: get out of the way (no clicks, no covering the map) */
+.play-view.running .play-hud,
+.play-view.running .play-debug { opacity: 0; pointer-events: none; }
+
 /* Glass panels */
 .panel, .palette, .debug {
   background: var(--surface);
@@ -221,12 +237,108 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 
 /* ───────────────────────── Editor ───────────────────────── */
 
-.editor-layout { display: grid; grid-template-columns: 196px minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
-@media (max-width: 1100px) {
-  .editor-layout { grid-template-columns: 196px minmax(0, 1fr); }
-  .editor-layout > .panel { grid-column: 1 / -1; }
+/* Full-window 16:9 canvas like the play screen; tools and properties float on top */
+.editor-view {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.35), rgba(220, 232, 246, 0.6));
 }
-@media (max-width: 700px) { .editor-layout { grid-template-columns: 1fr; } }
+.editor-stage { width: auto; }
+.editor-stage canvas { border-radius: 0; border: 0; box-shadow: 0 0 40px rgba(58, 96, 150, 0.18); }
+.editor-bar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  /* centered with left:50% + translate, so size to content instead of the remaining 50% */
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.editor-bar button { padding: 5px 12px; border-radius: 999px; }
+.bar-sep { width: 1px; height: 22px; background: var(--border-strong); }
+/* Floating panels: drag by the title bar, collapse with the toggle */
+.editor-float {
+  position: absolute;
+  top: 64px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100% - 76px);
+  border-radius: var(--radius);
+  background: var(--surface);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.editor-float.float-left { left: 12px; width: 196px; }
+.editor-float.float-right { right: 12px; width: 300px; }
+.editor-float.dragging { z-index: 3; box-shadow: 0 18px 44px rgba(58, 96, 150, 0.26); opacity: 0.96; }
+.float-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 6px 14px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  border-bottom: 1px solid var(--border);
+}
+.editor-float.dragging .float-head { cursor: grabbing; }
+.editor-float.collapsed .float-head { border-bottom: 0; }
+.float-title { font-family: var(--font-title); font-weight: 700; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.float-toggle { width: 26px; height: 26px; padding: 0; border-radius: 8px; font-weight: 700; line-height: 1; }
+.float-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.editor-float.collapsed .float-body { display: none; }
+/* The body sits inside the glass frame, so it doesn't need its own */
+.editor-float .palette, .editor-float .panel {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.editor-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  width: max-content;
+  max-width: min(760px, calc(100% - 24px));
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+.editor-view.panels-hidden .editor-float,
+.editor-view.panels-hidden .editor-hint { display: none; }
+@media (max-width: 900px) {
+  .editor-float.float-right { width: 260px; }
+  .editor-float.float-left { width: 170px; }
+}
 
 .palette { padding: 10px; display: flex; flex-direction: column; gap: 4px; }
 .pal-title { margin: 8px 0 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }

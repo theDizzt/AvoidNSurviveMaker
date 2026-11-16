@@ -2,6 +2,10 @@
 
 A web-based "avoid the walls with your mouse" maze game, with a built-in map editor. Get from START to GOAL without touching a wall, a moving obstacle, or the edge of the map.
 
+## Version
+
+The game version lives in the [`VERSION`](VERSION) file as `Update N` (e.g. `Update 20`) and is shown on the loading screen and the main menu. Bump the number there with each update.
+
 ## Getting started
 
 **Windows, quickest way:** double-click `run-dev.bat`. It installs dependencies on first run, starts the dev server, and opens the game in your browser. Saving any file reloads the page automatically (CSS changes apply instantly without a reload). Press Ctrl+C in the console window to stop.
@@ -81,12 +85,12 @@ offline and the account screen says so.
 
 Every object is a **shape** (rectangle, circle, polygon, freeform) with a **role** and an optional **behavior**:
 
-- **Path** — safe floor. Once a map has any path, everything outside the paths is deadly void. START and GOAL always count as floor.
+- **Path** — safe floor. Once a map has any path, everything outside the paths is treated as wall: it's deadly and drawn in the wall style. START and GOAL always count as floor.
 - **Wall** — deadly everywhere.
 - **Moving** — follows a route of markers: straight, curve (smooth spline through the markers) or circle (orbit around a center marker). Options: repeat (loop / ping-pong / once), speed, smooth start/end (easing per leg), start delay (negative = start partway through).
 - **Rotating** — spins around a draggable pivot. Options: speed, angle per cycle (360 + loop = continuous spin), direction, repeat, smooth start/end, start delay. Rotating objects can also have a route.
 
-The game screen is always **16:9**. New maps are 960×540; the editor offers 640×360 up to 1920×1080. Maps made in another ratio still open, centered with bars around them.
+The game screen is always **16:9**: the play screen fills the largest 16:9 area of the window (press **F** or the Fullscreen button to use the whole monitor), with a small HUD that hides while a run is in progress. New maps are 960×540; the editor offers 640×360 up to 1920×1080. Maps made in another ratio still open, centered with bars around them.
 
 The palette lists all 26 tools by number:
 
@@ -99,6 +103,10 @@ The palette lists all 26 tools by number:
 | 15–18 | Rotating paths |
 | 19–22 | Moving walls |
 | 23–26 | Rotating walls |
+
+The editor uses the same full-window 16:9 canvas. The **Tools** and **Properties** panels float on top: drag them by their title bar, collapse them with the −/+ button (or a double-click on the title bar), or press **H** to hide both. Their positions are remembered.
+
+The grid is 60×60 (a 960×540 map is 16×9 cells); **Grid on top** in the editor draws it over walls and obstacles. Static paths and walls are drawn as one floor and one wall mass, so pieces join without seams; walls cast a soft shadow onto the floor.
 
 Editing: drag to draw rectangles/circles (Shift = square/circle), click to place polygon points (freeform: click = curved point, Shift+click = sharp corner; click the first point or Enter to close). With Select (V): drag to move, drag handles to reshape, double-click a polygon vertex to toggle curve, double-click an edge to add a vertex, Alt+click a vertex to remove it. Ctrl+Z / Ctrl+Y undo/redo, Ctrl+D duplicate, Delete removes. Maps saved in the older v1 format are migrated automatically.
 

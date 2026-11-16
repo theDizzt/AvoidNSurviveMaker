@@ -2,7 +2,7 @@ import { formatTime, Simulation, type EndReason, type Replay } from '../core/sim
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
 import { options } from './options';
-import { beginFrame, clientToMap, COLORS, drawBanner, drawMap, drawTrail, fitCanvas, mapPointer } from './render';
+import { beginFrame, clientToMap, COLORS, drawBanner, drawMap, drawStopwatch, drawTrail, fitCanvas, mapPointer } from './render';
 
 /**
  * When the mouse is idle and no events arrive, the simulation advances "in place",
@@ -14,7 +14,7 @@ const TRAIL_POINTS = 800;
 const REASON_TEXT: Record<EndReason, string> = {
   wall: 'Touched a wall',
   mover: 'Hit a moving obstacle',
-  void: 'Fell off the path',
+  void: 'Touched a wall',
   bounds: 'Left the map',
   left: 'Cursor left the window',
   blur: 'Window lost focus',
@@ -22,6 +22,8 @@ const REASON_TEXT: Record<EndReason, string> = {
 };
 
 export interface PlayElements {
+  /** The play screen; gets the `running` class while a run is in progress */
+  root: HTMLElement;
   canvas: HTMLCanvasElement;
   status: HTMLElement;
   debug: HTMLElement;
@@ -147,6 +149,8 @@ export class PlayController {
       const target = now - this.t0 - IDLE_MARGIN_MS;
       if (target > sim.time) sim.advanceTo(target);
     }
+    const running = sim.status === 'playing';
+    if (running !== this.el.root.classList.contains('running')) this.el.root.classList.toggle('running', running);
     if (sim.status === 'cleared' && !this.notified) {
       this.notified = true;
       const key = JSON.stringify(this.map);
@@ -180,14 +184,7 @@ export class PlayController {
       ctx.beginPath();
       ctx.arc(sim.x, sim.y, 3, 0, Math.PI * 2);
       ctx.fill();
-      if (options.showTimer) {
-        const elapsed = Math.max(0, now - this.t0);
-        ctx.fillStyle = COLORS.ink;
-        ctx.font = '600 16px ui-monospace, monospace';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'top';
-        ctx.fillText(`${formatTime(elapsed)}s`, map.width - 10, 8);
-      }
+      if (options.showTimer) drawStopwatch(ctx, map, now - this.t0, now);
     } else if (sim.status === 'ready') {
       drawBanner(
         ctx, map, 'Click the START area to begin',

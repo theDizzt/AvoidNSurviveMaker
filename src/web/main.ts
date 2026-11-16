@@ -1,4 +1,6 @@
 import './style.css';
+// Game version, e.g. "Update 20" — edit the VERSION file at the repo root
+import versionFile from '../../VERSION?raw';
 import { BUILTIN_LEVELS } from '../core/levels';
 import { decodeMap } from '../core/share';
 import type { MapData } from '../core/types';
@@ -7,6 +9,7 @@ import { onOptionsChange, options, resetOptions, setOption, type Options } from 
 import { PlayController } from './play';
 import { FONT_TASKS, runPreload, type PreloadTask } from './preload';
 import { LiquidBackground } from './liquid';
+import { floatingPanel } from './float-panel';
 import { Account } from './auth/account';
 import { AuthUI, showToast } from './auth/auth-ui';
 import { PlayTimeTracker } from './auth/playtime';
@@ -16,6 +19,9 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   if (!el) throw new Error(`Missing element #${id}`);
   return el as T;
 };
+
+const VERSION = versionFile.trim();
+for (const id of ['menu-version', 'preload-version']) $(id).textContent = VERSION;
 
 // ───────────────────────── Screens ─────────────────────────
 
@@ -30,15 +36,13 @@ const screens: Record<Screen, HTMLElement> = {
   play: $('play-view'),
   editor: $('editor-view'),
 };
-const topbar = $('topbar');
-const navPlay = $<HTMLButtonElement>('nav-play');
-const navEdit = $<HTMLButtonElement>('nav-edit');
 const levelSelect = $<HTMLSelectElement>('level-select');
 const backToEditor = $<HTMLButtonElement>('btn-back-editor');
 const openInEditor = $<HTMLButtonElement>('btn-play-edit');
 const debugPanel = $('debug-panel');
 
 const play = new PlayController({
+  root: $('play-view'),
   canvas: $<HTMLCanvasElement>('play-canvas'),
   status: $('play-status'),
   debug: $('debug-stats'),
@@ -51,6 +55,7 @@ const editor = new Editor({
   theme: $('theme-panel'),
   snap: $<HTMLInputElement>('opt-snap'),
   preview: $<HTMLInputElement>('opt-preview'),
+  gridTop: $<HTMLInputElement>('opt-grid-top'),
   undo: $<HTMLButtonElement>('btn-undo'),
   redo: $<HTMLButtonElement>('btn-redo'),
   name: $<HTMLInputElement>('map-name'),
@@ -81,15 +86,15 @@ function show(next: Screen): void {
   if (current === 'editor' && next !== 'editor') editor.hide();
   for (const [name, el] of Object.entries(screens)) el.hidden = name !== next;
   const inGame = next === 'play' || next === 'editor';
-  topbar.hidden = !inGame;
   // The liquid animation only runs on menu screens, so gameplay keeps the whole frame budget
   document.body.classList.toggle('in-game', inGame);
   liquid.setActive(!inGame);
-  navPlay.setAttribute('aria-pressed', String(next === 'play'));
-  navEdit.setAttribute('aria-pressed', String(next === 'editor'));
   current = next;
   if (next === 'play') play.show();
-  if (next === 'editor') editor.show();
+  if (next === 'editor') {
+    editor.show();
+    for (const p of editorPanels) p.refresh();
+  }
   if (next === 'menu') $('menu-start').focus();
   if (next === 'options') $('options-back').focus();
 }
@@ -172,11 +177,39 @@ levelSelect.addEventListener('change', () => {
   showPlay(selectedLevel());
   levelSelect.blur(); // a lingering dropdown focus could trigger a blur fail on click
 });
-navPlay.addEventListener('click', () => showPlay(selectedLevel()));
-navEdit.addEventListener('click', showEditor);
-$('nav-menu').addEventListener('click', () => show('menu'));
-$('nav-menu-btn').addEventListener('click', () => show('menu'));
+$('btn-editor-play').addEventListener('click', () => showPlay(selectedLevel()));
+$('btn-editor-menu').addEventListener('click', () => show('menu'));
 backToEditor.addEventListener('click', showEditor);
+$('btn-play-menu').addEventListener('click', () => (testing ? showEditor() : show('menu')));
+
+// Fullscreen: on a 16:9 monitor the game then fills the entire screen
+const fullscreenButtons = [...document.querySelectorAll<HTMLButtonElement>('.btn-fullscreen')];
+const toggleFullscreen = () => {
+  if (document.fullscreenElement) void document.exitFullscreen();
+  else void document.documentElement.requestFullscreen?.().catch(() => {});
+};
+for (const b of fullscreenButtons) b.addEventListener('click', toggleFullscreen);
+document.addEventListener('fullscreenchange', () => {
+  for (const b of fullscreenButtons) b.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
+});
+
+// Editor panels float over the canvas; H (or the button) hides them to see the whole map
+const editorPanels = [floatingPanel($('tools-panel'), 'tools'), floatingPanel($('inspector-panel'), 'inspector')];
+const panelsBtn = $<HTMLButtonElement>('btn-panels');
+const togglePanels = () => {
+  const hidden = screens.editor.classList.toggle('panels-hidden');
+  panelsBtn.setAttribute('aria-pressed', String(hidden));
+  panelsBtn.textContent = hidden ? 'Show panels' : 'Hide panels';
+};
+panelsBtn.addEventListener('click', togglePanels);
+
+window.addEventListener('keydown', (e) => {
+  if ((current !== 'play' && current !== 'editor') || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement) return;
+  if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  else if (current === 'editor' && (e.key === 'h' || e.key === 'H')) togglePanels();
+});
 openInEditor.addEventListener('click', () => {
   editor.loadMap(currentMap);
   showEditor();

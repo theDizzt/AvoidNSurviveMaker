@@ -1,4 +1,4 @@
-import { FONT_MAIN, FONT_TITLE } from './render';
+import { FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
 
 export interface PreloadTask {
   label: string;
@@ -11,6 +11,7 @@ export const FONT_TASKS: PreloadTask[] = [
   { label: 'Main font (Regular)', run: () => document.fonts.load(`400 16px ${FONT_MAIN}`) },
   { label: 'Main font (Bold)', run: () => document.fonts.load(`700 16px ${FONT_MAIN}`) },
   { label: 'Main font (Light)', run: () => document.fonts.load(`300 16px ${FONT_MAIN}`) },
+  { label: 'Timer font', run: () => document.fonts.load(`400 16px ${FONT_TIMER}`) },
 ];
 
 const MIN_DURATION_MS = 800;
