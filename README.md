@@ -1,59 +1,82 @@
 # Avoid N Survive Maker
 
-마우스 피하기 미로 게임 + 맵 에디터. 벽·움직이는 장애물·맵 밖에 닿지 않고 START에서 GOAL까지 가면 클리어.
+A web-based "avoid the walls with your mouse" maze game, with a built-in map editor. Get from START to GOAL without touching a wall, a moving obstacle, or the edge of the map.
 
-## 실행
+## Getting started
 
 ```bash
 npm install
-npm run dev       # 개발 서버 (http://localhost:5173)
-npm test          # core 단위 테스트
-npm run build     # dist/ 에 정적 사이트 생성 → GitHub Pages, Vercel 등에 그대로 배포
+npm run dev       # dev server (http://localhost:5173)
+npm test          # core unit tests
+npm run build     # static site in dist/ — deploy as-is to GitHub Pages, Vercel, etc.
 ```
 
-> `pointerrawupdate`는 보안 컨텍스트(HTTPS 또는 localhost)에서만 동작합니다. 배포 시 HTTPS 필수.
+> `pointerrawupdate` is only available in secure contexts (HTTPS or localhost). Deploy over HTTPS.
 
-## 구조
+## Project structure
 
 ```
 src/
-  core/            # DOM 의존성 없음 → 추후 서버(리플레이 검증)에서도 그대로 사용
-    types.ts       # 맵 스키마 (MapData v1)
-    geometry.ts    # 선분-사각형 교차 (Liang–Barsky)
-    mover.ts       # 움직이는 장애물 위치 = 시간의 닫힌 식 (결정적)
-    simulation.ts  # 1ms 고정 틱 시뮬레이션, 리플레이
-    validate.ts    # 외부 맵 검증 / 경고
-    share.ts       # 맵 ↔ URL 공유 코드 (deflate-raw + base64url)
-    levels.ts      # 기본 맵
+  core/            # No DOM dependencies — reusable on a server later (replay verification)
+    types.ts       # Map schema (MapData v1)
+    geometry.ts    # Segment–rectangle intersection (Liang–Barsky)
+    mover.ts       # Moving obstacle position as a closed-form function of time (deterministic)
+    simulation.ts  # Fixed 1 ms tick simulation and replays
+    validate.ts    # Validation and warnings for external maps
+    share.ts       # Map <-> URL share code (deflate-raw + base64url)
+    levels.ts      # Built-in levels
   web/
-    input.ts       # 고정밀 입력 (pointerrawupdate + getCoalescedEvents), 폴링 레이트 측정
-    play.ts        # 플레이 화면
-    editor.ts      # 맵 에디터
-    render.ts      # Canvas 렌더링
-    main.ts        # 화면 전환, 공유 링크 로딩
+    input.ts       # High-precision input (pointerrawupdate + getCoalescedEvents), polling-rate measurement
+    play.ts        # Play screen
+    editor.ts      # Map editor
+    render.ts      # Canvas rendering
+    main.ts        # View switching, loading shared links
+  assets/
+    fonts/         # Web fonts (.woff2)
+    images/        # Sprites, backgrounds, icons
+    sounds/        # Sound effects and music
 ```
 
-## 1ms 판정 방식
+### Using assets
 
-1. **입력**: `pointerrawupdate`(지원 시) 또는 `pointermove`에서 `getCoalescedEvents()`로 프레임 사이에 묶인 원본 샘플을 전부 받음. 각 샘플의 `timeStamp` 사용.
-2. **시뮬레이션**: 샘플 사이 커서 경로를 선분으로 보고 1ms 경계마다 잘라서 검사.
-   - 벽: 선분 교차로 정확히 계산 → 아무리 빨리 움직여도 통과 불가
-   - 움직이는 장애물: 장애물 기준 상대 운동 선분으로 검사 → 서로 엇갈려 지나가는 충돌도 감지
-   - 마우스가 멈춰 있어도 렌더 루프가 시간을 진행시켜 장애물에 부딪히면 실패 (입력 지연 대비 40ms 여유)
-3. **결정적**: 같은 입력 샘플 → 항상 같은 결과. `getReplay()` / `runReplay()`로 서버에서 기록을 재검증할 수 있음.
+Files in `src/assets/` go through Vite: import them and you get a hashed, cache-safe URL in the build.
 
-실제 샘플 간격은 마우스 폴링 레이트가 상한입니다 (1000Hz → 1ms, 125Hz → 8ms). 플레이 화면 아래 **입력 정밀도 디버그**에서 확인할 수 있어요.
+```ts
+import hitSound from '../assets/sounds/hit.mp3';
+const audio = new Audio(hitSound);
+```
 
-## 치트 방지
+```css
+@font-face {
+  font-family: 'GameFont';
+  src: url('../assets/fonts/game-font.woff2') format('woff2');
+  font-display: swap;
+}
+```
 
-- START 영역을 클릭해야 시작
-- 커서가 창 밖으로 나가거나(`pointerout`), 포커스를 잃거나(`blur`, 탭 전환), 터치가 떨어지면 실패
-- 공유하려면 제작자가 테스트 플레이로 먼저 클리어해야 함
+Use a root-level `public/` folder only for files that must keep a fixed URL (e.g. `favicon.ico`, `robots.txt`); those are copied to `dist/` as-is.
 
-## 로드맵
+## How 1 ms hit detection works
 
-- [x] 1ms 시뮬레이션 + 연속 충돌 판정
-- [x] 고정밀 입력 + 디버그 표시
-- [x] 맵 에디터 (벽/장애물/경로/START/GOAL, 되돌리기, 자동 저장, JSON 입출력)
-- [x] URL 공유 (서버 없음)
-- [ ] 2단계: Supabase 연동 — 맵 목록/검색/좋아요, 랭킹, 서버 측 리플레이 검증
+1. **Input**: Listens to `pointerrawupdate` (when supported) or `pointermove`, and uses `getCoalescedEvents()` to recover every raw sample batched between frames. Each sample's `timeStamp` is used as its time.
+2. **Simulation**: The cursor path between samples is treated as line segments, split at every 1 ms boundary, and checked continuously.
+   - Walls: exact segment intersection, so you can't tunnel through a wall no matter how fast you move.
+   - Moving obstacles: checked as a relative-motion segment in the obstacle's frame, so collisions where the cursor and obstacle pass through each other are caught.
+   - If the mouse is idle, the render loop still advances time, so an obstacle running into a stationary cursor counts as a hit (with a 40 ms margin for input latency).
+3. **Deterministic**: The same input samples always produce the same result. `getReplay()` / `runReplay()` let a server re-verify a recorded run.
+
+The real sample interval is capped by the mouse's polling rate (1000 Hz → 1 ms, 125 Hz → 8 ms). You can check it in the **input precision debug** panel below the play area.
+
+## Anti-cheat
+
+- The run only starts when you click inside the START area.
+- The run fails if the cursor leaves the browser window (`pointerout`), the window loses focus (`blur`, tab switch), or a touch/pen pointer is lifted.
+- A map can only be shared after its creator clears it in test play; any edit resets that verification.
+
+## Roadmap
+
+- [x] 1 ms simulation with continuous collision detection
+- [x] High-precision input and debug display
+- [x] Map editor (walls, obstacles and paths, START/GOAL, undo/redo, autosave, JSON import/export)
+- [x] URL sharing (no server)
+- [ ] Phase 2: Supabase integration — map browser/search/likes, leaderboards, server-side replay verification

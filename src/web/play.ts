@@ -4,19 +4,19 @@ import { HighResPointer, InputStats } from './input';
 import { beginFrame, clientToMap, COLORS, drawBanner, drawMap, drawTrail, fitCanvas } from './render';
 
 /**
- * 마우스가 멈춰 이벤트가 없을 때 시뮬레이션을 "제자리"로 진행시키는데,
- * 아직 도착하지 않은 입력을 덮어쓰지 않도록 현재 시각보다 이만큼 뒤까지만 진행.
+ * When the mouse is idle and no events arrive, the simulation advances "in place",
+ * but only up to this far behind the current time, so input that hasn't arrived yet isn't overwritten.
  */
 const IDLE_MARGIN_MS = 40;
 const TRAIL_POINTS = 800;
 
 const REASON_TEXT: Record<EndReason, string> = {
-  wall: '벽에 닿았습니다',
-  mover: '움직이는 장애물에 닿았습니다',
-  bounds: '맵 밖으로 나갔습니다',
-  left: '커서가 창 밖으로 나갔습니다',
-  blur: '창 포커스를 잃었습니다',
-  pointer: '포인터 입력이 끊겼습니다',
+  wall: 'Touched a wall',
+  mover: 'Hit a moving obstacle',
+  bounds: 'Left the map',
+  left: 'Cursor left the window',
+  blur: 'Window lost focus',
+  pointer: 'Pointer input was interrupted',
 };
 
 export interface PlayElements {
@@ -26,7 +26,7 @@ export interface PlayElements {
 }
 
 export class PlayController {
-  /** 클리어 시 호출 (에디터 테스트 플레이 검증용) */
+  /** Called on clear (used to verify editor test plays) */
   onClear: ((map: MapData, replay: Replay, time: number) => void) | null = null;
 
   private map!: MapData;
@@ -49,7 +49,7 @@ export class PlayController {
     this.input = new HighResPointer((list) => this.onSamples(list));
 
     el.canvas.addEventListener('pointerdown', (e) => this.onDown(e));
-    // 커서가 브라우저 창 밖으로 나감
+    // Cursor left the browser window
     window.addEventListener('pointerout', (e) => {
       if (!e.relatedTarget) this.abort('left');
     });
@@ -57,7 +57,7 @@ export class PlayController {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.abort('blur');
     });
-    // 터치/펜은 손을 떼는 순간 위치가 끊기므로 실패 처리
+    // Touch/pen lose position the moment they lift, so treat that as a fail
     window.addEventListener('pointerup', (e) => {
       if (e.pointerType !== 'mouse') this.abort('pointer');
     });
@@ -178,7 +178,7 @@ export class PlayController {
       ctx.textBaseline = 'top';
       ctx.fillText(`${formatTime(elapsed)}s`, map.width - 10, 8);
     } else if (sim.status === 'ready') {
-      drawBanner(ctx, map, 'START 영역을 클릭하면 시작', '벽·장애물·맵 밖에 닿지 않고 GOAL까지 가세요');
+      drawBanner(ctx, map, 'Click the START area to begin', 'Reach GOAL without touching walls, obstacles, or the map edge');
     } else if (sim.status === 'dead') {
       ctx.strokeStyle = COLORS.hit;
       ctx.lineWidth = 3;
@@ -188,32 +188,32 @@ export class PlayController {
       ctx.moveTo(sim.x + 8, sim.y - 8);
       ctx.lineTo(sim.x - 8, sim.y + 8);
       ctx.stroke();
-      drawBanner(ctx, map, `실패 · ${formatTime(sim.endTime)}s`, `${REASON_TEXT[sim.endReason!]} — START를 다시 클릭`, '#ff8090');
+      drawBanner(ctx, map, `Failed · ${formatTime(sim.endTime)}s`, `${REASON_TEXT[sim.endReason!]} — click START to retry`, '#ff8090');
     } else {
       const best = this.best.get(JSON.stringify(map));
-      drawBanner(ctx, map, `클리어! ${formatTime(sim.endTime)}s`, best !== undefined ? `최고 기록 ${formatTime(best)}s — START를 클릭해 재도전` : '', '#ffd166');
+      drawBanner(ctx, map, `Cleared! ${formatTime(sim.endTime)}s`, best !== undefined ? `Best ${formatTime(best)}s — click START to try again` : '', '#ffd166');
     }
   }
 
   private updateText(now: number): void {
     const sim = this.sim;
     const state =
-      sim.status === 'playing' ? `진행 중 · ${formatTime(now - this.t0)}s`
-        : sim.status === 'ready' ? '대기 중'
-          : sim.status === 'cleared' ? `클리어 · ${formatTime(sim.endTime)}s`
-            : `실패 · ${REASON_TEXT[sim.endReason!]}`;
+      sim.status === 'playing' ? `Playing · ${formatTime(now - this.t0)}s`
+        : sim.status === 'ready' ? 'Ready'
+          : sim.status === 'cleared' ? `Cleared · ${formatTime(sim.endTime)}s`
+            : `Failed · ${REASON_TEXT[sim.endReason!]}`;
     this.el.status.textContent = `${this.map.name}${this.map.author ? ` (by ${this.map.author})` : ''} — ${state}`;
 
     const s = this.stats.summary();
     const rows: [string, string][] = [
-      ['입력 이벤트', `${this.input.source}${this.input.coalesced ? ' + getCoalescedEvents' : ' (coalesced 미지원)'}`],
-      ['샘플 간격 (중앙값)', s.medianMs !== null ? `${s.medianMs.toFixed(3)} ms` : '마우스를 계속 움직여 보세요'],
-      ['추정 폴링 레이트', s.hz !== null ? `${Math.round(s.hz)} Hz` : '-'],
-      ['최소 간격', s.minMs !== null ? `${s.minMs.toFixed(3)} ms` : '-'],
-      ['이벤트당 샘플 (평균/최대)', `${s.avgPerEvent.toFixed(1)} / ${s.maxPerEvent}`],
-      ['누적 샘플', String(s.total)],
-      ['시뮬레이션 틱 (1ms)', String(sim.ticks)],
-      ['렌더링 FPS', this.fps.toFixed(0)],
+      ['Input event', `${this.input.source}${this.input.coalesced ? ' + getCoalescedEvents' : ' (no coalesced events)'}`],
+      ['Sample interval (median)', s.medianMs !== null ? `${s.medianMs.toFixed(3)} ms` : 'Keep moving the mouse'],
+      ['Estimated polling rate', s.hz !== null ? `${Math.round(s.hz)} Hz` : '-'],
+      ['Min interval', s.minMs !== null ? `${s.minMs.toFixed(3)} ms` : '-'],
+      ['Samples per event (avg/max)', `${s.avgPerEvent.toFixed(1)} / ${s.maxPerEvent}`],
+      ['Total samples', String(s.total)],
+      ['Simulation ticks (1ms)', String(sim.ticks)],
+      ['Render FPS', this.fps.toFixed(0)],
     ];
     this.el.debug.replaceChildren(
       ...rows.flatMap(([k, v]) => {

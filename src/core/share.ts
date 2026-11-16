@@ -2,10 +2,10 @@ import type { MapData } from './types';
 import { validateMap } from './validate';
 
 /**
- * 맵 ↔ URL 공유 코드.
- *   'z' + base64url(deflate-raw(JSON))   (CompressionStream 지원 시)
- *   'j' + base64url(JSON)                (미지원 브라우저 대체)
- * 서버 없이 링크만으로 맵을 주고받기 위한 1단계 공유 방식.
+ * Map <-> URL share code.
+ *   'z' + base64url(deflate-raw(JSON))   (when CompressionStream is available)
+ *   'j' + base64url(JSON)                (fallback for browsers without it)
+ * Phase 1 sharing: exchange maps through a link alone, no server.
  */
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -37,16 +37,16 @@ export async function encodeMap(map: MapData): Promise<string> {
   return 'j' + toBase64Url(bytes);
 }
 
-/** 공유 코드를 해석하고 검증까지 마친 맵을 돌려준다. 실패하면 예외. */
+/** Decode a share code and return the validated map. Throws on failure. */
 export async function decodeMap(code: string): Promise<MapData> {
   const kind = code[0];
   let bytes = fromBase64Url(code.slice(1));
   if (kind === 'z') {
-    if (typeof DecompressionStream === 'undefined') throw new Error('이 브라우저는 압축 해제를 지원하지 않습니다');
+    if (typeof DecompressionStream === 'undefined') throw new Error('This browser does not support decompression');
     bytes = await pipe(bytes, new DecompressionStream('deflate-raw'));
   } else if (kind !== 'j') {
-    throw new Error('알 수 없는 공유 코드 형식입니다');
+    throw new Error('Unknown share code format');
   }
-  if (bytes.length > 2_000_000) throw new Error('맵 데이터가 너무 큽니다');
+  if (bytes.length > 2_000_000) throw new Error('Map data is too large');
   return validateMap(JSON.parse(new TextDecoder().decode(bytes)));
 }

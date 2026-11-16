@@ -17,14 +17,14 @@ function baseMap(patch: Partial<MapData> = {}): MapData {
 }
 
 describe('segmentRectEntry', () => {
-  it('선분이 사각형에 처음 닿는 비율을 구한다', () => {
+  it('returns the fraction where the segment first touches the rect', () => {
     expect(segmentRectEntry(0, 5, 100, 5, 40, 0, 10, 10)).toBeCloseTo(0.4);
   });
-  it('닿지 않으면 -1', () => {
+  it('returns -1 when it never touches', () => {
     expect(segmentRectEntry(0, 50, 100, 50, 40, 0, 10, 10)).toBe(-1);
     expect(segmentRectEntry(0, 5, 30, 5, 40, 0, 10, 10)).toBe(-1);
   });
-  it('시작점이 안쪽이면 0', () => {
+  it('returns 0 when the start point is inside', () => {
     expect(segmentRectEntry(45, 5, 100, 5, 40, 0, 10, 10)).toBe(0);
   });
 });
@@ -32,7 +32,7 @@ describe('segmentRectEntry', () => {
 describe('moverPos', () => {
   const cm = compileMover({ w: 10, h: 10, path: [{ x: 0, y: 0 }, { x: 100, y: 0 }], speed: 100, mode: 'pingpong', offset: 0 });
   const p = { x: 0, y: 0 };
-  it('pingpong: 갔다가 되돌아온다', () => {
+  it('pingpong: goes to the end and comes back', () => {
     expect(moverPos(cm, 500, p).x + 5).toBeCloseTo(50);
     expect(moverPos(cm, 1000, p).x + 5).toBeCloseTo(100);
     expect(moverPos(cm, 1500, p).x + 5).toBeCloseTo(50);
@@ -41,24 +41,24 @@ describe('moverPos', () => {
 });
 
 describe('Simulation', () => {
-  it('START 밖을 클릭하면 시작하지 않는다', () => {
+  it('does not start when clicking outside START', () => {
     const sim = new Simulation(baseMap());
     expect(sim.start(100, 100)).toBe(false);
     expect(sim.status).toBe('ready');
   });
 
-  it('한 번에 멀리 순간이동해도 얇은 벽을 통과하지 못한다', () => {
+  it('cannot tunnel through a thin wall even with a long jump', () => {
     const sim = new Simulation(baseMap({ walls: [{ x: 100, y: 0, w: 2, h: 500 }] }));
     sim.start(10, 10);
-    sim.feed(10, 600, 10); // 10ms 만에 590px 이동
+    sim.feed(10, 600, 10); // 590px in 10ms
     expect(sim.status).toBe('dead');
     expect(sim.endReason).toBe('wall');
     expect(sim.x).toBeCloseTo(100);
-    // 10ms 동안 590px → x=100 도달 시각 = 90/590*10ms
+    // 590px over 10ms → reaches x=100 at 90/590*10ms
     expect(sim.endTime).toBeCloseTo((90 / 590) * 10, 9);
   });
 
-  it('1ms 경계마다 틱을 진행한다', () => {
+  it('advances one tick per 1ms boundary', () => {
     const sim = new Simulation(baseMap());
     sim.start(10, 10);
     sim.feed(3.4, 12, 10);
@@ -68,17 +68,17 @@ describe('Simulation', () => {
     expect(sim.status).toBe('playing');
   });
 
-  it('GOAL에 닿으면 정확한 시각으로 클리어', () => {
+  it('clears at the exact time GOAL is reached', () => {
     const sim = new Simulation(baseMap());
     sim.start(10, 10);
     sim.feed(1000, 710, 10);
     expect(sim.status).toBe('cleared');
-    // x=700 도달: 690/700 지점
+    // reaches x=700 at 690/700 of the way
     expect(sim.endTime).toBeCloseTo((690 / 700) * 1000, 9);
     expect(formatTime(sim.endTime)).toBe('0.985');
   });
 
-  it('맵 밖으로 나가면 실패', () => {
+  it('fails when leaving the map', () => {
     const sim = new Simulation(baseMap());
     sim.start(10, 10);
     sim.feed(5, 10, -30);
@@ -87,7 +87,7 @@ describe('Simulation', () => {
     expect(sim.y).toBeCloseTo(0);
   });
 
-  it('마우스가 멈춰 있어도 움직이는 장애물이 와서 부딪히면 실패', () => {
+  it('fails when a moving obstacle hits a stationary cursor', () => {
     const sim = new Simulation(baseMap({
       start: { x: 140, y: 40, w: 20, h: 20 },
       movers: [{ w: 10, h: 10, path: [{ x: 100, y: 50 }, { x: 300, y: 50 }], speed: 100, mode: 'pingpong', offset: 0 }],
@@ -96,23 +96,23 @@ describe('Simulation', () => {
     sim.advanceTo(2000);
     expect(sim.status).toBe('dead');
     expect(sim.endReason).toBe('mover');
-    // 장애물 중심 x = 100 + 0.1t, 오른쪽 끝(중심+5)이 150에 닿는 시각 = 450ms
+    // obstacle center x = 100 + 0.1t; its right edge (center+5) reaches 150 at t=450ms
     expect(sim.endTime).toBeCloseTo(450, 6);
   });
 
-  it('커서와 장애물이 엇갈려 지나가는 충돌도 잡는다', () => {
-    // 장애물은 오른쪽으로, 커서는 왼쪽으로 빠르게 지나감 (프레임 단위 점 검사라면 놓치는 경우)
+  it('catches the cursor and an obstacle passing through each other', () => {
+    // obstacle moves right, cursor moves left fast (a per-frame point check would miss this)
     const sim = new Simulation(baseMap({
       start: { x: 380, y: 40, w: 20, h: 20 },
       movers: [{ w: 4, h: 40, path: [{ x: 300, y: 50 }, { x: 800, y: 50 }], speed: 20000, mode: 'pingpong', offset: 0 }],
     }));
     sim.start(390, 50);
-    sim.feed(1, 300, 50); // t=0, t=1 두 시점 모두 겹치지 않지만 그 사이에 교차함
+    sim.feed(1, 300, 50); // no overlap at t=0 or t=1, but they cross in between
     expect(sim.status).toBe('dead');
     expect(sim.endReason).toBe('mover');
   });
 
-  it('리플레이를 다시 돌리면 완전히 같은 결과 (결정적)', () => {
+  it('re-running a replay gives exactly the same result (deterministic)', () => {
     const map = BUILTIN_LEVELS[2];
     const sim = new Simulation(map);
     sim.start(40, 50);
@@ -135,7 +135,7 @@ describe('Simulation', () => {
     expect(again.y).toBe(sim.y);
   });
 
-  it('abort도 리플레이에 기록된다', () => {
+  it('aborts are recorded in the replay', () => {
     const map = baseMap();
     const sim = new Simulation(map);
     sim.start(10, 10);
@@ -148,32 +148,32 @@ describe('Simulation', () => {
 });
 
 describe('validateMap', () => {
-  it('기본 맵은 모두 유효하고 경고가 없다', () => {
+  it('all built-in levels are valid with no warnings', () => {
     for (const m of BUILTIN_LEVELS) {
       expect(validateMap(m)).toEqual(m);
       expect(mapWarnings(m)).toEqual([]);
     }
   });
-  it('잘못된 값은 거부', () => {
+  it('rejects invalid values', () => {
     expect(() => validateMap({ ...createEmptyMap(), width: 'abc' })).toThrow();
     expect(() => validateMap({ ...createEmptyMap(), v: 99 })).toThrow();
     expect(() => validateMap({ ...createEmptyMap(), walls: [{ x: 0, y: 0, w: -5, h: 10 }] })).toThrow();
   });
-  it('알 수 없는 필드는 제거', () => {
+  it('strips unknown fields', () => {
     const m = validateMap({ ...createEmptyMap(), evil: '<script>' }) as unknown as Record<string, unknown>;
     expect(m.evil).toBeUndefined();
   });
 });
 
 describe('share', () => {
-  it('인코딩 → 디코딩하면 같은 맵', async () => {
+  it('encode → decode round-trips to the same map', async () => {
     for (const m of BUILTIN_LEVELS) {
       const code = await encodeMap(m);
       expect(code).toMatch(/^[zj][A-Za-z0-9_-]+$/);
       expect(await decodeMap(code)).toEqual(m);
     }
   });
-  it('깨진 코드는 예외', async () => {
+  it('throws on a corrupted code', async () => {
     await expect(decodeMap('zAAAA')).rejects.toThrow();
     await expect(decodeMap('xabc')).rejects.toThrow();
   });

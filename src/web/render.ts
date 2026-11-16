@@ -18,9 +18,27 @@ export const COLORS = {
   path: 'rgba(255,84,104,0.55)',
 };
 
+/** Same families as --font-main / --font-title in style.css */
+export const FONT_MAIN = "'MangoDdobak', system-ui, sans-serif";
+export const FONT_TITLE = "'GSHyejaroun', 'MangoDdobak', system-ui, sans-serif";
+
+/**
+ * Canvas text doesn't trigger @font-face downloads by itself, so request the faces
+ * the canvas uses up front. The render loops redraw every frame, so text switches
+ * to the real font as soon as it's loaded.
+ */
+export function preloadCanvasFonts(): void {
+  if (!('fonts' in document)) return;
+  for (const f of [`400 16px ${FONT_MAIN}`, `700 16px ${FONT_MAIN}`, `700 16px ${FONT_TITLE}`]) {
+    document.fonts.load(f).catch(() => {
+      /* fall back to system fonts */
+    });
+  }
+}
+
 const tmp: Point = { x: 0, y: 0 };
 
-/** 맵 비율에 맞춰 캔버스 CSS 크기와 devicePixelRatio 반영한 실제 해상도를 설정 */
+/** Size the canvas to the map's aspect ratio, with backing resolution scaled by devicePixelRatio */
 export function fitCanvas(canvas: HTMLCanvasElement, map: MapData): void {
   const avail = canvas.parentElement?.clientWidth ?? map.width;
   const cssW = Math.max(100, Math.min(avail, map.width));
@@ -32,13 +50,13 @@ export function fitCanvas(canvas: HTMLCanvasElement, map: MapData): void {
   canvas.height = Math.round(cssH * dpr);
 }
 
-/** 이후 그리기를 맵 좌표계로 */
+/** Make subsequent drawing use map coordinates */
 export function beginFrame(ctx: CanvasRenderingContext2D, map: MapData): void {
   const s = ctx.canvas.width / map.width;
   ctx.setTransform(s, 0, 0, s, 0, 0);
 }
 
-/** 화면 1 CSS px이 맵 좌표로 몇 단위인지 */
+/** How many map units one on-screen CSS px covers */
 export function unitsPerPx(canvas: HTMLCanvasElement, map: MapData): number {
   const w = canvas.getBoundingClientRect().width;
   return w > 0 ? map.width / w : 1;
@@ -59,7 +77,7 @@ function zone(ctx: CanvasRenderingContext2D, r: Rect, fill: string, edge: string
   ctx.lineWidth = 2;
   ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
   ctx.fillStyle = edge;
-  ctx.font = `700 ${Math.max(8, Math.min(14, r.h * 0.3, r.w * 0.2))}px system-ui, sans-serif`;
+  ctx.font = `700 ${Math.max(8, Math.min(14, r.h * 0.3, r.w * 0.2))}px ${FONT_MAIN}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2);
@@ -125,11 +143,11 @@ export function drawBanner(ctx: CanvasRenderingContext2D, map: MapData, title: s
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = color;
-  ctx.font = '700 20px system-ui, sans-serif';
+  ctx.font = `700 22px ${FONT_TITLE}`;
   ctx.fillText(title, map.width / 2, y + (sub ? 26 : h / 2));
   if (sub) {
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = '14px system-ui, sans-serif';
+    ctx.font = `400 15px ${FONT_MAIN}`;
     ctx.fillText(sub, map.width / 2, y + 54);
   }
 }

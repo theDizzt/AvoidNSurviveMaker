@@ -20,25 +20,25 @@ function fail(msg: string): never {
 }
 
 function obj(v: unknown, name: string): Record<string, unknown> {
-  if (typeof v !== 'object' || v === null || Array.isArray(v)) fail(`${name}: 객체가 아닙니다`);
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) fail(`${name}: must be an object`);
   return v as Record<string, unknown>;
 }
 
 function num(v: unknown, name: string, min: number, max: number): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) fail(`${name}: 숫자가 아닙니다`);
-  if (v < min || v > max) fail(`${name}: ${min} ~ ${max} 범위여야 합니다 (현재 ${v})`);
+  if (typeof v !== 'number' || !Number.isFinite(v)) fail(`${name}: must be a number`);
+  if (v < min || v > max) fail(`${name}: must be between ${min} and ${max} (got ${v})`);
   return v;
 }
 
 function text(v: unknown, name: string): string {
   if (v === undefined) return '';
-  if (typeof v !== 'string') fail(`${name}: 문자열이 아닙니다`);
+  if (typeof v !== 'string') fail(`${name}: must be a string`);
   return v.slice(0, LIMITS.maxText);
 }
 
 function arr(v: unknown, name: string, max: number): unknown[] {
-  if (!Array.isArray(v)) fail(`${name}: 배열이 아닙니다`);
-  if (v.length > max) fail(`${name}: 최대 ${max}개까지 가능합니다`);
+  if (!Array.isArray(v)) fail(`${name}: must be an array`);
+  if (v.length > max) fail(`${name}: at most ${max} items allowed`);
   return v;
 }
 
@@ -60,8 +60,8 @@ function point(v: unknown, name: string, W: number, H: number): Point {
 function mover(v: unknown, name: string, W: number, H: number): Mover {
   const o = obj(v, name);
   const path = arr(o.path, `${name}.path`, LIMITS.maxPathPoints).map((p, i) => point(p, `${name}.path[${i}]`, W, H));
-  if (path.length === 0) fail(`${name}.path: 지점이 최소 1개 필요합니다`);
-  const mode = o.mode === 'loop' ? 'loop' : o.mode === 'pingpong' ? 'pingpong' : fail(`${name}.mode: pingpong 또는 loop`);
+  if (path.length === 0) fail(`${name}.path: needs at least 1 waypoint`);
+  const mode = o.mode === 'loop' ? 'loop' : o.mode === 'pingpong' ? 'pingpong' : fail(`${name}.mode: must be pingpong or loop`);
   return {
     w: num(o.w, `${name}.w`, 1, W),
     h: num(o.h, `${name}.h`, 1, H),
@@ -73,17 +73,17 @@ function mover(v: unknown, name: string, W: number, H: number): Mover {
 }
 
 /**
- * 외부에서 들어온 맵(공유 링크, 파일, 추후 서버 업로드)을 검증하고
- * 알 수 없는 필드를 제거한 깨끗한 객체로 돌려준다.
+ * Validate a map from an external source (share link, file, later server upload)
+ * and return a clean object with unknown fields stripped.
  */
 export function validateMap(input: unknown): MapData {
-  const o = obj(input, '맵');
-  if (o.v !== MAP_VERSION) fail(`지원하지 않는 맵 버전입니다 (${String(o.v)})`);
+  const o = obj(input, 'map');
+  if (o.v !== MAP_VERSION) fail(`Unsupported map version (${String(o.v)})`);
   const W = num(o.width, 'width', LIMITS.minSize, LIMITS.maxSize);
   const H = num(o.height, 'height', LIMITS.minSize, LIMITS.maxSize);
   return {
     v: MAP_VERSION,
-    name: text(o.name, 'name') || '이름 없는 맵',
+    name: text(o.name, 'name') || 'Untitled map',
     author: text(o.author, 'author'),
     width: W,
     height: H,
@@ -94,22 +94,22 @@ export function validateMap(input: unknown): MapData {
   };
 }
 
-/** 문법적으로는 맞지만 플레이에 문제가 될 수 있는 부분 */
+/** Things that are structurally valid but may cause problems in play */
 export function mapWarnings(map: MapData): string[] {
   const out: string[] = [];
   const inside = (r: Rect) => r.x >= 0 && r.y >= 0 && r.x + r.w <= map.width && r.y + r.h <= map.height;
-  if (!inside(map.start)) out.push('START 영역이 맵 밖으로 벗어나 있습니다.');
-  if (!inside(map.goal)) out.push('GOAL 영역이 맵 밖으로 벗어나 있습니다.');
-  if (rectsOverlap(map.start, map.goal)) out.push('START와 GOAL이 겹쳐 있습니다.');
+  if (!inside(map.start)) out.push('The START area extends outside the map.');
+  if (!inside(map.goal)) out.push('The GOAL area extends outside the map.');
+  if (rectsOverlap(map.start, map.goal)) out.push('START and GOAL overlap.');
   map.walls.forEach((w, i) => {
-    if (rectsOverlap(w, map.start)) out.push(`벽 #${i + 1}이 START와 겹칩니다.`);
-    if (rectsOverlap(w, map.goal)) out.push(`벽 #${i + 1}이 GOAL과 겹칩니다.`);
+    if (rectsOverlap(w, map.start)) out.push(`Wall #${i + 1} overlaps START.`);
+    if (rectsOverlap(w, map.goal)) out.push(`Wall #${i + 1} overlaps GOAL.`);
   });
   const p = { x: 0, y: 0 };
   map.movers.forEach((m, i) => {
     moverPos(compileMover(m), 0, p);
     if (rectsOverlap({ x: p.x, y: p.y, w: m.w, h: m.h }, map.start)) {
-      out.push(`장애물 #${i + 1}이 시작 순간 START와 겹칩니다.`);
+      out.push(`Obstacle #${i + 1} overlaps START when the run begins.`);
     }
   });
   return out;
@@ -118,7 +118,7 @@ export function mapWarnings(map: MapData): string[] {
 export function createEmptyMap(): MapData {
   return {
     v: MAP_VERSION,
-    name: '새 맵',
+    name: 'New map',
     author: '',
     width: 800,
     height: 500,

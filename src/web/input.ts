@@ -1,10 +1,10 @@
 /**
- * 고정밀 포인터 입력 수집.
+ * High-precision pointer input collection.
  *
- * - pointerrawupdate (Chromium, HTTPS/localhost): 화면 프레임에 묶이지 않고 입력 즉시 발생
- * - 그 외: pointermove
- * - 두 경우 모두 getCoalescedEvents()로 묶여 있던 원본 샘플을 전부 꺼낸다.
- *   → 1000Hz 마우스라면 약 1ms 간격의 샘플을 모두 받음
+ * - pointerrawupdate (Chromium, HTTPS/localhost): fires as soon as input arrives, not tied to display frames
+ * - Otherwise: pointermove
+ * - Either way, getCoalescedEvents() recovers every raw sample that was batched together.
+ *   → with a 1000Hz mouse, we receive every sample at ~1ms intervals
  */
 export type InputSource = 'pointerrawupdate' | 'pointermove';
 
@@ -45,7 +45,7 @@ export interface InputSummary {
   maxPerEvent: number;
 }
 
-/** 실제로 들어오는 샘플 간격을 측정해서 폴링 레이트를 추정 */
+/** Measure the actual sample interval to estimate the polling rate */
 export class InputStats {
   private readonly times = new Float64Array(512);
   private head = 0;
@@ -72,7 +72,7 @@ export class InputStats {
       const a = this.times[(this.head - n + i - 1 + L) % L];
       const b = this.times[(this.head - n + i + L) % L];
       const iv = b - a;
-      // 마우스를 멈춘 구간(긴 간격)은 제외
+      // Skip idle stretches (long gaps)
       if (iv > 0 && iv < 50) intervals.push(iv);
     }
     intervals.sort((x, y) => x - y);

@@ -3,8 +3,8 @@ import type { MapData } from './types';
 export const BUILTIN_LEVELS: MapData[] = [
   {
     v: 1,
-    name: '1. 튜토리얼 - 지그재그 복도',
-    author: '기본 맵',
+    name: '1. Tutorial - Zigzag Corridor',
+    author: 'Built-in',
     width: 800,
     height: 500,
     start: { x: 20, y: 220, w: 60, h: 60 },
@@ -19,8 +19,8 @@ export const BUILTIN_LEVELS: MapData[] = [
   },
   {
     v: 1,
-    name: '2. 움직이는 벽',
-    author: '기본 맵',
+    name: '2. Moving Walls',
+    author: 'Built-in',
     width: 800,
     height: 500,
     start: { x: 20, y: 20, w: 60, h: 60 },
@@ -37,8 +37,8 @@ export const BUILTIN_LEVELS: MapData[] = [
   },
   {
     v: 1,
-    name: '3. 순찰 구역',
-    author: '기본 맵',
+    name: '3. Patrol Zone',
+    author: 'Built-in',
     width: 800,
     height: 500,
     start: { x: 15, y: 25, w: 50, h: 50 },

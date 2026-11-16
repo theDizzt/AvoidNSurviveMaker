@@ -4,10 +4,13 @@ import { decodeMap } from '../core/share';
 import type { MapData } from '../core/types';
 import { Editor } from './editor';
 import { PlayController } from './play';
+import { preloadCanvasFonts } from './render';
+
+preloadCanvasFonts();
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
-  if (!el) throw new Error(`#${id} 요소가 없습니다`);
+  if (!el) throw new Error(`Missing element #${id}`);
   return el as T;
 };
 
@@ -55,7 +58,7 @@ let testing = false;
 
 function renderLevelOptions(): void {
   const opts = BUILTIN_LEVELS.map((m, i) => new Option(m.name, String(i)));
-  if (sharedMap) opts.unshift(new Option(`🔗 공유된 맵: ${sharedMap.name}`, 'shared'));
+  if (sharedMap) opts.unshift(new Option(`🔗 Shared map: ${sharedMap.name}`, 'shared'));
   levelSelect.replaceChildren(...opts);
 }
 
@@ -92,7 +95,7 @@ function selectedLevel(): MapData {
 
 levelSelect.addEventListener('change', () => {
   showPlay(selectedLevel());
-  levelSelect.blur(); // 드롭다운 포커스가 남아 있으면 클릭 시 blur 실패가 생길 수 있음
+  levelSelect.blur(); // a lingering dropdown focus could trigger a blur fail on click
 });
 navPlay.addEventListener('click', () => showPlay(selectedLevel()));
 navEdit.addEventListener('click', showEditor);
@@ -113,7 +116,7 @@ async function boot(): Promise<void> {
     try {
       sharedMap = await decodeMap(m[1]);
     } catch (err) {
-      alert(`공유 링크를 열 수 없어요: ${(err as Error).message}`);
+      alert(`Couldn't open the share link: ${(err as Error).message}`);
     }
   }
   renderLevelOptions();

@@ -17,11 +17,11 @@ const GRID = 10;
 const HISTORY_LIMIT = 200;
 
 const TOOL_HINTS: Record<Tool, string> = {
-  select: '클릭해서 선택, 드래그로 이동. 선택한 장애물의 경로 지점(동그라미)도 드래그 가능. Delete로 삭제',
-  wall: '드래그해서 벽을 그리세요',
-  mover: '드래그해서 장애물 크기를 정한 뒤, 클릭으로 이동 경로 지점을 추가하세요. Enter로 완료',
-  start: '드래그해서 START 영역을 지정하세요',
-  goal: '드래그해서 GOAL 영역을 지정하세요',
+  select: 'Click to select, drag to move. A selected obstacle\'s waypoints (circles) can be dragged too. Delete to remove',
+  wall: 'Drag to draw a wall',
+  mover: 'Drag to size the obstacle, then click to add path waypoints. Enter to finish',
+  start: 'Drag to set the START area',
+  goal: 'Drag to set the GOAL area',
 };
 
 export interface EditorElements {
@@ -102,7 +102,7 @@ export class Editor {
     el.importBtn.addEventListener('click', () => el.importFile.click());
     el.importFile.addEventListener('change', () => void this.importJson());
     el.newBtn.addEventListener('click', () => {
-      if (!confirm('현재 맵을 지우고 새로 만들까요? (되돌리기로 복구할 수 있어요)')) return;
+      if (!confirm('Clear the current map and start a new one? (You can restore it with Undo)')) return;
       this.edit(() => (this.map = createEmptyMap()));
       this.sel = null;
       fitCanvas(el.canvas, this.map);
@@ -128,14 +128,14 @@ export class Editor {
     this.finishMover();
   }
 
-  /** 플레이 화면의 맵을 에디터로 가져오기 (리믹스). 되돌리기로 이전 작업 복구 가능 */
+  /** Bring a map from the play screen into the editor (remix). Previous work can be restored with Undo */
   loadMap(map: MapData): void {
     this.edit(() => (this.map = clone(map)));
     this.sel = null;
     fitCanvas(this.el.canvas, this.map);
   }
 
-  /** 테스트 플레이에서 클리어한 맵이 현재 편집 중인 맵과 같으면 공유 가능 상태로 */
+  /** If the map cleared in test play matches the one being edited, mark it shareable */
   markVerified(map: MapData): void {
     const json = JSON.stringify(map);
     if (json === JSON.stringify(this.map)) {
@@ -144,7 +144,7 @@ export class Editor {
     }
   }
 
-  // ───────────────────────── 상태 관리 ─────────────────────────
+  // ───────────────────────── State ─────────────────────────
 
   private snapshot(json = JSON.stringify(this.map)): void {
     this.history.push(json);
@@ -184,7 +184,7 @@ export class Editor {
     this.changed();
   }
 
-  /** 맵이 바뀐 뒤: 저장, 검증, 패널 갱신 */
+  /** After the map changes: save, validate, refresh panels */
   private changed(): void {
     this.save();
     this.syncInputs();
@@ -211,8 +211,8 @@ export class Editor {
     const verified = this.verifiedJson === JSON.stringify(this.map);
     this.el.share.disabled = !verified || !this.valid;
     this.el.verify.textContent = verified
-      ? '✅ 클리어 확인됨 — 공유할 수 있어요'
-      : '공유하려면 먼저 테스트 플레이로 직접 클리어해야 해요';
+      ? '✅ Clear verified — ready to share'
+      : 'To share, first clear the map yourself in test play';
     this.el.verify.className = verified ? 'verify ok' : 'verify';
     if (!verified) this.el.shareUrl.value = '';
     this.el.undo.disabled = this.history.length === 0;
@@ -224,7 +224,7 @@ export class Editor {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ map: this.map, verifiedJson: this.verifiedJson }));
     } catch {
-      /* 저장소를 못 쓰는 환경이면 무시 */
+      /* ignore when storage is unavailable */
     }
   }
 
@@ -250,7 +250,7 @@ export class Editor {
     set(this.el.height, String(this.map.height));
   }
 
-  // ───────────────────────── 도구 & 입력 ─────────────────────────
+  // ───────────────────────── Tools & input ─────────────────────────
 
   private setTool(tool: Tool): void {
     this.finishMover();
@@ -269,7 +269,7 @@ export class Editor {
   private updateHint(): void {
     this.el.hint.textContent =
       this.pendingMover !== null
-        ? `경로 지점 추가 중 (현재 ${this.map.movers[this.pendingMover]?.path.length ?? 0}개) — 클릭으로 추가, Enter/Esc로 완료`
+        ? `Adding waypoints (${this.map.movers[this.pendingMover]?.path.length ?? 0} so far) — click to add, Enter/Esc to finish`
         : TOOL_HINTS[this.tool];
   }
 
@@ -407,7 +407,7 @@ export class Editor {
       this.edit(() => (this.map[key] = r));
       this.sel = { kind: key };
     } else if (this.tool === 'mover') {
-      // 클릭만 했으면 30x30 기본 크기
+      // A plain click (no drag) gives the default 30x30 size
       const w = r.w >= 6 ? r.w : 30;
       const h = r.h >= 6 ? r.h : 30;
       const cx = r.w >= 6 ? r.x + r.w / 2 : d.x0;
@@ -456,7 +456,7 @@ export class Editor {
     this.renderProps();
   }
 
-  // ───────────────────────── 속성 패널 ─────────────────────────
+  // ───────────────────────── Properties panel ─────────────────────────
 
   private numField(label: string, value: number, apply: (v: number) => void, step = 1): HTMLElement {
     const wrap = document.createElement('label');
@@ -492,8 +492,8 @@ export class Editor {
     return [
       this.numField('X', r.x, (v) => (r.x = Math.round(v))),
       this.numField('Y', r.y, (v) => (r.y = Math.round(v))),
-      this.numField('너비', r.w, (v) => (r.w = Math.max(1, Math.round(v)))),
-      this.numField('높이', r.h, (v) => (r.h = Math.max(1, Math.round(v)))),
+      this.numField('Width', r.w, (v) => (r.w = Math.max(1, Math.round(v)))),
+      this.numField('Height', r.h, (v) => (r.h = Math.max(1, Math.round(v)))),
     ];
   }
 
@@ -503,7 +503,7 @@ export class Editor {
     if (!s) {
       const p = document.createElement('p');
       p.className = 'muted';
-      p.textContent = '선택 도구(1)로 오브젝트를 클릭하세요.';
+      p.textContent = 'Click an object with the Select tool (1).';
       box.replaceChildren(p);
       return;
     }
@@ -513,30 +513,30 @@ export class Editor {
     const extra: HTMLElement[] = [];
 
     if (s.kind === 'start' || s.kind === 'goal') {
-      title.textContent = s.kind === 'start' ? 'START 영역' : 'GOAL 영역';
+      title.textContent = s.kind === 'start' ? 'START area' : 'GOAL area';
       grid.append(...this.rectFields(this.map[s.kind]));
     } else if (s.kind === 'wall') {
       const w = this.map.walls[s.i];
       if (!w) return box.replaceChildren();
-      title.textContent = `벽 #${s.i + 1}`;
+      title.textContent = `Wall #${s.i + 1}`;
       grid.append(...this.rectFields(w));
-      extra.push(this.button('삭제', () => this.deleteSelected(), 'danger'));
+      extra.push(this.button('Delete', () => this.deleteSelected(), 'danger'));
     } else {
       const m = this.map.movers[s.i];
       if (!m) return box.replaceChildren();
-      title.textContent = `장애물 #${s.i + 1}`;
+      title.textContent = `Obstacle #${s.i + 1}`;
       grid.append(
-        this.numField('너비', m.w, (v) => (m.w = Math.max(1, Math.round(v)))),
-        this.numField('높이', m.h, (v) => (m.h = Math.max(1, Math.round(v)))),
-        this.numField('속도 (px/초)', m.speed, (v) => (m.speed = Math.min(LIMITS.maxSpeed, Math.max(0, v))), 10),
-        this.numField('시작 위상 (ms)', m.offset, (v) => (m.offset = Math.min(LIMITS.maxOffset, Math.max(0, Math.round(v)))), 50),
+        this.numField('Width', m.w, (v) => (m.w = Math.max(1, Math.round(v)))),
+        this.numField('Height', m.h, (v) => (m.h = Math.max(1, Math.round(v)))),
+        this.numField('Speed (px/s)', m.speed, (v) => (m.speed = Math.min(LIMITS.maxSpeed, Math.max(0, v))), 10),
+        this.numField('Phase offset (ms)', m.offset, (v) => (m.offset = Math.min(LIMITS.maxOffset, Math.max(0, Math.round(v)))), 50),
       );
       const modeWrap = document.createElement('label');
       modeWrap.className = 'field';
       const modeLabel = document.createElement('span');
-      modeLabel.textContent = '이동 방식';
+      modeLabel.textContent = 'Motion';
       const sel = document.createElement('select');
-      for (const [v, t] of [['pingpong', '왕복'], ['loop', '순환']] as const) {
+      for (const [v, t] of [['pingpong', 'Ping-pong'], ['loop', 'Loop']] as const) {
         const o = new Option(t, v, false, m.mode === v);
         sel.append(o);
       }
@@ -546,19 +546,19 @@ export class Editor {
 
       const info = document.createElement('p');
       info.className = 'muted';
-      info.textContent = `경로 지점 ${m.path.length}개${m.path.length < 2 ? ' (2개 이상이어야 움직여요)' : ''}`;
+      info.textContent = `${m.path.length} waypoint${m.path.length === 1 ? '' : 's'}${m.path.length < 2 ? ' (needs 2+ to move)' : ''}`;
       const idx = s.i;
       extra.push(
         info,
-        this.button('경로 지점 추가', () => {
+        this.button('Add waypoints', () => {
           this.setTool('mover');
           this.pendingMover = idx;
           this.updateHint();
         }),
-        this.button('마지막 지점 삭제', () => {
+        this.button('Remove last waypoint', () => {
           if (m.path.length > 1) this.edit(() => m.path.pop());
         }),
-        this.button('삭제', () => this.deleteSelected(), 'danger'),
+        this.button('Delete', () => this.deleteSelected(), 'danger'),
       );
     }
     const actions = document.createElement('div');
@@ -567,7 +567,7 @@ export class Editor {
     box.replaceChildren(title, grid, actions);
   }
 
-  // ───────────────────────── 공유 / 파일 ─────────────────────────
+  // ───────────────────────── Sharing / files ─────────────────────────
 
   private async share(): Promise<void> {
     if (this.el.share.disabled) return;
@@ -577,9 +577,9 @@ export class Editor {
     this.el.shareUrl.select();
     try {
       await navigator.clipboard.writeText(url);
-      this.el.verify.textContent = `🔗 링크를 클립보드에 복사했어요 (${url.length}자)`;
+      this.el.verify.textContent = `🔗 Link copied to clipboard (${url.length} chars)`;
     } catch {
-      this.el.verify.textContent = `링크를 만들었어요. 직접 복사해 주세요 (${url.length}자)`;
+      this.el.verify.textContent = `Link created — please copy it manually (${url.length} chars)`;
     }
   }
 
@@ -600,11 +600,11 @@ export class Editor {
       const map = validateMap(JSON.parse(await file.text()));
       this.loadMap(map);
     } catch (err) {
-      alert(`맵을 불러오지 못했어요: ${(err as Error).message}`);
+      alert(`Couldn't load the map: ${(err as Error).message}`);
     }
   }
 
-  // ───────────────────────── 그리기 ─────────────────────────
+  // ───────────────────────── Drawing ─────────────────────────
 
   private draw(): void {
     if (!this.visible) return;
@@ -615,7 +615,7 @@ export class Editor {
     beginFrame(ctx, map);
     drawMap(ctx, map, movers, preview ? performance.now() - this.previewStart : 0);
 
-    // 미리보기 중에는 편집 기준 위치(시작 위치)를 점선으로
+    // While previewing, draw each obstacle's editing position (its start position) dashed
     ctx.lineWidth = 1.5 * u;
     if (preview) {
       ctx.setLineDash([4 * u, 3 * u]);
@@ -627,7 +627,7 @@ export class Editor {
       ctx.setLineDash([]);
     }
 
-    // 장애물 경로
+    // Obstacle paths
     map.movers.forEach((m, i) => {
       const selected = this.sel?.kind === 'mover' && this.sel.i === i;
       if (m.path.length > 1) {
@@ -652,7 +652,7 @@ export class Editor {
       }
     });
 
-    // 선택 표시
+    // Selection outline
     const selMover = this.sel?.kind === 'mover' ? map.movers[this.sel.i] : undefined;
     const sr = selMover ? this.moverRect(selMover) : this.selectedRect();
     if (sr) {
@@ -663,7 +663,7 @@ export class Editor {
       ctx.setLineDash([]);
     }
 
-    // 그리는 중인 사각형
+    // Rectangle being drawn
     const d = this.drag;
     if (d?.type === 'create') {
       const x = Math.min(d.x0, d.x1);

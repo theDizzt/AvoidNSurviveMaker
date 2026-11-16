@@ -12,16 +12,16 @@ export interface Rect {
 
 export type MoverMode = 'pingpong' | 'loop';
 
-/** 경로를 따라 움직이는 사각형 장애물. path는 장애물 "중심"의 경유 지점. */
+/** A rectangular obstacle moving along a path. `path` holds waypoints for the obstacle's center. */
 export interface Mover {
   w: number;
   h: number;
   path: Point[];
-  /** 픽셀/초 */
+  /** Pixels per second */
   speed: number;
-  /** pingpong: 끝까지 갔다가 되돌아옴, loop: 마지막 지점에서 첫 지점으로 이어서 순환 */
+  /** pingpong: go to the end and come back; loop: continue from the last waypoint back to the first */
   mode: MoverMode;
-  /** 시작 시점 위상 (ms). 같은 경로의 장애물을 어긋나게 배치할 때 사용 */
+  /** Phase offset at start (ms). Used to stagger obstacles that share the same path */
   offset: number;
 }
 

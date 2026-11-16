@@ -2,9 +2,9 @@ import type { Mover, Point } from './types';
 
 export interface CompiledMover {
   readonly src: Mover;
-  /** loop 모드면 첫 지점을 끝에 한 번 더 붙인 경로 */
+  /** In loop mode, the path with the first waypoint appended again at the end */
   readonly pts: readonly Point[];
-  /** 각 지점까지의 누적 거리 */
+  /** Cumulative distance up to each waypoint */
   readonly cum: Float64Array;
   readonly total: number;
 }
@@ -19,8 +19,9 @@ export function compileMover(m: Mover): CompiledMover {
 }
 
 /**
- * 시각 tMs(게임 시작 기준 ms)에서 장애물의 왼쪽 위 좌표.
- * 누적 상태 없이 시간만으로 계산되는 닫힌 식이라 항상 같은 입력 → 같은 결과(결정적).
+ * Top-left position of the obstacle at time tMs (ms since the run started).
+ * A closed-form function of time with no accumulated state, so the same input
+ * always gives the same result (deterministic).
  */
 export function moverPos(cm: CompiledMover, tMs: number, out: Point): Point {
   const m = cm.src;

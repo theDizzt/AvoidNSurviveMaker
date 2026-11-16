@@ -9,9 +9,9 @@ export function rectsOverlap(a: Rect, b: Rect): boolean {
 }
 
 /**
- * 선분 (x0,y0)→(x1,y1)이 사각형(rx,ry,rw,rh)에 처음 닿는 지점의 비율 t ∈ [0,1].
- * 닿지 않으면 -1, 시작점이 이미 안쪽이면 0. (Liang–Barsky 클리핑)
- * 매 1ms 틱마다 수많은 벽에 대해 호출되므로 할당 없이 작성.
+ * Fraction t ∈ [0,1] along segment (x0,y0)→(x1,y1) where it first touches rect (rx,ry,rw,rh).
+ * Returns -1 if it never touches, 0 if the start point is already inside. (Liang–Barsky clipping)
+ * Called for many walls on every 1 ms tick, so it is written allocation-free.
  */
 export function segmentRectEntry(
   x0: number, y0: number, x1: number, y1: number,
