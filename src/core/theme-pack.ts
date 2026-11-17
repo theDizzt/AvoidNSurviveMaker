@@ -75,7 +75,7 @@ export interface ThemeInfo {
   /** Font files bundled in the pack */
   fonts?: ThemeFont[];
   style: ThemeStyle;
-  /** Custom level select / level intro screens */
+  /** Custom level select screen */
   screens?: ThemeScreens;
 }
 

@@ -9,7 +9,7 @@ import { STARS_PER_LEVEL, type ThemeInfo } from '../core/theme-pack';
 import { FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
 
 /**
- * Builds a theme's custom screen (level select or level intro) as DOM on a 1280×720 stage that
+ * Builds a theme's custom screen (level select) as DOM on a 1280×720 stage that
  * scales to its host. The same renderer powers the game and the theme editor (edit mode adds
  * selection, dragging and resizing).
  */
@@ -26,7 +26,7 @@ const BUILTIN: Record<BuiltinFont, string> = {
   mono: "Consolas, 'Courier New', monospace",
 };
 
-/** What a screen shows: the theme, its files, its levels and (on the intro) the level */
+/** What a screen shows: the theme, its files, its levels and optional level details */
 export interface ScreenData {
   info: ThemeInfo;
   /** Pack path → URL (images, fonts) */
@@ -34,7 +34,7 @@ export interface ScreenData {
   /** Unique per theme, so bundled fonts of different themes don't clash */
   fontScope: string;
   levels: { available: boolean; stars: number; cleared: boolean; difficulty: number; title: string }[];
-  /** Intro: the level about to be played (index) */
+  /** Optional level index for level-specific elements */
   level?: number;
   best?: number | null;
 }

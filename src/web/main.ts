@@ -11,8 +11,7 @@ import { PackPanel } from './pack-panel';
 import { ThemeEditor } from './theme-editor';
 import { customTheme } from './theme-registry';
 import { installTooltips } from './tooltip';
-import { CampaignUI, fitRotatedGrid, screenData, themeFromKey, themeKey } from './campaign-ui';
-import { renderScreen } from './screen-render';
+import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-ui';
 import { recordClear, themeUnlocked, totalStars } from './progress';
 import { themedLevel, type ThemeEntry } from '../core/theme-pack';
 import { OFFICIAL_THEMES, allThemes } from './theme-registry';
@@ -24,6 +23,7 @@ import { floatingPanel } from './float-panel';
 import { Account } from './auth/account';
 import { AuthUI, showToast } from './auth/auth-ui';
 import { PlayTimeTracker } from './auth/playtime';
+import { IrisTransition } from './iris-transition';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -32,20 +32,20 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
 };
 
 installTooltips();
+const iris = new IrisTransition();
 
 const VERSION = versionFile.trim();
 for (const id of ['menu-version', 'preload-version']) $(id).textContent = VERSION;
 
 // ───────────────────────── Screens ─────────────────────────
 
-type Screen = 'preload' | 'menu' | 'themes' | 'levels' | 'intro' | 'themeEditor' | 'options' | 'licenses' | 'auth' | 'verify' | 'play' | 'editor';
+type Screen = 'preload' | 'menu' | 'themes' | 'levels' | 'themeEditor' | 'options' | 'licenses' | 'auth' | 'verify' | 'play' | 'editor';
 
 const screens: Record<Screen, HTMLElement> = {
   preload: $('preload-screen'),
   menu: $('menu-screen'),
   themes: $('themes-screen'),
   levels: $('levels-screen'),
-  intro: $('intro-screen'),
   themeEditor: $('theme-editor-screen'),
   options: $('options-screen'),
   licenses: $('licenses-screen'),
@@ -103,32 +103,11 @@ campaign.onPlay = (theme, level) => {
   playCampaign(theme, level);
 };
 
-/** Start a campaign level: through the theme's intro screen when it has one */
+/** Start the selected campaign level directly. */
 function playCampaign(theme: ThemeEntry, level: number): void {
   const map = themedLevel(theme, level);
-  if (!map) return;
-  const key = `c:${themeKey(theme)}:${level}`;
-  const intro = theme.info.screens?.intro;
-  if (!intro) return showPlay(map, { key });
-  currentKey = key;
-  const host = document.createElement('div');
-  host.className = 'se-full';
-  screens.intro.replaceChildren(host);
-  show('intro');
-  renderScreen(host, intro, screenData(theme, level), {
-    onStart: () => showPlay(map, { key }),
-    onBack: () => show('levels'),
-  });
-  requestAnimationFrame(() => host.querySelector<HTMLElement>('.se-start')?.focus({ preventScroll: true }));
+  if (map) showPlay(map, { key: `c:${themeKey(theme)}:${level}` });
 }
-
-screens.intro.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') show('levels');
-  else if ((e.key === 'Enter' || e.key === ' ') && !(e.target instanceof HTMLButtonElement)) {
-    e.preventDefault();
-    screens.intro.querySelector<HTMLElement>('.se-start')?.click();
-  }
-});
 
 /** 'c:<theme key>:<level index>' → the theme and level index */
 function campaignOf(key: string): { theme: ThemeEntry; index: number } | null {
@@ -170,7 +149,21 @@ let currentMap: MapData = BUILTIN_LEVELS[0];
 let currentKey = '';
 let testing = false;
 
-function show(next: Screen): void {
+function screenColors(screen: Screen): readonly [string, string] | undefined {
+  if (screen === 'levels') return (campaign.currentTheme ?? campaignOf(currentKey)?.theme)?.info.colors;
+  if (screen === 'play') return campaignOf(currentKey)?.theme.info.colors;
+  return undefined;
+}
+
+function show(next: Screen, prepare?: () => void, colors?: readonly [string, string]): void {
+  if (current === next && !prepare) return;
+  iris.run(() => {
+    prepare?.();
+    showImmediately(next);
+  }, colors ?? screenColors(next) ?? screenColors(current) ?? ['#9fe2ff', '#c3b5ff']);
+}
+
+function showImmediately(next: Screen): void {
   if (current === 'play' && next !== 'play') play.hide();
   if (current === 'editor' && next !== 'editor') editor.hide();
   if (current === 'themeEditor' && next !== 'themeEditor') themeEditor.hide();
@@ -204,21 +197,22 @@ function show(next: Screen): void {
 }
 
 function showPlay(map: MapData, opts: { test?: boolean; key?: string } = {}): void {
-  testing = !!opts.test;
-  currentMap = map;
-  currentKey = opts.key ?? '';
-  // Campaign levels wear their theme's badge design
-  const c = campaignOf(currentKey);
-  play.badge = c ? { style: c.theme.info.style.badge, imageUrl: c.theme.badgeUrl } : null;
-  renderLevelOptions(); // worlds may have unlocked since
-  if (currentKey) levelSelect.value = currentKey;
-  // From the editor the level list only makes sense while playing a pack
-  levelSelect.hidden = testing && !currentKey.startsWith('p:');
-  openInEditor.hidden = testing;
-  backToEditor.hidden = !testing;
-  play.load(map);
-  updateNext();
-  show('play');
+  show('play', () => {
+    testing = !!opts.test;
+    currentMap = map;
+    currentKey = opts.key ?? '';
+    // Campaign levels wear their theme's badge design
+    const c = campaignOf(currentKey);
+    play.badge = c ? { style: c.theme.info.style.badge, imageUrl: c.theme.badgeUrl } : null;
+    renderLevelOptions(); // worlds may have unlocked since
+    if (currentKey) levelSelect.value = currentKey;
+    // From the editor the level list only makes sense while playing a pack
+    levelSelect.hidden = testing && !currentKey.startsWith('p:');
+    openInEditor.hidden = testing;
+    backToEditor.hidden = !testing;
+    play.load(map);
+    updateNext();
+  }, campaignOf(opts.key ?? '')?.theme.info.colors);
 }
 
 function showEditor(): void {
@@ -484,9 +478,6 @@ async function boot(): Promise<void> {
   });
 
   renderLevelOptions();
-  screens.preload.classList.add('fade-out');
-  await new Promise((r) => setTimeout(r, 300));
-  screens.preload.classList.remove('fade-out');
 
   // A share link goes straight to that map; otherwise land on the main menu
   if (sharedMap) showPlay(sharedMap, { key: 'shared' });

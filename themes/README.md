@@ -63,19 +63,15 @@ Each level is a normal map file. Fields that matter for worlds (all set in the M
 
 ## Custom screens and fonts
 
-A theme can replace the level select screen and show an intro screen before each level
-(`screens.select`, `screens.intro`). Both are laid out on a 1280×720 stage — design them in the
-**Theme Editor** (tabs *Level select* / *Level intro*); the format is written into theme.json.
+A theme can replace the level select screen (`screens.select`) on a 1280×720 stage. Design it in the **Theme Editor** (*Level select* tab); the format is written into theme.json. Levels start directly after selection.
 
 - `screens.<name>.background`: `color`, optional `color2` (gradient), `image` (file), `fit`
   (`cover` / `contain` / `tile`), `dim` (0–0.9)
 - `screens.<name>.elements`: `text`, `image`, `box`, `levelGrid` (level buttons; pages through
-  packs with more levels than cells), `back`, `start` (the √ that begins a level), `stars`,
-  `progress`. Each has `x`, `y`, `w`, `h`, optional `rotate`, `opacity` and `when`
+  packs with more levels than cells), `back`, `stars`, `progress`. Each has `x`, `y`, `w`, `h`, optional `rotate`, `opacity` and `when`
   (`allComplete`, `notComplete`, `cleared`, `notCleared`).
 - Text placeholders: `{theme}`, `{description}`, `{author}`, `{credits}`, `{released}`,
-  `{cleared}`, `{total}`, `{stars}`, `{maxStars}`, and on the intro `{n}`, `{nn}`, `{title}`,
-  `{difficulty}`, `{difficultyLabel}`, `{best}`.
+  `{cleared}`, `{total}`, `{stars}`, `{maxStars}`.
 - `credits`: free text shown with `{credits}` (designers, music, …).
 - `fonts`: `[{ "family": "LCD", "file": "fonts/lcd.ttf" }]` — font files in the pack, picked by
   `family` for texts and level buttons. Built-in fonts: `title`, `main`, `serif`, `heavy`,

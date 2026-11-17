@@ -5,7 +5,7 @@ import { customTheme, OFFICIAL_SLOTS, OFFICIAL_THEMES, setCustomTheme } from './
 import { readThemeZip } from './theme-zip';
 import { renderScreen, type ScreenData } from './screen-render';
 
-/** What a theme's custom screens show (progress included); `level` for the intro */
+/** Theme screen data, including progress and optional level details */
 export function screenData(t: ThemeEntry, level?: number): ScreenData {
   const levels = Array.from({ length: levelSlots(t) }, (_, i) => {
     const map = themedLevel(t, i);

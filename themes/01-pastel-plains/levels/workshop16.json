@@ -1,0 +1,459 @@
+{
+  "v": 2,
+  "name": "workshop16",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 150,
+    "y": 600,
+    "w": 60,
+    "h": 60
+  },
+  "goal": {
+    "x": 1700,
+    "y": 720,
+    "w": 60,
+    "h": 60
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 90,
+            "y": 660
+          },
+          {
+            "x": 270,
+            "y": 840
+          },
+          {
+            "x": 510,
+            "y": 600
+          },
+          {
+            "x": 630,
+            "y": 720
+          },
+          {
+            "x": 870,
+            "y": 480
+          },
+          {
+            "x": 990,
+            "y": 600
+          },
+          {
+            "x": 1110,
+            "y": 480
+          },
+          {
+            "x": 1290,
+            "y": 660
+          },
+          {
+            "x": 1410,
+            "y": 540
+          },
+          {
+            "x": 1710,
+            "y": 840
+          },
+          {
+            "x": 1830,
+            "y": 720
+          },
+          {
+            "x": 1410,
+            "y": 300
+          },
+          {
+            "x": 1290,
+            "y": 420
+          },
+          {
+            "x": 1110,
+            "y": 240
+          },
+          {
+            "x": 990,
+            "y": 360
+          },
+          {
+            "x": 870,
+            "y": 240
+          },
+          {
+            "x": 630,
+            "y": 480
+          },
+          {
+            "x": 510,
+            "y": 360
+          },
+          {
+            "x": 270,
+            "y": 600
+          },
+          {
+            "x": 210,
+            "y": 540
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 510,
+            "y": 360
+          },
+          {
+            "x": 570,
+            "y": 420
+          },
+          {
+            "x": 510,
+            "y": 480
+          },
+          {
+            "x": 450,
+            "y": 420
+          }
+        ]
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 210,
+            "y": 720
+          }
+        ],
+        "speed": 390,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 870,
+            "y": 240
+          },
+          {
+            "x": 930,
+            "y": 300
+          },
+          {
+            "x": 870,
+            "y": 360
+          },
+          {
+            "x": 810,
+            "y": 300
+          }
+        ]
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 570,
+            "y": 600
+          }
+        ],
+        "speed": 390,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1110,
+            "y": 240
+          },
+          {
+            "x": 1170,
+            "y": 300
+          },
+          {
+            "x": 1110,
+            "y": 360
+          },
+          {
+            "x": 1050,
+            "y": 300
+          }
+        ]
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 930,
+            "y": 480
+          }
+        ],
+        "speed": 390,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1230,
+            "y": 360
+          },
+          {
+            "x": 1290,
+            "y": 420
+          },
+          {
+            "x": 1230,
+            "y": 480
+          },
+          {
+            "x": 1170,
+            "y": 420
+          }
+        ]
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1170,
+            "y": 480
+          }
+        ],
+        "speed": 390,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1470,
+            "y": 360
+          },
+          {
+            "x": 1530,
+            "y": 420
+          },
+          {
+            "x": 1470,
+            "y": 480
+          },
+          {
+            "x": 1410,
+            "y": 420
+          }
+        ]
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1290,
+            "y": 600
+          }
+        ],
+        "speed": 390,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1230,
+            "y": 480
+          },
+          {
+            "x": 1290,
+            "y": 540
+          },
+          {
+            "x": 1230,
+            "y": 600
+          },
+          {
+            "x": 1170,
+            "y": 540
+          }
+        ]
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1410,
+            "y": 360
+          }
+        ],
+        "speed": 390,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 990,
+            "y": 480
+          },
+          {
+            "x": 1050,
+            "y": 540
+          },
+          {
+            "x": 990,
+            "y": 600
+          },
+          {
+            "x": 930,
+            "y": 540
+          }
+        ]
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1170,
+            "y": 360
+          }
+        ],
+        "speed": 390,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 630,
+            "y": 600
+          },
+          {
+            "x": 690,
+            "y": 660
+          },
+          {
+            "x": 630,
+            "y": 720
+          },
+          {
+            "x": 570,
+            "y": 660
+          }
+        ]
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 930,
+            "y": 360
+          }
+        ],
+        "speed": 390,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 270,
+            "y": 720
+          },
+          {
+            "x": 330,
+            "y": 780
+          },
+          {
+            "x": 270,
+            "y": 840
+          },
+          {
+            "x": 210,
+            "y": 780
+          }
+        ]
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 570,
+            "y": 480
+          }
+        ],
+        "speed": 390,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    }
+  ],
+  "title": "Diagonal",
+  "level": 16,
+  "difficulty": 2.5,
+  "stars": {
+    "three": 6000,
+    "two": 10000,
+    "one": 15000
+  }
+}

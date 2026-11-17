@@ -120,7 +120,7 @@ export class ThemeEditor {
     const side = el('div', 'te-side');
     const tabs = el('div', 'te-tabs');
     tabs.setAttribute('role', 'tablist');
-    for (const [k, label] of [['game', 'In-game'], ['select', 'Level select'], ['intro', 'Level intro']] as const) {
+    for (const [k, label] of [['game', 'In-game'], ['select', 'Level select']] as const) {
       const t = el('button', '', label);
       t.type = 'button';
       t.setAttribute('role', 'tab');
@@ -178,7 +178,7 @@ export class ThemeEditor {
     for (const p of this.gameParts) p.hidden = !game;
     this.stageHost.hidden = game;
     this.screenPanel.hidden = game;
-    if (!game) this.designer.open(tab, this.previewIndex);
+    if (!game) this.designer.open(tab);
     else requestAnimationFrame(() => this.fit());
   }
 

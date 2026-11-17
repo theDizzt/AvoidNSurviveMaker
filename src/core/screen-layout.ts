@@ -1,5 +1,5 @@
 /**
- * Custom screens of a theme (level select, level intro), laid out like a slide: a background and
+ * Custom screens of a theme (level select), laid out like a slide: a background and
  * freely placed elements on a 1280×720 stage. The game scales the stage to the window.
  *
  * Text can use placeholders (see SCREEN_PLACEHOLDERS), so one layout works for every level.
@@ -119,8 +119,6 @@ export interface ScreenLayout {
 export interface ThemeScreens {
   /** Replaces the default diamond level select */
   select?: ScreenLayout;
-  /** Shown before each level; the start (√) button begins the run */
-  intro?: ScreenLayout;
 }
 
 /** Placeholders usable in text (shown in the editor's help) */
@@ -132,14 +130,8 @@ export const SCREEN_PLACEHOLDERS: [string, string][] = [
   ['{released}', 'Release date'],
   ['{cleared}', 'Levels cleared'],
   ['{total}', 'Number of levels'],
-  ['{stars}', 'Stars collected (select) / earned on this level (intro)'],
+  ['{stars}', 'Stars collected'],
   ['{maxStars}', 'Stars available'],
-  ['{n}', 'Level number (intro)'],
-  ['{nn}', 'Level number, two digits: 01 (intro)'],
-  ['{title}', 'Level title (intro)'],
-  ['{difficulty}', 'Difficulty 1.00–10.00 (intro)'],
-  ['{difficultyLabel}', 'EASY / NORMAL / HARD / EXPERT / INSANE (intro)'],
-  ['{best}', 'Best time, or "--" (intro)'],
 ];
 
 export function difficultyLabel(d: number): string {
@@ -256,10 +248,8 @@ export function readScreens(v: unknown): ThemeScreens | undefined {
   if (!isObj(v)) return undefined;
   const out: ThemeScreens = {};
   const select = readLayout(v.select);
-  const intro = readLayout(v.intro);
   if (select) out.select = select;
-  if (intro) out.intro = intro;
-  return select || intro ? out : undefined;
+  return select ? out : undefined;
 }
 
 export function readFonts(v: unknown): ThemeFont[] | undefined {

@@ -9,12 +9,12 @@ import { emptyLayout, newElement, SCREEN_TEMPLATES } from './screen-templates';
 import type { StoredTheme } from './theme-registry';
 
 /**
- * The theme editor's screen designer: a stage where the custom level select / level intro is laid
+ * The theme editor's screen designer: a stage where the custom level select is laid
  * out by dragging elements, and a panel with the background, element list and the selected
  * element's properties.
  */
 
-export type ScreenKind = 'select' | 'intro';
+export type ScreenKind = 'select';
 
 const KIND_NAMES: Record<ElementKind, string> = {
   text: 'Text', image: 'Image', box: 'Box', levelGrid: 'Level buttons', back: 'Back button', start: 'Start (√) button', stars: 'Stars', progress: 'Progress bar',
@@ -22,14 +22,12 @@ const KIND_NAMES: Record<ElementKind, string> = {
 /** Elements that make sense on each screen */
 const KINDS_FOR: Record<ScreenKind, ElementKind[]> = {
   select: ['text', 'image', 'box', 'levelGrid', 'back'],
-  intro: ['text', 'image', 'box', 'start', 'back', 'stars', 'progress'],
 };
 const SHAPES: [ButtonShape, string][] = [
   ['rounded', 'Rounded square'], ['square', 'Square'], ['circle', 'Circle'], ['diamond', 'Diamond'], ['drop', 'Teardrop'], ['leaf', 'Leaf'], ['none', 'Number only'],
 ];
 const WHEN: [Visibility, string][] = [
   ['always', 'Always'], ['allComplete', 'Only when every level is cleared'], ['notComplete', 'Until every level is cleared'],
-  ['cleared', 'Intro: only if this level was cleared'], ['notCleared', 'Intro: only if not cleared yet'],
 ];
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: string): HTMLElementTagNameMap[K] {
@@ -42,7 +40,6 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: stri
 export class ScreenDesigner {
   private kind: ScreenKind = 'select';
   private selected: string | null = null;
-  private previewLevel = 0;
   /** Preview the select screen as if every level were cleared (shows "ALL COMPLETE" elements) */
   private allClear = false;
 
@@ -55,9 +52,8 @@ export class ScreenDesigner {
     private readonly upload: (file: File, folder: string) => Promise<string>,
   ) {}
 
-  open(kind: ScreenKind, previewLevel: number): void {
+  open(kind: ScreenKind): void {
     this.kind = kind;
-    this.previewLevel = previewLevel;
     this.selected = null;
     this.render();
   }
@@ -71,7 +67,7 @@ export class ScreenDesigner {
     const screens = { ...(info.screens ?? {}) };
     if (l) screens[this.kind] = l;
     else delete screens[this.kind];
-    if (screens.select || screens.intro) info.screens = screens;
+    if (screens.select) info.screens = screens;
     else delete info.screens;
   }
 
@@ -84,7 +80,7 @@ export class ScreenDesigner {
       const cleared = !!map && (this.allClear || i < 3);
       return { available: !!map || i < 7, stars: cleared ? 3 - (i % 3) : 0, cleared, difficulty: map?.difficulty ?? 1 + (i % 10) * 0.9, title: map?.title ?? `Level ${i + 1}` };
     });
-    return { info: d.info, assets: d.images, fontScope: 'th-draft', levels, level: this.kind === 'intro' ? this.previewLevel : undefined, best: this.kind === 'intro' ? 12345 : undefined };
+    return { info: d.info, assets: d.images, fontScope: 'th-draft', levels };
   }
 
   render(): void {
@@ -96,8 +92,8 @@ export class ScreenDesigner {
     const layout = this.layout;
     if (!layout) {
       const empty = el('div', 'sd-empty');
-      empty.append(el('strong', '', this.kind === 'select' ? 'Default level select' : 'No intro screen'),
-        el('span', '', this.kind === 'select' ? 'Levels use the standard diamond screen. Turn on a custom screen below to design your own.' : 'Levels start right away. Turn on an intro screen below to show one before each level.'));
+      empty.append(el('strong', '', 'Default level select'),
+        el('span', '', 'Levels use the standard diamond screen. Turn on a custom screen below to design your own.'));
       this.stageHost.replaceChildren(empty);
       return;
     }
@@ -260,9 +256,9 @@ export class ScreenDesigner {
   private renderPanel(): void {
     const parts: HTMLElement[] = [];
     const layout = this.layout;
-    const title = this.kind === 'select' ? 'Level select screen' : 'Level intro screen';
+    const title = 'Level select screen';
     parts.push(el('h3', '', title));
-    parts.push(this.check(this.kind === 'select' ? 'Use a custom level select screen' : 'Show an intro screen before each level', !!layout, (on) => {
+    parts.push(this.check('Use a custom level select screen', !!layout, (on) => {
       this.setLayout(on ? SCREEN_TEMPLATES[0].make()[this.kind] ?? emptyLayout() : undefined);
       this.selected = null;
       queueMicrotask(() => this.renderPanel());
