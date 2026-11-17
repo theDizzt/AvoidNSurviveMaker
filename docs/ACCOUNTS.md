@@ -18,6 +18,7 @@ Without this setup the game still runs; the account screen just says accounts ar
 | Tag | `profiles.discriminator` | 1–9999, shown as 4 digits (`0042`) |
 | Total play time | `profiles.total_play_seconds` (seconds) and `profiles.play_time` (`hh:mm:ss`) | total time the game has been open (signed in, tab visible) |
 | Level records | `level_records` (`level_key`, `best_ms`, `stars`) | best clear time in ms and most stars per level; only the player can read their rows |
+| Deaths | `profiles.total_deaths` and `level_deaths` (`level_key`, `deaths`) | deaths in runs, in total and per level; only the player can read them |
 
 Tag rules (enforced in the database, not just the UI):
 
@@ -34,14 +35,15 @@ Supabase Dashboard → **SQL Editor** → paste and run each file, in this order
 2. [`supabase/migrations/20261117010000_play_time.sql`](../supabase/migrations/20261117010000_play_time.sql) — total play time
 3. [`supabase/migrations/20261117020000_play_time_seconds.sql`](../supabase/migrations/20261117020000_play_time_seconds.sql) — store play time in seconds
 4. [`supabase/migrations/20261117030000_level_records.sql`](../supabase/migrations/20261117030000_level_records.sql) — best time (ms) and stars per level
+5. [`supabase/migrations/20261118000000_security_hardening.sql`](../supabase/migrations/20261118000000_security_hardening.sql) — private profiles, unverified records
+6. [`supabase/migrations/20261118010000_deaths.sql`](../supabase/migrations/20261118010000_deaths.sql) — death counts, total and per level
+7. [`supabase/migrations/20261118020000_leaderboard.sql`](../supabase/migrations/20261118020000_leaderboard.sql) — per-level leaderboard (verified records only)
 
 (With the Supabase CLI linked to the project, `supabase db push` does the same.)
 
 ## 2. Auth settings
 
-Before deploying, also apply
-[`20261118000000_security_hardening.sql`](../supabase/migrations/20261118000000_security_hardening.sql)
-after migrations 1–4 above. Full profiles are owner-only; public identities use
+Migration 5 (security hardening) is required before deploying. Full profiles are owner-only; public identities use
 `public_profiles`. Records are unverified private backups, capped at 2000 per
 account. See [security boundaries](SECURITY.md) for limits and deployment details.
 
@@ -121,6 +123,32 @@ presses **Options → Level records → Sync records**. That uploads every recor
 downloads the account's records into it; both sides keep the best of each.
 
 **Main menu → Stats** reads the profile and every `level_records` row straight from the database.
+
+## Deaths
+
+A death is a run the maze ended (wall, moving wall, void, map bounds, laser). Runs the browser
+stopped (cursor left the window, the tab lost focus, a non-mouse pointer) and editor test plays
+don't count. Every death adds to `profiles.total_deaths`; deaths on chapter and custom pack levels
+also add to that level's `level_deaths` row (same `level_key` as level records). Shared maps and
+packs count only in the total.
+
+Deaths are counted in the browser per account and sent with `add_deaths(total, levels)` a few
+seconds after a death, when the tab is hidden, and before signing out; unsent counts are kept in
+localStorage and sent on the next visit. The server only adds (at most 10 000 deaths and 200 levels
+per call, 2000 level rows per player). Deaths while signed out aren't recorded. **Stats** shows the
+total and the level with the most deaths.
+
+## Leaderboards
+
+The level select shows a side panel: the chapter (number, name, stars, difficulty, description)
+and the leaderboard of the hovered level, read with `level_leaderboard(key, limit)` — the top 10
+plus the player's own place. Anyone can read it, signed in or not; it returns only the public tag,
+time and stars.
+
+Only **verified** records are ranked. Browser submissions are never verified (see
+[security boundaries](SECURITY.md)), so boards stay empty — "No verified records yet" — until a
+trusted replay verifier sets `level_records.verified`. Custom pack levels have no leaderboard,
+since pack ids aren't unique.
 
 ## Flow
 

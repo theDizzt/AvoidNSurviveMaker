@@ -97,6 +97,60 @@ try {
   assert.equal(await scalar('select count(*) from public.level_records'), 2000);
   assert.equal(await scalar("select best_ms from public.level_records where level_key = 'workshop/0'"), 100);
   console.log('PASS: account quota is atomic; existing records can still improve at the limit');
+
+  await db.exec('reset role');
+  await db.exec(await readFile(new URL('../supabase/migrations/20261118010000_deaths.sql', import.meta.url), 'utf8'));
+  await asUser(a);
+  const addDeaths = (total, levels) => scalar('select public.add_deaths($1, $2::jsonb)', [total, JSON.stringify(levels)]);
+  assert.equal(Number(await addDeaths(3, [{ key: 'workshop/0', count: 2 }])), 3);
+  // The total never trails the level counts; malformed entries are skipped
+  assert.equal(Number(await addDeaths(0, [
+    { key: 'workshop/0', count: 1 }, { key: '../x', count: 5 }, { key: 'x/999', count: 5 },
+    { key: 'x/1', count: 1.5 }, { key: 'x/2', count: 0 }, { key: 'x/3', count: 'bad' }, null,
+  ])), 4);
+  assert.equal(Number(await scalar("select deaths from public.level_deaths where level_key = 'workshop/0'")), 3);
+  assert.equal(Number(await scalar('select count(*) from public.level_deaths')), 1);
+  await assert.rejects(addDeaths(-1, []), /INVALID_DEATHS/);
+  await assert.rejects(addDeaths(10001, []), /INVALID_DEATHS/);
+  await assert.rejects(db.query("select public.add_deaths(1, '{}'::jsonb)"), /INVALID_DEATHS/);
+  await assert.rejects(addDeaths(1, Array(201).fill({})), /TOO_MANY_DEATHS/);
+  await assert.rejects(db.query('update public.profiles set total_deaths = 0'), /permission denied/);
+  await assert.rejects(db.query("insert into public.level_deaths (user_id, level_key, deaths) values ($1, 'w/0', 1)", [a]), /permission denied/);
+  await assert.rejects(db.query('select total_deaths from public.public_profiles'), /does not exist/);
+  await asUser(b);
+  assert.equal(Number(await scalar('select count(*) from public.level_deaths')), 0);
+  assert.equal(Number(await scalar('select total_deaths from public.profiles')), 0);
+  await db.exec('reset role; set role anon');
+  await assert.rejects(db.query("select public.add_deaths(1, '[]'::jsonb)"), /permission denied/);
+  await assert.rejects(db.query('select * from public.level_deaths'), /permission denied/);
+  console.log('PASS: deaths only add, stay private, and reject malformed or oversized reports');
+
+  await db.exec('reset role');
+  await db.exec(await readFile(new URL('../supabase/migrations/20261118020000_leaderboard.sql', import.meta.url), 'utf8'));
+  // A has an unverified workshop/0 record (100 ms); B gets a verified one, then A's is verified too
+  await db.query("insert into public.level_records (user_id, level_key, best_ms, stars, verified) values ($1, 'workshop/0', 150, 2, true)", [b]);
+  await asUser(a);
+  const board = async (key, limit = 10) => (await db.query('select * from public.level_leaderboard($1, $2)', [key, limit])).rows;
+  let rows = await board('workshop/0');
+  assert.deepEqual(rows.map((r) => [Number(r.place), r.nickname, r.is_me]), [[1, 'Security B', false]]);
+  await db.exec('reset role');
+  await db.query("update public.level_records set verified = true where user_id = $1 and level_key = 'workshop/0'", [a]);
+  await asUser(a);
+  rows = await board('workshop/0');
+  assert.deepEqual(rows.map((r) => [Number(r.place), r.nickname, r.best_ms, r.is_me]), [[1, 'Security A', 100, true], [2, 'Security B', 150, false]]);
+  // Outside the top places, the caller's own row is still returned
+  rows = await board('workshop/0', 1);
+  assert.equal(rows.length, 1);
+  await asUser(b);
+  rows = await board('workshop/0', 1);
+  assert.deepEqual(rows.map((r) => [Number(r.place), r.is_me]), [[1, false], [2, true]]);
+  assert.equal(Object.keys(rows[0]).includes('user_id'), false);
+  assert.equal((await board('custom:pack/998')).length, 0); // custom pack keys are never ranked
+  assert.equal((await board('last/0')).length, 0); // unverified only: empty
+  await db.exec("reset role; select set_config('request.jwt.claim.sub', '', false); set role anon");
+  assert.equal((await board('workshop/0')).length, 2);
+  assert.ok((await board('workshop/0')).every((r) => r.is_me === false));
+  console.log('PASS: leaderboards rank verified records only, are public, and expose no user ids');
 } finally {
   await db.close();
 }

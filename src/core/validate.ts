@@ -464,10 +464,10 @@ export function createEmptyMap(): MapData {
     v: MAP_VERSION,
     name: 'New map',
     author: '',
-    width: 960,
-    height: 540,
-    start: { x: 30, y: 240, w: 60, h: 60 },
-    goal: { x: 870, y: 240, w: 60, h: 60 },
+    width: 1920,
+    height: 1080,
+    start: { x: 60, y: 480, w: 120, h: 120 },
+    goal: { x: 1740, y: 480, w: 120, h: 120 },
     objects: [],
   };
 }

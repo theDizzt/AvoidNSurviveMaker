@@ -14,7 +14,9 @@ describe('theme packs', () => {
       Array.from({ length: 16 }, (_, i) => `workshop${String(i + 1).padStart(2, '0')}`),
     );
     expect(OFFICIAL_THEMES[4].info.style.badge.kind).toBe('emblem');
-    expect(OFFICIAL_THEMES.slice(1).every((t) => t.levels.length === 0)).toBe(true);
+    // Chapter 2 (desert) is being built; the chapters after it have no levels yet
+    expect(OFFICIAL_THEMES[1].levels.length).toBeGreaterThan(0);
+    expect(OFFICIAL_THEMES.slice(2).every((t) => t.levels.length === 0)).toBe(true);
     expect(CUSTOM_THEME_PRESETS.map((t) => t.info.id)).toEqual(['pastel', 'forest', 'candy', 'neon', 'lava', 'mono']);
     expect(CUSTOM_THEME_PRESETS.every((t) => !t.official)).toBe(true);
     expect(CUSTOM_THEME_PRESETS[0].info.name).toBe('Pastel Plains');

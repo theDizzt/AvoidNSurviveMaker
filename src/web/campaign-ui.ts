@@ -1,6 +1,9 @@
 import { formatTime } from '../core/simulation';
 import { averageDifficulty, LEVELS_PER_THEME, levelSlots, maxStars, STARS_PER_THEME, themedLevel, type ThemeEntry } from '../core/theme-pack';
-import { levelRecord, themeStars, themeUnlocked, totalStars } from './progress';
+import { formatTag } from '../core/account';
+import { fetchLeaderboard, type LeaderboardRow } from './auth/leaderboard';
+import { renderTag } from './player-tag';
+import { levelKey, levelRecord, themeStars, themeUnlocked, totalStars } from './progress';
 import { customTheme, OFFICIAL_SLOTS, OFFICIAL_THEMES, setCustomTheme } from './theme-registry';
 import { readThemeZip } from './theme-zip';
 import { renderScreen, type ScreenData } from './screen-render';
@@ -74,6 +77,11 @@ function starRow(n: number): HTMLElement {
 
 const diff = (v: number) => `◆ ${v.toFixed(2)}`;
 
+/** Below this window width the level select's side panel stacks above the lattice (style.css) */
+const SIDE_BREAKPOINT = 900;
+/** Wait this long on a hovered level before loading its leaderboard */
+const BOARD_DELAY_MS = 120;
+
 /** Lay out diamonds in zig-zag rows; returns the lattice size */
 function placeLattice(tiles: HTMLElement[], size: number, perRow: number, gap = 6): { w: number; h: number } {
   const step = (size * Math.SQRT2) / 2 + gap;
@@ -120,7 +128,10 @@ export class CampaignUI {
       const w = lat.offsetWidth;
       const h = lat.offsetHeight;
       const room = root === this.themesRoot ? 250 : 170;
-      const fit = Math.min(1.2, (window.innerWidth * 0.94) / w, (window.innerHeight - room) / h);
+      // Level select: the side panel takes its column when it sits beside the lattice
+      const side = root.querySelector<HTMLElement>('.dside');
+      const sideW = side && window.innerWidth > SIDE_BREAKPOINT ? side.offsetWidth + 28 : 0;
+      const fit = Math.min(1.2, (window.innerWidth * 0.94 - sideW) / w, (window.innerHeight - room) / h);
       wrap.style.width = `${w * fit}px`;
       wrap.style.height = `${h * fit}px`;
       lat.style.transform = `scale(${fit})`;
@@ -149,7 +160,8 @@ export class CampaignUI {
     backBtn.append(inner('←'));
     backBtn.addEventListener('click', back);
     const titles = el('div', 'dhead-titles');
-    titles.append(el('h2', 'dhead-title', title), el('p', 'dhead-sub', sub));
+    titles.append(el('h2', 'dhead-title', title));
+    if (sub) titles.append(el('p', 'dhead-sub', sub));
     const right = el('div', 'dhead-right');
     if (extra) right.append(extra);
     const total = el('div', 'dtotal');
@@ -230,10 +242,13 @@ export class CampaignUI {
   private worldTile(t: ThemeEntry, label: string, onHover: () => void): HTMLElement {
     const unlocked = themeUnlocked(t);
     const planned = t.official && t.levels.length === 0;
-    const b = el('button', `dtile dworld${unlocked ? '' : ' locked'}${t.official ? '' : ' custom'}`);
+    const b = el('button', `dtile dworld${planned ? ' planned' : unlocked ? '' : ' locked'}${t.official ? '' : ' custom'}`);
     b.type = 'button';
-    const grad = `linear-gradient(135deg, ${t.info.colors[0]}, ${t.info.colors[1]})`;
-    b.style.background = t.coverUrl ? `linear-gradient(180deg, rgba(20,24,40,0.05), rgba(20,24,40,0.55)), url("${t.coverUrl}") center / cover, ${grad}` : grad;
+    // Coming-soon chapters show a plain dark gray tile (style.css .dworld.planned), not their cover
+    if (!planned) {
+      const grad = `linear-gradient(135deg, ${t.info.colors[0]}, ${t.info.colors[1]})`;
+      b.style.background = t.coverUrl ? `linear-gradient(180deg, rgba(20,24,40,0.05), rgba(20,24,40,0.55)), url("${t.coverUrl}") center / cover, ${grad}` : grad;
+    }
     const stars = themeStars(t);
     const parts: (HTMLElement | string)[] = [el('span', 'dworld-no', label), el('strong', 'dworld-name', t.info.name)];
     if (planned) {
@@ -274,6 +289,7 @@ export class CampaignUI {
       requestAnimationFrame(() => host.querySelector<HTMLElement>('.se-level:not(:disabled)')?.focus({ preventScroll: true }));
       return;
     }
+    const side = this.sidePanel(t);
     const lattice = el('div', 'lattice');
     lattice.style.setProperty('--c1', t.info.colors[0]);
     lattice.style.setProperty('--c2', t.info.colors[1]);
@@ -291,6 +307,8 @@ export class CampaignUI {
         if (rec) parts.push(el('small', 'dlevel-best', `${formatTime(rec.best)}s`));
         b.title = `Level ${i + 1} · ${map.title}\nDifficulty ${(map.difficulty ?? 1).toFixed(2)}`;
         b.addEventListener('click', () => this.onPlay(t, i));
+        b.addEventListener('pointerenter', () => side.show(i));
+        b.addEventListener('focus', () => side.show(i));
         first ??= b;
       } else {
         parts.push(el('small', 'dlevel-best', 'Soon'));
@@ -306,14 +324,92 @@ export class CampaignUI {
     lattice.style.height = `${size.h}px`;
     const wrap = el('div', 'lattice-wrap');
     wrap.append(lattice);
-    const ready = t.levels.length;
-    this.levelsRoot.replaceChildren(
-      this.header(t.info.name, `★ ${themeStars(t)} / ${maxStars(t)} · ${diff(averageDifficulty(t.levels))}${t.official && ready < LEVELS_PER_THEME ? ` · ${ready} of ${LEVELS_PER_THEME} levels available` : ` · ${ready} levels`}`, () => this.onBack('levels')),
-      wrap,
-    );
+    const body = el('div', 'dlevels-body');
+    body.append(side.panel, wrap);
+    const firstPlayable = Array.from({ length: slots }, (_, i) => i).find((i) => themedLevel(t, i));
+    if (firstPlayable !== undefined) side.show(firstPlayable);
+    // Stars and difficulty live in the side panel's theme card
+    this.levelsRoot.replaceChildren(this.header(t.info.name, '', () => this.onBack('levels')), body);
     requestAnimationFrame(() => {
       this.fit();
       first?.focus({ preventScroll: true });
     });
+  }
+
+  /**
+   * Level select side panel: the theme (chapter number, name, stars and difficulty, description) on
+   * top, and below it the leaderboard of the hovered / focused level (verified records only, see
+   * auth/leaderboard.ts).
+   */
+  private sidePanel(t: ThemeEntry): { panel: HTMLElement; show: (index: number) => void } {
+    const panel = el('aside', 'dside');
+    panel.setAttribute('aria-label', 'Chapter and leaderboard');
+
+    const about = el('section', 'dside-card dside-theme');
+    const chapter = OFFICIAL_THEMES.indexOf(t);
+    about.append(el('span', 'dside-chapter', chapter >= 0 ? `Chapter ${String(chapter + 1).padStart(2, '0')}` : 'Custom pack'));
+    about.append(el('h3', 'dside-name', t.info.name));
+    const score = el('span', 'dside-score');
+    score.append(el('span', 'dside-star', '★'), ` ${themeStars(t)} / ${maxStars(t)} · ${diff(averageDifficulty(t.levels))}`);
+    about.append(score);
+    if (t.info.description) about.append(el('p', 'dside-desc', t.info.description));
+    const meta = [t.info.author ? `by ${t.info.author}` : '', t.info.released ? `released ${t.info.released}` : ''].filter(Boolean).join(' · ');
+    if (meta) about.append(el('span', 'dside-meta', meta));
+
+    const board = el('section', 'dside-card dside-board');
+    board.setAttribute('aria-live', 'polite');
+    const head = el('div', 'dside-board-head');
+    const title = el('h4', 'dside-board-title', 'Leaderboard');
+    const sub = el('small', 'dside-board-sub', '');
+    head.append(title, sub);
+    const content = el('div', 'dside-board-body');
+    board.append(head, content);
+    panel.append(about, board);
+
+    const note = (text: string) => content.replaceChildren(el('p', 'dside-note', text));
+    let shown = -1;
+    let timer: number | undefined;
+    let token = 0;
+    const show = (i: number) => {
+      if (i === shown) return;
+      shown = i;
+      const map = themedLevel(t, i);
+      title.textContent = `Leaderboard · Level ${i + 1}`;
+      sub.textContent = map?.title ?? '';
+      window.clearTimeout(timer);
+      const run = ++token;
+      if (!t.official) return note('Leaderboards are kept for the official chapters only.');
+      note('Loading…');
+      timer = window.setTimeout(() => {
+        void fetchLeaderboard(levelKey(t, i)).then((r) => {
+          if (run !== token) return; // another level was hovered meanwhile
+          if (!r.ok) {
+            return note(r.reason === 'unconfigured'
+              ? 'Leaderboards need accounts, which are not set up on this server.'
+              : "Couldn't load the leaderboard. Check your connection.");
+          }
+          if (!r.rows.length) return note('No verified records yet. Clears appear here once they are verified.');
+          content.replaceChildren(this.boardList(r.rows));
+        });
+      }, BOARD_DELAY_MS);
+    };
+    return { panel, show };
+  }
+
+  private boardList(rows: LeaderboardRow[]): HTMLElement {
+    const list = el('ol', 'dboard');
+    let last = 0;
+    for (const r of rows) {
+      // The player's own row below the top places: mark the gap
+      if (last > 0 && r.place > last + 1) list.append(el('li', 'dboard-gap', '⋯'));
+      last = r.place;
+      const li = el('li', `dboard-row${r.is_me ? ' me' : ''}${r.place <= 3 ? ` top${r.place}` : ''}`);
+      const name = el('span', 'dboard-name');
+      renderTag(name, formatTag(r.nickname, r.discriminator));
+      li.append(el('span', 'dboard-place', String(r.place)), name, el('span', 'dboard-time', `${formatTime(r.best_ms)}s`), starRow(r.stars));
+      if (r.is_me) li.title = 'Your record';
+      list.append(li);
+    }
+    return list;
   }
 }

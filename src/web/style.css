@@ -909,6 +909,47 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 .dtheme.locked { filter: grayscale(0.85) brightness(0.85); }
 .dlock { font-weight: 700; font-size: 15px; }
 
+/* Level select: side panel (theme card + leaderboard of the hovered level) beside the lattice.
+ * Under 900px (SIDE_BREAKPOINT in campaign-ui.ts) it stacks above the lattice. */
+.dlevels-body { width: min(1500px, 100%); display: flex; align-items: flex-start; justify-content: center; gap: 28px; }
+.dside { flex: 0 0 300px; display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 130px); overflow-y: auto; }
+.dside-card {
+  padding: 16px 18px; border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+}
+.dside-theme { display: flex; flex-direction: column; gap: 6px; }
+.dside-chapter { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+.dside-name { margin: 0; font-family: var(--font-title); font-size: 24px; line-height: 1.15; }
+.dside-score { font-weight: 700; font-size: 14px; }
+.dside-star { color: #e0a100; font-family: 'Segoe UI Symbol', 'Apple Symbols', 'Noto Sans Symbols 2', sans-serif; }
+.dside-desc { margin: 2px 0 0; font-size: 13px; line-height: 1.5; color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
+.dside-meta { font-size: 12px; color: var(--muted); }
+.dside-board { display: flex; flex-direction: column; gap: 10px; min-height: 180px; }
+.dside-board-head { display: flex; flex-direction: column; gap: 2px; }
+.dside-board-title { margin: 0; font-size: 15px; }
+.dside-board-sub { color: var(--muted); font-size: 12px; min-height: 1.2em; }
+.dside-note { margin: 8px 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.dboard { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dboard-row {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 10px; font-size: 13px;
+}
+.dboard-row:nth-child(odd) { background: rgba(58, 159, 240, 0.06); }
+.dboard-row.me { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.dboard-place { font-family: var(--font-title); font-size: 15px; text-align: center; color: var(--muted); }
+.dboard-row.top1 .dboard-place { color: #e0a100; }
+.dboard-row.top2 .dboard-place { color: #8d99a8; }
+.dboard-row.top3 .dboard-place { color: #c07a3a; }
+.dboard-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.dboard-time { font-variant-numeric: tabular-nums; font-weight: 700; }
+.dboard .dstars { font-size: 11px; }
+.dboard-gap { text-align: center; color: var(--muted); line-height: 1; }
+@media (max-width: 900px) {
+  .dlevels-body { flex-direction: column; align-items: center; }
+  .dside { flex: none; width: min(560px, 100%); max-height: none; overflow: visible; }
+}
+
 /* Level lattice: 21 diamonds in zig-zag rows */
 .lattice-wrap { position: relative; }
 .lattice { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
@@ -957,6 +998,9 @@ button.dworld:hover:not(:disabled), button.dworld:focus-visible { transform: rot
 .dworld-stars .on { color: #fff4a8; font-family: 'Segoe UI Symbol', 'Apple Symbols', sans-serif; }
 .dworld-diff { font-size: 11px; font-weight: 700; opacity: 0.95; }
 .dworld.locked { filter: grayscale(0.85) brightness(0.8); }
+/* Coming soon: no cover art, just dark gray */
+.dworld.planned { background: linear-gradient(135deg, #4a4f58, #33373e); border-color: rgba(255, 255, 255, 0.35); }
+.dworld.planned .dtile-in { color: rgba(255, 255, 255, 0.82); }
 .dworld.custom { border-style: dashed; }
 .dworld-empty { background: transparent !important; border: 2px solid rgba(255, 255, 255, 0.85); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .dworld-load { background: rgba(255, 255, 255, 0.55); color: var(--text); border-style: dashed; border-color: var(--border-strong); }
@@ -1245,6 +1289,8 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 .dstat strong { font-size: 18px !important; overflow-wrap: anywhere; max-width: 140px; }
 .dstat-mint { background: linear-gradient(135deg, #effff9, #bdeee4); }
 .dstat-mint strong { font-family: var(--font-title) !important; font-size: 34px !important; }
+.dstat-deaths { background: linear-gradient(135deg, #fff4f6, #ffd3dc); }
+.dstat-deaths strong { font-family: var(--font-title) !important; font-size: 30px !important; color: #c23a58; }
 
 /* Narrow screens: upright two-column cards instead of a turned grid */
 .dia-wrap.dia-flat { width: 100% !important; height: auto !important; }

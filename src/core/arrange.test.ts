@@ -195,6 +195,8 @@ describe('phase 2 objects', () => {
 describe('phase 3: switches and links', () => {
   const base = () => ({
     ...createEmptyMap(),
+    width: 960, // fixtures are laid out on the 960×540 map
+    height: 540,
     start: { x: 0, y: 280, w: 20, h: 20 },
     goal: { x: 900, y: 280, w: 50, h: 50 },
   });
@@ -298,7 +300,8 @@ describe('phase 3: switches and links', () => {
 });
 
 describe('phase 4: spikes, boulders, lasers, portals', () => {
-  const base = () => ({ ...createEmptyMap(), start: { x: 0, y: 280, w: 20, h: 20 }, goal: { x: 900, y: 280, w: 50, h: 50 } });
+  // Fixtures are laid out on the 960×540 map
+  const base = () => ({ ...createEmptyMap(), width: 960, height: 540, start: { x: 0, y: 280, w: 20, h: 20 }, goal: { x: 900, y: 280, w: 50, h: 50 } });
 
   it('spikes thrust fast and return slowly', async () => {
     const { SpikeMover } = await import('./hazards');

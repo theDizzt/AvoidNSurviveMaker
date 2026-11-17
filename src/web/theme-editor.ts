@@ -34,6 +34,11 @@ const BADGE_FONTS: [BadgeFont, string][] = [['title', 'Title'], ['main', 'Rounde
 function demoMap(): MapData {
   return {
     ...createEmptyMap(),
+    // Drawn on a 960×540 map, whatever size new maps start at
+    width: 960,
+    height: 540,
+    start: { x: 30, y: 240, w: 60, h: 60 },
+    goal: { x: 870, y: 240, w: 60, h: 60 },
     objects: [
       { role: 'path', shape: { type: 'rect', x: 0, y: 200, w: 960, h: 140 } },
       { role: 'path', shape: { type: 'ellipse', cx: 480, cy: 270, rx: 150, ry: 150 } },

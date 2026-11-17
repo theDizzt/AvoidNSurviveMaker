@@ -740,7 +740,7 @@ export class Editor {
     set(this.el.author, this.map.author);
     // 16:9 sizes; a map made in another ratio keeps its size as a "custom" entry
     const current = `${this.map.width}x${this.map.height}`;
-    const sizes = MAP_SIZES.map(([w, h]) => [`${w}x${h}`, `${w} × ${h}${w === 960 ? ' (default)' : ''}`]);
+    const sizes = MAP_SIZES.map(([w, h]) => [`${w}x${h}`, `${w} × ${h}${w === 1920 ? ' (default)' : ''}`]);
     if (!sizes.some(([v]) => v === current)) sizes.push([current, `${this.map.width} × ${this.map.height} (not 16:9)`]);
     this.el.size.replaceChildren(...sizes.map(([v, t]) => new Option(t, v, false, v === current)));
   }

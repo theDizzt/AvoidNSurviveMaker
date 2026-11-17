@@ -44,6 +44,9 @@ export interface PlayElements {
 export class PlayController {
   /** Called on clear (used to verify editor test plays) */
   onClear: ((map: MapData, replay: Replay, time: number) => void) | null = null;
+  /** Called when the maze ends a run (wall, moving wall, void, bounds, laser) — not for runs the
+   *  browser stopped (cursor left the window, focus lost, non-mouse pointer) */
+  onDeath: ((map: MapData) => void) | null = null;
   /** Called when the player presses Esc */
   onExit: (() => void) | null = null;
   /** Level badge design of the theme being played (null = the default look) */
@@ -201,6 +204,7 @@ export class PlayController {
       this.deathNotified = true;
       this.burst = new DeathBurst(sim.x, sim.y, COLORS.cursor, now);
       if (sim.endReason !== 'blur' && sim.endReason !== 'left') gameAudio.death();
+      if (sim.endReason !== 'blur' && sim.endReason !== 'left' && sim.endReason !== 'pointer') this.onDeath?.(this.map);
     }
     if (running !== this.el.root.classList.contains('running')) this.el.root.classList.toggle('running', running);
     if (sim.status === 'cleared' && !this.notified) {

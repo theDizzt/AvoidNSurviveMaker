@@ -44,7 +44,9 @@ function save(): void {
   }
 }
 
-const key = (theme: ThemeEntry, index: number) => `${theme.official ? '' : 'custom:'}${theme.info.id}/${index}`;
+/** Progress key of a level: '<theme id>/<index>', or 'custom:<theme id>/<index>' for custom packs */
+export const levelKey = (theme: ThemeEntry, index: number) => `${theme.official ? '' : 'custom:'}${theme.info.id}/${index}`;
+const key = levelKey;
 
 export function levelRecord(theme: ThemeEntry, index: number): LevelRecord | null {
   return records[key(theme, index)] ?? null;

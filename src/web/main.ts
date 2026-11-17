@@ -11,7 +11,7 @@ import { ThemeEditor } from './theme-editor';
 import { customTheme } from './theme-registry';
 import { installTooltips } from './tooltip';
 import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-ui';
-import { recordClear, themeUnlocked, totalStars } from './progress';
+import { levelKey, recordClear, themeUnlocked, totalStars } from './progress';
 import { themedLevel, type ThemeEntry } from '../core/theme-pack';
 import { OFFICIAL_THEMES, allThemes, badgeFor, chapterMusicFor } from './theme-registry';
 import { onOptionsChange, options, resetOptions, setOption } from './options';
@@ -26,6 +26,8 @@ import { RecordSync } from './auth/records';
 import { installDiamondDial } from './diamond-dial';
 import { renderTag } from './player-tag';
 import { StatsUI } from './stats-ui';
+import { DeathTracker } from './auth/deaths';
+import { clearLeaderboardCache } from './auth/leaderboard';
 import { IrisTransition } from './iris-transition';
 import { gameAudio } from './audio';
 import { installMenuMusicControls, menuMusicUrl } from './menu-music';
@@ -503,7 +505,16 @@ play.onExit = leavePlay;
 const account = new Account();
 // Total time the game is open, saved to the player's profile
 const playTime = new PlayTimeTracker(account);
-account.beforeSignOut = () => playTime.flush();
+// Deaths in runs (total and per level), saved to the player's account
+const deaths = new DeathTracker(account);
+account.beforeSignOut = async () => {
+  await Promise.all([playTime.flush(), deaths.flush()]);
+};
+play.onDeath = () => {
+  if (testing) return; // editor test plays don't count
+  const c = campaignOf(currentKey);
+  deaths.record(c ? levelKey(c.theme, c.index) : null);
+};
 // Best time (ms) and stars per level, saved to the player's account
 const recordSync = new RecordSync(account);
 const recordsButton = $<HTMLButtonElement>('records-sync');
@@ -521,9 +532,10 @@ function renderRecordsOption(): void {
     ? "Upload records already in this browser and download the account's records"
     : account.configured ? 'Sign in to save your best times and stars to your account' : 'Accounts are not set up, so records stay in this browser';
 }
-const stats = new StatsUI($('stats-dia'), $('stats-message'), $('stats-records'), account, recordSync);
+const stats = new StatsUI($('stats-dia'), $('stats-message'), $('stats-records'), account, recordSync, deaths);
 account.onChange(() => current === 'stats' && void stats.render());
 account.onChange(renderRecordsOption);
+account.onChange(clearLeaderboardCache); // so the player's own row is marked after signing in
 renderRecordsOption();
 recordsButton.addEventListener('click', async () => {
   recordsButton.dataset.busy = '1';

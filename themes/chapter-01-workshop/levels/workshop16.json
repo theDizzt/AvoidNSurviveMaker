@@ -250,7 +250,7 @@
             "y": 480
           }
         ],
-        "speed": 390,
+        "speed": 240,
         "repeat": "pingpong",
         "easing": "inOut",
         "delay": 0,

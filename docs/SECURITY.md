@@ -34,7 +34,8 @@ This repository change alone does not update a deployed Supabase database.
 - All existing and newly submitted browser records are **unverified personal
   backups**. `verified` defaults to false and cannot be changed by clients.
   An improvement submitted by a browser clears any previous verification flag.
-  Do not build rankings, rewards, or access control from these rows. A future
+  Do not build rankings, rewards, or access control from these rows; the level
+  leaderboard (`level_leaderboard`) ranks only `verified = true` rows. A future
   trusted verifier must load the authoritative map/version, validate and replay
   bounded input, and derive times and stars itself before publishing records.
 
