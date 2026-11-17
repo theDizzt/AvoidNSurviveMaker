@@ -13,7 +13,6 @@
   ],
   "cover": "cover.png",
   "style": {
-    "cursorColor": "#2b86e0",
     "badge": {
       "kind": "pill",
       "primary": "#ffffff",

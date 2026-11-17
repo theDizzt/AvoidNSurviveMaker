@@ -39,6 +39,12 @@ Supabase Dashboard → **SQL Editor** → paste and run each file, in this order
 
 ## 2. Auth settings
 
+Before deploying, also apply
+[`20261118000000_security_hardening.sql`](../supabase/migrations/20261118000000_security_hardening.sql)
+after migrations 1–4 above. Full profiles are owner-only; public identities use
+`public_profiles`. Records are unverified private backups, capped at 2000 per
+account. See [security boundaries](SECURITY.md) for limits and deployment details.
+
 Supabase Dashboard → **Authentication**:
 
 - **Sign In / Providers → Email**: enabled, **Confirm email: ON**.

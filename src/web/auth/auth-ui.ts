@@ -1,6 +1,7 @@
 import { byteLength, emailError, formatPlayTime, NICKNAME_MAX_BYTES, nicknameError, passwordError } from '../../core/account';
 import type { Account, AuthResult } from './account';
 import { Captcha } from './captcha';
+import { renderTag } from '../player-tag';
 import { TURNSTILE_SITE_KEY } from './supabase';
 
 type Tab = 'signin' | 'signup';
@@ -69,7 +70,7 @@ export class AuthUI {
     const updateNick = () => {
       const v = nick.value.trim();
       const bytes = byteLength(v);
-      $('nick-preview').textContent = `${v || 'Nickname'}#????`;
+      renderTag($('nick-preview'), `${v || 'Nickname'}#????`);
       const counter = $('nick-bytes');
       counter.textContent = `${bytes}/${NICKNAME_MAX_BYTES} bytes`;
       counter.classList.toggle('over', bytes > NICKNAME_MAX_BYTES);
@@ -206,7 +207,7 @@ export class AuthUI {
       const name = document.createElement('span');
       name.className = 'account-tag';
       const tagText = document.createElement('strong');
-      tagText.textContent = tag;
+      renderTag(tagText, tag);
       const time = document.createElement('small');
       time.className = 'account-time';
       time.textContent = playTime;

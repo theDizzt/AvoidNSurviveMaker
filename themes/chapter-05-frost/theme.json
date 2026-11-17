@@ -12,7 +12,6 @@
                ],
     "cover":  "cover.svg",
     "style":  {
-                  "cursorColor":  "#b6ecff",
                   "maze":  {
                                "wall":  {
                                             "edge":  "#b6ecff",

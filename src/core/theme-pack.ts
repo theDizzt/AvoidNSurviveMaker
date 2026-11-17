@@ -49,8 +49,6 @@ export interface BadgeStyle {
 export interface ThemeStyle {
   /** Maze colors: walls and paths (the map editor's Theme) — applied to levels without their own */
   maze?: Theme;
-  /** Default cursor color for its levels */
-  cursorColor?: string;
   badge: BadgeStyle;
 }
 
@@ -174,7 +172,6 @@ export function validateThemeInfo(input: unknown): ThemeInfo {
   if (fonts) info.fonts = fonts;
   const screens = readScreens(o.screens);
   if (screens) info.screens = screens;
-  if (HEX.test(str(style.cursorColor))) info.style.cursorColor = str(style.cursorColor).toLowerCase();
   if (style.maze !== undefined) {
     // Reuse the map validator for the maze colors
     const probe = validateMap({ v: 2, width: 960, height: 540, start: { x: 0, y: 0, w: 10, h: 10 }, goal: { x: 20, y: 0, w: 10, h: 10 }, objects: [], theme: style.maze });
@@ -199,12 +196,11 @@ export function maxStars(entry: ThemeEntry): number {
   return levelSlots(entry) * STARS_PER_LEVEL;
 }
 
-/** A level ready to play: the theme's maze colors and cursor color applied where the level has none */
+/** A level ready to play: the theme's maze colors applied where the level has none */
 export function themedLevel(entry: ThemeEntry, index: number): MapData | null {
   const m = entry.levels[index];
   if (!m || index >= levelSlots(entry)) return null;
   const out: MapData = { ...m, level: m.level ?? index + 1, title: m.title ?? m.name.replace(/^\d+\.\s*/, '') };
   if (!out.theme && entry.info.style.maze) out.theme = entry.info.style.maze;
-  if (!out.cursorColor && entry.info.style.cursorColor) out.cursorColor = entry.info.style.cursorColor;
   return out;
 }

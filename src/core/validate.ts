@@ -362,7 +362,6 @@ export function validateMap(input: unknown): MapData {
     if (!Number.isInteger(level)) fail('level: must be a whole number');
     map.level = level;
   }
-  if (o.cursorColor !== undefined) map.cursorColor = color(o.cursorColor, 'cursorColor');
   if (o.difficulty !== undefined) map.difficulty = Math.round(num(o.difficulty, 'difficulty', 1, 10) * 100) / 100;
   if (o.darkness !== undefined) {
     map.darkness = { light: num(obj(o.darkness, 'darkness').light, 'darkness.light', LIMITS.minLight, LIMITS.maxLight) };

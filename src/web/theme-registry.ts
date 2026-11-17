@@ -133,12 +133,28 @@ export function chapterMazePresets(): { id: string; name: string; theme: Theme }
     : []));
 }
 
-/** Music URL of the official chapter whose maze colors exactly match `theme`, if it has music */
-export function chapterMusicFor(theme: Theme | undefined): string | null {
+/** The official chapter whose maze colors exactly match `theme` (a map made with a chapter preset) */
+export function chapterForTheme(theme: Theme | undefined): ThemeEntry | null {
   if (!theme) return null;
   const json = JSON.stringify(theme);
-  const t = OFFICIAL_THEMES.find((x) => x.info.music && x.info.style.maze && JSON.stringify(x.info.style.maze) === json);
+  return OFFICIAL_THEMES.find((x) => x.info.style.maze && JSON.stringify(x.info.style.maze) === json) ?? null;
+}
+
+/** Music URL of the chapter matching `theme`, if it has music */
+export function chapterMusicFor(theme: Theme | undefined): string | null {
+  const t = chapterForTheme(theme);
   return t?.info.music ? t.assets[t.info.music] ?? null : null;
+}
+
+/** Level badge (number + title) design for a map: its chapter's when it uses a chapter preset */
+export function badgeFor(map: MapData): { style: ThemeEntry['info']['style']['badge']; imageUrl?: string } | null {
+  const t = chapterForTheme(map.theme);
+  return t ? { style: t.info.style.badge, imageUrl: t.badgeUrl } : null;
+}
+
+/** Title shown in the badge: the map's title, else its name without a "12. " prefix */
+export function badgeTitle(map: MapData): string {
+  return map.title ?? map.name.replace(/^\d+\.\s*/, '');
 }
 
 export function allThemes(): ThemeEntry[] {

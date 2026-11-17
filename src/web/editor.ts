@@ -23,7 +23,9 @@ import {
 } from './render';
 import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
 import { renderThemePanel } from './theme-panel';
-import { chapterMazePresets } from './theme-registry';
+import { badgeFor, badgeTitle, chapterMazePresets } from './theme-registry';
+import { badgeImage, drawLevelBadge } from './badge';
+import { DEFAULT_BADGE } from '../core/theme-pack';
 import { fontPicker } from './font-picker';
 
 // ───────────────────────── Tools ─────────────────────────
@@ -195,7 +197,7 @@ export interface EditorElements {
   hint: HTMLElement;
   palette: HTMLElement;
   theme: HTMLElement;
-  /** Level settings: title, number, cursor color, star times */
+  /** Level settings: title, number, difficulty, star times */
   level: HTMLElement;
   snap: HTMLInputElement;
   preview: HTMLInputElement;
@@ -701,7 +703,7 @@ export class Editor {
 
     const verified = this.isVerified();
     this.el.share.disabled = !verified || !this.valid;
-    this.el.verify.textContent = verified ? '✅ Clear verified — ready to share' : 'To share, first clear the map yourself in test play';
+    this.el.verify.textContent = verified ? 'Clear verified — ready to share' : 'To share, first clear the map yourself in test play';
     this.el.verify.className = verified ? 'verify ok' : 'verify';
     if (!verified) this.el.shareUrl.value = '';
     this.el.undo.disabled = this.history.length === 0;
@@ -2450,7 +2452,7 @@ export class Editor {
   private renderedLevel: string | null = null;
   private renderLevel(): void {
     const m = this.map;
-    const json = JSON.stringify([m.title, m.level, m.cursorColor, m.stars, this.lastClearMs, m.darkness, m.difficulty]);
+    const json = JSON.stringify([m.title, m.level, m.stars, this.lastClearMs, m.darkness, m.difficulty]);
     if (json === this.renderedLevel) return;
     this.renderedLevel = json;
 
@@ -2490,22 +2492,11 @@ export class Editor {
       else delete m.difficulty;
     }));
 
-    const color = document.createElement('input');
-    color.type = 'color';
-    color.value = m.cursorColor ?? COLORS.cursor;
-    color.addEventListener('change', () => this.edit(() => (m.cursorColor = color.value.toLowerCase())));
-    const resetColor = this.button('Default', () => m.cursorColor && this.edit(() => delete m.cursorColor));
-    resetColor.disabled = !m.cursorColor;
-    const colorRow = document.createElement('div');
-    colorRow.className = 'color-row';
-    colorRow.append(color, resetColor);
-
     const parts: HTMLElement[] = [
       this.group(
         this.field('Level title', title, true),
         this.field('Level number', level),
         this.field('Difficulty (1–10)', difficulty),
-        this.field('Cursor color', colorRow, true),
       ),
       this.note('The title and number are shown in game; the file name above is used for exports.'),
     ];
@@ -2560,7 +2551,7 @@ export class Editor {
     this.el.shareUrl.select();
     try {
       await navigator.clipboard.writeText(url);
-      this.el.verify.textContent = `🔗 Link copied to clipboard (${url.length} chars)`;
+      this.el.verify.textContent = `Link copied to clipboard (${url.length} chars)`;
     } catch {
       this.el.verify.textContent = `Link created — please copy it manually (${url.length} chars)`;
     }
@@ -2663,6 +2654,13 @@ export class Editor {
     ctx.setLineDash([]);
     // Global darkness: a light preview around the mouse
     if (map.darkness && this.hover) drawGlobalDark(ctx, map, [{ x: this.hover.x, y: this.hover.y, r: map.darkness.light }], 0.3);
+    // Level number and title as they'll appear in game, in the chapter preset's badge design
+    const badge = badgeFor(map);
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    drawLevelBadge(ctx, map.level === undefined && !map.title ? { ...map, title: badgeTitle(map) } : map,
+      badge?.style ?? { ...DEFAULT_BADGE, numberColor: COLORS.cursor }, badgeImage(badge?.imageUrl), performance.now());
+    ctx.restore();
 
     // While previewing, show where dynamic objects rest (their editing position)
     if (preview) {

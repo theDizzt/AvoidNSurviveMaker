@@ -239,7 +239,7 @@ export class PackPanel {
     this.shareUrl.select();
     try {
       await navigator.clipboard.writeText(url);
-      this.status.textContent = `🔗 Pack link copied to clipboard (${url.length} chars)`;
+      this.status.textContent = `Pack link copied to clipboard (${url.length} chars)`;
     } catch {
       this.status.textContent = `Pack link created — please copy it manually (${url.length} chars)`;
     }
@@ -305,7 +305,7 @@ export class PackPanel {
       this.button('Save to pack', () => this.saveOpened(), { disabled: !dirty, title: 'Replace the open level with the map in the editor' }),
       this.button('▶ Play pack', () => this.onPlay(validatePack(this.pack), this.opened ?? 0), { disabled: !n }),
       this.button('Number 1…N', () => this.renumber(), { disabled: !n, title: 'Set each level number to its position in the pack' }),
-      this.button('🔗 Share pack', () => void this.share(), { disabled: !n || unverified > 0, title: unverified ? 'Every level must be cleared first' : 'Create a share link' }),
+      this.button('Share pack', () => void this.share(), { disabled: !n || unverified > 0, title: unverified ? 'Every level must be cleared first' : 'Create a share link' }),
       this.button('Export', () => this.exportFile(), { disabled: !n, title: 'Download the pack as a .pack.json file' }),
       this.button('Import', () => this.file.click(), { title: 'Load a .pack.json file' }),
       this.button('New pack', () => this.newPack(), { cls: 'danger' }),

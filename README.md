@@ -23,6 +23,8 @@ npm run build     # static site in dist/ — deploy as-is to GitHub Pages, Verce
 
 ## Project structure
 
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the pieces fit together.
+
 ```
 src/
   core/            # No DOM dependencies — reusable on a server later (replay verification)
@@ -43,7 +45,7 @@ src/
     editor.ts      # Map editor
     render.ts      # Canvas rendering
     preload.ts     # Loading screen tasks (fonts, account, shared map) with progress and timeout
-    liquid.ts      # Pastel liquid pouring background (metaballs) on menu screens
+    backdrop.ts    # Menu backgrounds: autopilot demo run, grid, theme colors
     theme-panel.ts # Map theme editor (solid / gradient / pattern fills)
     auth/          # Supabase sign-up / sign-in, email verification, Turnstile CAPTCHA
     options.ts     # Player options (cursor trail, run timer, debug panel), saved per browser
@@ -104,7 +106,7 @@ The palette lists all 26 tools by number:
 | 19–22 | Moving walls |
 | 23–26 | Rotating walls |
 
-The editor uses the same full-window 16:9 canvas. The **Tools** and **Properties** panels float on top: drag them by their title bar, collapse them with the −/+ button (or a double-click on the title bar), or press **H** to hide both. Their positions are remembered.
+The editor uses the same full-window 16:9 canvas. The **Tools**, **Level** (map info, level settings, theme, share) and **Object** (the selected object's options) panels float on top: drag them by their title bar, collapse them with the −/+ button (or a double-click on the title bar), or press **H** to hide them all. **▶ Test play** (T) sits in the top bar. Their positions are remembered.
 
 The grid is 60×60 (a 960×540 map is 16×9 cells); **Grid on top** in the editor draws it over walls and obstacles. Static paths and walls are drawn as one floor and one wall mass, so pieces join without seams; walls cast a soft shadow onto the floor.
 

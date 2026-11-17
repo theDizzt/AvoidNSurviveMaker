@@ -9,7 +9,7 @@ import {
 import type { MapData } from '../core/types';
 import { createEmptyMap, validateMap, validatePack } from '../core/validate';
 import { badgeImage, drawLevelBadge } from './badge';
-import { beginFrame, COLORS, drawMap, fitCanvas } from './render';
+import { beginFrame, drawMap, fitCanvas } from './render';
 import { renderThemePanel } from './theme-panel';
 import { ScreenDesigner, type ScreenKind } from './screen-designer';
 import { ensureFonts } from './screen-render';
@@ -112,8 +112,8 @@ export class ThemeEditor {
       return b;
     };
     actions.append(
-      btn('📂 Import .zip', () => this.zipInput.click()),
-      btn('💾 Export .zip', () => this.exportZip()),
+      btn('Import .zip', () => this.zipInput.click()),
+      btn('Export .zip', () => this.exportZip()),
       btn('▶ Play as custom pack', () => this.playCustom(), 'primary'),
     );
     head.append(back, titles, actions);
@@ -495,17 +495,6 @@ export class ThemeEditor {
     const toggle = el('label', 'toggle');
     toggle.append(showTitle, el('span', '', 'Show the level title'));
 
-    const cursor = this.color(info.style.cursorColor ?? COLORS.cursor, (v) => (info.style.cursorColor = v));
-    const cursorReset = el('button', '', 'Default');
-    cursorReset.type = 'button';
-    cursorReset.addEventListener('click', () => {
-      delete info.style.cursorColor;
-      cursor.value = COLORS.cursor;
-      this.save();
-    });
-    const cursorRow = el('div', 'color-row');
-    cursorRow.append(cursor, cursorReset);
-
     const group = (...children: HTMLElement[]) => {
       const g = el('div', 'fields');
       g.append(...children);
@@ -546,7 +535,7 @@ export class ThemeEditor {
       )),
       section('Fonts', this.fontsBox()),
       section('Background music', this.musicControl()),
-      section('Maze colors', maze, group(this.field('Cursor color', cursorRow, true))),
+      section('Maze colors', maze),
       section('Level badge', group(
         this.field('Design', this.select(badge.kind, BADGE_KINDS, (v) => b({ kind: v }))),
         this.field('Font', fontPicker(this.select(badge.font, BADGE_FONTS, (v) => b({ font: v })), badge.font)),
@@ -712,7 +701,6 @@ export class ThemeEditor {
     const m = this.draft.levels[this.previewIndex] ?? demoMap();
     const out: MapData = { ...m, level: m.level ?? this.previewIndex + 1, title: m.title ?? m.name.replace(/^\d+\.\s*/, '') };
     if (!out.theme && style.maze) out.theme = style.maze;
-    if (!out.cursorColor && style.cursorColor) out.cursorColor = style.cursorColor;
     return out;
   }
 

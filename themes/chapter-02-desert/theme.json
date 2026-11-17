@@ -5,172 +5,170 @@
   "description": "Sun-baked sandstone, buried gates and heat shimmering over ancient ruins.",
   "author": "Avoid N Survive",
   "released": "2026-11-17",
-  "unlockStars": 0,
+  "unlockStars": 30,
   "colors": [
     "#f5bb58",
     "#c55d36"
   ],
-  "cover": "cover.svg",
-  "music": "audio/arabic-desert.mp3",
-  "credits": "Music: .:Arabic Desert:. by neoloconick. https://www.newgrounds.com/audio/listen/114103 . Original audio, unmodified.",
   "style": {
-    "cursorColor": "#f5bb58",
+    "badge": {
+      "kind": "image",
+      "primary": "#000000",
+      "secondary": "#000000",
+      "numberColor": "#ffcd75",
+      "titleColor": "#e4af53",
+      "font": "caesar-dressing",
+      "pad": 2,
+      "showTitle": true,
+      "image": "badge.svg"
+    },
     "maze": {
       "wall": {
-        "edge": "#f5bb58",
         "fill": {
-          "background": "#291b22",
-          "color": "#c55d36",
-          "pattern": "diagonal",
-          "size": 16,
-          "type": "pattern"
-        }
+          "type": "pattern",
+          "pattern": "sand",
+          "color": "#574a24",
+          "background": "#cabd93",
+          "size": 40
+        },
+        "edge": "#000000"
       },
       "path": {
-        "edge": "#c55d36",
         "fill": {
-          "angle": 90,
-          "from": "#291b22",
+          "type": "gradient",
           "style": "linear",
-          "to": "#c55d36",
-          "type": "gradient"
-        }
+          "from": "#fae8b4",
+          "to": "#ffe180",
+          "angle": 90
+        },
+        "edge": "#000000"
       }
-    },
-    "badge": {
-      "caption": "CHAPTER 02 / DESERT",
-      "kind": "slant",
-      "pad": 2,
-      "primary": "#291b22",
-      "titleColor": "#f5bb58",
-      "showTitle": true,
-      "secondary": "#c55d36",
-      "font": "title",
-      "numberColor": "#f5bb58"
     }
   },
+  "cover": "cover.svg",
+  "music": "audio/arabic-desert.mp3",
   "screens": {
     "select": {
       "background": {
-        "color2": "#291b22",
-        "color": "#291b22"
+        "color": "#291b22",
+        "color2": "#291b22"
       },
       "elements": [
         {
           "id": "art",
-          "w": 440,
-          "opacity": 0.5,
-          "y": 0,
-          "x": 0,
           "kind": "image",
-          "src": "cover.svg",
-          "h": 720
+          "x": 0,
+          "y": 0,
+          "w": 440,
+          "h": 720,
+          "opacity": 0.5,
+          "src": "cover.svg"
         },
         {
-          "x": 52,
-          "align": "left",
           "id": "chapter",
           "kind": "text",
-          "size": 19,
+          "x": 52,
           "y": 54,
           "w": 330,
           "h": 32,
-          "color": "#f5bb58",
           "text": "CHAPTER 02 / DESERT",
-          "font": "main"
+          "font": "main",
+          "size": 19,
+          "color": "#f5bb58",
+          "align": "left"
         },
         {
-          "x": 52,
-          "align": "left",
           "id": "title",
           "kind": "text",
-          "size": 42,
+          "x": 52,
           "y": 105,
           "w": 340,
           "h": 160,
-          "color": "#f5bb58",
           "text": "{theme}",
-          "font": "title"
+          "font": "title",
+          "size": 42,
+          "color": "#f5bb58",
+          "align": "left"
         },
         {
-          "x": 52,
-          "align": "left",
           "id": "description",
           "kind": "text",
-          "size": 19,
+          "x": 52,
           "y": 290,
           "w": 320,
           "h": 140,
-          "color": "#f5bb58",
           "text": "{description}",
-          "font": "main"
+          "font": "main",
+          "size": 19,
+          "color": "#f5bb58",
+          "align": "left"
         },
         {
-          "x": 52,
-          "align": "left",
           "id": "progress",
           "kind": "text",
-          "size": 21,
+          "x": 52,
           "y": 485,
           "w": 320,
           "h": 46,
-          "color": "#f5bb58",
           "text": "{cleared} / {total} CLEARED",
-          "font": "main"
+          "font": "main",
+          "size": 21,
+          "color": "#f5bb58",
+          "align": "left"
         },
         {
-          "x": 470,
           "id": "grid",
           "kind": "levelGrid",
-          "gap": 14,
+          "x": 470,
           "y": 140,
           "w": 750,
+          "h": 420,
+          "cols": 7,
+          "rows": 3,
+          "gap": 14,
           "button": {
-            "borderWidth": 2,
-            "showStars": true,
-            "showDifficulty": true,
             "shape": "diamond",
-            "clearedFill": "#c55d36",
-            "border": "#f5bb58",
             "fill": "#291b22",
             "fill2": "#c55d36",
-            "pad": 2,
-            "numberColor": "#f5bb58",
+            "clearedFill": "#c55d36",
+            "border": "#f5bb58",
+            "borderWidth": 2,
             "font": "title",
-            "numberSize": 30
-          },
-          "h": 420,
-          "rows": 3,
-          "cols": 7
+            "numberSize": 30,
+            "numberColor": "#f5bb58",
+            "pad": 2,
+            "showStars": true,
+            "showDifficulty": true
+          }
         },
         {
-          "size": 23,
           "id": "back",
-          "y": 610,
-          "color": "#f5bb58",
-          "border": "#c55d36",
-          "fill": "#291b22",
-          "borderWidth": 2,
           "kind": "back",
           "x": 52,
+          "y": 610,
           "w": 190,
-          "radius": 10,
+          "h": 54,
           "text": "BACK",
           "font": "title",
-          "h": 54
+          "size": 23,
+          "color": "#f5bb58",
+          "fill": "#291b22",
+          "border": "#c55d36",
+          "borderWidth": 2,
+          "radius": 10
         },
         {
-          "x": 470,
           "id": "footer",
           "kind": "text",
-          "size": 18,
+          "x": 470,
           "y": 600,
           "w": 750,
           "h": 38,
-          "color": "#f5bb58",
+          "opacity": 0.6,
           "text": "SELECT A LEVEL",
           "font": "main",
-          "opacity": 0.6
+          "size": 18,
+          "color": "#f5bb58"
         }
       ]
     }

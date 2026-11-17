@@ -1,6 +1,37 @@
 import type { MapData, MapPack } from './types';
 import { validateMap, validatePack } from './validate';
 
+export const MAX_SHARE_BYTES = 20_000_000;
+const MAX_SHARE_CODE = 1 + 4 * Math.ceil(MAX_SHARE_BYTES / 3);
+
+/** Stop consuming as soon as the decoded stream crosses the budget. */
+export async function readBoundedStream(stream: ReadableStream<Uint8Array>, maxBytes: number): Promise<Uint8Array> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error('Data is too large');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const result = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
+}
+
 /**
  * Map <-> URL share code.
  *   'z' + base64url(deflate-raw(JSON))   (when CompressionStream is available)
@@ -38,15 +69,16 @@ async function encodeJson(value: unknown): Promise<string> {
 }
 
 async function decodeJson(code: string): Promise<unknown> {
+  if (code.length > MAX_SHARE_CODE) throw new Error('Data is too large');
   const kind = code[0];
+  if (kind !== 'z' && kind !== 'j') throw new Error('Unknown share code format');
   let bytes = fromBase64Url(code.slice(1));
+  if (bytes.length > MAX_SHARE_BYTES) throw new Error('Data is too large');
   if (kind === 'z') {
     if (typeof DecompressionStream === 'undefined') throw new Error('This browser does not support decompression');
-    bytes = await pipe(bytes, new DecompressionStream('deflate-raw'));
-  } else if (kind !== 'j') {
-    throw new Error('Unknown share code format');
+    const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    bytes = await readBoundedStream(stream, MAX_SHARE_BYTES);
   }
-  if (bytes.length > 20_000_000) throw new Error('Data is too large');
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 

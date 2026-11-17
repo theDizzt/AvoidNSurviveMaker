@@ -16,7 +16,7 @@ export function fontPicker(s: HTMLSelectElement, value: string): HTMLSelectEleme
     const g = document.createElement('optgroup');
     g.label = `Library · ${label}`;
     for (const f of LIBRARY_FONTS.filter((x) => x.script === script)) {
-      const mark = f.license === 'ofl' ? '' : f.license === 'check' ? ' ⓘ' : ' ⚠';
+      const mark = f.license === 'ofl' ? '' : f.license === 'check' ? ' ⓘ' : ' (!)';
       const o = new Option(`${f.name}${mark}`, f.id, false, f.id === value);
       o.style.fontFamily = libraryFontCss(f.id);
       o.title = f.license === 'ofl' ? 'SIL Open Font License' : f.license === 'personal' ? 'Personal use only' : f.license === 'commercial' ? 'Commercial font: needs a paid license' : 'License not stated in the font file';
@@ -25,7 +25,7 @@ export function fontPicker(s: HTMLSelectElement, value: string): HTMLSelectEleme
     s.append(g);
   }
   s.value = value;
-  s.title = 'Fonts marked ⓘ do not state their license in the file: see Options → Font licenses';
+  s.title = 'Fonts marked ⓘ do not state their license in the file: see Options → Licenses';
   const preview = () => {
     const f = LIBRARY_FONTS.find((x) => x.id === s.value);
     s.style.fontFamily = f ? libraryFontCss(f.id) : '';

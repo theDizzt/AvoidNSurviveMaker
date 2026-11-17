@@ -150,7 +150,7 @@ export class Backdrop {
       if (run.trail.length > TRAIL_POINTS * 2) run.trail.splice(0, run.trail.length - TRAIL_POINTS * 2);
       if (sim.status !== 'playing') {
         run.endedAt = now;
-        if (sim.status === 'dead') run.burst = new DeathBurst(sim.x, sim.y, run.map.cursorColor ?? COLORS.cursor, now);
+        if (sim.status === 'dead') run.burst = new DeathBurst(sim.x, sim.y, COLORS.cursor, now);
       }
     }
 
@@ -178,10 +178,10 @@ export class Backdrop {
     drawMap(ctx, map, run.objects, t, { ...state, coinsLeft: sim?.coinsLeft, beams: sim?.beams, now });
     if (!sim) return;
     const unit = (window.devicePixelRatio || 1) / s;
-    drawTrail(ctx, run.trail, map.cursorColor);
+    drawTrail(ctx, run.trail);
     if (sim.status === 'playing' || sim.status === 'cleared') {
       const r = (CURSOR_PX / 2) * unit;
-      ctx.fillStyle = map.cursorColor ?? COLORS.cursor;
+      ctx.fillStyle = COLORS.cursor;
       ctx.beginPath();
       ctx.arc(sim.x, sim.y, r, 0, Math.PI * 2);
       ctx.fill();

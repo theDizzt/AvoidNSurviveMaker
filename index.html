@@ -129,75 +129,109 @@
 
     <!-- Options -->
     <div id="options-screen" class="screen menu" hidden>
-      <div class="menu-inner">
+      <div class="menu-inner menu-diamonds">
         <h2 class="logo logo-sm">Options</h2>
-        <div class="option-list">
-          <div class="option menu-music-option">
-            <label for="menu-music-file"><strong>Main menu music</strong></label>
-            <small id="menu-music-name" role="status">No music selected</small>
-            <small>Default: <a href="https://www.newgrounds.com/audio/listen/458694" target="_blank" rel="noopener">- Platform</a>
-              by <a href="https://or4nges.newgrounds.com/" target="_blank" rel="noopener">Or4nges</a> ·
-              <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/" target="_blank" rel="noopener">CC BY-NC-SA 3.0</a>.
-              Loop boundary silence trimmed; 2 ms edge fades.</small>
-            <input type="file" id="menu-music-file" accept=".mp3,.ogg,.wav,.m4a,.aac,.flac" />
-            <button type="button" id="menu-music-remove">Reset music</button>
-            <small>Chapter 1 music: <a href="https://www.newgrounds.com/audio/listen/414834" target="_blank" rel="noopener">- Have a Cookie</a>
-              by <a href="https://or4nges.newgrounds.com/" target="_blank" rel="noopener">Or4nges</a> ·
-              <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/" target="_blank" rel="noopener">CC BY-NC-SA 3.0</a>. Original audio, unmodified.</small>
-            <small>Chapter 7 music: <a href="https://www.newgrounds.com/audio/listen/447794" target="_blank" rel="noopener">- For Science!</a>
-              by <a href="https://or4nges.newgrounds.com/" target="_blank" rel="noopener">Or4nges</a> ·
-              <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/" target="_blank" rel="noopener">CC BY-NC-SA 3.0</a>. Original audio, unmodified.</small>
+        <!-- Same 45°-turned grid as the main menu; menu music spans 2×2 -->
+        <div class="dia-wrap" id="options-dia">
+          <div class="dgrid dgrid-panel" style="--cols: 4">
+            <div class="dtile dtile-music" style="grid-column: 1 / span 2; grid-row: 1 / span 2">
+              <span class="dtile-in">
+                <span class="dicon" aria-hidden="true">♪</span>
+                <strong>Main menu music</strong>
+                <small id="menu-music-name" class="dmusic-name" role="status">No music selected</small>
+                <span class="dpill-row">
+                  <label class="dpill dpill-file"><input type="file" id="menu-music-file" class="visually-hidden" accept=".mp3,.ogg,.wav,.m4a,.aac,.flac" />Choose file</label>
+                  <button type="button" id="menu-music-remove" class="dpill">Reset</button>
+                </span>
+              </span>
+            </div>
+            <label class="dtile dvolume" for="opt-master-volume" style="grid-column: 3; grid-row: 1">
+              <span class="dtile-in">
+                <strong>Master</strong>
+                <span class="ddial"><input type="range" id="opt-master-volume" class="visually-hidden" min="0" max="100" step="1" /></span>
+                <output id="opt-master-volume-value" for="opt-master-volume">80%</output>
+              </span>
+            </label>
+            <label class="dtile dvolume" for="opt-music-volume" style="grid-column: 4; grid-row: 1">
+              <span class="dtile-in">
+                <strong>Music</strong>
+                <span class="ddial"><input type="range" id="opt-music-volume" class="visually-hidden" min="0" max="100" step="1" /></span>
+                <output id="opt-music-volume-value" for="opt-music-volume">60%</output>
+              </span>
+            </label>
+            <label class="dtile dvolume" for="opt-effects-volume" style="grid-column: 3; grid-row: 2">
+              <span class="dtile-in">
+                <strong>Effects</strong>
+                <span class="ddial"><input type="range" id="opt-effects-volume" class="visually-hidden" min="0" max="100" step="1" /></span>
+                <output id="opt-effects-volume-value" for="opt-effects-volume">80%</output>
+              </span>
+            </label>
+            <div class="dtile drecords" style="grid-column: 4; grid-row: 2">
+              <span class="dtile-in">
+                <strong>Records</strong>
+                <small id="records-status">Sign in to save records</small>
+                <button type="button" id="records-sync" class="dpill" disabled>Sync</button>
+              </span>
+            </div>
+            <label class="dtile dtoggle" style="grid-column: 1; grid-row: 3" title="Draw the path your cursor took during a run">
+              <span class="dtile-in"><input type="checkbox" id="opt-trail" /><strong>Cursor trail</strong></span>
+            </label>
+            <label class="dtile dtoggle" style="grid-column: 2; grid-row: 3" title="Show elapsed time in the corner while playing">
+              <span class="dtile-in"><input type="checkbox" id="opt-timer" /><strong>Run timer</strong></span>
+            </label>
+            <label class="dtile dtoggle" style="grid-column: 3; grid-row: 3" title="Show sample interval and polling rate below the game">
+              <span class="dtile-in"><input type="checkbox" id="opt-debug" /><strong>Input panel</strong></span>
+            </label>
+            <span class="dtile dtile-deco" style="grid-column: 4; grid-row: 3" aria-hidden="true"></span>
+            <span class="dtile dtile-deco" style="grid-column: 1; grid-row: 4" aria-hidden="true"></span>
+            <button type="button" id="options-reset" class="dtile" style="grid-column: 2; grid-row: 4">
+              <span class="dtile-in"><strong>Reset</strong><small>to defaults</small></span>
+            </button>
+            <button type="button" id="options-licenses" class="dtile" style="grid-column: 3; grid-row: 4">
+              <span class="dtile-in"><strong>Licenses</strong><small>music &amp; fonts</small></span>
+            </button>
+            <button type="button" id="options-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 4">
+              <span class="dtile-in"><strong>Back</strong></span>
+            </button>
           </div>
-          <div class="option records-option">
-            <span><strong>Level records</strong><small id="records-status">Sign in to save your best times and stars to your account.</small></span>
-            <button type="button" id="records-sync" disabled>Sync records</button>
-          </div>
-          <label class="option volume-option" for="opt-master-volume">
-            <span><strong>Master volume</strong><small>Overall sound level</small></span>
-            <input type="range" id="opt-master-volume" min="0" max="100" step="1" />
-            <output id="opt-master-volume-value" for="opt-master-volume">80%</output>
-          </label>
-          <label class="option volume-option" for="opt-music-volume">
-            <span><strong>Background music</strong><small>Music volume</small></span>
-            <input type="range" id="opt-music-volume" min="0" max="100" step="1" />
-            <output id="opt-music-volume-value" for="opt-music-volume">60%</output>
-          </label>
-          <label class="option volume-option" for="opt-effects-volume">
-            <span><strong>Sound effects</strong><small>Gameplay sound volume</small></span>
-            <input type="range" id="opt-effects-volume" min="0" max="100" step="1" />
-            <output id="opt-effects-volume-value" for="opt-effects-volume">80%</output>
-          </label>
-          <label class="option">
-            <input type="checkbox" id="opt-trail" />
-            <span><strong>Cursor trail</strong><small>Draw the path your cursor took during a run</small></span>
-          </label>
-          <label class="option">
-            <input type="checkbox" id="opt-timer" />
-            <span><strong>Run timer</strong><small>Show elapsed time in the corner while playing</small></span>
-          </label>
-          <label class="option">
-            <input type="checkbox" id="opt-debug" />
-            <span><strong>Input precision panel</strong><small>Show sample interval and polling rate below the game</small></span>
-          </label>
-        </div>
-        <div class="menu-buttons">
-          <button type="button" id="options-back" class="menu-btn primary">Back</button>
-          <button type="button" id="options-licenses" class="menu-btn subtle">Font licenses</button>
-          <button type="button" id="options-reset" class="menu-btn subtle">Reset to defaults</button>
         </div>
       </div>
     </div>
 
-    <!-- Font copyright and licenses -->
+    <!-- Stats: account summary on the same diamond grid; Stars spans 2×2 -->
     <div id="stats-screen" class="screen menu" hidden>
-      <div class="menu-inner stats-inner">
+      <div class="menu-inner menu-diamonds">
         <h2 class="logo logo-sm">Stats</h2>
-        <p class="muted stats-intro">Everything saved to your account: profile, play time, and the best time and stars of every level.</p>
-        <div id="stats-body" class="stats-body"></div>
-        <div class="menu-buttons">
-          <button type="button" id="stats-back" class="menu-btn primary">Back</button>
-          <button type="button" id="stats-refresh" class="menu-btn subtle">Refresh</button>
+        <p id="stats-message" class="tagline stats-message" role="status"></p>
+        <div class="dia-wrap" id="stats-dia">
+          <div class="dgrid dgrid-panel" style="--cols: 4">
+            <div class="dtile dtile-stars" style="grid-column: 1 / span 2; grid-row: 1 / span 2">
+              <span class="dtile-in"><span class="dtotal-star" aria-hidden="true">★</span><strong data-stat="stars">—</strong><small data-stat="stars-note">stars</small></span>
+            </div>
+            <div class="dtile dstat" style="grid-column: 3; grid-row: 1">
+              <span class="dtile-in"><small class="dstat-label">Player</small><strong data-stat="player">—</strong><small data-stat="player-note"></small></span>
+            </div>
+            <div class="dtile dstat" style="grid-column: 4; grid-row: 1">
+              <span class="dtile-in"><small class="dstat-label">Play time</small><strong data-stat="time">—</strong><small data-stat="time-note"></small></span>
+            </div>
+            <div class="dtile dstat dstat-mint" style="grid-column: 3; grid-row: 2">
+              <span class="dtile-in"><small class="dstat-label">Cleared</small><strong data-stat="cleared">—</strong><small data-stat="cleared-note"></small></span>
+            </div>
+            <div class="dtile dstat" style="grid-column: 4; grid-row: 2">
+              <span class="dtile-in"><small class="dstat-label">Last record</small><strong data-stat="last">—</strong></span>
+            </div>
+            <span class="dtile dtile-deco" style="grid-column: 1; grid-row: 3" aria-hidden="true"></span>
+            <span class="dtile dtile-deco" style="grid-column: 2; grid-row: 3" aria-hidden="true"></span>
+            <button type="button" id="stats-refresh" class="dtile" style="grid-column: 3; grid-row: 3">
+              <span class="dtile-in"><span class="dicon" aria-hidden="true">↻</span><strong>Refresh</strong></span>
+            </button>
+            <button type="button" id="stats-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 3">
+              <span class="dtile-in"><strong>Back</strong></span>
+            </button>
+          </div>
         </div>
+        <!-- Per-level record tables: hidden for now (StatsUI.SHOW_LEVEL_RECORDS) -->
+        <div id="stats-records" class="stats-list" hidden></div>
       </div>
     </div>
 
@@ -223,8 +257,8 @@
 
     <div id="licenses-screen" class="screen menu" hidden>
       <div class="menu-inner licenses-inner">
-        <h2 class="logo logo-sm">Font licenses</h2>
-        <p class="muted licenses-intro">Fonts bundled with the game, with the copyright and license stated by each font file.</p>
+        <h2 class="logo logo-sm">Licenses</h2>
+        <p class="muted licenses-intro">Music and fonts bundled with the game, with the copyright and license of each.</p>
         <div id="licenses-list" class="licenses-list"></div>
         <div class="menu-buttons">
           <button type="button" id="licenses-back" class="menu-btn primary">Back</button>
@@ -264,7 +298,7 @@
       <section id="editor-view" class="editor-view" hidden>
         <div class="stage editor-stage"><canvas id="editor-canvas" data-fit="screen"></canvas></div>
         <div class="editor-bar">
-          <button type="button" id="btn-editor-play">Play</button>
+          <button type="button" id="btn-test" class="primary" title="T">▶ Test play</button>
           <button type="button" id="btn-editor-menu" title="Main menu">Main Menu</button>
           <span class="bar-sep" aria-hidden="true"></span>
           <label class="check" title="N"><input type="checkbox" id="opt-snap" checked /> Snap</label>
@@ -285,9 +319,22 @@
           <div id="palette" class="palette float-body"></div>
         </aside>
         <p id="editor-hint" class="editor-hint status"></p>
-        <aside id="inspector-panel" class="editor-float float-right" aria-label="Properties">
+        <!-- Object options: the selected object's properties -->
+        <aside id="object-panel" class="editor-float float-right float-object" aria-label="Object">
           <div class="float-head" title="Drag to move · double-click to collapse">
-            <span class="float-title">Properties</span>
+            <span class="float-title">Object</span>
+            <button type="button" class="float-toggle" aria-expanded="true" title="Collapse">−</button>
+          </div>
+          <div class="panel float-body">
+            <section>
+              <div id="props"></div>
+            </section>
+          </div>
+        </aside>
+        <!-- Level metadata: map info, level settings, theme, verify & share -->
+        <aside id="level-info-panel" class="editor-float float-right" aria-label="Level">
+          <div class="float-head" title="Drag to move · double-click to collapse">
+            <span class="float-title">Level</span>
             <button type="button" class="float-toggle" aria-expanded="true" title="Collapse">−</button>
           </div>
           <div class="panel float-body">
@@ -307,16 +354,11 @@
               <summary><h3>Theme</h3></summary>
               <div id="theme-panel"></div>
             </details>
-            <section>
-              <h3>Selected object</h3>
-              <div id="props"></div>
-            </section>
             <ul id="messages" class="messages"></ul>
             <section>
-              <h3>Test &amp; share</h3>
-              <button type="button" id="btn-test" class="primary" title="T">▶ Test play</button>
+              <h3>Verify &amp; share</h3>
               <p id="verify-status" class="verify"></p>
-              <button type="button" id="btn-share" disabled>🔗 Create share link</button>
+              <button type="button" id="btn-share" disabled>Create share link</button>
               <input id="share-url" readonly placeholder="Your share link will appear here" />
             </section>
             <section class="actions">
@@ -325,10 +367,6 @@
               <input type="file" id="import-file" accept=".json,application/json" hidden />
               <button type="button" id="btn-new" class="danger">New map</button>
             </section>
-            <details class="theme-section">
-              <summary><h3>Map pack</h3></summary>
-              <div id="pack-panel"></div>
-            </details>
           </div>
         </aside>
       </section>

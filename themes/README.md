@@ -50,7 +50,6 @@ Images can be `.png`, `.jpg`, `.webp`, `.gif` or `.svg`.
 | `cover` | File name of the representative image (optional) |
 | `music` | Relative audio path inside the pack, e.g. `audio/background.mp3` (optional) |
 | `style.maze` | Maze colors for levels without their own theme: `{ "wall": …, "path": … }`, the same format as a map's `theme` (easiest to make in the Theme Editor) |
-| `style.cursorColor` | Cursor color for levels without their own (optional) |
 | `style.badge` | The in-game level number / title badge (below) |
 
 ### Background music

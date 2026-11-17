@@ -261,8 +261,6 @@ export interface MapData {
   title?: string;
   /** Level number shown in game, 1–9999 */
   level?: number;
-  /** Color of the in-game virtual cursor and its trail, '#rrggbb' */
-  cursorColor?: string;
   stars?: StarTimes;
   /** Global darkness: the whole map is dark during a run except a light around the cursor */
   darkness?: { light: number };

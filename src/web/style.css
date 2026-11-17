@@ -319,6 +319,8 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 }
 .editor-float.float-left { left: 12px; width: 196px; }
 .editor-float.float-right { right: 12px; width: 300px; }
+/* The object panel starts just left of the level panel */
+.editor-float.float-object { right: 324px; width: 260px; }
 .editor-float.dragging { z-index: 3; box-shadow: 0 18px 44px rgba(58, 96, 150, 0.26); opacity: 0.96; }
 .float-head {
   display: flex;
@@ -337,6 +339,22 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .float-toggle { width: 26px; height: 26px; padding: 0; border-radius: 8px; font-weight: 700; line-height: 1; }
 .float-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .editor-float.collapsed .float-body { display: none; }
+/* Resizable panels (float-panel.ts): invisible grips along the left, right and bottom edges */
+.editor-float.collapsed { height: auto !important; }
+.editor-float.collapsed .float-resize { display: none; }
+.editor-float.resizing { z-index: 3; user-select: none; }
+.float-resize { position: absolute; z-index: 1; touch-action: none; }
+.float-resize.rz-w { left: -4px; top: 14px; bottom: 14px; width: 8px; cursor: ew-resize; }
+.float-resize.rz-e { right: -4px; top: 14px; bottom: 14px; width: 8px; cursor: ew-resize; }
+.float-resize.rz-s { left: 14px; right: 14px; bottom: -4px; height: 8px; cursor: ns-resize; }
+.float-resize.rz-sw { left: -4px; bottom: -4px; width: 16px; height: 16px; cursor: nesw-resize; }
+.float-resize.rz-se { right: -4px; bottom: -4px; width: 16px; height: 16px; cursor: nwse-resize; }
+/* A small corner mark so the bottom-left grip can be found */
+.editor-float.resizable::after {
+  content: ''; position: absolute; left: 5px; bottom: 5px; width: 8px; height: 8px; pointer-events: none;
+  border-left: 2px solid var(--border-strong); border-bottom: 2px solid var(--border-strong); border-bottom-left-radius: 3px; opacity: 0.7;
+}
+.editor-float.resizable.collapsed::after { display: none; }
 /* The body sits inside the glass frame, so it doesn't need its own */
 .editor-float .palette, .editor-float .panel {
   background: none;
@@ -410,12 +428,14 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 }
 @media (max-width: 900px) {
   .editor-float.float-right { width: 260px; }
+  .editor-float.float-object { right: 284px; width: 230px; }
   .editor-float.float-left { width: 170px; }
 }
 
 .palette { padding: 10px; display: flex; flex-direction: column; gap: 4px; }
 .pal-title { margin: 8px 0 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.pal-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+/* As many 40px+ tool buttons per row as the (resizable) Tools panel is wide */
+.pal-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; }
 .pal-btn { position: relative; aspect-ratio: 1; padding: 0; display: grid; place-items: center; border-radius: 9px; }
 .pal-btn svg { width: 24px; height: 24px; stroke-width: 1.5; }
 .pal-btn[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px rgba(58, 159, 240, 0.18); }
@@ -618,6 +638,8 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   align-items: center;
   gap: 10px;
 }
+/* Player tag discriminator (#0639): lighter than the nickname */
+.tag-num { opacity: 0.5; font-weight: inherit; }
 .account-time { font-size: 11px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
 .account-tag {
   display: flex;
@@ -631,38 +653,6 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   box-shadow: var(--shadow-sm);
   font-weight: 700;
 }
-
-/* Options */
-.option-list { width: 100%; display: flex; flex-direction: column; gap: 10px; margin: 6px 0 12px; }
-.option {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border-radius: var(--radius);
-  background: var(--surface);
-  backdrop-filter: var(--glass);
-  -webkit-backdrop-filter: var(--glass);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-}
-.option:hover, .option:focus-within { border-color: var(--accent); }
-.option input { width: 20px; height: 20px; padding: 0; flex: none; accent-color: var(--accent); }
-.option span { display: flex; flex-direction: column; gap: 2px; }
-.option strong { font-size: 16px; }
-.option small { color: var(--muted); font-size: 13px; }
-.volume-option { flex-wrap: wrap; }
-.menu-music-option { flex-direction: column; align-items: stretch; }
-.menu-music-option input[type="file"] { width: 100%; height: auto; }
-.menu-music-option small { overflow-wrap: anywhere; }
-.records-option span { flex: 1 1 200px; }
-.records-option button { flex: none; }
-.volume-option span { flex: 1 1 150px; }
-.volume-option input[type="range"] { width: 140px; flex: 1 1 100px; min-width: 0; height: 24px; cursor: pointer; }
-.volume-option output { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
-#options-screen { overflow-y: auto; align-items: safe center; }
-#options-screen .menu-inner { margin-block: auto; padding-block: 24px; }
 
 /* Account */
 .auth-card {
@@ -768,27 +758,6 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .color-row { display: flex; gap: 6px; align-items: center; }
 .color-row input[type="color"] { flex: 1 1 auto; }
 .color-row button { padding: 5px 10px; }
-
-/* Map pack builder */
-.pack-list { list-style: none; margin: 10px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 4px; counter-reset: lvl; }
-.pack-list li {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  font-size: 13px;
-}
-.pack-list li.open { border-color: var(--accent); background: var(--accent-soft); }
-.pack-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pack-badge { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; font-size: 11px; font-weight: 700; background: var(--warn-soft); color: var(--warn); }
-.pack-badge.ok { background: rgba(27, 154, 114, 0.14); color: var(--ok); }
-.pack-tools { display: flex; gap: 3px; }
-.pack-tools button { padding: 2px 7px; font-size: 12px; border-radius: 6px; }
-.pack-status { margin: 6px 0 0; font-size: 12px; }
-#pack-panel input[readonly] { width: 100%; margin-top: 6px; }
 
 /* Hover tooltips (replace the browser's native title tooltips; see tooltip.ts) */
 .app-tooltip {
@@ -1120,7 +1089,7 @@ button.se-back:hover, button.se-start:hover, button.se-back:focus-visible, butto
 .te-font-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: center; }
 .te-font-sample { font-size: 20px; }
 
-/* ───────────────────────── Font licenses ───────────────────────── */
+/* ───────────────────────── Licenses (music & fonts) ───────────────────────── */
 
 .licenses-inner { width: min(860px, 100%); gap: 12px; }
 .licenses-intro { margin: -6px 0 0; text-align: center; font-size: 14px; }
@@ -1149,6 +1118,9 @@ button.se-back:hover, button.se-start:hover, button.se-back:focus-visible, butto
 .lic-check { background: #e7eefa; color: #3c5a8a; }
 .lic-personal { background: #fff1d6; color: #9a5b00; }
 .lic-commercial { background: #fde0e0; color: #a02626; }
+.lic-cc { background: #e3f1ff; color: #2a6fb8; text-decoration: none; }
+.lic-music { width: 150px; font-size: 34px; color: #3a9ff0; text-align: center; }
+.lic-copy a { color: inherit; }
 .lic-ofl-text { margin-top: 14px; background: none; color: inherit; padding: 0; border-radius: 0; font-weight: 400; }
 .lic-ofl-text summary { cursor: pointer; font-weight: 700; }
 .lic-ofl-text pre { white-space: pre-wrap; font-size: 11px; line-height: 1.45; color: var(--muted); }
@@ -1161,15 +1133,6 @@ button.se-back:hover, button.se-start:hover, button.se-back:focus-visible, butto
 
 .stats-inner { width: min(900px, 100%); gap: 12px; }
 .stats-intro { margin: -6px 0 0; text-align: center; font-size: 14px; }
-.stats-body { width: 100%; display: flex; flex-direction: column; gap: 12px; }
-.stats-message { text-align: center; padding: 24px 0; }
-.stats-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-.stats-card {
-  display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 14px;
-  background: var(--surface-solid); border: 1px solid var(--border); min-width: 0;
-}
-.stats-card strong { font-size: 20px; overflow-wrap: anywhere; }
-.stats-card small { font-size: 12px; }
 .stats-list {
   max-height: min(52vh, 560px); overflow: auto; padding: 4px 12px 12px;
   border: 1px solid var(--border); border-radius: 18px; background: var(--surface);
@@ -1185,3 +1148,113 @@ button.se-back:hover, button.se-start:hover, button.se-back:focus-visible, butto
 .stats-table .stats-name { overflow-wrap: anywhere; }
 .stats-empty td { opacity: 0.45; }
 @media (max-width: 560px) { .stats-table td:last-child, .stats-table th:last-child { display: none; } }
+
+/* ───────────────────────── Options & stats diamonds ─────────────────────────
+ * Both screens reuse the main menu's 45°-turned grid (.dgrid); .dgrid-panel has larger cells so
+ * controls stay readable. Under 640px wide main.ts adds .dia-flat and the tiles fall back to a
+ * plain two-column grid of upright cards.
+ */
+#options-screen, #stats-screen { overflow-y: auto; align-items: safe center; }
+#options-screen .menu-inner, #stats-screen .menu-inner { margin-block: auto; padding-block: 24px; gap: 10px; }
+.dgrid-panel { --cell: 168px; --gap: 12px; }
+.dgrid-panel .dtile-in strong { font-family: var(--font-main); font-size: 17px; }
+.dgrid-panel .dtile-in small { font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
+label.dtile { cursor: pointer; }
+label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within {
+  box-shadow: 0 16px 34px rgba(58, 96, 150, 0.28), 0 0 0 3px rgba(255, 255, 255, 0.9);
+  z-index: 1;
+}
+.dtile-back .dtile-in strong { font-size: 26px !important; }
+.visually-hidden {
+  position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+/* Small diamond buttons inside a tile: the box stays upright for the text, ::before draws the diamond */
+.dpill-row { display: flex; gap: 2px; justify-content: center; margin-top: 2px; }
+.dpill {
+  --size: 74px;
+  position: relative; isolation: isolate; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--size); height: var(--size); padding: 0 12px;
+  border: 0; border-radius: 0; background: none; box-shadow: none;
+  color: var(--text); font: 600 11px/1.1 var(--font-main); text-align: center;
+  cursor: pointer; clip-path: polygon(50% -4%, 104% 50%, 50% 104%, -4% 50%); /* only the diamond is clickable */
+}
+.dpill::before {
+  content: ''; position: absolute; z-index: -1; inset: calc(var(--size) * 0.1464 + 1px);
+  transform: rotate(45deg); border-radius: 6px;
+  background: #fff; border: 1px solid var(--border); box-shadow: 0 3px 8px rgba(58, 96, 150, 0.16);
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.dpill:hover:not(:disabled)::before, .dpill-file:not(:has(input:disabled)):hover::before {
+  border-color: var(--accent); background: #eef7ff; transform: rotate(45deg) scale(1.06);
+}
+.dpill:disabled, .dpill-file:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
+.dpill:focus-visible { outline: none; }
+.dpill:focus-visible::before, .dpill-file:focus-within::before { border: 2px solid #326bc0; }
+
+/* Menu music (2×2) */
+.dtile-music { background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(214, 236, 255, 0.9)); }
+.dtile-music .dtile-in { gap: 6px; }
+.dtile-music .dtile-in strong { font-size: 24px; }
+.dtile-music .dicon { font-size: 34px; color: #3a9ff0; opacity: 1; }
+.dmusic-name { max-width: 220px; font-size: 12px !important; }
+
+/* Volume: diamond dials (diamond-dial.ts). The SVG fills the tile behind the label and value;
+ * the real <input type="range"> is visually hidden but still takes focus and arrow keys. */
+.dvolume .dtile-in { gap: 0; }
+.dvolume strong { position: relative; pointer-events: none; font-size: 15px !important; }
+.dvolume output {
+  position: relative; pointer-events: none;
+  font: 700 26px/1.1 var(--font-title); font-variant-numeric: tabular-nums; color: #326bc0;
+}
+.ddial { position: absolute; left: 50%; top: 50%; width: 180px; height: 180px; transform: translate(-50%, -50%); }
+.ddial-svg { display: block; width: 100%; height: 100%; overflow: visible; touch-action: none; cursor: grab; }
+.ddial-svg.dragging { cursor: grabbing; }
+.ddial-track, .ddial-fill { fill: none; stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; }
+.ddial-track { stroke: #c7d8eb; }
+.ddial-fill { stroke: #3a9ff0; }
+.ddial-thumb { fill: #468ee9; stroke: #fff; stroke-width: 3; filter: drop-shadow(1px 2px 3px #28599066); transition: fill 0.12s; }
+.ddial-svg:hover .ddial-thumb, .ddial-svg.dragging .ddial-thumb { fill: #6874ed; }
+.dvolume:has(input:focus-visible) .ddial-thumb { stroke: #326bc0; stroke-width: 4; }
+
+/* Records sync */
+.drecords .dtile-in { gap: 4px; }
+.drecords small { max-width: 130px; }
+
+/* Toggles: the whole tile is the label; a checked tile lights up */
+.dtoggle .dtile-in { gap: 8px; }
+.dtoggle input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; width: 20px; height: 20px; margin: 0; padding: 0; flex: none;
+  transform: rotate(45deg); border-radius: 2px; border: 2px solid #93afce; background: #fff; box-shadow: none; cursor: pointer;
+}
+.dtoggle input[type="checkbox"]:checked { background: #fff; border-color: #fff; box-shadow: inset 0 0 0 4px #3a9ff0; }
+.dtoggle input[type="checkbox"]:focus-visible { outline: 2px solid #326bc0; outline-offset: 4px; }
+.dtoggle:has(input:checked) { background: var(--gradient); color: #fff; border-color: transparent; }
+.dtoggle:has(input:checked) .dtile-in { text-shadow: 0 1px 6px rgba(20, 30, 60, 0.3); }
+
+/* Stats tiles */
+.stats-message { min-height: 1.3em; text-align: center; }
+#stats-dia .dtile-stars .dtile-in { gap: 4px; }
+#stats-dia .dtile-stars strong { font-family: var(--font-title); font-size: 72px !important; line-height: 1; }
+#stats-dia .dtile-stars small { font-size: 13px; }
+#stats-dia .dtotal-star { font-size: 40px; }
+.dstat .dtile-in { gap: 3px; }
+.dstat .dstat-label { text-transform: uppercase; letter-spacing: 0.1em; font-size: 10px !important; color: var(--muted); opacity: 1; }
+.dstat strong { font-size: 18px !important; overflow-wrap: anywhere; max-width: 140px; }
+.dstat-mint { background: linear-gradient(135deg, #effff9, #bdeee4); }
+.dstat-mint strong { font-family: var(--font-title) !important; font-size: 34px !important; }
+
+/* Narrow screens: upright two-column cards instead of a turned grid */
+.dia-wrap.dia-flat { width: 100% !important; height: auto !important; }
+.dia-flat .dgrid {
+  position: static; transform: none !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto;
+}
+.dia-flat .dtile { grid-column: auto !important; grid-row: auto !important; min-height: 120px; }
+.dia-flat .dtile-music, .dia-flat .dtile-stars { grid-column: 1 / -1 !important; }
+.dia-flat .dtile-in { position: static; inset: auto; transform: none; height: 100%; padding: 16px 12px; }
+.dia-flat .dtile-deco { display: none; }
+.dia-flat .dvolume { min-height: 190px; }
+.dia-flat .dvolume .dtile-in { position: relative; }

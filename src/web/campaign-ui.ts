@@ -211,7 +211,7 @@ export class CampaignUI {
     const wrap = el('div', 'lattice-wrap');
     wrap.append(lattice);
 
-    const load = el('button', 'dload', '📂 Load pack (.zip)');
+    const load = el('button', 'dload', 'Load pack (.zip)');
     load.type = 'button';
     load.title = 'Load a custom theme pack made with the Theme Editor';
     load.addEventListener('click', () => this.file.click());
@@ -243,7 +243,7 @@ export class CampaignUI {
       p.append(el('span', 'on', '★'), ` ${stars}/${maxStars(t)}`);
       parts.push(p, el('span', 'dworld-diff', diff(averageDifficulty(t.levels))));
     } else {
-      parts.push(el('span', 'dlock', `🔒 ★ ${t.info.unlockStars}`));
+      parts.push(el('span', 'dlock', `Locked · ★ ${t.info.unlockStars}`));
     }
     b.append(inner(...parts));
     b.title = unlocked ? `${t.info.name} — ${t.levels.length} level${t.levels.length === 1 ? '' : 's'}` : `Collect ${t.info.unlockStars} stars to unlock (${t.info.unlockStars - totalStars()} more)`;

@@ -1,6 +1,6 @@
 # Bundled fonts: copyright and licenses
 
-The game shows this list in **Options → Font licenses**. The data lives in
+The game shows this list in **Options → Licenses**. The data lives in
 `src/core/font-catalog.ts`; keep both in sync when adding or removing a font.
 
 Fonts licensed for personal use only or sold commercially are not bundled. License kinds are what each font file states in its own metadata (name table):

@@ -4,6 +4,7 @@ import { formatUtc } from '../core/time';
 import { levelSlots, STARS_PER_LEVEL, type ThemeEntry } from '../core/theme-pack';
 import type { Account } from './auth/account';
 import type { AccountRecord, RecordSync } from './auth/records';
+import { renderTag } from './player-tag';
 import { customTheme, OFFICIAL_THEMES } from './theme-registry';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
@@ -19,17 +20,42 @@ const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(Math.max(0, STARS_PE
 /** Same key format as progress.ts */
 const levelKey = (t: ThemeEntry, i: number) => `${t.official ? '' : 'custom:'}${t.info.id}/${i}`;
 
+/** The per-level record tables are built but kept hidden for now; flip to show them again. */
+const SHOW_LEVEL_RECORDS = false;
+
+type StatField = 'stars' | 'stars-note' | 'player' | 'player-note' | 'time' | 'time-note' | 'cleared' | 'cleared-note' | 'last';
+
 /**
  * Personal stats: everything the database holds for the signed-in player at a glance —
- * profile (tag, sign-up date, play time) and every level record (best ms, stars, dates).
+ * profile (tag, sign-up date, play time) and level record totals, shown on the diamond tiles of
+ * #stats-dia ([data-stat] slots). The per-level tables go to `list` (hidden, see SHOW_LEVEL_RECORDS).
  */
 export class StatsUI {
   private loading = 0;
 
-  constructor(private readonly box: HTMLElement, private readonly account: Account, private readonly records: RecordSync) {}
+  constructor(
+    private readonly grid: HTMLElement,
+    private readonly status: HTMLElement,
+    private readonly list: HTMLElement,
+    private readonly account: Account,
+    private readonly records: RecordSync,
+  ) {}
+
+  private set(field: StatField, text: string): void {
+    const slot = this.grid.querySelector<HTMLElement>(`[data-stat="${field}"]`);
+    if (slot) slot.textContent = text;
+  }
+
+  private clear(): void {
+    for (const slot of this.grid.querySelectorAll<HTMLElement>('[data-stat]')) slot.textContent = slot.dataset.stat!.endsWith('-note') ? '' : '—';
+    this.set('stars-note', 'stars');
+    this.list.replaceChildren();
+    this.list.hidden = true;
+  }
 
   async render(): Promise<void> {
     const run = ++this.loading;
+    this.clear();
     if (!this.account.configured) return this.message('Accounts are not set up, so there is nothing stored in the database.');
     const profile = this.account.profile;
     if (!profile) return this.message('Sign in to see the stats saved to your account.');
@@ -44,18 +70,18 @@ export class StatsUI {
     const lastUpdate = rows.reduce<string | undefined>((a, r) => (!a || r.updated_at > a ? r.updated_at : a), undefined);
     const officialMax = OFFICIAL_THEMES.reduce((s, t) => s + levelSlots(t) * STARS_PER_LEVEL, 0);
 
-    const summary = el('div', 'stats-cards');
-    const card = (label: string, value: string, note?: string) => {
-      const c = el('div', 'stats-card');
-      c.append(el('small', '', label), el('strong', '', value));
-      if (note) c.append(el('small', 'muted', note));
-      summary.append(c);
-    };
-    card('Player', this.account.tag ?? '—', `Joined ${date(profile.created_at)}`);
-    card('Play time', formatPlayTime(profile.total_play_seconds), `${profile.total_play_seconds.toLocaleString()} s`);
-    card('Levels cleared', String(rows.length), `${perfect} with all stars`);
-    card('Stars', String(totalStars), `of ${officialMax} in chapters`);
-    card('Last record', date(lastUpdate));
+    this.message('Everything saved to your account.');
+    this.set('stars', String(totalStars));
+    this.set('stars-note', `of ${officialMax} in chapters`);
+    const player = this.grid.querySelector<HTMLElement>('[data-stat="player"]');
+    if (player) renderTag(player, this.account.tag ?? '—');
+    this.set('player-note', `Joined ${date(profile.created_at)}`);
+    this.set('time', formatPlayTime(profile.total_play_seconds));
+    this.set('time-note', `${profile.total_play_seconds.toLocaleString()} s`);
+    this.set('cleared', String(rows.length));
+    this.set('cleared-note', `${perfect} with all stars`);
+    this.set('last', date(lastUpdate));
+    if (!SHOW_LEVEL_RECORDS) return;
 
     const sections: HTMLElement[] = [];
     const themes = [...OFFICIAL_THEMES, ...(customTheme() ? [customTheme()!] : [])];
@@ -72,9 +98,8 @@ export class StatsUI {
     // Records for levels this build doesn't know (older or other custom packs)
     if (byKey.size) sections.push(this.section('Other levels', `${byKey.size} record${byKey.size === 1 ? '' : 's'}`, [...byKey].map(([k, r]) => [k, r])));
 
-    const list = el('div', 'stats-list');
-    list.append(...sections);
-    this.box.replaceChildren(summary, list);
+    this.list.replaceChildren(...sections);
+    this.list.hidden = false;
   }
 
   private section(title: string, meta: string, rows: [string, AccountRecord | undefined][]): HTMLElement {
@@ -102,6 +127,6 @@ export class StatsUI {
   }
 
   private message(text: string): void {
-    this.box.replaceChildren(el('p', 'muted stats-message', text));
+    this.status.textContent = text;
   }
 }

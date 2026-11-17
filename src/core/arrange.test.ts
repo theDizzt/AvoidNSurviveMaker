@@ -127,7 +127,7 @@ describe('level settings and packs', () => {
       ...createEmptyMap(), title: ' Spiral ', level: 3, cursorColor: '#FF00AA', stars: { three: 5000, two: 8000, one: 12000 },
     });
     expect(map.title).toBe('Spiral');
-    expect(map.cursorColor).toBe('#ff00aa');
+    expect('cursorColor' in map).toBe(false); // retired field: dropped from old files
     expect(levelLabel(map)).toBe('Level 3 · Spiral');
     expect([4000, 5000, 7000, 12000, 12001].map((t) => starsFor(map, t))).toEqual([3, 3, 2, 1, 0]);
     expect(starsFor(createEmptyMap(), 1)).toBeNull();

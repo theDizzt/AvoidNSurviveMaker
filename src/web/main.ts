@@ -7,14 +7,13 @@ import { levelLabel } from '../core/level';
 import { decodeMap, decodePack } from '../core/share';
 import type { MapData, MapPack } from '../core/types';
 import { Editor } from './editor';
-import { PackPanel } from './pack-panel';
 import { ThemeEditor } from './theme-editor';
 import { customTheme } from './theme-registry';
 import { installTooltips } from './tooltip';
 import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-ui';
 import { recordClear, themeUnlocked, totalStars } from './progress';
 import { themedLevel, type ThemeEntry } from '../core/theme-pack';
-import { OFFICIAL_THEMES, allThemes, chapterMusicFor } from './theme-registry';
+import { OFFICIAL_THEMES, allThemes, badgeFor, chapterMusicFor } from './theme-registry';
 import { onOptionsChange, options, resetOptions, setOption } from './options';
 import { PlayController } from './play';
 import { FONT_TASKS, runPreload, type PreloadTask } from './preload';
@@ -24,6 +23,8 @@ import { Account } from './auth/account';
 import { AuthUI, showToast } from './auth/auth-ui';
 import { PlayTimeTracker } from './auth/playtime';
 import { RecordSync } from './auth/records';
+import { installDiamondDial } from './diamond-dial';
+import { renderTag } from './player-tag';
 import { StatsUI } from './stats-ui';
 import { IrisTransition } from './iris-transition';
 import { gameAudio } from './audio';
@@ -102,8 +103,23 @@ const editor = new Editor({
 });
 
 const campaign = new CampaignUI($('themes-screen'), $('levels-screen'));
-const fitMenu = () => fitRotatedGrid($('menu-dia'), $('menu-dia').querySelector<HTMLElement>('.dgrid')!, Math.min(560, window.innerWidth * 0.9), window.innerHeight * 0.58);
-window.addEventListener('resize', () => current === 'menu' && fitMenu());
+const fitDia = (id: string, maxW: number, maxH: number) => fitRotatedGrid($(id), $(id).querySelector<HTMLElement>('.dgrid')!, maxW, maxH);
+const fitMenu = () => fitDia('menu-dia', Math.min(560, window.innerWidth * 0.9), window.innerHeight * 0.58);
+/** Options and stats: larger panels; the screen scrolls rather than shrinking text too far */
+const fitPanel = (id: string) => {
+  const wrap = $(id);
+  const flat = window.innerWidth < 640; // too narrow for a turned grid: style.css lays out upright cards
+  wrap.classList.toggle('dia-flat', flat);
+  if (flat) {
+    wrap.style.width = wrap.style.height = '';
+    wrap.querySelector<HTMLElement>('.dgrid')!.style.transform = '';
+  } else fitDia(id, Math.min(860, window.innerWidth * 0.94), Math.max(480, window.innerHeight - 190));
+};
+window.addEventListener('resize', () => {
+  if (current === 'menu') fitMenu();
+  if (current === 'options') fitPanel('options-dia');
+  if (current === 'stats') fitPanel('stats-dia');
+});
 campaign.onBack = (from) => show(from === 'levels' ? 'themes' : 'menu');
 campaign.onPlay = (theme, level) => {
   if (level < 0) return show('levels');
@@ -141,11 +157,7 @@ themeEditor.onPlayCustom = () => {
 };
 $('menu-theme-editor').addEventListener('click', () => show('themeEditor'));
 
-const packPanel = new PackPanel($('pack-panel'), editor);
-editor.onChange = () => {
-  packPanel.refresh();
-  syncMusic();
-};
+editor.onChange = () => syncMusic();
 
 const backdrop = new Backdrop($('app-bg'), $<HTMLCanvasElement>('demo-bg'));
 /** Background per screen; the map and theme editors share the world select grid */
@@ -219,8 +231,12 @@ function showImmediately(next: Screen): void {
     const t = campaign.currentTheme ?? campaignOf(currentKey)?.theme ?? OFFICIAL_THEMES[0];
     if (t) campaign.renderLevels(t);
   }
-  if (next === 'options') $('options-back').focus();
+  if (next === 'options') {
+    requestAnimationFrame(() => fitPanel('options-dia'));
+    $('options-back').focus();
+  }
   if (next === 'stats') {
+    requestAnimationFrame(() => fitPanel('stats-dia'));
     void stats.render();
     $('stats-back').focus();
   }
@@ -240,7 +256,8 @@ function showPlay(map: MapData, opts: { test?: boolean; key?: string } = {}): vo
     currentKey = opts.key ?? '';
     // Campaign levels wear their theme's badge design
     const c = campaignOf(currentKey);
-    play.badge = c ? { style: c.theme.info.style.badge, imageUrl: c.theme.badgeUrl } : null;
+    // Other maps (editor test play, shared links) wear their chapter preset's badge, if any
+    play.badge = c ? { style: c.theme.info.style.badge, imageUrl: c.theme.badgeUrl } : badgeFor(map);
     renderLevelOptions(); // worlds may have unlocked since
     if (currentKey) levelSelect.value = currentKey;
     // From the editor the level list only makes sense while playing a pack
@@ -307,15 +324,15 @@ function renderLevelOptions(): void {
   const groups: HTMLElement[] = [];
   if (playPack) {
     const g = document.createElement('optgroup');
-    g.label = `📦 ${playPack.name}${playPack.author ? ` by ${playPack.author}` : ''}`;
+    g.label = `Pack: ${playPack.name}${playPack.author ? ` by ${playPack.author}` : ''}`;
     g.append(...playPack.levels.map((m, i) => new Option(levelLabel(m), `p:${i}`)));
     groups.push(g);
   }
-  if (sharedMap) groups.push(new Option(`🔗 Shared map: ${levelLabel(sharedMap)}`, 'shared'));
+  if (sharedMap) groups.push(new Option(`Shared map: ${levelLabel(sharedMap)}`, 'shared'));
   allThemes().forEach((t) => {
     if (!t.levels.length || !themeUnlocked(t)) return;
     const g = document.createElement('optgroup');
-    g.label = t.official ? t.info.name : `📦 ${t.info.name}`;
+    g.label = t.official ? t.info.name : `Custom: ${t.info.name}`;
     g.append(...t.levels.map((_, i) => new Option(levelLabel(themedLevel(t, i)!), `c:${themeKey(t)}:${i}`)));
     groups.push(g);
   });
@@ -325,20 +342,16 @@ function renderLevelOptions(): void {
 
 // ───────────────────────── Main menu ─────────────────────────
 
-const playSelected = () => {
-  const { map, key } = selectedLevel();
-  showPlay(map, { key });
-};
 $('menu-start').addEventListener('click', () => show('themes'));
 $('menu-options').addEventListener('click', () => show('options'));
 $('menu-editor').addEventListener('click', showEditor);
 
 // Arrow keys move between menu buttons
-for (const screen of [screens.menu, screens.options]) {
+for (const screen of [screens.menu, screens.options, screens.stats]) {
   screen.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement && e.target.type === 'range') return;
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-    const items = [...screen.querySelectorAll<HTMLElement>('.menu-btn, .option input, button.dtile')];
+    const items = [...screen.querySelectorAll<HTMLElement>('.menu-btn, .dgrid input, .dgrid button')];
     const i = items.indexOf(document.activeElement as HTMLElement);
     const next = items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length];
     next?.focus();
@@ -362,12 +375,18 @@ const volumeInputs: Record<VolumeOption, HTMLInputElement> = {
   effectsVolume: $<HTMLInputElement>('opt-effects-volume'),
 };
 
+/** Volume sliders drawn as diamond dials; each entry redraws its dial after a code-side change */
+const volumeDials = Object.fromEntries(
+  (Object.entries(volumeInputs) as [VolumeOption, HTMLInputElement][]).map(([k, input]) => [k, installDiamondDial(input)]),
+) as Record<VolumeOption, () => void>;
+
 function syncOptions(): void {
   for (const [k, input] of Object.entries(optionInputs) as [ToggleOption, HTMLInputElement][]) {
     input.checked = options[k];
   }
   for (const [k, input] of Object.entries(volumeInputs) as [VolumeOption, HTMLInputElement][]) {
     input.value = String(options[k]);
+    volumeDials[k]();
     input.setAttribute('aria-valuetext', `${options[k]}%`);
     $(`${input.id}-value`).textContent = `${options[k]}%`;
   }
@@ -411,7 +430,6 @@ levelSelect.addEventListener('change', () => {
   showPlay(map, { test: testing && key.startsWith('p:'), key });
   levelSelect.blur(); // a lingering dropdown focus could trigger a blur fail on click
 });
-$('btn-editor-play').addEventListener('click', playSelected);
 nextLevelBtn.addEventListener('click', () => {
   playNext();
   nextLevelBtn.blur();
@@ -432,7 +450,9 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 // Editor panels float over the canvas; H (or the button) hides them to see the whole map
-const editorPanels = [floatingPanel($('tools-panel'), 'tools'), floatingPanel($('inspector-panel'), 'inspector')];
+const editorPanels = (
+  [['tools-panel', 'tools'], ['level-info-panel', 'level-info'], ['object-panel', 'object']] as const
+).map(([el, id]) => floatingPanel($(el), id, { resizable: true }));
 const panelsBtn = $<HTMLButtonElement>('btn-panels');
 const togglePanels = () => {
   const hidden = screens.editor.classList.toggle('panels-hidden');
@@ -467,18 +487,12 @@ openInEditor.addEventListener('click', () => {
 });
 
 editor.onTest = (map) => showPlay(map, { test: true });
-packPanel.onPlay = (pack, index) => {
-  playPack = pack;
-  renderLevelOptions();
-  showPlay(pack.levels[index], { test: true, key: `p:${index}` });
-};
 play.onClear = (map, _replay, time) => {
   // Campaign stars
   const c = campaignOf(currentKey);
   if (c) recordClear(c.theme, c.index, map, time);
-  // A clear of the same gameplay verifies the editor's map / pack levels for sharing
+  // A clear of the same gameplay verifies the editor's map for sharing
   editor.markVerified(map, time);
-  packPanel.markVerified(map);
 };
 // Esc / Main Menu: back to where the level was picked
 const leavePlay = () => (testing ? showEditor() : currentKey.startsWith('c:') ? show('levels') : show('menu'));
@@ -494,15 +508,20 @@ account.beforeSignOut = () => playTime.flush();
 const recordSync = new RecordSync(account);
 const recordsButton = $<HTMLButtonElement>('records-sync');
 const recordsStatus = $('records-status');
-const signedOutRecords = 'Sign in to save your best times and stars to your account.';
+const signedOutRecords = 'Sign in to save records';
 function renderRecordsOption(): void {
   if (recordsButton.dataset.busy) return;
   recordsButton.disabled = !recordSync.available;
-  recordsStatus.textContent = recordSync.available
-    ? `Clears are saved to ${account.tag ?? 'your account'}. Sync to upload records already in this browser and download the account's records.`
-    : account.configured ? signedOutRecords : 'Accounts are not set up, so records stay in this browser.';
+  if (recordSync.available) {
+    const to = document.createElement('span');
+    renderTag(to, account.tag ?? 'your account');
+    recordsStatus.replaceChildren('Saved to ', to);
+  } else recordsStatus.textContent = account.configured ? signedOutRecords : 'Kept in this browser';
+  recordsButton.title = recordSync.available
+    ? "Upload records already in this browser and download the account's records"
+    : account.configured ? 'Sign in to save your best times and stars to your account' : 'Accounts are not set up, so records stay in this browser';
 }
-const stats = new StatsUI($('stats-body'), account, recordSync);
+const stats = new StatsUI($('stats-dia'), $('stats-message'), $('stats-records'), account, recordSync);
 account.onChange(() => current === 'stats' && void stats.render());
 account.onChange(renderRecordsOption);
 renderRecordsOption();
@@ -514,7 +533,7 @@ recordsButton.addEventListener('click', async () => {
   delete recordsButton.dataset.busy;
   renderRecordsOption();
   if (result.ok) {
-    recordsStatus.textContent = `Synced ${result.uploaded} record${result.uploaded === 1 ? '' : 's'} from this browser; ${result.downloaded} level${result.downloaded === 1 ? '' : 's'} updated from your account.`;
+    recordsStatus.textContent = `↑ ${result.uploaded} sent · ↓ ${result.downloaded} updated`;
     $('menu-stars').textContent = String(totalStars());
     renderLevelOptions();
   } else recordsStatus.textContent = result.message;

@@ -1,4 +1,5 @@
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import { strFromU8, strToU8, zipSync } from 'fflate';
+import { unpackBoundedZip, ZIP_LIMITS } from '../core/bounded-zip';
 import { MAX_PACK_LEVELS, validateThemeInfo } from '../core/theme-pack';
 import type { MapData } from '../core/types';
 import { validateMap } from '../core/validate';
@@ -14,7 +15,25 @@ const FILE_TYPES: Record<string, string> = {
   ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
   mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac',
 };
-const MAX_ZIP = 30 * 1024 * 1024;
+async function unpack(bytes: ArrayBuffer): Promise<Record<string, Uint8Array>> {
+  // Node tests have no browser Worker. They use the same bounded decoder.
+  if (typeof Worker === 'undefined') return unpackBoundedZip(new Uint8Array(bytes));
+  const worker = new Worker(new URL('./theme-zip.worker.ts', import.meta.url), { type: 'module' });
+  try {
+    return await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Zip extraction timed out')), 15_000);
+      worker.onmessage = (event: MessageEvent<{ files: Record<string, Uint8Array>; error?: string }>) => {
+        clearTimeout(timer);
+        if (event.data.error) reject(new Error(event.data.error));
+        else resolve(event.data.files);
+      };
+      worker.onerror = () => { clearTimeout(timer); reject(new Error('Could not extract zip')); };
+      worker.postMessage(bytes, [bytes]);
+    });
+  } finally {
+    worker.terminate();
+  }
+}
 
 function toDataUrl(bytes: Uint8Array, type: string): string {
   let bin = '';
@@ -32,8 +51,8 @@ export function dataUrlBytes(url: string): Uint8Array {
 
 /** Read a theme pack zip (theme.json may sit at the root or inside one top folder) */
 export async function readThemeZip(file: File): Promise<StoredTheme> {
-  if (file.size > MAX_ZIP) throw new Error('The zip file is too large (30 MB max)');
-  const files = unzipSync(new Uint8Array(await file.arrayBuffer()));
+  if (file.size > ZIP_LIMITS.compressed) throw new Error('The zip file is too large (30 MB max)');
+  const files = await unpack(await file.arrayBuffer());
   const infoPath = Object.keys(files).filter((p) => /(^|\/)theme\.json$/.test(p)).sort((a, b) => a.length - b.length)[0];
   if (!infoPath) throw new Error('No theme.json in the zip');
   const root = infoPath.slice(0, -'theme.json'.length);

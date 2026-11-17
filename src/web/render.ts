@@ -26,6 +26,9 @@ export const COLORS = {
   startEdge: '#22b08f',
   goal: 'rgba(255,196,60,0.28)',
   goalEdge: '#e09a00',
+  /** GOAL while coins remain */
+  goalLocked: 'rgba(58,62,72,0.88)',
+  goalLockedEdge: '#c9ced8',
   trail: 'rgba(58,159,240,0.75)',
   cursor: '#2b86e0',
   hit: '#e2365f',
@@ -140,10 +143,12 @@ export function clientToMap(canvas: HTMLCanvasElement, map: MapData, clientX: nu
   return mapPointer(canvas, map)(clientX, clientY, { x: 0, y: 0 });
 }
 
-function zone(ctx: CanvasRenderingContext2D, r: Rect, fill: string, edge: string, label: string): void {
+function zone(ctx: CanvasRenderingContext2D, r: Rect, fill: string, edge: string, label: string, underlay = true): void {
   // Light underlay keeps zones readable on dark or busy theme floors
-  ctx.fillStyle = 'rgba(255,255,255,0.65)';
-  ctx.fillRect(r.x, r.y, r.w, r.h);
+  if (underlay) {
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+  }
   ctx.fillStyle = fill;
   ctx.fillRect(r.x, r.y, r.w, r.h);
   ctx.strokeStyle = edge;
@@ -411,7 +416,7 @@ export interface DrawMapOptions {
   beams?: readonly Beam[];
   /** Animation time for portal swirls (ms); default `t` */
   now?: number;
-  /** Coins still needed: GOAL shows how many are left and looks locked */
+  /** Coins still needed: GOAL turns dark gray and shows collected / total, e.g. "3/10" */
   coinsLeft?: number;
 }
 
@@ -568,8 +573,12 @@ export function drawMap(
   }
 
   zone(ctx, map.start, COLORS.start, COLORS.startEdge, 'START');
+  // Locked GOAL (coins still to collect): dark gray, with the coins collected so far, e.g. "3/10"
   const left = opts.coinsLeft ?? 0;
-  zone(ctx, map.goal, COLORS.goal, COLORS.goalEdge, left > 0 ? `🔒${left}` : 'GOAL');
+  if (left > 0) {
+    const total = map.objects.reduce((n, o) => n + (o.role === 'coin' ? 1 : 0), 0);
+    zone(ctx, map.goal, COLORS.goalLocked, COLORS.goalLockedEdge, `${Math.max(0, total - left)}/${total}`, false);
+  } else zone(ctx, map.goal, COLORS.goal, COLORS.goalEdge, 'GOAL');
 
   // Event zones lie on the floor
   objects.forEach((o, i) => {
@@ -1173,10 +1182,9 @@ function drawDoorStripes(ctx: CanvasRenderingContext2D, m: MapObject, open: numb
   }
 }
 
-export function drawTrail(ctx: CanvasRenderingContext2D, pts: readonly number[], color?: string): void {
+export function drawTrail(ctx: CanvasRenderingContext2D, pts: readonly number[]): void {
   if (pts.length < 4) return;
-  // A custom cursor color tints the trail to match (semi-transparent like the default)
-  ctx.strokeStyle = color ? `${color}8c` : COLORS.trail;
+  ctx.strokeStyle = COLORS.trail;
   ctx.lineWidth = 1.5;
   ctx.lineJoin = 'round';
   ctx.beginPath();

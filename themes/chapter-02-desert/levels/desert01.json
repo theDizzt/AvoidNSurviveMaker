@@ -1,0 +1,315 @@
+{
+  "v": 2,
+  "name": "desert01",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 420,
+    "w": 60,
+    "h": 180
+  },
+  "goal": {
+    "x": 1740,
+    "y": 420,
+    "w": 60,
+    "h": 180
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 420,
+        "w": 1560,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 300,
+            "y": 420
+          },
+          {
+            "x": 540,
+            "y": 240
+          },
+          {
+            "x": 1560,
+            "y": 240
+          },
+          {
+            "x": 1620,
+            "y": 420
+          },
+          {
+            "x": 1620,
+            "y": 600
+          },
+          {
+            "x": 1380,
+            "y": 780
+          },
+          {
+            "x": 360,
+            "y": 780
+          },
+          {
+            "x": 300,
+            "y": 600
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 540,
+            "y": 420
+          },
+          {
+            "x": 660,
+            "y": 360
+          },
+          {
+            "x": 780,
+            "y": 480
+          },
+          {
+            "x": 720,
+            "y": 660
+          },
+          {
+            "x": 600,
+            "y": 660
+          },
+          {
+            "x": 480,
+            "y": 540
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 780,
+            "y": 780
+          },
+          {
+            "x": 1020,
+            "y": 600
+          },
+          {
+            "x": 1140,
+            "y": 780
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 840,
+            "y": 240
+          },
+          {
+            "x": 1200,
+            "y": 240
+          },
+          {
+            "x": 900,
+            "y": 360
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1320,
+            "y": 360
+          },
+          {
+            "x": 1440,
+            "y": 420
+          },
+          {
+            "x": 1440,
+            "y": 540
+          },
+          {
+            "x": 1320,
+            "y": 600
+          },
+          {
+            "x": 1200,
+            "y": 550
+          },
+          {
+            "x": 1200,
+            "y": 480
+          }
+        ]
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 390,
+        "cy": 520,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 630,
+        "cy": 320,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 870,
+        "cy": 440,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 800,
+        "cy": 680,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 520,
+        "cy": 690,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1230,
+        "cy": 690,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1460,
+        "cy": 630,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1540,
+        "cy": 460,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1460,
+        "cy": 330,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1240,
+        "cy": 320,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1110,
+        "cy": 460,
+        "rx": 12,
+        "ry": 12
+      }
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "sand",
+        "color": "#574a24",
+        "background": "#cabd93",
+        "size": 40
+      },
+      "edge": "#000000"
+    },
+    "path": {
+      "fill": {
+        "type": "gradient",
+        "style": "linear",
+        "from": "#fae8b4",
+        "to": "#ffe180",
+        "angle": 90
+      },
+      "edge": "#000000"
+    }
+  },
+  "level": 1,
+  "difficulty": 1.25,
+  "title": "Coins",
+  "stars": {
+    "three": 6000,
+    "two": 10000,
+    "one": 15000
+  }
+}

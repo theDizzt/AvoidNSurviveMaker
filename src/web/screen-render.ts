@@ -297,7 +297,7 @@ function buildElement(e: LayoutElement, d: ScreenData, h: ScreenHandlers, editin
         img.alt = '';
         img.draggable = false;
         node.append(img);
-      } else if (editing) node.textContent = '🖼 Image';
+      } else if (editing) node.textContent = 'Image';
       break;
     }
     case 'stars': {

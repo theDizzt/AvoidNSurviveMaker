@@ -1,6 +1,7 @@
 import { levelLabel, starGoals, starsFor, starText } from '../core/level';
 import { DEFAULT_BADGE, type BadgeStyle } from '../core/theme-pack';
 import { badgeImage, drawLevelBadge } from './badge';
+import { badgeTitle } from './theme-registry';
 import { formatTime, Simulation, type EndReason, type Replay } from '../core/simulation';
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
@@ -198,7 +199,7 @@ export class PlayController {
     const running = sim.status === 'playing';
     if (sim.status === 'dead' && !this.deathNotified) {
       this.deathNotified = true;
-      this.burst = new DeathBurst(sim.x, sim.y, this.map.cursorColor ?? COLORS.cursor, now);
+      this.burst = new DeathBurst(sim.x, sim.y, COLORS.cursor, now);
       if (sim.endReason !== 'blur' && sim.endReason !== 'left') gameAudio.death();
     }
     if (running !== this.el.root.classList.contains('running')) this.el.root.classList.toggle('running', running);
@@ -230,14 +231,14 @@ export class PlayController {
     beginFrame(ctx, map);
     const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress };
     drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now });
-    if (options.showTrail) drawTrail(ctx, this.trail, map.cursorColor);
+    if (options.showTrail) drawTrail(ctx, this.trail);
 
     if (sim.status === 'playing') {
       // The system cursor is hidden during a run (CSS .running); this dot is exactly where the
       // simulation has the cursor, so what you see is what is checked for collisions
       const u = unitsPerPx(this.el.canvas, map);
       const r = (CURSOR_PX / 2) * u;
-      ctx.fillStyle = map.cursorColor ?? COLORS.cursor;
+      ctx.fillStyle = COLORS.cursor;
       ctx.beginPath();
       ctx.arc(sim.x, sim.y, r, 0, Math.PI * 2);
       ctx.fill();
@@ -262,8 +263,9 @@ export class PlayController {
     if (this.burst && !this.burst.draw(ctx, now, unitsPerPx(this.el.canvas, map))) this.burst = null;
 
     // Level number (large) and title (small) at the top-left; the coin count goes below it
-    const style = this.badge?.style ?? { ...DEFAULT_BADGE, numberColor: map.cursorColor ?? COLORS.cursor };
-    const top = drawLevelBadge(ctx, map, style, badgeImage(this.badge?.imageUrl), now);
+    const style = this.badge?.style ?? { ...DEFAULT_BADGE, numberColor: COLORS.cursor };
+    // Maps without a number or title (e.g. editor test play) still show their name in the badge
+    const top = drawLevelBadge(ctx, map.level === undefined && !map.title ? { ...map, title: badgeTitle(map) } : map, style, badgeImage(this.badge?.imageUrl), now);
 
     if (sim.status === 'playing') {
       if (options.showTimer) drawStopwatch(ctx, map, now - this.t0, now);

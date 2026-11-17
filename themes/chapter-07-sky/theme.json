@@ -14,7 +14,6 @@
     "music": "audio/for-science.mp3",
     "credits": "Music: - For Science! by Or4nges. https://www.newgrounds.com/audio/listen/447794 - CC BY-NC-SA 3.0: https://creativecommons.org/licenses/by-nc-sa/3.0/ . Original audio, unmodified.",
     "style":  {
-                  "cursorColor":  "#a2e5f3",
                   "maze":  {
                                "wall":  {
                                             "edge":  "#a2e5f3",

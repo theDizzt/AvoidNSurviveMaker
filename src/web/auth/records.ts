@@ -93,10 +93,11 @@ export class RecordSync {
     const payload = toPayload(this.pending);
     if (!supabase || !this.userId || this.sending || payload.length === 0) return;
     const userId = this.userId;
-    const sent = { ...this.pending };
+    const batch = payload.slice(0, BATCH);
+    const sent = Object.fromEntries(batch.map((r) => [r.key, this.pending[r.key]]));
     this.sending = true;
     try {
-      const { error } = await supabase.rpc('submit_level_records', { p_records: payload.slice(0, BATCH) });
+      const { error } = await supabase.rpc('submit_level_records', { p_records: batch });
       if (error || this.userId !== userId) return; // keep them, retry on the next clear or sign-in
       for (const [k, r] of Object.entries(sent)) if (this.pending[k] === r) delete this.pending[k];
       this.persist();
