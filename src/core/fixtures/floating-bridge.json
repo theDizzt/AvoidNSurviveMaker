@@ -1,0 +1,121 @@
+{
+  "v": 2,
+  "name": "5. Floating Bridge",
+  "author": "Built-in",
+  "width": 960,
+  "height": 540,
+  "start": {
+    "x": 70,
+    "y": 238,
+    "w": 64,
+    "h": 64
+  },
+  "goal": {
+    "x": 826,
+    "y": 238,
+    "w": 64,
+    "h": 64
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 0,
+            "y": 205
+          },
+          {
+            "x": 167,
+            "y": 162,
+            "smooth": true
+          },
+          {
+            "x": 286,
+            "y": 248,
+            "smooth": true
+          },
+          {
+            "x": 404,
+            "y": 205
+          },
+          {
+            "x": 404,
+            "y": 335
+          },
+          {
+            "x": 286,
+            "y": 378,
+            "smooth": true
+          },
+          {
+            "x": 167,
+            "y": 292,
+            "smooth": true
+          },
+          {
+            "x": 0,
+            "y": 335
+          }
+        ]
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 394,
+        "y": 216,
+        "w": 86,
+        "h": 108
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 631,
+            "y": 270
+          }
+        ],
+        "speed": 130,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 1000,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 772,
+        "cy": 270,
+        "rx": 119,
+        "ry": 97
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 718,
+        "y": 264,
+        "w": 108,
+        "h": 12
+      },
+      "rotation": {
+        "pivot": {
+          "x": 772,
+          "y": 270
+        },
+        "speed": 45,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    }
+  ]
+}

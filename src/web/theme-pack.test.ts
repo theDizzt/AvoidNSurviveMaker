@@ -6,17 +6,20 @@ import { readThemeZip, writeThemeZip } from './theme-zip';
 describe('theme packs', () => {
   it('loads the official themes from themes/', () => {
     expect(OFFICIAL_THEMES.map((t) => t.info.id)).toEqual(['pastel', 'forest', 'candy', 'neon', 'lava', 'mono']);
-    expect(OFFICIAL_THEMES[0].levels.length).toBe(5);
+    expect(OFFICIAL_THEMES[0].levels.map((level) => level.name)).toEqual(
+      Array.from({ length: 16 }, (_, i) => `workshop${String(i + 1).padStart(2, '0')}`),
+    );
     expect(OFFICIAL_THEMES[3].info.style.badge.kind).toBe('disc');
     const lvl = themedLevel(OFFICIAL_THEMES[0], 0)!;
     expect(lvl.level).toBe(1);
-    expect(lvl.title).toBe('Tutorial - Zigzag Corridor');
+    expect(lvl.title).toBe('Linear');
   });
 
   it('averages difficulty, counting levels without one as 1.00', () => {
     const lv = OFFICIAL_THEMES[0].levels;
     expect(averageDifficulty([])).toBe(1);
-    expect(averageDifficulty([{ ...lv[0], difficulty: 5 }, lv[1]])).toBe(3);
+    const { difficulty: _difficulty, ...withoutDifficulty } = lv[1];
+    expect(averageDifficulty([{ ...lv[0], difficulty: 5 }, withoutDifficulty])).toBe(3);
   });
 
   it('reads theme.json leniently', () => {

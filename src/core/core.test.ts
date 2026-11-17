@@ -6,6 +6,7 @@ import { runReplay, Simulation, formatTime } from './simulation';
 import { createEmptyMap, mapWarnings, validateMap } from './validate';
 import { decodeMap, encodeMap } from './share';
 import { BUILTIN_LEVELS } from './levels';
+import floatingBridge from './fixtures/floating-bridge.json';
 import { THEME_PRESETS } from './theme';
 import type { MapData, MapObject, Motion, Rect, Rotation } from './types';
 
@@ -270,8 +271,8 @@ describe('Simulation', () => {
     }
   });
 
-  it('level 5 (Floating Bridge) can be cleared by riding the moving platform', () => {
-    const map = BUILTIN_LEVELS[4];
+  it('Floating Bridge can be cleared by riding the moving platform', () => {
+    const map = validateMap(floatingBridge);
     const sim = new Simulation(map);
     const platform = sim.objects[1].motion!;
     const off = { x: 0, y: 0 };
@@ -285,6 +286,7 @@ describe('Simulation', () => {
       [3360, 3560, [858, 335], [858, 281]], // …and up into GOAL (bottom edge y=302)
     ];
     sim.start(102, 270);
+    expect(sim.status).toBe('playing');
     for (let t = 1; t <= 3560 && sim.status === 'playing'; t++) {
       let x: number;
       let y: number;
@@ -316,10 +318,13 @@ describe('Simulation', () => {
 });
 
 describe('validateMap', () => {
-  it('all built-in levels are valid with no warnings', () => {
+  it('all built-in levels are valid with only documented warnings', () => {
     for (const m of BUILTIN_LEVELS) {
-      expect(validateMap(m)).toEqual(m);
-      expect(mapWarnings(m)).toEqual([]);
+      expect(validateMap(m), m.name).toEqual(m);
+      // Bounce: wall #6's tip (1680, 300) touches GOAL's top-left corner.
+      // Keep this boundary-contact warning visible without changing the authored map.
+      const expected = m.name === 'workshop13' ? ['Wall #6 covers part of GOAL.'] : [];
+      expect(mapWarnings(m), m.name).toEqual(expected);
     }
   });
   it('rejects invalid values', () => {
