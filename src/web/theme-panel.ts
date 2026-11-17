@@ -1,3 +1,4 @@
+import { createPatternTile } from './theme-pattern';
 import { BASE_THEME, primaryColor, secondaryColor, shade, THEME_PRESETS } from '../core/theme';
 import type { Fill, PatternKind, SurfaceStyle, Theme } from '../core/types';
 
@@ -8,6 +9,10 @@ const PATTERNS: [PatternKind, string][] = [
   ['dots', 'Dots'],
   ['grid', 'Grid'],
   ['checker', 'Checker'],
+  ['wood', 'Wood planks'],
+  ['grass', 'Grass'],
+  ['sand', 'Sand'],
+  ['metal', 'Metal'],
 ];
 const CATEGORIES: [keyof Theme, string][] = [['wall', 'Walls & obstacles'], ['path', 'Paths']];
 
@@ -62,7 +67,7 @@ function numberInput(value: number, min: number, max: number, step: number, onCh
   return i;
 }
 
-/** Small swatch showing a fill, drawn with CSS */
+/** Small fill swatch; patterns use the same tile as the game */
 function swatch(f: Fill): HTMLElement {
   const d = document.createElement('div');
   d.className = 'theme-swatch';
@@ -72,17 +77,9 @@ function swatch(f: Fill): HTMLElement {
       ? `radial-gradient(circle, ${f.from}, ${f.to})`
       : `linear-gradient(${f.angle + 90}deg, ${f.from}, ${f.to})`;
   } else {
-    const c = f.color;
-    const bg = f.background;
-    const s = Math.max(6, f.size * 0.75);
-    const css: Record<PatternKind, string> = {
-      stripes: `repeating-linear-gradient(0deg, ${c} 0 ${s / 2}px, ${bg} ${s / 2}px ${s}px)`,
-      diagonal: `repeating-linear-gradient(-45deg, ${c} 0 ${s * 0.3}px, ${bg} ${s * 0.3}px ${s * 0.7}px)`,
-      dots: `radial-gradient(circle, ${c} 0 ${s * 0.22}px, transparent ${s * 0.22 + 0.5}px) 0 0 / ${s}px ${s}px, ${bg}`,
-      grid: `linear-gradient(${c} 0 1px, transparent 1px) 0 0 / ${s}px ${s}px, linear-gradient(90deg, ${c} 0 1px, transparent 1px) 0 0 / ${s}px ${s}px, ${bg}`,
-      checker: `conic-gradient(${c} 25%, ${bg} 0 50%, ${c} 0 75%, ${bg} 0) 0 0 / ${s}px ${s}px`,
-    };
-    d.style.background = css[f.pattern];
+    const tile = createPatternTile(f);
+    d.style.backgroundImage = `url("${tile.toDataURL()}")`;
+    d.style.backgroundSize = `${f.size}px ${f.size}px`;
   }
   return d;
 }
@@ -91,15 +88,22 @@ function swatch(f: Fill): HTMLElement {
  * Theme editor: preset picker + per-category fill/outline controls.
  * `apply` receives the next theme (undefined = default look) and is responsible for undo + redraw.
  */
-export function renderThemePanel(box: HTMLElement, theme: Theme | undefined, apply: (next: Theme | undefined) => void): void {
+export function renderThemePanel(
+  box: HTMLElement,
+  theme: Theme | undefined,
+  apply: (next: Theme | undefined) => void,
+  extraPresets: readonly { id: string; name: string; theme: Theme }[] = [],
+): void {
   const json = JSON.stringify(theme ?? null);
-  const preset = THEME_PRESETS.find((p) => JSON.stringify(p.theme ?? null) === json);
-  const presetOptions: [string, string][] = THEME_PRESETS.map((p) => [p.id, p.name]);
+  const presets = [...THEME_PRESETS, ...extraPresets];
+  // Chapter presets win a tie so their music is recognised
+  const preset = [...extraPresets, ...THEME_PRESETS].find((p) => JSON.stringify(p.theme ?? null) === json);
+  const presetOptions: [string, string][] = presets.map((p) => [p.id, p.name]);
   if (!preset) presetOptions.push(['custom', 'Custom']);
 
   const parts: HTMLElement[] = [
     label('Preset', select(preset?.id ?? 'custom', presetOptions, (id) => {
-      const p = THEME_PRESETS.find((x) => x.id === id);
+      const p = presets.find((x) => x.id === id);
       if (p) apply(p.theme ? clone(p.theme) : undefined);
     }), true),
   ];

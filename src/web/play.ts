@@ -5,6 +5,8 @@ import { formatTime, Simulation, type EndReason, type Replay } from '../core/sim
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
 import { options } from './options';
+import { gameAudio } from './audio';
+import { DeathBurst } from './death-burst';
 import {
   beginFrame, clientToMap, COLORS, drawBanner, drawDarkAreas, drawGlobalDark, drawMap, drawStopwatch, drawTrail, fitCanvas,
   FONT_MAIN, mapPointer, unitsPerPx,
@@ -57,6 +59,8 @@ export class PlayController {
   private trail: number[] = [];
   private readonly point = { x: 0, y: 0 };
   private notified = false;
+  private deathNotified = false;
+  private burst: DeathBurst | null = null;
   private visible = false;
   private best = new Map<string, number>();
   private lastDebug = 0;
@@ -105,6 +109,8 @@ export class PlayController {
   }
 
   reset(): void {
+    this.burst = null;
+    this.deathNotified = false;
     this.sim = new Simulation(this.map);
     this.trail = [];
     this.notified = false;
@@ -121,6 +127,7 @@ export class PlayController {
   }
 
   hide(): void {
+    this.burst = null;
     this.abort('blur');
     this.visible = false;
     this.input.detach();
@@ -143,6 +150,8 @@ export class PlayController {
     if (!sim.start(p.x, p.y)) return;
     e.preventDefault();
     this.sim = sim;
+    this.burst = null;
+    this.deathNotified = false;
     this.t0 = e.timeStamp;
     this.trail = [p.x, p.y];
     this.trailTeleports = 0;
@@ -187,6 +196,11 @@ export class PlayController {
       this.breakTrailOnTeleport();
     }
     const running = sim.status === 'playing';
+    if (sim.status === 'dead' && !this.deathNotified) {
+      this.deathNotified = true;
+      this.burst = new DeathBurst(sim.x, sim.y, this.map.cursorColor ?? COLORS.cursor, now);
+      if (sim.endReason !== 'blur' && sim.endReason !== 'left') gameAudio.death();
+    }
     if (running !== this.el.root.classList.contains('running')) this.el.root.classList.toggle('running', running);
     if (sim.status === 'cleared' && !this.notified) {
       this.notified = true;
@@ -244,6 +258,8 @@ export class PlayController {
         ? [{ x: sim.x, y: sim.y, r: light }]
         : [{ x: s.x + s.w / 2, y: s.y + s.h / 2, r: Math.max(light, Math.hypot(s.w, s.h) / 2 + 12) }]);
     }
+
+    if (this.burst && !this.burst.draw(ctx, now, unitsPerPx(this.el.canvas, map))) this.burst = null;
 
     // Level number (large) and title (small) at the top-left; the coin count goes below it
     const style = this.badge?.style ?? { ...DEFAULT_BADGE, numberColor: map.cursorColor ?? COLORS.cursor };

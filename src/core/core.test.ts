@@ -455,3 +455,12 @@ describe('saws, text boxes and safe zones (#43–48)', () => {
     expect(sim.status).toBe('playing');
   });
 });
+
+describe('formatUtc', () => {
+  it('shows timestamps in UTC whatever the offset in the input', async () => {
+    const { formatUtc } = await import('./time');
+    expect(formatUtc('2026-11-17T17:05:09+09:00')).toBe('2026-11-17 08:05:09 UTC');
+    expect(formatUtc('not a date')).toBe('—');
+    expect(formatUtc(undefined)).toBe('—');
+  });
+});

@@ -274,7 +274,7 @@ function color(v: unknown, name: string): string {
   return v.toLowerCase();
 }
 
-const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker'] as const satisfies readonly PatternKind[];
+const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal'] as const satisfies readonly PatternKind[];
 
 function fill(v: unknown, name: string): Fill {
   const o = obj(v, name);

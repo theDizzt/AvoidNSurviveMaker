@@ -6,12 +6,13 @@ import type { StoredTheme } from './theme-registry';
 
 /**
  * Theme pack zip files: theme.json, images, and levels/NN.json — the same layout as a folder in
- * the repo's themes/, so a pack can be unzipped straight into it to become official.
+ * the repo's themes/ and custom-themes/ packs. Official chapters are registered separately.
  */
 
 const FILE_TYPES: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml',
   ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
+  mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac',
 };
 const MAX_ZIP = 30 * 1024 * 1024;
 
@@ -48,7 +49,7 @@ export async function readThemeZip(file: File): Promise<StoredTheme> {
     }
   }
 
-  // Every image and font in the pack, by its path inside the pack
+  // Every image, font and audio asset in the pack, by its path inside the pack
   const images: Record<string, string> = {};
   for (const [p, bytes] of Object.entries(files)) {
     if (!p.startsWith(root) || p.endsWith('/')) continue;

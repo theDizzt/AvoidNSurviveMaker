@@ -1,52 +1,71 @@
-import { LEVELS_PER_THEME, validateThemeInfo, type ThemeEntry, type ThemeInfo } from '../core/theme-pack';
-import type { MapData } from '../core/types';
+import { LEVELS_PER_THEME, MAX_PACK_LEVELS, validateThemeInfo, type ThemeEntry, type ThemeInfo } from '../core/theme-pack';
+import type { MapData, Theme } from '../core/types';
 import { validateMap } from '../core/validate';
 
 /**
  * All playable themes: the official ones from the repo's themes/ folder (bundled at build time)
  * and one custom pack loaded from a zip (kept in this browser).
  *
- * Official folder layout: themes/NN-name/{theme.json, cover.*, badge.*, levels/*.json}.
+ * Pack layout: themes/<folder>/{theme.json, cover.*, badge.*, levels/*.json}.
+ * CHAPTER_FOLDERS selects campaign packs; custom-themes/ contains reusable custom presets.
  * Folders starting with "_" (the template) are skipped.
  */
 export const OFFICIAL_SLOTS = 16;
 
-const infoFiles = import.meta.glob<unknown>('../../themes/*/theme.json', { eager: true, import: 'default' });
-const levelFiles = import.meta.glob<unknown>('../../themes/*/levels/*.json', { eager: true, import: 'default' });
-const assetFiles = import.meta.glob<string>('../../themes/*/**/*.{png,jpg,jpeg,webp,gif,svg,ttf,otf,woff,woff2}', { eager: true, query: '?url', import: 'default' });
+const infoFiles = import.meta.glob<unknown>(['../../themes/*/theme.json', '../../custom-themes/*/theme.json'], { eager: true, import: 'default' });
+const levelFiles = import.meta.glob<unknown>(['../../themes/*/levels/*.json', '../../custom-themes/*/levels/*.json'], { eager: true, import: 'default' });
+const assetFiles = import.meta.glob<string>(['../../themes/*/**/*.{png,jpg,jpeg,webp,gif,svg,ttf,otf,woff,woff2,mp3,ogg,wav,m4a,aac,flac}', '../../custom-themes/*/**/*.{png,jpg,jpeg,webp,gif,svg,ttf,otf,woff,woff2,mp3,ogg,wav,m4a,aac,flac}'], { eager: true, query: '?url', import: 'default' });
 
-const folderOf = (path: string) => path.split('/themes/')[1]?.split('/')[0] ?? '';
+const folderOf = (path: string) => path.split('/')[3] ?? '';
 
-function loadOfficial(): ThemeEntry[] {
+function loadBundled(): { folder: string; entry: ThemeEntry }[] {
   const out: { folder: string; entry: ThemeEntry }[] = [];
   for (const [path, raw] of Object.entries(infoFiles)) {
     const folder = folderOf(path);
     if (!folder || folder.startsWith('_')) continue;
+    const official = path.startsWith('../../themes/');
+    const prefix = path.slice(0, -'theme.json'.length);
     let info: ThemeInfo;
     try {
       info = validateThemeInfo(raw);
     } catch (err) {
-      console.warn(`themes/${folder}: ${(err as Error).message}`);
+      console.warn(`${path}: ${(err as Error).message}`);
       continue;
     }
     const levels: MapData[] = [];
-    for (const lp of Object.keys(levelFiles).filter((p) => folderOf(p) === folder).sort().slice(0, LEVELS_PER_THEME)) {
+    for (const lp of Object.keys(levelFiles).filter((p) => p.startsWith(`${prefix}levels/`)).sort().slice(0, official ? LEVELS_PER_THEME : MAX_PACK_LEVELS)) {
       try {
         levels.push(validateMap(levelFiles[lp]));
       } catch (err) {
         console.warn(`${lp}: ${(err as Error).message}`);
       }
     }
-    const prefix = `../../themes/${folder}/`;
     const assets: Record<string, string> = {};
     for (const [p, url] of Object.entries(assetFiles)) if (p.startsWith(prefix)) assets[p.slice(prefix.length)] = url;
     const image = (name?: string) => (name ? assets[name] : undefined);
-    out.push({ folder, entry: { info, levels, coverUrl: image(info.cover), badgeUrl: image(info.style.badge.image), assets, official: true } });
+    out.push({ folder, entry: { info, levels, coverUrl: image(info.cover), badgeUrl: image(info.style.badge.image), assets, official } });
   }
-  return out.sort((a, b) => a.folder.localeCompare(b.folder)).slice(0, OFFICIAL_SLOTS).map((o) => o.entry);
+  return out.sort((a, b) => a.folder.localeCompare(b.folder));
 }
 
-export const OFFICIAL_THEMES: readonly ThemeEntry[] = loadOfficial();
+const bundled = loadBundled();
+/** Explicit chapter order keeps editor-only themes out of the campaign. */
+const CHAPTER_FOLDERS = [
+  'chapter-01-workshop', 'chapter-02-desert', 'chapter-03-wood', 'chapter-04-botany',
+  'chapter-05-frost', 'chapter-06-factory', 'chapter-07-sky', 'chapter-08-magma',
+  'chapter-09-optics', 'chapter-10-ocean', 'chapter-11-cavern', 'chapter-12-galaxy',
+  'chapter-13-unknown', 'chapter-14-unknown', 'chapter-15-cyberfunk', 'chapter-16-unknown',
+] as const;
+
+export const OFFICIAL_THEMES: readonly ThemeEntry[] = CHAPTER_FOLDERS.map((folder) => {
+  const source = bundled.find((t) => t.folder === folder && t.entry.official)?.entry;
+  if (!source) throw new Error(`Missing chapter theme: ${folder}`);
+  return source;
+});
+
+export const CUSTOM_THEME_PRESETS: readonly ThemeEntry[] = bundled
+  .filter(({ entry }) => !entry.official)
+  .map(({ entry }) => entry);
 
 // ───────────────────────── Custom pack ─────────────────────────
 
@@ -105,6 +124,21 @@ export function setCustomTheme(s: StoredTheme): boolean {
   } catch {
     return false; // too large for storage: works until the page is reloaded
   }
+}
+
+/** Official chapters that define maze colors, offered as map editor presets */
+export function chapterMazePresets(): { id: string; name: string; theme: Theme }[] {
+  return OFFICIAL_THEMES.flatMap((t, i) => (t.info.style.maze
+    ? [{ id: `chapter:${t.info.id}`, name: `Chapter ${String(i + 1).padStart(2, '0')} · ${t.info.name}`, theme: t.info.style.maze }]
+    : []));
+}
+
+/** Music URL of the official chapter whose maze colors exactly match `theme`, if it has music */
+export function chapterMusicFor(theme: Theme | undefined): string | null {
+  if (!theme) return null;
+  const json = JSON.stringify(theme);
+  const t = OFFICIAL_THEMES.find((x) => x.info.music && x.info.style.maze && JSON.stringify(x.info.style.maze) === json);
+  return t?.info.music ? t.assets[t.info.music] ?? null : null;
 }
 
 export function allThemes(): ThemeEntry[] {

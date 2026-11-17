@@ -216,7 +216,7 @@ export interface MapObject {
   text?: TextBox;
 }
 
-export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker';
+export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal';
 
 /** Colors are '#rrggbb'. Gradients and patterns are laid out in the object's own frame, so they move and rotate with it. */
 export type Fill =

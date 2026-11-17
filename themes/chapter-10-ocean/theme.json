@@ -1,0 +1,176 @@
+{
+    "format":  1,
+    "id":  "ocean",
+    "name":  "Ocean - Title TBD",
+    "description":  "Deep blue water, coral silhouettes and luminous currents. Chapter title to be announced.",
+    "author":  "Avoid N Survive",
+    "released":  "2026-11-17",
+    "unlockStars":  0,
+    "colors":  [
+                   "#5fdddf",
+                   "#4385c7"
+               ],
+    "cover":  "cover.svg",
+    "style":  {
+                  "cursorColor":  "#5fdddf",
+                  "maze":  {
+                               "wall":  {
+                                            "edge":  "#5fdddf",
+                                            "fill":  {
+                                                         "background":  "#102e47",
+                                                         "color":  "#4385c7",
+                                                         "pattern":  "dots",
+                                                         "size":  16,
+                                                         "type":  "pattern"
+                                                     }
+                                        },
+                               "path":  {
+                                            "edge":  "#4385c7",
+                                            "fill":  {
+                                                         "angle":  90,
+                                                         "from":  "#102e47",
+                                                         "style":  "linear",
+                                                         "to":  "#4385c7",
+                                                         "type":  "gradient"
+                                                     }
+                                        }
+                           },
+                  "badge":  {
+                                "caption":  "CHAPTER 10 / OCEAN",
+                                "kind":  "pill",
+                                "pad":  2,
+                                "primary":  "#102e47",
+                                "titleColor":  "#5fdddf",
+                                "showTitle":  true,
+                                "secondary":  "#4385c7",
+                                "font":  "title",
+                                "numberColor":  "#5fdddf"
+                            }
+              },
+    "screens":  {
+                    "select":  {
+                                   "background":  {
+                                                      "color2":  "#102e47",
+                                                      "color":  "#102e47"
+                                                  },
+                                   "elements":  [
+                                                    {
+                                                        "id":  "art",
+                                                        "w":  440,
+                                                        "opacity":  0.5,
+                                                        "y":  0,
+                                                        "x":  0,
+                                                        "kind":  "image",
+                                                        "src":  "cover.svg",
+                                                        "h":  720
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "chapter",
+                                                        "kind":  "text",
+                                                        "size":  19,
+                                                        "y":  54,
+                                                        "w":  330,
+                                                        "h":  32,
+                                                        "color":  "#5fdddf",
+                                                        "text":  "CHAPTER 10 / OCEAN",
+                                                        "font":  "main"
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "title",
+                                                        "kind":  "text",
+                                                        "size":  42,
+                                                        "y":  105,
+                                                        "w":  340,
+                                                        "h":  160,
+                                                        "color":  "#5fdddf",
+                                                        "text":  "{theme}",
+                                                        "font":  "title"
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "description",
+                                                        "kind":  "text",
+                                                        "size":  19,
+                                                        "y":  290,
+                                                        "w":  320,
+                                                        "h":  140,
+                                                        "color":  "#5fdddf",
+                                                        "text":  "{description}",
+                                                        "font":  "main"
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "progress",
+                                                        "kind":  "text",
+                                                        "size":  21,
+                                                        "y":  485,
+                                                        "w":  320,
+                                                        "h":  46,
+                                                        "color":  "#5fdddf",
+                                                        "text":  "{cleared} / {total} CLEARED",
+                                                        "font":  "main"
+                                                    },
+                                                    {
+                                                        "x":  470,
+                                                        "id":  "grid",
+                                                        "kind":  "levelGrid",
+                                                        "gap":  14,
+                                                        "y":  140,
+                                                        "w":  750,
+                                                        "button":  {
+                                                                       "borderWidth":  2,
+                                                                       "showStars":  true,
+                                                                       "showDifficulty":  true,
+                                                                       "shape":  "drop",
+                                                                       "clearedFill":  "#4385c7",
+                                                                       "border":  "#5fdddf",
+                                                                       "fill":  "#102e47",
+                                                                       "fill2":  "#4385c7",
+                                                                       "pad":  2,
+                                                                       "numberColor":  "#5fdddf",
+                                                                       "font":  "title",
+                                                                       "numberSize":  30
+                                                                   },
+                                                        "h":  420,
+                                                        "rows":  3,
+                                                        "cols":  7
+                                                    },
+                                                    {
+                                                        "size":  23,
+                                                        "id":  "back",
+                                                        "y":  610,
+                                                        "color":  "#5fdddf",
+                                                        "border":  "#4385c7",
+                                                        "fill":  "#102e47",
+                                                        "borderWidth":  2,
+                                                        "kind":  "back",
+                                                        "x":  52,
+                                                        "w":  190,
+                                                        "radius":  10,
+                                                        "text":  "BACK",
+                                                        "font":  "title",
+                                                        "h":  54
+                                                    },
+                                                    {
+                                                        "x":  470,
+                                                        "id":  "footer",
+                                                        "kind":  "text",
+                                                        "size":  18,
+                                                        "y":  600,
+                                                        "w":  750,
+                                                        "h":  38,
+                                                        "color":  "#5fdddf",
+                                                        "text":  "SELECT A LEVEL",
+                                                        "font":  "main",
+                                                        "opacity":  0.6
+                                                    }
+                                                ]
+                               }
+                }
+}

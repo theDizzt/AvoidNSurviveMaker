@@ -1,3 +1,4 @@
+import { todayUtc } from './time';
 import { isLibraryFont } from './font-catalog';
 import { readFonts, readScreens, type ThemeFont, type ThemeScreens } from './screen-layout';
 import type { MapData, Theme } from './types';
@@ -70,6 +71,8 @@ export interface ThemeInfo {
   colors: [string, string];
   /** Representative image file name in the pack */
   cover?: string;
+  /** Looping background music, as a file path inside the theme pack. */
+  music?: string;
   /** Credits shown on its screens via {credits}, e.g. designers and music */
   credits?: string;
   /** Font files bundled in the pack */
@@ -97,7 +100,7 @@ export function blankThemeInfo(): ThemeInfo {
     name: 'My Theme',
     description: '',
     author: '',
-    released: new Date().toISOString().slice(0, 10),
+    released: todayUtc(),
     unlockStars: 0,
     colors: ['#9fe2ff', '#c3b5ff'],
     style: { badge: { ...DEFAULT_BADGE } },
@@ -163,6 +166,9 @@ export function validateThemeInfo(input: unknown): ThemeInfo {
   };
   if (str(o.authorUrl)) info.authorUrl = str(o.authorUrl, 300);
   if (str(o.cover)) info.cover = str(o.cover, 120);
+  const music = str(o.music, 200);
+  if (music && !music.startsWith('/') && !music.includes('\\') && !music.includes(':')
+    && !music.split('/').includes('..') && /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(music)) info.music = music;
   if (str(o.credits)) info.credits = str(o.credits, 2000);
   const fonts = readFonts(o.fonts);
   if (fonts) info.fonts = fonts;

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Defective Processing Plant">
+  <defs><linearGradient id="bg" x2=".7" y2="1"><stop stop-color="#20272c"/><stop offset="1" stop-color="#7c939a"/></linearGradient><radialGradient id="halo"><stop stop-color="#e9ba42" stop-opacity=".2"/><stop offset="1" stop-color="#e9ba42" stop-opacity="0"/></radialGradient></defs>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <circle cx="200" cy="200" r="190" fill="url(#halo)"/>
+  <path d="M24 80V24H80M320 24H376V80M24 320V376H80M320 376H376V320" fill="none" stroke="#e9ba42" opacity=".35" stroke-width="2"/>
+  <g color="#e9ba42"><path d="M85 300V165L150 205V165L215 205V145H310V300Z" fill="currentColor" opacity=".7"/><path d="M249 145V85H278V145" fill="currentColor"/><g stroke="#20272c" stroke-width="13"><path d="M118 240H151M182 240H215M249 240H282"/></g><path d="M65 330H335" stroke="currentColor" stroke-width="18" stroke-dasharray="23 12"/></g>
+  <text x="32" y="49" fill="#e9ba42" font-family="sans-serif" font-size="12" letter-spacing="4">CHAPTER 06</text>
+</svg>

@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { averageDifficulty, themedLevel, validateThemeInfo } from '../core/theme-pack';
-import { OFFICIAL_THEMES } from './theme-registry';
+import { OFFICIAL_THEMES, CUSTOM_THEME_PRESETS } from './theme-registry';
 import { readThemeZip, writeThemeZip } from './theme-zip';
 
 describe('theme packs', () => {
   it('loads the official themes from themes/', () => {
-    expect(OFFICIAL_THEMES.map((t) => t.info.id)).toEqual(['pastel', 'forest', 'candy', 'neon', 'lava', 'mono']);
+    expect(OFFICIAL_THEMES.map((t) => t.info.id)).toEqual([
+      'workshop', 'desert', 'wood', 'botany', 'frost', 'factory', 'sky', 'magma',
+      'optics', 'ocean', 'cavern', 'galaxy', 'chapter-13', 'chapter-14', 'cyberfunk', 'chapter-16',
+    ]);
+    expect(OFFICIAL_THEMES[0].info.name).toBe('Tutorial Workshop');
     expect(OFFICIAL_THEMES[0].levels.map((level) => level.name)).toEqual(
       Array.from({ length: 16 }, (_, i) => `workshop${String(i + 1).padStart(2, '0')}`),
     );
-    expect(OFFICIAL_THEMES[3].info.style.badge.kind).toBe('disc');
+    expect(OFFICIAL_THEMES[4].info.style.badge.kind).toBe('emblem');
+    expect(OFFICIAL_THEMES.slice(1).every((t) => t.levels.length === 0)).toBe(true);
+    expect(CUSTOM_THEME_PRESETS.map((t) => t.info.id)).toEqual(['pastel', 'forest', 'candy', 'neon', 'lava', 'mono']);
+    expect(CUSTOM_THEME_PRESETS.every((t) => !t.official)).toBe(true);
+    expect(CUSTOM_THEME_PRESETS[0].info.name).toBe('Pastel Plains');
+    for (const t of OFFICIAL_THEMES) {
+      expect(t.assets[t.info.cover!], t.info.id).toBeTruthy();
+    }
     const lvl = themedLevel(OFFICIAL_THEMES[0], 0)!;
     expect(lvl.level).toBe(1);
     expect(lvl.title).toBe('Linear');
@@ -32,7 +43,10 @@ describe('theme packs', () => {
 
   it('round-trips a pack through a zip', async () => {
     const t = OFFICIAL_THEMES[0];
-    const pack = { info: { ...t.info, cover: 'cover.png' }, levels: t.levels, images: { 'cover.png': 'data:image/png;base64,iVBORw0KGgo=' } };
+    const pack = { info: { ...t.info, cover: 'cover.png', music: 'audio/background.wav' }, levels: t.levels, images: {
+      'cover.png': 'data:image/png;base64,iVBORw0KGgo=',
+      'audio/background.wav': 'data:audio/wav;base64,UklGRg==',
+    } };
     const blob = writeThemeZip(pack);
     const file = new File([await blob.arrayBuffer()], 'p.zip');
     const back = await readThemeZip(file);

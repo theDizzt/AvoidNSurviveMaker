@@ -14,16 +14,20 @@ import { installTooltips } from './tooltip';
 import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-ui';
 import { recordClear, themeUnlocked, totalStars } from './progress';
 import { themedLevel, type ThemeEntry } from '../core/theme-pack';
-import { OFFICIAL_THEMES, allThemes } from './theme-registry';
-import { onOptionsChange, options, resetOptions, setOption, type Options } from './options';
+import { OFFICIAL_THEMES, allThemes, chapterMusicFor } from './theme-registry';
+import { onOptionsChange, options, resetOptions, setOption } from './options';
 import { PlayController } from './play';
 import { FONT_TASKS, runPreload, type PreloadTask } from './preload';
-import { LiquidBackground } from './liquid';
+import { Backdrop, type BackdropMode } from './backdrop';
 import { floatingPanel } from './float-panel';
 import { Account } from './auth/account';
 import { AuthUI, showToast } from './auth/auth-ui';
 import { PlayTimeTracker } from './auth/playtime';
+import { RecordSync } from './auth/records';
+import { StatsUI } from './stats-ui';
 import { IrisTransition } from './iris-transition';
+import { gameAudio } from './audio';
+import { installMenuMusicControls, menuMusicUrl } from './menu-music';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -39,7 +43,7 @@ for (const id of ['menu-version', 'preload-version']) $(id).textContent = VERSIO
 
 // ───────────────────────── Screens ─────────────────────────
 
-type Screen = 'preload' | 'menu' | 'themes' | 'levels' | 'themeEditor' | 'options' | 'licenses' | 'auth' | 'verify' | 'play' | 'editor';
+type Screen = 'preload' | 'menu' | 'themes' | 'levels' | 'themeEditor' | 'options' | 'licenses' | 'stats' | 'achievements' | 'customize' | 'auth' | 'verify' | 'play' | 'editor';
 
 const screens: Record<Screen, HTMLElement> = {
   preload: $('preload-screen'),
@@ -49,6 +53,9 @@ const screens: Record<Screen, HTMLElement> = {
   themeEditor: $('theme-editor-screen'),
   options: $('options-screen'),
   licenses: $('licenses-screen'),
+  stats: $('stats-screen'),
+  achievements: $('achievements-screen'),
+  customize: $('customize-screen'),
   auth: $('auth-screen'),
   verify: $('verify-screen'),
   play: $('play-view'),
@@ -135,10 +142,17 @@ themeEditor.onPlayCustom = () => {
 $('menu-theme-editor').addEventListener('click', () => show('themeEditor'));
 
 const packPanel = new PackPanel($('pack-panel'), editor);
-editor.onChange = () => packPanel.refresh();
+editor.onChange = () => {
+  packPanel.refresh();
+  syncMusic();
+};
 
-const liquid = new LiquidBackground($<HTMLCanvasElement>('liquid-bg'));
-liquid.setActive(true);
+const backdrop = new Backdrop($('app-bg'), $<HTMLCanvasElement>('demo-bg'));
+/** Background per screen; the map and theme editors share the world select grid */
+function syncBackdrop(): void {
+  const modes: Partial<Record<Screen, BackdropMode>> = { play: 'none', themes: 'grid', editor: 'grid', themeEditor: 'grid', levels: 'theme' };
+  backdrop.set(modes[current] ?? 'demo', campaign.currentTheme ?? campaignOf(currentKey)?.theme ?? OFFICIAL_THEMES[0]);
+}
 
 let current: Screen = 'preload';
 let sharedMap: MapData | null = null;
@@ -148,6 +162,22 @@ let currentMap: MapData = BUILTIN_LEVELS[0];
 /** Level list entry being played: 'b:3' built-in, 'p:3' pack level, 'shared', or '' (editor test) */
 let currentKey = '';
 let testing = false;
+
+function syncMusic(): void {
+  // Map editor (and its test play): the chosen chapter theme's music, else the menu music
+  if (current === 'editor' || (current === 'play' && testing)) {
+    gameAudio.setMusic(chapterMusicFor(current === 'editor' ? editor.mapTheme : currentMap.theme) ?? menuMusicUrl);
+    return;
+  }
+  const theme = current === 'levels' ? campaign.currentTheme : current === 'play' ? campaignOf(currentKey)?.theme : null;
+  if (current === 'levels' || current === 'play') {
+    gameAudio.setMusic(theme?.info.music ? theme.assets[theme.info.music] ?? null : null);
+  } else if (current === 'themeEditor' || current === 'preload') {
+    gameAudio.setMusic(null);
+  } else gameAudio.setMusic(menuMusicUrl);
+}
+
+installMenuMusicControls(syncMusic);
 
 function screenColors(screen: Screen): readonly [string, string] | undefined {
   if (screen === 'levels') return (campaign.currentTheme ?? campaignOf(currentKey)?.theme)?.info.colors;
@@ -169,10 +199,10 @@ function showImmediately(next: Screen): void {
   if (current === 'themeEditor' && next !== 'themeEditor') themeEditor.hide();
   for (const [name, el] of Object.entries(screens)) el.hidden = name !== next;
   const inGame = next === 'play' || next === 'editor';
-  // The liquid animation only runs on menu screens, so gameplay keeps the whole frame budget
   document.body.classList.toggle('in-game', inGame);
-  liquid.setActive(!inGame);
   current = next;
+  // The demo only runs on menu screens, so gameplay and editing keep the whole frame budget
+  syncBackdrop();
   if (next === 'play') play.show();
   if (next === 'editor') {
     editor.show();
@@ -190,10 +220,17 @@ function showImmediately(next: Screen): void {
     if (t) campaign.renderLevels(t);
   }
   if (next === 'options') $('options-back').focus();
+  if (next === 'stats') {
+    void stats.render();
+    $('stats-back').focus();
+  }
+  if (next === 'achievements') $('achievements-back').focus();
+  if (next === 'customize') $('customize-back').focus();
   if (next === 'licenses') {
     renderFontLicenses($('licenses-list'));
     $('licenses-back').focus();
   }
+  syncMusic();
 }
 
 function showPlay(map: MapData, opts: { test?: boolean; key?: string } = {}): void {
@@ -299,6 +336,7 @@ $('menu-editor').addEventListener('click', showEditor);
 // Arrow keys move between menu buttons
 for (const screen of [screens.menu, screens.options]) {
   screen.addEventListener('keydown', (e) => {
+    if (e.target instanceof HTMLInputElement && e.target.type === 'range') return;
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     const items = [...screen.querySelectorAll<HTMLElement>('.menu-btn, .option input, button.dtile')];
     const i = items.indexOf(document.activeElement as HTMLElement);
@@ -310,21 +348,37 @@ for (const screen of [screens.menu, screens.options]) {
 
 // ───────────────────────── Options ─────────────────────────
 
-const optionInputs: Record<keyof Options, HTMLInputElement> = {
+type ToggleOption = 'showTrail' | 'showTimer' | 'showDebug';
+type VolumeOption = 'masterVolume' | 'musicVolume' | 'effectsVolume';
+const optionInputs: Record<ToggleOption, HTMLInputElement> = {
   showTrail: $<HTMLInputElement>('opt-trail'),
   showTimer: $<HTMLInputElement>('opt-timer'),
   showDebug: $<HTMLInputElement>('opt-debug'),
 };
 
+const volumeInputs: Record<VolumeOption, HTMLInputElement> = {
+  masterVolume: $<HTMLInputElement>('opt-master-volume'),
+  musicVolume: $<HTMLInputElement>('opt-music-volume'),
+  effectsVolume: $<HTMLInputElement>('opt-effects-volume'),
+};
+
 function syncOptions(): void {
-  for (const [k, input] of Object.entries(optionInputs) as [keyof Options, HTMLInputElement][]) {
+  for (const [k, input] of Object.entries(optionInputs) as [ToggleOption, HTMLInputElement][]) {
     input.checked = options[k];
+  }
+  for (const [k, input] of Object.entries(volumeInputs) as [VolumeOption, HTMLInputElement][]) {
+    input.value = String(options[k]);
+    input.setAttribute('aria-valuetext', `${options[k]}%`);
+    $(`${input.id}-value`).textContent = `${options[k]}%`;
   }
   debugPanel.hidden = !options.showDebug;
 }
 
-for (const [k, input] of Object.entries(optionInputs) as [keyof Options, HTMLInputElement][]) {
+for (const [k, input] of Object.entries(optionInputs) as [ToggleOption, HTMLInputElement][]) {
   input.addEventListener('change', () => setOption(k, input.checked));
+}
+for (const [k, input] of Object.entries(volumeInputs) as [VolumeOption, HTMLInputElement][]) {
+  input.addEventListener('input', () => setOption(k, Number(input.value)));
 }
 onOptionsChange(syncOptions);
 syncOptions();
@@ -336,6 +390,16 @@ $('licenses-back').addEventListener('click', () => show('options'));
 screens.licenses.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') show('options');
 });
+$('menu-stats').addEventListener('click', () => show('stats'));
+$('menu-achievements').addEventListener('click', () => show('achievements'));
+$('menu-customize').addEventListener('click', () => show('customize'));
+$('stats-refresh').addEventListener('click', () => void stats.render());
+for (const s of ['stats', 'achievements', 'customize'] as const) {
+  $(`${s}-back`).addEventListener('click', () => show('menu'));
+  screens[s].addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') show('menu');
+  });
+}
 screens.options.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') show('menu');
 });
@@ -426,6 +490,36 @@ const account = new Account();
 // Total time the game is open, saved to the player's profile
 const playTime = new PlayTimeTracker(account);
 account.beforeSignOut = () => playTime.flush();
+// Best time (ms) and stars per level, saved to the player's account
+const recordSync = new RecordSync(account);
+const recordsButton = $<HTMLButtonElement>('records-sync');
+const recordsStatus = $('records-status');
+const signedOutRecords = 'Sign in to save your best times and stars to your account.';
+function renderRecordsOption(): void {
+  if (recordsButton.dataset.busy) return;
+  recordsButton.disabled = !recordSync.available;
+  recordsStatus.textContent = recordSync.available
+    ? `Clears are saved to ${account.tag ?? 'your account'}. Sync to upload records already in this browser and download the account's records.`
+    : account.configured ? signedOutRecords : 'Accounts are not set up, so records stay in this browser.';
+}
+const stats = new StatsUI($('stats-body'), account, recordSync);
+account.onChange(() => current === 'stats' && void stats.render());
+account.onChange(renderRecordsOption);
+renderRecordsOption();
+recordsButton.addEventListener('click', async () => {
+  recordsButton.dataset.busy = '1';
+  recordsButton.disabled = true;
+  recordsStatus.textContent = 'Syncing…';
+  const result = await recordSync.syncAll();
+  delete recordsButton.dataset.busy;
+  renderRecordsOption();
+  if (result.ok) {
+    recordsStatus.textContent = `Synced ${result.uploaded} record${result.uploaded === 1 ? '' : 's'} from this browser; ${result.downloaded} level${result.downloaded === 1 ? '' : 's'} updated from your account.`;
+    $('menu-stars').textContent = String(totalStars());
+    renderLevelOptions();
+  } else recordsStatus.textContent = result.message;
+  showToast(result.ok ? 'Records synced.' : result.message, result.ok ? 'ok' : 'error');
+});
 new AuthUI(account, (screen) => show(screen));
 for (const s of [screens.auth, screens.verify]) {
   s.addEventListener('keydown', (e) => {

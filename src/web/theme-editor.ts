@@ -1,4 +1,5 @@
 import { fontPicker } from './font-picker';
+import { gameAudio } from './audio';
 import { levelLabel } from '../core/level';
 import { compileMap } from '../core/object';
 import {
@@ -12,7 +13,7 @@ import { beginFrame, COLORS, drawMap, fitCanvas } from './render';
 import { renderThemePanel } from './theme-panel';
 import { ScreenDesigner, type ScreenKind } from './screen-designer';
 import { ensureFonts } from './screen-render';
-import { customStoredTheme, OFFICIAL_THEMES, setCustomTheme, type StoredTheme } from './theme-registry';
+import { customStoredTheme, OFFICIAL_THEMES, CUSTOM_THEME_PRESETS, setCustomTheme, type StoredTheme } from './theme-registry';
 import { download, fileToDataUrl, readThemeZip, urlToDataUrl, writeThemeZip } from './theme-zip';
 
 /**
@@ -196,6 +197,7 @@ export class ThemeEditor {
   }
 
   hide(): void {
+    gameAudio.setMusic(null);
     this.visible = false;
   }
 
@@ -231,11 +233,12 @@ export class ThemeEditor {
   }
 
   private async load(entry: ThemeEntry | StoredTheme): Promise<void> {
+    gameAudio.setMusic(null);
     const images: Record<string, string> = {};
     if ('images' in entry) Object.assign(images, entry.images);
     else {
-      // Official theme: turn its image files into data so they go into an exported zip
-      for (const [name, url] of [[entry.info.cover, entry.coverUrl], [entry.info.style.badge.image, entry.badgeUrl]]) {
+      // Preserve every bundled asset, including custom screen images and fonts, in the draft.
+      for (const [name, url] of Object.entries(entry.assets)) {
         if (name && url) {
           try {
             images[name] = await urlToDataUrl(url);
@@ -268,7 +271,7 @@ export class ThemeEditor {
 
   private exportZip(): void {
     download(writeThemeZip(this.draft), `${this.draft.info.id || 'theme'}.zip`);
-    this.flash('Exported. Unzip it into a folder in themes/ (e.g. themes/07-my-theme/) to make it an official theme.');
+    this.flash('Exported. Load this zip as a custom pack to play it, or import it into Theme Editor.');
   }
 
   private playCustom(): void {
@@ -395,6 +398,58 @@ export class ThemeEditor {
     return wrap;
   }
 
+  private musicControl(): HTMLElement {
+    const row = el('div', 'actions');
+    const info = this.draft.info;
+    row.append(el('span', 'muted', info.music ?? 'No background music'));
+    const input = el('input');
+    input.type = 'file';
+    input.accept = '.mp3,.ogg,.wav,.m4a,.aac,.flac';
+    input.setAttribute('aria-label', 'Theme background music');
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (!/\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(file.name) || file.size > 20 * 1024 * 1024) {
+        this.flash('Choose an audio file up to 20 MB.');
+        input.value = '';
+        return;
+      }
+      const draft = this.draft;
+      input.disabled = true;
+      try {
+        const url = await fileToDataUrl(file);
+        if (this.draft !== draft) return;
+        const name = `audio/background.${file.name.split('.').pop()!.toLowerCase()}`;
+        if (info.music) delete draft.images[info.music];
+        draft.images[name] = url;
+        info.music = name;
+        gameAudio.setMusic(null);
+        this.save();
+        this.renderForm();
+      } catch { this.flash('Could not read the music file.'); }
+      finally { input.disabled = false; }
+    });
+    const preview = el('button', '', 'Preview music');
+    preview.type = 'button';
+    preview.disabled = !info.music || !this.draft.images[info.music];
+    preview.addEventListener('click', () => gameAudio.setMusic(info.music ? this.draft.images[info.music] ?? null : null));
+    const stop = el('button', '', 'Stop');
+    stop.type = 'button';
+    stop.addEventListener('click', () => gameAudio.setMusic(null));
+    const remove = el('button', '', 'Remove music');
+    remove.type = 'button';
+    remove.disabled = !info.music;
+    remove.addEventListener('click', () => {
+      gameAudio.setMusic(null);
+      if (info.music) delete this.draft.images[info.music];
+      delete info.music;
+      this.save();
+      this.renderForm();
+    });
+    row.append(input, preview, stop, remove);
+    return row;
+  }
+
   private renderForm(): void {
     const info = this.draft.info;
     const badge = info.style.badge;
@@ -403,7 +458,13 @@ export class ThemeEditor {
     // Start from an existing theme
     const source = el('select');
     source.append(new Option('Start from…', ''), new Option('Blank theme', 'blank'));
-    OFFICIAL_THEMES.forEach((t, i) => source.append(new Option(`Official: ${t.info.name}`, `o${i}`)));
+    const chapters = el('optgroup');
+    chapters.label = 'Official chapters';
+    OFFICIAL_THEMES.forEach((t, i) => chapters.append(new Option(`Chapter ${i + 1}: ${t.info.name}`, `o${i}`)));
+    const unused = el('optgroup');
+    unused.label = 'Custom theme presets';
+    CUSTOM_THEME_PRESETS.forEach((t, i) => unused.append(new Option(t.info.name, `u${i}`)));
+    source.append(chapters, unused);
     if (customStoredTheme()) source.append(new Option(`Custom pack: ${customStoredTheme()!.info.name}`, 'custom'));
     source.addEventListener('change', () => {
       const v = source.value;
@@ -411,6 +472,7 @@ export class ThemeEditor {
       if (!v || !confirm('Replace the theme being edited?')) return;
       if (v === 'blank') void this.load({ info: blankThemeInfo(), levels: [], images: {} });
       else if (v === 'custom') void this.load(customStoredTheme()!);
+      else if (v.startsWith('u')) void this.load(CUSTOM_THEME_PRESETS[Number(v.slice(1))]);
       else void this.load(OFFICIAL_THEMES[Number(v.slice(1))]);
     });
 
@@ -483,6 +545,7 @@ export class ThemeEditor {
         }, { multiline: true }), true),
       )),
       section('Fonts', this.fontsBox()),
+      section('Background music', this.musicControl()),
       section('Maze colors', maze, group(this.field('Cursor color', cursorRow, true))),
       section('Level badge', group(
         this.field('Design', this.select(badge.kind, BADGE_KINDS, (v) => b({ kind: v }))),

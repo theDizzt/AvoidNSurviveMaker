@@ -87,18 +87,45 @@ body {
     linear-gradient(180deg, #f5faff 0%, #e8f2fb 100%) fixed;
 }
 
-/* Pouring pastel liquid behind everything */
-.liquid-bg {
+/*
+ * Page background (backdrop.ts): an autopilot demo run on the main menu and most screens,
+ * a soft grid on world select and the editors, the theme's colors on level select.
+ */
+.app-bg {
   position: fixed;
   inset: 0;
-  width: 100%;
-  height: 100%;
   z-index: 0;
   pointer-events: none;
-  filter: blur(3.5px) saturate(1.08);
+  overflow: hidden;
+}
+.app-bg::before, .app-bg::after, .app-bg canvas {
+  content: '';
+  position: absolute;
+  inset: 0;
   transition: opacity 0.6s ease;
 }
-body.in-game .liquid-bg { opacity: 0.35; }
+.app-bg canvas { width: 100%; height: 100%; opacity: 0; filter: blur(1.5px) saturate(0.9); }
+/* ::before = grid / theme colors, ::after = veil that keeps menus readable over the demo */
+.app-bg::before { opacity: 0; }
+.app-bg::after { opacity: 0; background: rgba(240, 247, 255, 0.58); }
+.app-bg[data-mode="demo"] canvas, .app-bg[data-mode="demo"]::after { opacity: 1; }
+.app-bg[data-mode="grid"]::before {
+  opacity: 1;
+  background-color: #f2f7fd;
+  background-image:
+    linear-gradient(rgba(58, 159, 240, 0.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(58, 159, 240, 0.075) 1px, transparent 1px),
+    linear-gradient(rgba(58, 159, 240, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(58, 159, 240, 0.045) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+  background-position: -1px -1px;
+}
+.app-bg[data-mode="theme"]::before {
+  opacity: 1;
+  background:
+    radial-gradient(1100px 700px at 15% 0%, rgba(255, 255, 255, 0.22), transparent 60%),
+    linear-gradient(135deg, var(--bg-a, #9fe2ff), var(--bg-b, #c3b5ff));
+}
 
 /* ───────────────────────── Controls ───────────────────────── */
 
@@ -190,7 +217,8 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 }
 .play-stage { width: auto; }
 .play-stage canvas { border-radius: 0; border: 0; box-shadow: 0 0 40px rgba(58, 96, 150, 0.18); }
-/* Bottom-left, so the result banner and timer at the top stay visible */
+/* Hidden in game (keyboard shortcuts only); bottom-left if shown again */
+.play-hud[hidden] { display: none; }
 .play-hud {
   position: absolute;
   bottom: 12px;
@@ -480,8 +508,51 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   color: var(--text);
   text-shadow: 0 2px 0 rgba(255, 255, 255, 0.8), 0 10px 30px rgba(80, 130, 200, 0.2);
 }
-.logo span { text-shadow: none; filter: drop-shadow(0 6px 14px rgba(90, 140, 255, 0.3)); }
 .logo-sm { font-size: clamp(32px, 6vw, 50px); }
+
+/*
+ * Title logo: three stacked copies — blue at the back, white in the middle, black in front —
+ * drifting apart in a slow circle while the whole word sways, for a layered 3D look.
+ * The N is green on every layer (lighter on the back ones).
+ */
+.logo-3d {
+  display: grid;
+  perspective: 700px;
+  text-shadow: none;
+  animation: logo-sway 7s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+.logo-layer { grid-area: 1 / 1; white-space: nowrap; will-change: transform; }
+.logo-back { color: #3a9ff0; animation: logo-orbit-back 4.2s linear infinite; }
+.logo-mid { color: #ffffff; animation: logo-orbit-mid 4.2s linear infinite; }
+.logo-front { color: #141a26; }
+.logo-back .logo-n { color: #1f8f5a; }
+.logo-mid .logo-n { color: #d9fbe8; }
+.logo-front .logo-n { color: #22c55e; }
+.logo-front { filter: drop-shadow(0 10px 22px rgba(30, 60, 120, 0.22)); }
+@keyframes logo-orbit-back {
+  0% { transform: translate(0.075em, 0.075em); }
+  25% { transform: translate(0.03em, 0.105em); }
+  50% { transform: translate(-0.03em, 0.075em); }
+  75% { transform: translate(0.03em, 0.045em); }
+  100% { transform: translate(0.075em, 0.075em); }
+}
+@keyframes logo-orbit-mid {
+  0% { transform: translate(0.038em, 0.038em); }
+  25% { transform: translate(0.015em, 0.053em); }
+  50% { transform: translate(-0.015em, 0.038em); }
+  75% { transform: translate(0.015em, 0.023em); }
+  100% { transform: translate(0.038em, 0.038em); }
+}
+@keyframes logo-sway {
+  0%, 100% { transform: rotateX(8deg) rotateY(-10deg); }
+  50% { transform: rotateX(4deg) rotateY(10deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-3d, .logo-layer { animation: none; }
+  .logo-back { transform: translate(0.075em, 0.075em); }
+  .logo-mid { transform: translate(0.038em, 0.038em); }
+}
 
 /* Preload */
 .preload-inner { width: min(420px, 100%); display: flex; flex-direction: column; align-items: center; gap: 28px; }
@@ -581,6 +652,17 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .option span { display: flex; flex-direction: column; gap: 2px; }
 .option strong { font-size: 16px; }
 .option small { color: var(--muted); font-size: 13px; }
+.volume-option { flex-wrap: wrap; }
+.menu-music-option { flex-direction: column; align-items: stretch; }
+.menu-music-option input[type="file"] { width: 100%; height: auto; }
+.menu-music-option small { overflow-wrap: anywhere; }
+.records-option span { flex: 1 1 200px; }
+.records-option button { flex: none; }
+.volume-option span { flex: 1 1 150px; }
+.volume-option input[type="range"] { width: 140px; flex: 1 1 100px; min-width: 0; height: 24px; cursor: pointer; }
+.volume-option output { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
+#options-screen { overflow-y: auto; align-items: safe center; }
+#options-screen .menu-inner { margin-block: auto; padding-block: 24px; }
 
 /* Account */
 .auth-card {
@@ -642,7 +724,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .toast.error { color: var(--danger); }
 
 @media (prefers-reduced-motion: reduce) {
-  button, .menu-btn, .progress-bar, .screen, .liquid-bg { transition: none; }
+  button, .menu-btn, .progress-bar, .screen, .app-bg::before, .app-bg::after, .app-bg canvas { transition: none; }
 }
 
 /* Arrange buttons in the properties panel */
@@ -800,10 +882,13 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
   line-height: 1.15;
 }
 .dtile-in strong { font-family: var(--font-title); font-size: 20px; }
+/* Main menu tiles: text only, in the main font */
+#menu-dia .dtile-in strong { font-family: var(--font-main); }
 .dtile-in small { font-size: 12px; opacity: 0.8; }
 .dicon { font-size: 26px; line-height: 1; opacity: 0.75; }
-.dtile-primary { background: var(--gradient); color: #fff; border-color: transparent; box-shadow: 0 16px 40px rgba(58, 159, 240, 0.4); }
-.dtile-primary .dtile-in strong { font-size: 40px; text-shadow: 0 3px 12px rgba(30, 60, 140, 0.35); }
+/* Start Game: green into blue, matching the logo's green N */
+.dtile-primary { background: linear-gradient(135deg, #3ddc84 0%, #1fb37a 38%, #2a9fe0 72%, #3a7ff0 100%); color: #fff; border-color: transparent; box-shadow: 0 16px 40px rgba(34, 170, 140, 0.4); }
+.dtile-primary .dtile-in strong { font-size: 40px; text-shadow: 0 3px 12px rgba(10, 70, 80, 0.35); }
 .dtile-primary .dtile-in small { font-size: 15px; opacity: 0.95; }
 .dtile-deco { background: rgba(255, 255, 255, 0.35); box-shadow: none; }
 .dtile-stars { background: linear-gradient(135deg, #fff4c4, #ffd25e); }
@@ -1071,3 +1156,32 @@ button.se-back:hover, button.se-start:hover, button.se-back:focus-visible, butto
   .lic-row { flex-direction: column; gap: 6px; }
   .lic-sample { width: auto; }
 }
+
+/* ───────────────────────── Stats ───────────────────────── */
+
+.stats-inner { width: min(900px, 100%); gap: 12px; }
+.stats-intro { margin: -6px 0 0; text-align: center; font-size: 14px; }
+.stats-body { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.stats-message { text-align: center; padding: 24px 0; }
+.stats-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stats-card {
+  display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 14px;
+  background: var(--surface-solid); border: 1px solid var(--border); min-width: 0;
+}
+.stats-card strong { font-size: 20px; overflow-wrap: anywhere; }
+.stats-card small { font-size: 12px; }
+.stats-list {
+  max-height: min(52vh, 560px); overflow: auto; padding: 4px 12px 12px;
+  border: 1px solid var(--border); border-radius: 18px; background: var(--surface);
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+}
+.stats-group { margin-top: 10px; }
+.stats-group summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 6px 0; }
+.stats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.stats-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.stats-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.stats-table .num { font-variant-numeric: tabular-nums; text-align: right; }
+.stats-table .stats-stars { color: #e3a400; letter-spacing: 1px; }
+.stats-table .stats-name { overflow-wrap: anywhere; }
+.stats-empty td { opacity: 0.45; }
+@media (max-width: 560px) { .stats-table td:last-child, .stats-table th:last-child { display: none; } }

@@ -23,6 +23,7 @@ import {
 } from './render';
 import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
 import { renderThemePanel } from './theme-panel';
+import { chapterMazePresets } from './theme-registry';
 import { fontPicker } from './font-picker';
 
 // ───────────────────────── Tools ─────────────────────────
@@ -306,6 +307,10 @@ export class Editor {
   onChange: () => void = () => {};
 
   private map: MapData;
+  /** Maze colors of the map being edited (picks the editor's music) */
+  get mapTheme(): MapData['theme'] {
+    return this.map.theme;
+  }
   private compiledCache: CompiledObject[] | null = null;
   /** gameplayKey() of the map as last cleared in test play (sharing needs a verified clear) */
   private verifiedJson: string | null = null;
@@ -2437,6 +2442,7 @@ export class Editor {
         if (next) this.map.theme = next;
         else delete this.map.theme;
       }),
+      chapterMazePresets(),
     );
   }
 

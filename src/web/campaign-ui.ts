@@ -216,7 +216,7 @@ export class CampaignUI {
     load.title = 'Load a custom theme pack made with the Theme Editor';
     load.addEventListener('click', () => this.file.click());
     this.themesRoot.replaceChildren(
-      this.header('Select a World', `${OFFICIAL_THEMES.length} of ${OFFICIAL_SLOTS} worlds · ${LEVELS_PER_THEME} levels and ${STARS_PER_THEME} stars each`, () => this.onBack('themes'), load),
+      this.header('Select a Chapter', `${OFFICIAL_THEMES.length} chapters · ${LEVELS_PER_THEME} levels and ${STARS_PER_THEME} stars each`, () => this.onBack('themes'), load),
       info,
       wrap,
     );
@@ -229,13 +229,16 @@ export class CampaignUI {
 
   private worldTile(t: ThemeEntry, label: string, onHover: () => void): HTMLElement {
     const unlocked = themeUnlocked(t);
+    const planned = t.official && t.levels.length === 0;
     const b = el('button', `dtile dworld${unlocked ? '' : ' locked'}${t.official ? '' : ' custom'}`);
     b.type = 'button';
     const grad = `linear-gradient(135deg, ${t.info.colors[0]}, ${t.info.colors[1]})`;
     b.style.background = t.coverUrl ? `linear-gradient(180deg, rgba(20,24,40,0.05), rgba(20,24,40,0.55)), url("${t.coverUrl}") center / cover, ${grad}` : grad;
     const stars = themeStars(t);
     const parts: (HTMLElement | string)[] = [el('span', 'dworld-no', label), el('strong', 'dworld-name', t.info.name)];
-    if (unlocked) {
+    if (planned) {
+      parts.push(el('small', 'dworld-tag', 'COMING SOON'));
+    } else if (unlocked) {
       const p = el('span', 'dworld-stars');
       p.append(el('span', 'on', '★'), ` ${stars}/${maxStars(t)}`);
       parts.push(p, el('span', 'dworld-diff', diff(averageDifficulty(t.levels))));
@@ -244,10 +247,15 @@ export class CampaignUI {
     }
     b.append(inner(...parts));
     b.title = unlocked ? `${t.info.name} — ${t.levels.length} level${t.levels.length === 1 ? '' : 's'}` : `Collect ${t.info.unlockStars} stars to unlock (${t.info.unlockStars - totalStars()} more)`;
-    b.disabled = !unlocked;
+    if (planned) {
+      b.title = `${t.info.name} — Coming soon. Preview the theme in Theme Editor.`;
+      b.setAttribute('aria-disabled', 'true');
+    }
+    b.disabled = !unlocked && !planned;
     b.addEventListener('pointerenter', onHover);
     b.addEventListener('focus', onHover);
     b.addEventListener('click', () => {
+      if (planned) return;
       this.theme = t;
       this.onPlay(t, -1);
     });

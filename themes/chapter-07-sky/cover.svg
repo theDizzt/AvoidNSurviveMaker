@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Sky - Title TBD">
+  <defs><linearGradient id="bg" x2=".7" y2="1"><stop stop-color="#314866"/><stop offset="1" stop-color="#eab6dd"/></linearGradient><radialGradient id="halo"><stop stop-color="#a2e5f3" stop-opacity=".2"/><stop offset="1" stop-color="#a2e5f3" stop-opacity="0"/></radialGradient></defs>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <circle cx="200" cy="200" r="190" fill="url(#halo)"/>
+  <path d="M24 80V24H80M320 24H376V80M24 320V376H80M320 376H376V320" fill="none" stroke="#a2e5f3" opacity=".35" stroke-width="2"/>
+  <g color="#a2e5f3"><path d="M70 267 192 187 330 254 200 321Z" fill="currentColor" opacity=".55"/><path d="M70 267 200 321 190 365Z" fill="currentColor" opacity=".3"/><path d="M75 152Q62 112 104 107Q115 66 155 87Q192 75 202 113Q242 118 226 152Z" fill="currentColor"/><path d="M240 192Q236 168 264 161Q287 130 314 158Q349 156 352 192Z" fill="currentColor" opacity=".7"/></g>
+  <text x="32" y="49" fill="#a2e5f3" font-family="sans-serif" font-size="12" letter-spacing="4">CHAPTER 07</text>
+</svg>

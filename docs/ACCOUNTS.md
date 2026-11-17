@@ -17,6 +17,7 @@ Without this setup the game still runs; the account screen just says accounts ar
 | Nickname | `profiles.nickname` | 1–32 bytes UTF-8 (e.g. 10 Korean characters), no `#` |
 | Tag | `profiles.discriminator` | 1–9999, shown as 4 digits (`0042`) |
 | Total play time | `profiles.total_play_seconds` (seconds) and `profiles.play_time` (`hh:mm:ss`) | total time the game has been open (signed in, tab visible) |
+| Level records | `level_records` (`level_key`, `best_ms`, `stars`) | best clear time in ms and most stars per level; only the player can read their rows |
 
 Tag rules (enforced in the database, not just the UI):
 
@@ -32,6 +33,7 @@ Supabase Dashboard → **SQL Editor** → paste and run each file, in this order
 1. [`supabase/migrations/20261117000000_profiles.sql`](../supabase/migrations/20261117000000_profiles.sql) — profiles, nickname tags
 2. [`supabase/migrations/20261117010000_play_time.sql`](../supabase/migrations/20261117010000_play_time.sql) — total play time
 3. [`supabase/migrations/20261117020000_play_time_seconds.sql`](../supabase/migrations/20261117020000_play_time_seconds.sql) — store play time in seconds
+4. [`supabase/migrations/20261117030000_level_records.sql`](../supabase/migrations/20261117030000_level_records.sql) — best time (ms) and stars per level
 
 (With the Supabase CLI linked to the project, `supabase db push` does the same.)
 
@@ -100,6 +102,19 @@ under the player's tag.
 Reports come from the browser, so the database caps them: a report can't add more than the real
 time elapsed since the previous one (+5 s), nor more than 1 hour at once. That also keeps several
 open tabs from counting the same minutes twice.
+
+## Level records
+
+When a signed-in player clears a chapter level, its best time (whole ms) and stars are sent with
+`submit_level_records(records)`. Unsent records are kept in the browser per account and retried on
+the next clear or sign-in. The server merges, so a record only improves: `best_ms` keeps the
+lowest value and `stars` the highest.
+
+Records made before signing in (or before this feature) stay in the browser until the player
+presses **Options → Level records → Sync records**. That uploads every record in this browser and
+downloads the account's records into it; both sides keep the best of each.
+
+**Main menu → Stats** reads the profile and every `level_records` row straight from the database.
 
 ## Flow
 

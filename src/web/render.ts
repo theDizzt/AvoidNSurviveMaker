@@ -1,3 +1,4 @@
+import { createPatternTile, PATTERN_RES } from './theme-pattern';
 import { toWorld, transformAt, type CompiledObject, type Transform } from '../core/object';
 import { primaryColor, secondaryColor, shade } from '../core/theme';
 import { switchColor } from '../core/colors';
@@ -169,7 +170,7 @@ export function traceObject(ctx: CanvasRenderingContext2D, o: CompiledObject, tf
 // ───────────────────────── Theme fills ─────────────────────────
 
 /** Patterns are rendered once per (context, fill) at 4× resolution and scaled down, so they stay crisp */
-const PATTERN_RES = 4;
+
 const patternCache = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasPattern>>();
 
 function patternFor(ctx: CanvasRenderingContext2D, f: Extract<Fill, { type: 'pattern' }>): CanvasPattern | string {
@@ -179,46 +180,7 @@ function patternFor(ctx: CanvasRenderingContext2D, f: Extract<Fill, { type: 'pat
   const hit = cache.get(key);
   if (hit) return hit;
 
-  const s = f.size;
-  const tile = document.createElement('canvas');
-  tile.width = tile.height = Math.ceil(s * PATTERN_RES);
-  const g = tile.getContext('2d');
-  if (!g) return f.background;
-  g.scale(PATTERN_RES, PATTERN_RES);
-  g.fillStyle = f.background;
-  g.fillRect(0, 0, s, s);
-  g.fillStyle = f.color;
-  g.strokeStyle = f.color;
-  switch (f.pattern) {
-    case 'stripes':
-      g.fillRect(0, 0, s, s / 2);
-      break;
-    case 'diagonal':
-      // Three strokes so the band continues seamlessly across tile edges
-      g.lineWidth = s * 0.3;
-      g.beginPath();
-      for (const o of [-s, 0, s]) {
-        g.moveTo(o, s);
-        g.lineTo(o + s, 0);
-      }
-      g.stroke();
-      break;
-    case 'dots':
-      g.beginPath();
-      g.arc(s / 2, s / 2, s * 0.22, 0, Math.PI * 2);
-      g.fill();
-      break;
-    case 'grid': {
-      const w = Math.max(1, s * 0.08);
-      g.fillRect(0, 0, s, w);
-      g.fillRect(0, 0, w, s);
-      break;
-    }
-    case 'checker':
-      g.fillRect(0, 0, s / 2, s / 2);
-      g.fillRect(s / 2, s / 2, s / 2, s / 2);
-      break;
-  }
+  const tile = createPatternTile(f);
   const pattern = ctx.createPattern(tile, 'repeat');
   if (!pattern) return f.background;
   pattern.setTransform(new DOMMatrix().scale(1 / PATTERN_RES));

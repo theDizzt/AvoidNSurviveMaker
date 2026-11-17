@@ -1,0 +1,176 @@
+{
+    "format":  1,
+    "id":  "factory",
+    "name":  "Defective Processing Plant",
+    "description":  "Faulty production lines, hazard stripes and industrial steel.",
+    "author":  "Avoid N Survive",
+    "released":  "2026-11-17",
+    "unlockStars":  0,
+    "colors":  [
+                   "#e9ba42",
+                   "#7c939a"
+               ],
+    "cover":  "cover.svg",
+    "style":  {
+                  "cursorColor":  "#e9ba42",
+                  "maze":  {
+                               "wall":  {
+                                            "edge":  "#e9ba42",
+                                            "fill":  {
+                                                         "background":  "#20272c",
+                                                         "color":  "#7c939a",
+                                                         "pattern":  "stripes",
+                                                         "size":  16,
+                                                         "type":  "pattern"
+                                                     }
+                                        },
+                               "path":  {
+                                            "edge":  "#7c939a",
+                                            "fill":  {
+                                                         "angle":  90,
+                                                         "from":  "#20272c",
+                                                         "style":  "linear",
+                                                         "to":  "#7c939a",
+                                                         "type":  "gradient"
+                                                     }
+                                        }
+                           },
+                  "badge":  {
+                                "caption":  "CHAPTER 06 / FACTORY",
+                                "kind":  "plate",
+                                "pad":  2,
+                                "primary":  "#20272c",
+                                "titleColor":  "#e9ba42",
+                                "showTitle":  true,
+                                "secondary":  "#7c939a",
+                                "font":  "title",
+                                "numberColor":  "#e9ba42"
+                            }
+              },
+    "screens":  {
+                    "select":  {
+                                   "background":  {
+                                                      "color2":  "#20272c",
+                                                      "color":  "#20272c"
+                                                  },
+                                   "elements":  [
+                                                    {
+                                                        "id":  "art",
+                                                        "w":  440,
+                                                        "opacity":  0.5,
+                                                        "y":  0,
+                                                        "x":  0,
+                                                        "kind":  "image",
+                                                        "src":  "cover.svg",
+                                                        "h":  720
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "chapter",
+                                                        "kind":  "text",
+                                                        "size":  19,
+                                                        "y":  54,
+                                                        "w":  330,
+                                                        "h":  32,
+                                                        "color":  "#e9ba42",
+                                                        "text":  "CHAPTER 06 / FACTORY",
+                                                        "font":  "main"
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "title",
+                                                        "kind":  "text",
+                                                        "size":  42,
+                                                        "y":  105,
+                                                        "w":  340,
+                                                        "h":  160,
+                                                        "color":  "#e9ba42",
+                                                        "text":  "{theme}",
+                                                        "font":  "title"
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "description",
+                                                        "kind":  "text",
+                                                        "size":  19,
+                                                        "y":  290,
+                                                        "w":  320,
+                                                        "h":  140,
+                                                        "color":  "#e9ba42",
+                                                        "text":  "{description}",
+                                                        "font":  "main"
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "progress",
+                                                        "kind":  "text",
+                                                        "size":  21,
+                                                        "y":  485,
+                                                        "w":  320,
+                                                        "h":  46,
+                                                        "color":  "#e9ba42",
+                                                        "text":  "{cleared} / {total} CLEARED",
+                                                        "font":  "main"
+                                                    },
+                                                    {
+                                                        "x":  470,
+                                                        "id":  "grid",
+                                                        "kind":  "levelGrid",
+                                                        "gap":  14,
+                                                        "y":  140,
+                                                        "w":  750,
+                                                        "button":  {
+                                                                       "borderWidth":  2,
+                                                                       "showStars":  true,
+                                                                       "showDifficulty":  true,
+                                                                       "shape":  "square",
+                                                                       "clearedFill":  "#7c939a",
+                                                                       "border":  "#e9ba42",
+                                                                       "fill":  "#20272c",
+                                                                       "fill2":  "#7c939a",
+                                                                       "pad":  2,
+                                                                       "numberColor":  "#e9ba42",
+                                                                       "font":  "title",
+                                                                       "numberSize":  30
+                                                                   },
+                                                        "h":  420,
+                                                        "rows":  3,
+                                                        "cols":  7
+                                                    },
+                                                    {
+                                                        "size":  23,
+                                                        "id":  "back",
+                                                        "y":  610,
+                                                        "color":  "#e9ba42",
+                                                        "border":  "#7c939a",
+                                                        "fill":  "#20272c",
+                                                        "borderWidth":  2,
+                                                        "kind":  "back",
+                                                        "x":  52,
+                                                        "w":  190,
+                                                        "radius":  10,
+                                                        "text":  "BACK",
+                                                        "font":  "title",
+                                                        "h":  54
+                                                    },
+                                                    {
+                                                        "x":  470,
+                                                        "id":  "footer",
+                                                        "kind":  "text",
+                                                        "size":  18,
+                                                        "y":  600,
+                                                        "w":  750,
+                                                        "h":  38,
+                                                        "color":  "#e9ba42",
+                                                        "text":  "SELECT A LEVEL",
+                                                        "font":  "main",
+                                                        "opacity":  0.6
+                                                    }
+                                                ]
+                               }
+                }
+}

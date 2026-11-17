@@ -1,11 +1,25 @@
 # Themes (worlds)
 
-Every folder here is one official world on the **Select a World** screen, in folder-name order
-(up to 16). Folders starting with `_` are ignored — `_template/` is a blank starting point.
+The 16 official chapters are selected in explicit order by `CHAPTER_FOLDERS` in
+`src/web/theme-registry.ts`. This folder contains only official chapter packs.
+The original six themes and the blank `_template` now live in `custom-themes/` at the repo root.
+They are available under **Custom theme presets** in Theme Editor's **Start from** selector,
+with their maps and artwork preserved. Load a preset and choose **Play as custom pack** or
+**Export .zip** to use it as a custom theme.
+Chapter 1 lives in `chapter-01-workshop` as **Tutorial Workshop** (campaign id `workshop`);
+existing `pastel` progress is carried forward. The separate original custom preset remains
+**Pastel Plains**. Its files are independent of the official Workshop files.
+
+Chapters 2–16 live in `chapter-NN-concept/`. They include cover art, map colors, badges and
+custom level-select layouts, but no placeholder gameplay maps. They appear as **Coming soon**
+until maps are added under their `levels/` folder. Chapters 13, 14 and 16 have deliberately
+neutral TBD artwork; the other unnamed chapters retain their supplied concept names.
+The source for the planned designs is `scripts/make-chapter-themes.ps1`; running it regenerates
+their `theme.json` and `cover.svg` files (and overwrites edits to those files).
 
 A custom level pack is the same folder zipped up: make one with **Theme Editor** on the main
 menu (*Export .zip*), load it with **Load pack (.zip)** on the world screen. To turn a custom
-pack into an official world, unzip it into a new folder here, e.g. `themes/07-my-world/`.
+pack into an official world, unzip it into a folder here and register it in `CHAPTER_FOLDERS`.
 
 ```
 themes/07-my-world/
@@ -34,9 +48,35 @@ Images can be `.png`, `.jpg`, `.webp`, `.gif` or `.svg`.
 | `unlockStars` | Stars (over all official worlds) needed to play it. `0` = open from the start |
 | `colors` | Two colors, `["#rrggbb", "#rrggbb"]`: the world tile's gradient |
 | `cover` | File name of the representative image (optional) |
+| `music` | Relative audio path inside the pack, e.g. `audio/background.mp3` (optional) |
 | `style.maze` | Maze colors for levels without their own theme: `{ "wall": …, "path": … }`, the same format as a map's `theme` (easiest to make in the Theme Editor) |
 | `style.cursorColor` | Cursor color for levels without their own (optional) |
 | `style.badge` | The in-game level number / title badge (below) |
+
+### Background music
+
+In **Theme Editor → Background music**, choose an MP3, OGG, WAV, M4A, AAC or FLAC file
+(up to 20 MB). Use **Preview music**, **Stop**, or **Remove music** to manage it.
+The music loops through level selection and gameplay without restarting between levels.
+Master and background-music volume apply to preview and gameplay. Formats must be supported
+by the player's browser. Themes without a music file are silent.
+
+Music is included in theme ZIP import/export. For official or bundled custom themes, place
+the audio file inside that theme's folder and set `"music": "audio/background.mp3"` in
+`theme.json`. Large audio may exceed browser draft/custom-pack localStorage capacity;
+the editor reports this and the current pack can still be exported to ZIP (30 MB import limit).
+
+For menu music, use **Options → Main menu music** (saved locally in this browser), or add
+`src/assets/music/main-menu.mp3` to bundle a default for everyone. **Reset music** removes
+the local override. Playback begins after the first interaction and pauses in hidden tabs.
+
+### Maze patterns
+
+Maze surface fills support these pattern ids: `stripes`, `diagonal`, `dots`, `grid`,
+`checker`, `wood` (staggered planks and grain), `grass` (grass blades), `sand`
+(grains and ripples), and `metal` (brushed panels and rivets). In the editor, choose
+**Pattern** as the fill type, then select the material. All patterns use the chosen
+`color`, `background`, and tile `size` (4–64 pixels), for both walls and paths.
 
 ### style.badge
 

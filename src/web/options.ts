@@ -3,12 +3,18 @@ export interface Options {
   showTrail: boolean;
   showTimer: boolean;
   showDebug: boolean;
+  masterVolume: number;
+  musicVolume: number;
+  effectsVolume: number;
 }
 
 export const DEFAULT_OPTIONS: Readonly<Options> = {
   showTrail: true,
   showTimer: true,
   showDebug: false,
+  masterVolume: 80,
+  musicVolume: 60,
+  effectsVolume: 80,
 };
 
 const STORAGE_KEY = 'avoid-n-survive:options';
@@ -18,8 +24,12 @@ function load(): Options {
   const out = { ...DEFAULT_OPTIONS };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, unknown>;
-    for (const k of Object.keys(out) as (keyof Options)[]) {
+    for (const k of ['showTrail', 'showTimer', 'showDebug'] as const) {
       if (typeof saved[k] === 'boolean') out[k] = saved[k];
+    }
+    for (const k of ['masterVolume', 'musicVolume', 'effectsVolume'] as const) {
+      const value = saved[k];
+      if (typeof value === 'number' && Number.isFinite(value)) out[k] = Math.max(0, Math.min(100, value));
     }
   } catch {
     /* storage unavailable or corrupted → defaults */
@@ -40,6 +50,10 @@ function commit(): void {
 }
 
 export function setOption<K extends keyof Options>(key: K, value: Options[K]): void {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return;
+    value = Math.max(0, Math.min(100, value)) as Options[K];
+  }
   (options as Options)[key] = value;
   commit();
 }

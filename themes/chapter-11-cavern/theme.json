@@ -1,0 +1,176 @@
+{
+    "format":  1,
+    "id":  "cavern",
+    "name":  "Cavern - Title TBD",
+    "description":  "Faceted crystals and narrow passages below the surface. Chapter title to be announced.",
+    "author":  "Avoid N Survive",
+    "released":  "2026-11-17",
+    "unlockStars":  0,
+    "colors":  [
+                   "#a59be0",
+                   "#64c4b1"
+               ],
+    "cover":  "cover.svg",
+    "style":  {
+                  "cursorColor":  "#a59be0",
+                  "maze":  {
+                               "wall":  {
+                                            "edge":  "#a59be0",
+                                            "fill":  {
+                                                         "background":  "#252238",
+                                                         "color":  "#64c4b1",
+                                                         "pattern":  "diagonal",
+                                                         "size":  16,
+                                                         "type":  "pattern"
+                                                     }
+                                        },
+                               "path":  {
+                                            "edge":  "#64c4b1",
+                                            "fill":  {
+                                                         "angle":  90,
+                                                         "from":  "#252238",
+                                                         "style":  "linear",
+                                                         "to":  "#64c4b1",
+                                                         "type":  "gradient"
+                                                     }
+                                        }
+                           },
+                  "badge":  {
+                                "caption":  "CHAPTER 11 / CAVERN",
+                                "kind":  "plate",
+                                "pad":  2,
+                                "primary":  "#252238",
+                                "titleColor":  "#a59be0",
+                                "showTitle":  true,
+                                "secondary":  "#64c4b1",
+                                "font":  "title",
+                                "numberColor":  "#a59be0"
+                            }
+              },
+    "screens":  {
+                    "select":  {
+                                   "background":  {
+                                                      "color2":  "#252238",
+                                                      "color":  "#252238"
+                                                  },
+                                   "elements":  [
+                                                    {
+                                                        "id":  "art",
+                                                        "w":  440,
+                                                        "opacity":  0.5,
+                                                        "y":  0,
+                                                        "x":  0,
+                                                        "kind":  "image",
+                                                        "src":  "cover.svg",
+                                                        "h":  720
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "chapter",
+                                                        "kind":  "text",
+                                                        "size":  19,
+                                                        "y":  54,
+                                                        "w":  330,
+                                                        "h":  32,
+                                                        "color":  "#a59be0",
+                                                        "text":  "CHAPTER 11 / CAVERN",
+                                                        "font":  "main"
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "title",
+                                                        "kind":  "text",
+                                                        "size":  42,
+                                                        "y":  105,
+                                                        "w":  340,
+                                                        "h":  160,
+                                                        "color":  "#a59be0",
+                                                        "text":  "{theme}",
+                                                        "font":  "title"
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "description",
+                                                        "kind":  "text",
+                                                        "size":  19,
+                                                        "y":  290,
+                                                        "w":  320,
+                                                        "h":  140,
+                                                        "color":  "#a59be0",
+                                                        "text":  "{description}",
+                                                        "font":  "main"
+                                                    },
+                                                    {
+                                                        "x":  52,
+                                                        "align":  "left",
+                                                        "id":  "progress",
+                                                        "kind":  "text",
+                                                        "size":  21,
+                                                        "y":  485,
+                                                        "w":  320,
+                                                        "h":  46,
+                                                        "color":  "#a59be0",
+                                                        "text":  "{cleared} / {total} CLEARED",
+                                                        "font":  "main"
+                                                    },
+                                                    {
+                                                        "x":  470,
+                                                        "id":  "grid",
+                                                        "kind":  "levelGrid",
+                                                        "gap":  14,
+                                                        "y":  140,
+                                                        "w":  750,
+                                                        "button":  {
+                                                                       "borderWidth":  2,
+                                                                       "showStars":  true,
+                                                                       "showDifficulty":  true,
+                                                                       "shape":  "diamond",
+                                                                       "clearedFill":  "#64c4b1",
+                                                                       "border":  "#a59be0",
+                                                                       "fill":  "#252238",
+                                                                       "fill2":  "#64c4b1",
+                                                                       "pad":  2,
+                                                                       "numberColor":  "#a59be0",
+                                                                       "font":  "title",
+                                                                       "numberSize":  30
+                                                                   },
+                                                        "h":  420,
+                                                        "rows":  3,
+                                                        "cols":  7
+                                                    },
+                                                    {
+                                                        "size":  23,
+                                                        "id":  "back",
+                                                        "y":  610,
+                                                        "color":  "#a59be0",
+                                                        "border":  "#64c4b1",
+                                                        "fill":  "#252238",
+                                                        "borderWidth":  2,
+                                                        "kind":  "back",
+                                                        "x":  52,
+                                                        "w":  190,
+                                                        "radius":  10,
+                                                        "text":  "BACK",
+                                                        "font":  "title",
+                                                        "h":  54
+                                                    },
+                                                    {
+                                                        "x":  470,
+                                                        "id":  "footer",
+                                                        "kind":  "text",
+                                                        "size":  18,
+                                                        "y":  600,
+                                                        "w":  750,
+                                                        "h":  38,
+                                                        "color":  "#a59be0",
+                                                        "text":  "SELECT A LEVEL",
+                                                        "font":  "main",
+                                                        "opacity":  0.6
+                                                    }
+                                                ]
+                               }
+                }
+}

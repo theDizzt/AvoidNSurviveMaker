@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Chop Chop Sawmill">
+  <defs><linearGradient id="bg" x2=".7" y2="1"><stop stop-color="#241e19"/><stop offset="1" stop-color="#69834c"/></linearGradient><radialGradient id="halo"><stop stop-color="#dbb580" stop-opacity=".2"/><stop offset="1" stop-color="#dbb580" stop-opacity="0"/></radialGradient></defs>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <circle cx="200" cy="200" r="190" fill="url(#halo)"/>
+  <path d="M24 80V24H80M320 24H376V80M24 320V376H80M320 376H376V320" fill="none" stroke="#dbb580" opacity=".35" stroke-width="2"/>
+  <g color="#dbb580"><path d="M38 270 94 105 150 270M260 250 310 90 365 250" fill="currentColor" opacity=".25"/><g fill="none" stroke="currentColor"><circle cx="200" cy="213" r="98" stroke-width="15"/><circle cx="200" cy="213" r="70" stroke-width="3"/><circle cx="200" cy="213" r="48" stroke-width="5"/><circle cx="200" cy="213" r="22" stroke-width="3"/><path d="M100 335 300 110M125 355 325 130" stroke-width="13"/></g></g>
+  <text x="32" y="49" fill="#dbb580" font-family="sans-serif" font-size="12" letter-spacing="4">CHAPTER 03</text>
+</svg>

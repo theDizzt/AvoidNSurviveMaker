@@ -1,0 +1,227 @@
+{
+  "v": 2,
+  "name": "workshop09",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 120,
+    "w": 60,
+    "h": 120
+  },
+  "goal": {
+    "x": 1740,
+    "y": 120,
+    "w": 60,
+    "h": 120
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 120,
+        "w": 480,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 660,
+        "cy": 360,
+        "rx": 240,
+        "ry": 240
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 660,
+        "cy": 360,
+        "rx": 120,
+        "ry": 120
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 640,
+        "y": 120,
+        "w": 40,
+        "h": 480
+      },
+      "rotation": {
+        "pivot": {
+          "x": 660,
+          "y": 360
+        },
+        "speed": 90,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 660,
+        "cy": 780,
+        "rx": 240,
+        "ry": 240
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 660,
+        "cy": 780,
+        "rx": 120,
+        "ry": 120
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 640,
+        "y": 540,
+        "w": 40,
+        "h": 480
+      },
+      "rotation": {
+        "pivot": {
+          "x": 660,
+          "y": 780
+        },
+        "speed": 90,
+        "angle": 360,
+        "clockwise": false,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 840,
+        "y": 720,
+        "w": 240,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1260,
+        "cy": 360,
+        "rx": 240,
+        "ry": 240
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1260,
+        "cy": 360,
+        "rx": 120,
+        "ry": 120
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1240,
+        "y": 120,
+        "w": 40,
+        "h": 480
+      },
+      "rotation": {
+        "pivot": {
+          "x": 1260,
+          "y": 360
+        },
+        "speed": 90,
+        "angle": 360,
+        "clockwise": false,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1260,
+        "cy": 780,
+        "rx": 240,
+        "ry": 240
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1260,
+        "cy": 780,
+        "rx": 120,
+        "ry": 120
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1240,
+        "y": 540,
+        "w": 40,
+        "h": 480
+      },
+      "rotation": {
+        "pivot": {
+          "x": 1260,
+          "y": 780
+        },
+        "speed": 90,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1260,
+        "y": 120,
+        "w": 480,
+        "h": 120
+      }
+    }
+  ],
+  "title": "Rotate 2",
+  "level": 9,
+  "difficulty": 1.25,
+  "stars": {
+    "three": 3700,
+    "two": 6000,
+    "one": 9000
+  }
+}
