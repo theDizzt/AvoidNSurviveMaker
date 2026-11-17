@@ -95,7 +95,7 @@ function shape(v: unknown, name: string, W: number, H: number): Shape {
     return obj(p, name).smooth === true ? { ...pt, smooth: true } : pt;
   });
   if (points.length < 3) fail(`${name}.points: a polygon needs at least 3 vertices`);
-  return { type, points };
+  return o.free === true ? { type, points, free: true } : { type, points };
 }
 
 function motion(v: unknown, name: string, W: number, H: number): Motion {
@@ -133,6 +133,10 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
   };
   if (o.motion !== undefined) out.motion = motion(o.motion, `${name}.motion`, W, H);
   if (o.rotation !== undefined) out.rotation = rotation(o.rotation, `${name}.rotation`, W, H);
+  if (o.group !== undefined) {
+    const g = num(o.group, `${name}.group`, 1, 1e9);
+    if (Number.isInteger(g)) out.group = g;
+  }
   return out;
 }
 

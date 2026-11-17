@@ -58,6 +58,7 @@ const editor = new Editor({
   gridTop: $<HTMLInputElement>('opt-grid-top'),
   undo: $<HTMLButtonElement>('btn-undo'),
   redo: $<HTMLButtonElement>('btn-redo'),
+  shortcuts: $<HTMLButtonElement>('btn-shortcuts'),
   name: $<HTMLInputElement>('map-name'),
   author: $<HTMLInputElement>('map-author'),
   size: $<HTMLSelectElement>('map-size'),
@@ -203,12 +204,21 @@ const togglePanels = () => {
 };
 panelsBtn.addEventListener('click', togglePanels);
 
+// No browser right-click menu anywhere in the app (the editor canvas opens its own). Text fields
+// keep theirs so copy / paste by mouse still works.
+document.addEventListener('contextmenu', (e) => {
+  const t = e.target;
+  const editable = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || (t instanceof HTMLElement && t.isContentEditable);
+  if (!editable) e.preventDefault();
+});
+
 window.addEventListener('keydown', (e) => {
   if ((current !== 'play' && current !== 'editor') || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
   const t = e.target;
   if (t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement) return;
-  if (e.key === 'f' || e.key === 'F') toggleFullscreen();
-  else if (current === 'editor' && (e.key === 'h' || e.key === 'H')) togglePanels();
+  // Physical keys, so these also work with a non-Latin IME
+  if (e.code === 'KeyF') toggleFullscreen();
+  else if (current === 'editor' && e.code === 'KeyH') togglePanels();
 });
 openInEditor.addEventListener('click', () => {
   editor.loadMap(currentMap);

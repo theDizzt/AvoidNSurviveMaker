@@ -154,11 +154,12 @@
           <button type="button" id="btn-editor-play">Play</button>
           <button type="button" id="btn-editor-menu" title="Main menu">Main Menu</button>
           <span class="bar-sep" aria-hidden="true"></span>
-          <label class="check"><input type="checkbox" id="opt-snap" checked /> Snap</label>
-          <label class="check"><input type="checkbox" id="opt-preview" /> Preview motion</label>
+          <label class="check" title="N"><input type="checkbox" id="opt-snap" checked /> Snap</label>
+          <label class="check" title="P"><input type="checkbox" id="opt-preview" /> Preview motion</label>
           <label class="check" title="Draw the grid over walls and obstacles"><input type="checkbox" id="opt-grid-top" /> Grid on top</label>
           <button type="button" id="btn-undo" title="Ctrl+Z">Undo</button>
           <button type="button" id="btn-redo" title="Ctrl+Y">Redo</button>
+          <button type="button" id="btn-shortcuts" title="?" aria-pressed="false">Shortcuts</button>
           <span class="bar-sep" aria-hidden="true"></span>
           <button type="button" id="btn-panels" title="H" aria-pressed="false">Hide panels</button>
           <button type="button" id="btn-editor-fullscreen" class="btn-fullscreen" title="F">Fullscreen</button>
@@ -196,7 +197,7 @@
             <ul id="messages" class="messages"></ul>
             <section>
               <h3>Test &amp; share</h3>
-              <button type="button" id="btn-test" class="primary">▶ Test play</button>
+              <button type="button" id="btn-test" class="primary" title="T">▶ Test play</button>
               <p id="verify-status" class="verify"></p>
               <button type="button" id="btn-share" disabled>🔗 Create share link</button>
               <input id="share-url" readonly placeholder="Your share link will appear here" />

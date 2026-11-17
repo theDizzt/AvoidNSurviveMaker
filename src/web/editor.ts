@@ -1,13 +1,19 @@
 import { pointInPoly, pointInRect } from '../core/geometry';
 import { CompiledMotion } from '../core/motion';
 import { compileObject, transformAt, type CompiledObject, type Transform } from '../core/object';
-import { polyOutline, shapeBounds, shapeCenter, translateShape } from '../core/shape';
+import {
+  alignOffset, distributeOffsets, objectsBounds, reorder, shapeCentroid, translateObject, turnObjects, unionRect,
+  type AlignMode, type Turn, type ZOrder,
+} from '../core/arrange';
+import { mergeShapes, type MergeOp } from '../core/merge';
+import { polyOutline, shapeBounds, shapeCenter } from '../core/shape';
 import { encodeMap } from '../core/share';
 import type {
   Easing, MapData, MapObject, Motion, MotionType, Point, PolyPoint, Rect, Repeat, Role, Rotation, Shape,
 } from '../core/types';
 import { createEmptyMap, DEFAULT_MOTION, defaultRotation, LIMITS, mapWarnings, validateMap } from '../core/validate';
 import { beginFrame, clientToMap, COLORS, drawMap, FONT_MAIN, fitCanvas, traceObject, unitsPerPx } from './render';
+import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
 import { renderThemePanel } from './theme-panel';
 
 // ───────────────────────── Tools ─────────────────────────
@@ -53,18 +59,41 @@ function toolLabel(t: ObjectTool): string {
   return `${beh}${shape} ${t.role === 'path' ? 'Path' : 'Wall'}`;
 }
 
+/** Freeform: drawn with the freeform tool, made by merging, or any polygon with curved vertices */
+function isFreeform(s: Shape): boolean {
+  return s.type === 'poly' && (!!s.free || s.points.some((p) => p.smooth));
+}
+
 function describeObject(o: MapObject): string {
   const shape =
     o.shape.type === 'rect' ? 'Rectangle'
       : o.shape.type === 'ellipse' ? 'Circle'
-        : o.shape.points.some((p) => p.smooth) ? 'Freeform' : 'Polygon';
+        : isFreeform(o.shape) ? 'Freeform' : 'Polygon';
   const beh = o.rotation ? 'Rotating ' : o.motion ? 'Moving ' : '';
   return `${beh}${shape} ${o.role === 'path' ? 'Path' : 'Wall'}`;
 }
 
+/** The palette number (1–26) of the tool that makes this kind of object */
+function objectToolId(o: MapObject): number {
+  const shape = o.shape.type === 'rect' ? 0 : o.shape.type === 'ellipse' ? 1 : isFreeform(o.shape) ? 3 : 2;
+  const group = GROUPS.find(
+    (g) => 'role' in g && g.role === o.role && g.behavior === (o.rotation ? 'rotating' : o.motion ? 'moving' : 'static'),
+  );
+  return group && 'first' in group ? group.first + shape : 0;
+}
+
+const ZONE_IDS = { start: 9, goal: 10 } as const;
+
+/** "120×40"; circles report their diameter, polygons their bounding box */
+function sizeText(w: number, h: number): string {
+  return `${Math.round(w)}×${Math.round(h)}`;
+}
+
 // ───────────────────────── Editor state types ─────────────────────────
 
-type Selection = { kind: 'object'; i: number } | { kind: 'start' } | { kind: 'goal' } | null;
+/** Selected objects keep the order they were picked in (merge "subtract" keeps the first one) */
+type Selection = { kind: 'objects'; ids: number[] } | { kind: 'start' } | { kind: 'goal' } | null;
+type Hit = { kind: 'object'; i: number } | { kind: 'start' } | { kind: 'goal' } | null;
 type Handle =
   | { kind: 'corner'; j: number }
   | { kind: 'vertex'; j: number }
@@ -72,7 +101,14 @@ type Handle =
   | { kind: 'pivot' };
 type Drag =
   | { type: 'box'; x0: number; y0: number; x1: number; y1: number; square: boolean }
-  | { type: 'move'; p0: Point; before: string; moved: boolean; orig: MapObject | Rect }
+  | {
+    type: 'move'; p0: Point; before: string; moved: boolean;
+    /** Zone being moved, or the selected objects as they were */
+    zone?: Rect; objs?: { i: number; o: MapObject }[];
+    /** Object clicked inside the current selection: picked alone if released without moving */
+    clicked: number | null;
+  }
+  | { type: 'marquee'; x0: number; y0: number; x1: number; y1: number; add: boolean; base: number[] }
   | { type: 'handle'; h: Handle; before: string; moved: boolean; orig: MapObject | Rect };
 
 const STORAGE_KEY = 'avoid-n-survive:editor';
@@ -82,6 +118,8 @@ const MAP_SIZES: [number, number][] = [[640, 360], [960, 540], [1280, 720], [160
 const GRID = 10;
 const HISTORY_LIMIT = 200;
 const HANDLE_PX = 7;
+/** Screen px within which a dragged pivot snaps to the shape's center points / vertices */
+const PIVOT_SNAP_PX = 10;
 const IDENTITY: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
 
 const REPEAT_OPTIONS: [Repeat, string][] = [['loop', 'Loop'], ['pingpong', 'Ping-pong'], ['once', 'Once']];
@@ -99,6 +137,7 @@ export interface EditorElements {
   gridTop: HTMLInputElement;
   undo: HTMLButtonElement;
   redo: HTMLButtonElement;
+  shortcuts: HTMLButtonElement;
   name: HTMLInputElement;
   author: HTMLInputElement;
   size: HTMLSelectElement;
@@ -116,12 +155,73 @@ export interface EditorElements {
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
-function translateObject(o: MapObject, dx: number, dy: number): MapObject {
-  const out: MapObject = { ...clone(o), shape: translateShape(o.shape, dx, dy) };
-  if (out.motion) out.motion.points = out.motion.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
-  if (out.rotation) out.rotation.pivot = { x: out.rotation.pivot.x + dx, y: out.rotation.pivot.y + dy };
-  return out;
+type CommandId =
+  | 'cut' | 'copy' | 'paste' | 'duplicate' | 'delete'
+  | 'selectAll' | 'selectPaths' | 'selectWalls' | 'selectSame'
+  | 'front' | 'forward' | 'backward' | 'back'
+  | 'alignLeft' | 'alignCenter' | 'alignRight' | 'alignTop' | 'alignMiddle' | 'alignBottom' | 'distH' | 'distV' | 'alignToMap'
+  | 'rotCW' | 'rotCCW' | 'flipV' | 'flipH'
+  | 'group' | 'ungroup' | 'regroup'
+  | 'union' | 'combine' | 'fragment' | 'intersect' | 'subtract'
+  | 'pivotCenter' | 'pivotCentroid'
+  | 'makePath' | 'makeWall';
+
+interface Command {
+  label: string;
+  enabled: boolean;
+  run: () => void;
+  keys?: string;
+  checked?: boolean;
+  danger?: boolean;
 }
+
+const ARROWS: Record<string, [number, number]> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+
+/** Shown in the "?" overlay; keep in sync with Editor.onKey and the F/H keys in main.ts */
+const SHORTCUTS: [string, [string, string][]][] = [
+  ['Tools', [
+    ['V', 'Select / edit'],
+    ['1 / 2 / 3 / 4', 'Rectangle / Circle / Polygon / Freeform'],
+    ['W', 'Switch between path and wall'],
+    ['M', 'Moving object (press again for static)'],
+    ['R', 'Rotating object (press again for static)'],
+    ['S / G', 'Start area / Goal area'],
+  ]],
+  ['Edit', [
+    ['Ctrl+Z', 'Undo'],
+    ['Ctrl+Y / Ctrl+Shift+Z', 'Redo'],
+    ['Ctrl+C / Ctrl+X / Ctrl+V', 'Copy / cut / paste'],
+    ['Ctrl+D', 'Duplicate'],
+    ['Delete', 'Delete'],
+    ['Ctrl+A', 'Select all'],
+    ['Shift+Click / Ctrl+Click', 'Add to / remove from selection'],
+    ['Drag', 'On empty space: select everything inside the box'],
+    ['Ctrl+G / Ctrl+Shift+G', 'Group / ungroup'],
+    ['Ctrl+] / Ctrl+[', 'Bring forward / send backward'],
+    ['Ctrl+Shift+] / Ctrl+Shift+[', 'Bring to front / send to back'],
+    ['Alt', 'While dragging a pivot: place freely (no snapping)'],
+    ['Arrows', 'Move selection (grid step when Snap is on)'],
+    ['Shift+Arrows', 'Move selection ×10'],
+    ['Tab / Shift+Tab', 'Select next / previous'],
+    ['Esc', 'Cancel drawing / deselect'],
+    ['Enter', 'Close polygon / finish markers'],
+    ['Backspace', 'Remove last point while drawing'],
+  ]],
+  ['View', [
+    ['N', 'Toggle snap to grid'],
+    ['P', 'Toggle motion preview'],
+    ['T', 'Test play'],
+    ['H', 'Hide / show panels'],
+    ['F', 'Fullscreen'],
+    ['Right-click', 'Arrange, align, rotate, group and merge menu'],
+    ['?', 'Show this list'],
+  ]],
+];
 
 function rectFromCorners(a: Point, b: Point): Rect {
   return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
@@ -157,6 +257,21 @@ export class Editor {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly previewStart = performance.now();
   private readonly paletteButtons: { btn: HTMLButtonElement; tool: Tool }[] = [];
+  /** Last object tool used; number keys / W / M / R change one aspect of it */
+  private lastObjectTool: ObjectTool = { kind: 'object', role: 'path', behavior: 'static', shape: 'rect' };
+  /** Copied objects (Ctrl+C / Ctrl+X) and how many times they have been pasted */
+  private clipboard: { objs: MapObject[]; pastes: number } | null = null;
+  /** Consecutive arrow-key nudges of the same selection share one undo step */
+  private lastNudge: { key: string; t: number } | null = null;
+  private helpBox: HTMLElement | null = null;
+  /** Align / distribute relative to the map instead of the selection */
+  private alignToMap = false;
+  /** Members of the last ungrouped group, for "Regroup" (valid while the object list keeps its layout) */
+  private lastUngrouped: { ids: number[]; count: number } | null = null;
+  /** Short status message shown in the hint bar for a moment */
+  private flashMsg: { text: string; until: number } | null = null;
+  /** Pivot snap target while dragging a pivot (drawn as a guide) */
+  private pivotSnap: { p: Point; label: string } | null = null;
 
   constructor(private readonly el: EditorElements) {
     this.ctx = el.canvas.getContext('2d')!;
@@ -169,7 +284,10 @@ export class Editor {
     el.canvas.addEventListener('pointerup', (e) => this.onUp(e));
     el.canvas.addEventListener('pointerleave', () => (this.hover = null));
     el.canvas.addEventListener('dblclick', (e) => this.onDoubleClick(e));
-    el.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    el.canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.onContextMenu(e);
+    });
     window.addEventListener('keydown', (e) => this.onKey(e));
     const refit = () => fitCanvas(el.canvas, this.map);
     new ResizeObserver(refit).observe(el.canvas.parentElement!);
@@ -190,6 +308,7 @@ export class Editor {
     });
     el.undo.addEventListener('click', () => this.undo());
     el.redo.addEventListener('click', () => this.redo());
+    el.shortcuts.addEventListener('click', () => this.toggleHelp());
 
     const textField = (input: HTMLInputElement, key: 'name' | 'author') =>
       input.addEventListener('change', () => this.edit(() => (this.map[key] = input.value.slice(0, LIMITS.maxText))));
@@ -216,7 +335,7 @@ export class Editor {
     el.newBtn.addEventListener('click', () => {
       if (!confirm('Clear the current map and start a new one? (You can restore it with Undo)')) return;
       this.edit(() => (this.map = createEmptyMap()));
-      this.sel = null;
+      this.clearSelection();
       fitCanvas(el.canvas, this.map);
     });
 
@@ -237,14 +356,16 @@ export class Editor {
 
   hide(): void {
     this.visible = false;
+    closeContextMenu();
     this.finishModes();
+    this.toggleHelp(false);
   }
 
   /** Bring a map from the play screen into the editor (remix). Previous work can be restored with Undo */
   loadMap(map: MapData): void {
     this.finishModes();
     this.edit(() => (this.map = clone(map)));
-    this.sel = null;
+    this.clearSelection();
     fitCanvas(this.el.canvas, this.map);
   }
 
@@ -301,8 +422,8 @@ export class Editor {
       const row = document.createElement('div');
       row.className = 'pal-row';
       if ('zones' in g) {
-        addButton(row, { kind: 'zone', zone: 'start' }, '<span class="pal-zone">S</span><span class="pal-num">9</span>', '#9 Start area', 'pal-start');
-        addButton(row, { kind: 'zone', zone: 'goal' }, '<span class="pal-zone">G</span><span class="pal-num">10</span>', '#10 Goal area', 'pal-goal');
+        addButton(row, { kind: 'zone', zone: 'start' }, '<span class="pal-zone">S</span><span class="pal-num">9</span>', '#9 Start area (S)', 'pal-start');
+        addButton(row, { kind: 'zone', zone: 'goal' }, '<span class="pal-zone">G</span><span class="pal-num">10</span>', '#10 Goal area (G)', 'pal-goal');
       } else {
         SHAPES.forEach(([shape], k) => {
           const tool: ObjectTool = { kind: 'object', role: g.role, behavior: g.behavior, shape };
@@ -312,7 +433,7 @@ export class Editor {
             row,
             tool,
             `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[shape]}</svg>${badge}<span class="pal-num">${num}</span>`,
-            `#${num} ${toolLabel(tool)}`,
+            `#${num} ${toolLabel(tool)} (${k + 1})`,
             `pal-${g.role} pal-${g.behavior}`,
           );
         });
@@ -324,6 +445,7 @@ export class Editor {
   private setTool(tool: Tool): void {
     this.finishModes();
     this.tool = tool;
+    if (tool.kind === 'object') this.lastObjectTool = tool;
     for (const { btn, tool: t } of this.paletteButtons) {
       btn.setAttribute('aria-pressed', String(JSON.stringify(t) === JSON.stringify(tool)));
     }
@@ -341,6 +463,7 @@ export class Editor {
   // ───────────────────────── State ─────────────────────────
 
   private snapshot(json = JSON.stringify(this.map)): void {
+    this.lastNudge = null;
     this.history.push(json);
     if (this.history.length > HISTORY_LIMIT) this.history.shift();
     this.future = [];
@@ -369,14 +492,19 @@ export class Editor {
   }
 
   private afterHistoryJump(): void {
+    this.lastNudge = null;
     this.finishModes();
-    if (this.sel?.kind === 'object' && this.sel.i >= this.map.objects.length) this.sel = null;
     fitCanvas(this.el.canvas, this.map);
     this.changed();
   }
 
   /** After the map changes: save, validate, refresh panels */
   private changed(): void {
+    // Drop selected indices that no longer exist (delete, merge, undo…) before panels read them
+    if (this.sel?.kind === 'objects') {
+      const ids = this.sel.ids.filter((i) => i < this.map.objects.length);
+      this.sel = ids.length ? { kind: 'objects', ids } : null;
+    }
     this.dirty();
     this.save();
     this.syncInputs();
@@ -446,7 +574,10 @@ export class Editor {
 
   private updateHint(): void {
     let text: string;
-    if (this.markerMode !== null) {
+    const n = this.selIds().length;
+    if (this.flashMsg && performance.now() < this.flashMsg.until) {
+      text = this.flashMsg.text;
+    } else if (this.markerMode !== null) {
       const m = this.map.objects[this.markerMode]?.motion;
       text = m?.type === 'circle'
         ? 'Click to set the orbit center. Enter or Esc when done'
@@ -455,8 +586,10 @@ export class Editor {
       text = this.draft.tool.shape === 'free'
         ? `Click to add curved points, Shift+click for sharp corners (${this.draft.points.length}). Click the first point or press Enter to close · Backspace undoes a point · Esc cancels`
         : `Click to add vertices (${this.draft.points.length}). Click the first point or press Enter to close · Backspace undoes a point · Esc cancels`;
+    } else if (this.tool.kind === 'select' && n > 1) {
+      text = `${n} objects selected. Drag to move them together · right-click for arrange, align, group and merge · Shift+click adds or removes`;
     } else if (this.tool.kind === 'select') {
-      text = 'Click to select, drag to move, drag handles to reshape. Polygons: double-click a vertex to toggle curve, double-click an edge to add a vertex, Alt+click a vertex to remove it';
+      text = 'Click to select, drag on empty space to select several, Shift+click to add. Drag handles to reshape · double-click a vertex to toggle curve, an edge to add a vertex · Alt+click removes a vertex · right-click for more';
     } else if (this.tool.kind === 'zone') {
       text = `Drag to set the ${this.tool.zone === 'start' ? 'START' : 'GOAL'} area`;
     } else {
@@ -482,7 +615,7 @@ export class Editor {
     return clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
   }
 
-  private hitTest(p: Point): Selection {
+  private hitTest(p: Point): Hit {
     const objs = this.compiled;
     for (let i = objs.length - 1; i >= 0; i--) {
       if (objs[i].role === 'wall' && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
@@ -495,8 +628,66 @@ export class Editor {
     return null;
   }
 
+  /** Selected object indices in pick order (empty for zones / nothing) */
+  private selIds(): number[] {
+    return this.sel?.kind === 'objects' ? this.sel.ids : [];
+  }
+
+  /** The selected object when exactly one is selected */
   private selectedObject(): MapObject | null {
-    return this.sel?.kind === 'object' ? (this.map.objects[this.sel.i] ?? null) : null;
+    const ids = this.selIds();
+    return ids.length === 1 ? (this.map.objects[ids[0]] ?? null) : null;
+  }
+
+  private selectedIndex(): number {
+    const ids = this.selIds();
+    return ids.length === 1 ? ids[0] : -1;
+  }
+
+  /** Every object index that shares a group with any of `ids` (keeping `ids` first, in order) */
+  private withGroups(ids: readonly number[]): number[] {
+    const groups = new Set(ids.map((i) => this.map.objects[i]?.group).filter((g) => g !== undefined));
+    const out = [...ids];
+    if (groups.size) this.map.objects.forEach((o, i) => o.group !== undefined && groups.has(o.group) && !out.includes(i) && out.push(i));
+    return out;
+  }
+
+  /** Select objects (indices are expanded to whole groups unless `exact`) */
+  private selectObjects(ids: readonly number[], exact = false): void {
+    const valid = [...new Set(ids)].filter((i) => i >= 0 && i < this.map.objects.length);
+    const all = exact ? valid : this.withGroups(valid);
+    this.sel = all.length ? { kind: 'objects', ids: all } : null;
+    this.renderProps();
+  }
+
+  private selectZone(zone: 'start' | 'goal'): void {
+    this.sel = { kind: zone };
+    this.renderProps();
+  }
+
+  private clearSelection(): void {
+    this.sel = null;
+    this.renderProps();
+  }
+
+  /** Selected objects split into units that move / align together: each group, and each loose object */
+  private selUnits(): number[][] {
+    const units = new Map<string, number[]>();
+    for (const i of this.selIds()) {
+      const g = this.map.objects[i]?.group;
+      const key = g === undefined ? `o${i}` : `g${g}`;
+      const u = units.get(key);
+      if (u) u.push(i);
+      else units.set(key, [i]);
+    }
+    return [...units.values()];
+  }
+
+  /** Show a short message in the hint bar */
+  private flash(text: string): void {
+    this.flashMsg = { text, until: performance.now() + 2500 };
+    this.updateHint();
+    setTimeout(() => this.updateHint(), 2600);
   }
 
   private selectedZone(): Rect | null {
@@ -514,7 +705,7 @@ export class Editor {
       return out;
     }
     const o = this.selectedObject();
-    if (!o) return out;
+    if (!o) return out; // no handles for multi-selections
     if (o.rotation) out.push({ h: { kind: 'pivot' }, p: o.rotation.pivot });
     o.motion?.points.forEach((p, j) => out.push({ h: { kind: 'marker', j }, p }));
     if (o.shape.type === 'poly') o.shape.points.forEach((p, j) => out.push({ h: { kind: 'vertex', j }, p }));
@@ -577,22 +768,69 @@ export class Editor {
         this.drag = { type: 'handle', h, before: JSON.stringify(this.map), moved: false, orig };
         return;
       }
-      this.sel = this.hitTest(raw);
-      this.renderProps();
-      const target = this.selectedZone() ?? this.selectedObject();
-      if (target) this.drag = { type: 'move', p0: raw, before: JSON.stringify(this.map), moved: false, orig: clone(target) };
+      const hit = this.hitTest(raw);
+      const toggle = e.shiftKey || e.ctrlKey || e.metaKey;
+      if (hit?.kind === 'object') {
+        const ids = this.selIds();
+        if (toggle) {
+          // Add or remove the clicked object (with its group)
+          const unit = this.withGroups([hit.i]);
+          if (ids.includes(hit.i)) this.selectObjects(ids.filter((i) => !unit.includes(i)), true);
+          else this.selectObjects([...ids, ...unit], true);
+          return;
+        }
+        const already = ids.includes(hit.i);
+        if (!already) this.selectObjects([hit.i]);
+        this.startMove(raw, already ? hit.i : null);
+        return;
+      }
+      if (hit) {
+        if (toggle) return;
+        this.selectZone(hit.kind);
+        this.startMove(raw, null);
+        return;
+      }
+      // Empty space: rubber-band selection
+      const base = toggle ? this.selIds() : [];
+      if (!toggle) this.clearSelection();
+      this.drag = { type: 'marquee', x0: raw.x, y0: raw.y, x1: raw.x, y1: raw.y, add: toggle, base };
       return;
     }
 
     if (tool.kind === 'object' && (tool.shape === 'poly' || tool.shape === 'free')) {
       this.draft = { tool, points: [tool.shape === 'free' && !e.shiftKey ? { ...p, smooth: true } : p] };
-      this.sel = null;
-      this.renderProps();
+      this.clearSelection();
       this.updateHint();
       return;
     }
 
     this.drag = { type: 'box', x0: p.x, y0: p.y, x1: p.x, y1: p.y, square: e.shiftKey };
+  }
+
+  private startMove(p0: Point, clicked: number | null): void {
+    const zone = this.selectedZone();
+    this.drag = {
+      type: 'move', p0, before: JSON.stringify(this.map), moved: false, clicked,
+      zone: zone ? clone(zone) : undefined,
+      objs: this.selIds().map((i) => ({ i, o: clone(this.map.objects[i]) })),
+    };
+  }
+
+  /** Points a dragged pivot snaps to: center of the bounds, center of mass, and the outline's corners */
+  private pivotTargets(o: MapObject): { p: Point; label: string }[] {
+    const s = o.shape;
+    const out = [{ p: shapeCenter(s), label: 'Center' }];
+    const c = shapeCentroid(s);
+    if (Math.hypot(c.x - out[0].p.x, c.y - out[0].p.y) > 0.5) out.push({ p: c, label: 'Center of mass' });
+    if (s.type === 'poly') s.points.forEach((v) => out.push({ p: { x: v.x, y: v.y }, label: 'Vertex' }));
+    else {
+      const b = shapeBounds(s);
+      rectCorners(b).forEach((v) => out.push({ p: v, label: 'Corner' }));
+      for (const [fx, fy] of [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]]) {
+        out.push({ p: { x: b.x + b.w * fx, y: b.y + b.h * fy }, label: 'Edge middle' });
+      }
+    }
+    return out;
   }
 
   private onMove(e: PointerEvent): void {
@@ -608,22 +846,29 @@ export class Editor {
       d.square = e.shiftKey;
       return;
     }
+    if (d.type === 'marquee') {
+      d.x1 = raw.x;
+      d.y1 = raw.y;
+      return;
+    }
     if (!d.moved) {
+      // A tiny wobble while clicking isn't a move
+      if (d.type === 'move' && Math.hypot(raw.x - d.p0.x, raw.y - d.p0.y) < 2 * unitsPerPx(this.el.canvas, this.map)) return;
       d.moved = true;
       this.snapshot(d.before);
     }
 
     if (d.type === 'move') {
       const zone = this.selectedZone();
-      if (zone && !('shape' in d.orig)) {
-        const o = d.orig;
-        zone.x = this.snapv(o.x + raw.x - d.p0.x);
-        zone.y = this.snapv(o.y + raw.y - d.p0.y);
-      } else if (this.sel?.kind === 'object' && 'shape' in d.orig) {
-        const b = shapeBounds(d.orig.shape);
+      if (zone && d.zone) {
+        zone.x = this.snapv(d.zone.x + raw.x - d.p0.x);
+        zone.y = this.snapv(d.zone.y + raw.y - d.p0.y);
+      } else if (d.objs?.length) {
+        // Snap the combined bounds, so a multi-selection keeps its layout
+        const b = objectsBounds(d.objs.map((x) => x.o));
         const dx = this.snapv(b.x + raw.x - d.p0.x) - b.x;
         const dy = this.snapv(b.y + raw.y - d.p0.y) - b.y;
-        this.map.objects[this.sel.i] = translateObject(d.orig, dx, dy);
+        for (const { i, o } of d.objs) this.map.objects[i] = translateObject(o, dx, dy);
       }
       this.dirty();
       return;
@@ -641,8 +886,23 @@ export class Editor {
     }
     const o = this.selectedObject();
     if (!o || !('shape' in d.orig)) return;
-    if (h.kind === 'pivot' && o.rotation) o.rotation.pivot = p;
-    else if (h.kind === 'marker' && o.motion) o.motion.points[h.j] = p;
+    if (h.kind === 'pivot' && o.rotation) {
+      // Snap to the exact center / corners when close (hold Alt to place freely)
+      const reach = PIVOT_SNAP_PX * unitsPerPx(this.el.canvas, this.map);
+      let best: { p: Point; label: string } | null = null;
+      let bestD = reach;
+      if (!e.altKey) {
+        for (const t of this.pivotTargets(o)) {
+          const dist = Math.hypot(t.p.x - raw.x, t.p.y - raw.y);
+          if (dist <= bestD) {
+            bestD = dist;
+            best = t;
+          }
+        }
+      }
+      this.pivotSnap = best;
+      o.rotation.pivot = best ? { x: Math.round(best.p.x * 100) / 100, y: Math.round(best.p.y * 100) / 100 } : p;
+    } else if (h.kind === 'marker' && o.motion) o.motion.points[h.j] = p;
     else if (h.kind === 'vertex' && o.shape.type === 'poly') o.shape.points[h.j] = { ...o.shape.points[h.j], x: p.x, y: p.y };
     else if (h.kind === 'corner') {
       const opposite = rectCorners(shapeBounds(d.orig.shape))[(h.j + 2) % 4];
@@ -658,8 +918,34 @@ export class Editor {
   private onUp(e: PointerEvent): void {
     const d = this.drag;
     this.drag = null;
+    this.pivotSnap = null;
     if (this.el.canvas.hasPointerCapture(e.pointerId)) this.el.canvas.releasePointerCapture(e.pointerId);
     if (!d) return;
+    if (d.type === 'marquee') {
+      const r = rectFromCorners({ x: d.x0, y: d.y0 }, { x: d.x1, y: d.y1 });
+      if (r.w < 2 && r.h < 2) return;
+      // Objects entirely inside the box (PowerPoint style)
+      const hits: number[] = [];
+      this.map.objects.forEach((o, i) => {
+        const b = shapeBounds(o.shape);
+        if (b.x >= r.x && b.y >= r.y && b.x + b.w <= r.x + r.w && b.y + b.h <= r.y + r.h) hits.push(i);
+      });
+      this.selectObjects([...d.base, ...hits]);
+      return;
+    }
+    if (d.type === 'move') {
+      if (d.moved) return this.changed();
+      // A click without dragging inside a multi-selection narrows it to the clicked group,
+      // or from a whole group down to the clicked member
+      if (d.clicked !== null && this.selIds().length > 1) {
+        const unit = this.withGroups([d.clicked]);
+        const ids = this.selIds();
+        const same = unit.length === ids.length && unit.every((i) => ids.includes(i));
+        if (same && unit.length > 1) this.selectObjects([d.clicked], true);
+        else if (!same) this.selectObjects(unit, true);
+      }
+      return;
+    }
     if (d.type !== 'box') {
       if (d.moved) this.changed();
       return;
@@ -675,8 +961,7 @@ export class Editor {
     if (tool.kind === 'zone') {
       if (r.w < 10 || r.h < 10) return;
       this.edit(() => (this.map[tool.zone] = r));
-      this.sel = { kind: tool.zone };
-      this.renderProps();
+      this.selectZone(tool.zone);
       return;
     }
     if (tool.kind !== 'object') return;
@@ -694,7 +979,10 @@ export class Editor {
     const draft = this.draft;
     this.draft = null;
     if (!draft || draft.points.length < 3) return this.updateHint();
-    this.addObject(draft.tool, { type: 'poly', points: draft.points });
+    const shape: Shape = draft.tool.shape === 'free'
+      ? { type: 'poly', points: draft.points, free: true }
+      : { type: 'poly', points: draft.points };
+    this.addObject(draft.tool, shape);
   }
 
   private addObject(tool: ObjectTool, shape: Shape): void {
@@ -704,9 +992,8 @@ export class Editor {
     if (tool.behavior === 'moving') o.motion = { ...DEFAULT_MOTION, points: [] };
     this.edit(() => this.map.objects.push(o));
     const i = this.map.objects.length - 1;
-    this.sel = { kind: 'object', i };
     if (tool.behavior === 'moving') this.markerMode = i;
-    this.renderProps();
+    this.selectObjects([i], true);
     this.updateHint();
   }
 
@@ -749,53 +1036,532 @@ export class Editor {
     if (!this.visible) return;
     const t = e.target;
     if (t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement) return;
+    if (e.altKey) return;
     const mod = e.ctrlKey || e.metaKey;
-    const key = e.key.toLowerCase();
-    if (mod && key === 'z') {
+    // Letters by physical key (e.code), so shortcuts also work with a non-Latin IME such as Korean
+    const code = e.code;
+    const letter = code.startsWith('Key') ? code.slice(3).toLowerCase() : e.key.toLowerCase();
+
+    if (this.helpBox && !this.helpBox.hidden) {
+      if (e.key === 'Escape' || e.key === '?' || code === 'Slash') {
+        e.preventDefault();
+        this.toggleHelp(false);
+      }
+      return;
+    }
+
+    const arrow = ARROWS[e.key];
+    if (arrow && !mod) {
+      if (this.draft || this.markerMode !== null || !this.sel) return;
       e.preventDefault();
-      if (e.shiftKey) this.redo();
-      else this.undo();
-    } else if (mod && key === 'y') {
+      const step = (this.el.snap.checked ? GRID : 1) * (e.shiftKey ? 10 : 1);
+      this.nudge(arrow[0] * step, arrow[1] * step);
+      return;
+    }
+
+    if (mod) {
+      const cmds = this.commands();
+      const run = (c: Command) => {
+        e.preventDefault();
+        if (c.enabled) c.run();
+      };
+      if (code === 'BracketRight') return run(e.shiftKey ? cmds.front : cmds.forward);
+      if (code === 'BracketLeft') return run(e.shiftKey ? cmds.back : cmds.backward);
+      if (!['z', 'y', 'd', 'c', 'x', 'v', 'a', 'g'].includes(letter)) return;
+      // Leave the browser's own copy / paste alone when there is nothing of ours to act on
+      if ((letter === 'c' || letter === 'x') && !cmds.copy.enabled) return;
+      if (letter === 'v' && !cmds.paste.enabled) return;
       e.preventDefault();
-      this.redo();
-    } else if (mod && key === 'd') {
+      if (letter === 'z') {
+        if (e.shiftKey) this.redo();
+        else this.undo();
+      } else if (letter === 'y') this.redo();
+      else if (letter === 'd') run(cmds.duplicate);
+      else if (letter === 'c') run(cmds.copy);
+      else if (letter === 'x') run(cmds.cut);
+      else if (letter === 'v') run(cmds.paste);
+      else if (letter === 'a') run(cmds.selectAll);
+      else if (letter === 'g') run(e.shiftKey ? cmds.ungroup : cmds.group);
+      return;
+    }
+
+    if (e.key === '?' || (code === 'Slash' && e.shiftKey)) {
       e.preventDefault();
-      this.duplicateSelected();
+      this.toggleHelp(true);
+    } else if (e.key === 'Tab') {
+      if (this.draft || this.markerMode !== null) return;
+      e.preventDefault();
+      this.cycleSelection(e.shiftKey ? -1 : 1);
     } else if (e.key === 'Enter') {
       if (this.draft) this.closeDraft();
       else this.finishModes();
     } else if (e.key === 'Escape') {
       if (this.draft || this.markerMode !== null) this.finishModes();
-      else {
-        this.sel = null;
-        this.renderProps();
-      }
+      else this.clearSelection();
     } else if (e.key === 'Backspace' && this.draft) {
       this.draft.points.pop();
       if (this.draft.points.length === 0) this.draft = null;
       this.updateHint();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       this.deleteSelected();
-    } else if (!mod && key === 'v') {
+    } else if (e.repeat) {
+      // Tool and toggle keys shouldn't fire repeatedly while held
+    } else if (letter === 'v') {
       this.setTool({ kind: 'select' });
+    } else if (code >= 'Digit1' && code <= 'Digit4') {
+      this.setTool({ ...this.lastObjectTool, shape: SHAPES[Number(code.slice(5)) - 1][0] });
+    } else if (letter === 'w') {
+      const t = this.lastObjectTool;
+      this.setTool({ ...t, role: t.role === 'path' ? 'wall' : 'path' });
+    } else if (letter === 'm' || letter === 'r') {
+      const t = this.lastObjectTool;
+      const want: Behavior = letter === 'm' ? 'moving' : 'rotating';
+      // Pressing again while that tool is active returns to a static object
+      const active = this.tool.kind === 'object' && t.behavior === want;
+      this.setTool({ ...t, behavior: active ? 'static' : want });
+    } else if (letter === 's') {
+      this.setTool({ kind: 'zone', zone: 'start' });
+    } else if (letter === 'g') {
+      this.setTool({ kind: 'zone', zone: 'goal' });
+    } else if (letter === 'n') {
+      this.el.snap.click();
+    } else if (letter === 'p') {
+      this.el.preview.click();
+    } else if (letter === 't') {
+      this.el.test.click();
     }
   }
 
-  private deleteSelected(): void {
+  /** Move the selection by (dx, dy); a burst of nudges is one undo step */
+  private nudge(dx: number, dy: number): void {
     const s = this.sel;
-    if (s?.kind !== 'object') return;
-    this.finishModes();
-    this.edit(() => this.map.objects.splice(s.i, 1));
-    this.sel = null;
+    if (!s) return;
+    const key = JSON.stringify(s);
+    const now = performance.now();
+    const coalesce = this.lastNudge && this.lastNudge.key === key && now - this.lastNudge.t < 1000;
+    if (!coalesce) this.snapshot();
+    if (s.kind === 'objects') {
+      for (const i of s.ids) this.map.objects[i] = translateObject(this.map.objects[i], dx, dy);
+    } else {
+      const zone = this.selectedZone()!;
+      zone.x += dx;
+      zone.y += dy;
+    }
+    this.lastNudge = { key, t: now };
+    this.changed();
+  }
+
+  /** Tab / Shift+Tab: step through START, GOAL and every object */
+  private cycleSelection(dir: 1 | -1): void {
+    const all: Selection[] = [{ kind: 'start' }, { kind: 'goal' }, ...this.map.objects.map((_, i) => ({ kind: 'objects' as const, ids: [i] }))];
+    const cur = all.findIndex((s) => JSON.stringify(s) === JSON.stringify(this.sel));
+    const next = cur < 0 ? (dir > 0 ? 0 : all.length - 1) : (cur + dir + all.length) % all.length;
+    if (this.tool.kind !== 'select') this.setTool({ kind: 'select' });
+    this.sel = all[next];
     this.renderProps();
   }
 
-  private duplicateSelected(): void {
-    const o = this.selectedObject();
-    if (!o || this.map.objects.length >= LIMITS.maxObjects) return;
-    this.edit(() => this.map.objects.push(translateObject(o, GRID * 2, GRID * 2)));
-    this.sel = { kind: 'object', i: this.map.objects.length - 1 };
+  private copySelected(): boolean {
+    const ids = [...this.selIds()].sort((a, b) => a - b);
+    if (!ids.length) return false;
+    this.clipboard = { objs: ids.map((i) => clone(this.map.objects[i])), pastes: 0 };
+    return true;
+  }
+
+  /** Append copies of objects (offset), with fresh group ids, and select them */
+  private insertCopies(objs: readonly MapObject[], off: number): void {
+    const room = LIMITS.maxObjects - this.map.objects.length;
+    if (room <= 0) return this.flash(`A map can have at most ${LIMITS.maxObjects} objects`);
+    const fresh = new Map<number, number>();
+    let next = this.nextGroupId();
+    const copies = objs.slice(0, room).map((o) => {
+      const c = translateObject(o, off, off);
+      if (c.group !== undefined) {
+        if (!fresh.has(c.group)) fresh.set(c.group, next++);
+        c.group = fresh.get(c.group);
+      }
+      return c;
+    });
+    this.finishModes();
+    const start = this.map.objects.length;
+    this.edit(() => this.map.objects.push(...copies));
+    if (this.tool.kind !== 'select') this.setTool({ kind: 'select' });
+    this.selectObjects(copies.map((_, k) => start + k), true);
+  }
+
+  private paste(): void {
+    const c = this.clipboard;
+    if (!c) return;
+    c.pastes++;
+    this.insertCopies(c.objs, GRID * 2 * c.pastes);
+  }
+
+  private nextGroupId(): number {
+    return this.map.objects.reduce((m, o) => Math.max(m, o.group ?? 0), 0) + 1;
+  }
+
+  // ───────────────────────── Arrange commands ─────────────────────────
+
+  /** Everything the context menu, shortcuts and properties panel can do with the selection */
+  private commands(): Record<CommandId, Command> {
+    const ids = this.selIds();
+    const objs = this.map.objects;
+    const n = ids.length;
+    const units = this.selUnits();
+    const zone = this.selectedZone();
+    const groupedSel = ids.some((i) => objs[i].group !== undefined);
+    const oneGroup = n > 1 && objs[ids[0]].group !== undefined && ids.every((i) => objs[i].group === objs[ids[0]].group);
+    const rotating = ids.filter((i) => objs[i].rotation);
+    const lu = this.lastUngrouped;
+    const canRegroup = !!lu && lu.count === objs.length && lu.ids.every((i) => objs[i] && objs[i].group === undefined);
+    const toMap = this.alignToMap || (zone ? true : units.length < 2);
+    const cmd = (label: string, enabled: boolean, run: () => void, keys?: string): Command => ({ label, enabled, run, keys });
+    const align = (mode: AlignMode, label: string) => cmd(label, n > 0 || !!zone, () => this.align(mode));
+    const merge = (op: MergeOp, label: string) => cmd(label, n >= 2, () => this.merge(op));
+    return {
+      cut: cmd('Cut', n > 0, () => this.copySelected() && this.deleteSelected(), 'Ctrl+X'),
+      copy: cmd('Copy', n > 0, () => this.copySelected(), 'Ctrl+C'),
+      paste: cmd('Paste', !!this.clipboard, () => this.paste(), 'Ctrl+V'),
+      duplicate: cmd('Duplicate', n > 0, () => this.duplicateSelected(), 'Ctrl+D'),
+      delete: { ...cmd('Delete', n > 0, () => this.deleteSelected(), 'Del'), danger: true },
+
+      selectAll: cmd('Select all', objs.length > 0, () => this.selectObjects(objs.map((_, i) => i), true), 'Ctrl+A'),
+      selectPaths: cmd('All paths', objs.some((o) => o.role === 'path'), () => this.selectObjects(this.indicesWhere((o) => o.role === 'path'), true)),
+      selectWalls: cmd('All walls', objs.some((o) => o.role === 'wall'), () => this.selectObjects(this.indicesWhere((o) => o.role === 'wall'), true)),
+      selectSame: cmd('Same kind as this', n > 0, () => {
+        const id = objectToolId(objs[ids[0]]);
+        this.selectObjects(this.indicesWhere((o) => objectToolId(o) === id), true);
+      }),
+
+      front: cmd('Bring to front', n > 0, () => this.order('front'), 'Ctrl+Shift+]'),
+      forward: cmd('Bring forward', n > 0, () => this.order('forward'), 'Ctrl+]'),
+      backward: cmd('Send backward', n > 0, () => this.order('backward'), 'Ctrl+['),
+      back: cmd('Send to back', n > 0, () => this.order('back'), 'Ctrl+Shift+['),
+
+      alignLeft: align('left', 'Align left'),
+      alignCenter: align('center', 'Align center'),
+      alignRight: align('right', 'Align right'),
+      alignTop: align('top', 'Align top'),
+      alignMiddle: align('middle', 'Align middle'),
+      alignBottom: align('bottom', 'Align bottom'),
+      distH: cmd('Distribute horizontally', toMap ? n > 0 : units.length >= 3, () => this.distribute('x')),
+      distV: cmd('Distribute vertically', toMap ? n > 0 : units.length >= 3, () => this.distribute('y')),
+      alignToMap: { ...cmd('Align to map', true, () => (this.alignToMap = !this.alignToMap)), checked: this.alignToMap },
+
+      rotCW: cmd('Rotate right 90°', n > 0, () => this.turn('cw')),
+      rotCCW: cmd('Rotate left 90°', n > 0, () => this.turn('ccw')),
+      flipV: cmd('Flip vertical', n > 0, () => this.turn('flipV')),
+      flipH: cmd('Flip horizontal', n > 0, () => this.turn('flipH')),
+
+      group: cmd('Group', n >= 2 && !oneGroup, () => this.groupSelected(), 'Ctrl+G'),
+      ungroup: cmd('Ungroup', groupedSel, () => this.ungroupSelected(), 'Ctrl+Shift+G'),
+      regroup: cmd('Regroup', canRegroup, () => this.regroup()),
+
+      union: merge('union', 'Union'),
+      combine: merge('combine', 'Combine'),
+      fragment: merge('fragment', 'Fragment'),
+      intersect: merge('intersect', 'Intersect'),
+      subtract: merge('subtract', 'Subtract'),
+
+      pivotCenter: cmd('Pivot to center', rotating.length > 0, () => this.setPivots(false)),
+      pivotCentroid: cmd('Pivot to center of mass', rotating.length > 0 && rotating.some((i) => objs[i].shape.type === 'poly'), () => this.setPivots(true)),
+
+      makePath: cmd('Make path', ids.some((i) => objs[i].role !== 'path'), () => this.edit(() => ids.forEach((i) => (objs[i].role = 'path')))),
+      makeWall: cmd('Make wall', ids.some((i) => objs[i].role !== 'wall'), () => this.edit(() => ids.forEach((i) => (objs[i].role = 'wall')))),
+    };
+  }
+
+  private indicesWhere(f: (o: MapObject) => boolean): number[] {
+    const out: number[] = [];
+    this.map.objects.forEach((o, i) => f(o) && out.push(i));
+    return out;
+  }
+
+  private order(op: ZOrder): void {
+    const ids = this.selIds();
+    if (!ids.length) return;
+    const old = this.map.objects;
+    const order = reorder(old.length, ids, op);
+    if (order.every((k, i) => k === i)) return;
+    this.edit(() => (this.map.objects = order.map((k) => old[k])));
+    this.lastUngrouped = null;
+    this.selectObjects(ids.map((i) => order.indexOf(i)), true);
+  }
+
+  private align(mode: AlignMode): void {
+    const full: Rect = { x: 0, y: 0, w: this.map.width, h: this.map.height };
+    const zone = this.selectedZone();
+    if (zone) {
+      const d = alignOffset(zone, full, mode);
+      this.edit(() => {
+        zone.x = Math.round(zone.x + d.x);
+        zone.y = Math.round(zone.y + d.y);
+      });
+      return;
+    }
+    const units = this.selUnits();
+    if (!units.length) return;
+    const objs = this.map.objects;
+    const rects = units.map((u) => objectsBounds(u.map((i) => objs[i])));
+    const to = this.alignToMap || units.length < 2 ? full : unionRect(rects);
+    this.edit(() => units.forEach((u, k) => {
+      const d = alignOffset(rects[k], to, mode);
+      for (const i of u) objs[i] = translateObject(objs[i], d.x, d.y);
+    }));
+  }
+
+  private distribute(axis: 'x' | 'y'): void {
+    const units = this.selUnits();
+    const objs = this.map.objects;
+    const rects = units.map((u) => objectsBounds(u.map((i) => objs[i])));
+    const toMap = this.alignToMap || units.length < 3;
+    if (!units.length || (!toMap && units.length < 3)) return;
+    const offs = distributeOffsets(rects, axis, toMap ? { x: 0, y: 0, w: this.map.width, h: this.map.height } : undefined);
+    this.edit(() => units.forEach((u, k) => {
+      for (const i of u) objs[i] = translateObject(objs[i], offs[k].x, offs[k].y);
+    }));
+  }
+
+  /** Rotate / flip each unit (a group, or a loose object) about its own center */
+  private turn(t: Turn): void {
+    const units = this.selUnits();
+    if (!units.length) return;
+    const objs = this.map.objects;
+    this.edit(() => units.forEach((u) => {
+      const out = turnObjects(u.map((i) => objs[i]), t);
+      u.forEach((i, k) => (objs[i] = out[k]));
+    }));
+  }
+
+  private groupSelected(): void {
+    const ids = this.selIds();
+    if (ids.length < 2) return;
+    const id = this.nextGroupId();
+    this.edit(() => ids.forEach((i) => (this.map.objects[i].group = id)));
+    this.lastUngrouped = null;
     this.renderProps();
+  }
+
+  private ungroupSelected(): void {
+    const ids = this.selIds().filter((i) => this.map.objects[i].group !== undefined);
+    if (!ids.length) return;
+    this.edit(() => ids.forEach((i) => delete this.map.objects[i].group));
+    this.lastUngrouped = { ids, count: this.map.objects.length };
+    this.renderProps();
+  }
+
+  private regroup(): void {
+    const lu = this.lastUngrouped;
+    if (!lu) return;
+    const id = this.nextGroupId();
+    this.edit(() => lu.ids.forEach((i) => (this.map.objects[i].group = id)));
+    this.lastUngrouped = null;
+    if (this.tool.kind !== 'select') this.setTool({ kind: 'select' });
+    this.selectObjects(lu.ids, true);
+  }
+
+  private setPivots(centroid: boolean): void {
+    const objs = this.map.objects;
+    this.edit(() => this.selIds().forEach((i) => {
+      const r = objs[i].rotation;
+      if (!r) return;
+      const c = centroid ? shapeCentroid(objs[i].shape) : shapeCenter(objs[i].shape);
+      r.pivot = { x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100 };
+    }));
+  }
+
+  /**
+   * PowerPoint-style merge. The result takes its type, movement and rotation from the first
+   * selected object, and is always a freeform shape. Several separate pieces are grouped
+   * (except for Fragment, which is meant to break shapes apart).
+   */
+  private merge(op: MergeOp): void {
+    const ids = this.selIds();
+    if (ids.length < 2) return;
+    const objs = this.map.objects;
+    const first = objs[ids[0]];
+    let results: Shape[][];
+    try {
+      results = mergeShapes(op, ids.map((i) => objs[i].shape), LIMITS.maxPolyPoints);
+    } catch {
+      return this.flash('These shapes could not be merged');
+    }
+    if (!results.length) return this.flash(op === 'intersect' ? 'The shapes do not overlap, so nothing is left' : 'Nothing is left after merging');
+    const made: MapObject[] = [];
+    let gid = this.nextGroupId();
+    const oldCenter = shapeCenter(first.shape);
+    for (const shapes of results) {
+      const group = op !== 'fragment' && shapes.length > 1 ? gid++ : undefined;
+      for (const shape of shapes) {
+        const o: MapObject = { role: first.role, shape };
+        // Keep the route's offsets: the anchor is the shape center, which the merge moves
+        if (first.motion) {
+          const c = shapeCenter(shape);
+          const m = clone(first.motion);
+          m.points = m.points.map((p) => ({ x: p.x + c.x - oldCenter.x, y: p.y + c.y - oldCenter.y }));
+          o.motion = m;
+        }
+        if (first.rotation) o.rotation = clone(first.rotation);
+        if (group !== undefined) o.group = group;
+        made.push(o);
+      }
+    }
+    const remove = new Set(ids);
+    const kept = objs.filter((_, i) => !remove.has(i));
+    if (kept.length + made.length > LIMITS.maxObjects) return this.flash(`A map can have at most ${LIMITS.maxObjects} objects`);
+    // Results take the first selected object's place in the drawing order
+    const at = objs.slice(0, ids[0]).filter((_, i) => !remove.has(i)).length;
+    this.finishModes();
+    this.edit(() => (this.map.objects = [...kept.slice(0, at), ...made, ...kept.slice(at)]));
+    this.lastUngrouped = null;
+    this.selectObjects(made.map((_, k) => at + k), true);
+    if (op === 'fragment') this.flash(`Split into ${made.length} pieces`);
+  }
+
+  // ───────────────────────── Context menu ─────────────────────────
+
+  private onContextMenu(e: MouseEvent): void {
+    if (!this.visible) return;
+    const x = e.clientX;
+    const y = e.clientY;
+    if (this.draft) {
+      const pts = this.draft.points.length;
+      return openContextMenu(x, y, [
+        { label: 'Finish shape', keys: 'Enter', disabled: pts < 3, action: () => this.closeDraft() },
+        { label: 'Remove last point', keys: 'Backspace', action: () => {
+          this.draft?.points.pop();
+          if (this.draft && !this.draft.points.length) this.draft = null;
+          this.updateHint();
+        } },
+        { label: 'Cancel', keys: 'Esc', action: () => this.finishModes() },
+      ]);
+    }
+    if (this.markerMode !== null) {
+      return openContextMenu(x, y, [{ label: 'Done placing markers', keys: 'Enter', action: () => this.finishModes() }]);
+    }
+
+    // Right-clicking something outside the selection selects it first
+    const hit = this.hitTest(this.pointer(e));
+    if (hit?.kind === 'object') {
+      if (!this.selIds().includes(hit.i)) {
+        if (this.tool.kind !== 'select') this.setTool({ kind: 'select' });
+        this.selectObjects([hit.i]);
+      }
+    } else if (hit) {
+      if (this.tool.kind !== 'select') this.setTool({ kind: 'select' });
+      this.selectZone(hit.kind);
+    } else {
+      this.clearSelection();
+    }
+
+    const c = this.commands();
+    const item = (k: CommandId): MenuItem => ({
+      label: c[k].label, keys: c[k].keys, disabled: !c[k].enabled, action: c[k].run, checked: c[k].checked, danger: c[k].danger,
+    });
+    const sub = (label: string, items: MenuItem[]): MenuItem => ({
+      label, submenu: items, disabled: items.every((it) => it === 'sep' || it.disabled),
+    });
+    const alignMenu = sub('Align', [
+      item('alignLeft'), item('alignCenter'), item('alignRight'), 'sep',
+      item('alignTop'), item('alignMiddle'), item('alignBottom'), 'sep',
+      item('distH'), item('distV'), 'sep', item('alignToMap'),
+    ]);
+    const selectMenu = sub('Select', [item('selectAll'), item('selectPaths'), item('selectWalls'), item('selectSame')]);
+    const help: MenuItem = { label: 'Keyboard shortcuts', keys: '?', action: () => this.toggleHelp(true) };
+
+    if (this.selectedZone()) {
+      return openContextMenu(x, y, [alignMenu, 'sep', selectMenu, item('paste'), 'sep', help]);
+    }
+    if (!this.selIds().length) {
+      return openContextMenu(x, y, [item('paste'), selectMenu, 'sep', help]);
+    }
+    openContextMenu(x, y, [
+      item('cut'), item('copy'), item('paste'), item('duplicate'), 'sep',
+      sub('Bring to front', [item('front'), item('forward')]),
+      sub('Send to back', [item('back'), item('backward')]),
+      alignMenu,
+      sub('Rotate', [item('rotCW'), item('rotCCW'), 'sep', item('flipV'), item('flipH')]),
+      sub('Group', [item('group'), item('ungroup'), item('regroup')]),
+      sub('Merge shapes', [item('union'), item('combine'), item('fragment'), item('intersect'), item('subtract')]),
+      'sep',
+      sub('Rotation pivot', [item('pivotCenter'), item('pivotCentroid')]),
+      sub('Type', [item('makePath'), item('makeWall')]),
+      selectMenu,
+      'sep',
+      item('delete'),
+    ]);
+  }
+
+  /** Shortcut list overlay (?); built on first use */
+  private toggleHelp(show?: boolean): void {
+    if (!this.helpBox) {
+      if (show === false) return;
+      const box = document.createElement('div');
+      box.className = 'shortcut-help';
+      box.hidden = true;
+      box.setAttribute('role', 'dialog');
+      box.setAttribute('aria-label', 'Keyboard shortcuts');
+      const card = document.createElement('div');
+      card.className = 'shortcut-card';
+      const head = document.createElement('div');
+      head.className = 'shortcut-head';
+      const h = document.createElement('h3');
+      h.textContent = 'Keyboard shortcuts';
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.textContent = '×';
+      close.title = 'Close (Esc)';
+      close.addEventListener('click', () => this.toggleHelp(false));
+      head.append(h, close);
+      card.append(head);
+      for (const [title, rows] of SHORTCUTS) {
+        const sec = document.createElement('section');
+        const h4 = document.createElement('h4');
+        h4.textContent = title;
+        const dl = document.createElement('dl');
+        for (const [keys, what] of rows) {
+          const dt = document.createElement('dt');
+          keys.split(' / ').forEach((k, n) => {
+            if (n) dt.append(' / ');
+            k.split('+').forEach((part, m) => {
+              if (m) dt.append('+');
+              const kbd = document.createElement('kbd');
+              kbd.textContent = part;
+              dt.append(kbd);
+            });
+          });
+          const dd = document.createElement('dd');
+          dd.textContent = what;
+          dl.append(dt, dd);
+        }
+        sec.append(h4, dl);
+        card.append(sec);
+      }
+      box.append(card);
+      box.addEventListener('pointerdown', (e) => {
+        if (e.target === box) this.toggleHelp(false);
+      });
+      (this.el.canvas.closest('.editor-view') ?? document.body).append(box);
+      this.helpBox = box;
+    }
+    const open = show ?? this.helpBox.hidden;
+    this.helpBox.hidden = !open;
+    this.el.shortcuts.setAttribute('aria-pressed', String(open));
+  }
+
+  private deleteSelected(): void {
+    const ids = new Set(this.selIds());
+    if (!ids.size) return;
+    this.finishModes();
+    this.edit(() => (this.map.objects = this.map.objects.filter((_, i) => !ids.has(i))));
+    this.lastUngrouped = null;
+    this.clearSelection();
+  }
+
+  private duplicateSelected(): void {
+    const ids = [...this.selIds()].sort((a, b) => a - b);
+    if (!ids.length) return;
+    this.insertCopies(ids.map((i) => this.map.objects[i]), GRID * 2);
   }
 
   // ───────────────────────── Properties panel ─────────────────────────
@@ -895,18 +1661,24 @@ export class Editor {
     const zone = this.selectedZone();
     if (zone) {
       const title = document.createElement('h4');
-      title.textContent = this.sel?.kind === 'start' ? 'START area' : 'GOAL area';
+      const z = this.sel?.kind === 'start' ? 'start' : 'goal';
+      title.textContent = `ID ${ZONE_IDS[z]} · ${z === 'start' ? 'START area' : 'GOAL area'}`;
       box.replaceChildren(title, this.rectFields(zone));
       return;
     }
-    const o = this.selectedObject();
-    if (!o || this.sel?.kind !== 'object') {
-      box.replaceChildren(this.note('Pick a tool from the palette, or select an object with the Select tool (V).'));
+    const ids = this.selIds();
+    if (ids.length > 1) {
+      box.replaceChildren(...this.multiProps(ids));
       return;
     }
-    const idx = this.sel.i;
+    const o = this.selectedObject();
+    if (!o) {
+      box.replaceChildren(this.note('Pick a tool from the palette, or select an object with the Select tool (V). Drag on empty space to select several.'));
+      return;
+    }
+    const idx = ids[0];
     const title = document.createElement('h4');
-    title.textContent = `#${idx + 1} ${describeObject(o)}`;
+    title.textContent = `#${idx + 1} · ID ${objectToolId(o)} · ${describeObject(o)}${o.group !== undefined ? ` · Group ${o.group}` : ''}`;
     const parts: HTMLElement[] = [title];
 
     parts.push(this.group(
@@ -997,11 +1769,94 @@ export class Editor {
       parts.push(this.actions(this.button('Center pivot', () => this.edit(() => (r.pivot = shapeCenter(o.shape))))));
     }
 
+    parts.push(...this.arrangeProps(false));
     parts.push(this.actions(
       this.button('Duplicate', () => this.duplicateSelected()),
       this.button('Delete', () => this.deleteSelected(), 'danger'),
     ));
     box.replaceChildren(...parts);
+  }
+
+  /** A button that runs an arrange command (disabled when it can't apply) */
+  private cmdButton(c: Command, text: string): HTMLButtonElement {
+    const b = this.button(text, () => c.enabled && c.run(), 'cmd-btn');
+    b.title = c.keys ? `${c.label} (${c.keys})` : c.label;
+    b.setAttribute('aria-label', c.label);
+    b.disabled = !c.enabled;
+    return b;
+  }
+
+  private arrangeProps(multi: boolean): HTMLElement[] {
+    const c = this.commands();
+    const row = (...b: HTMLButtonElement[]) => {
+      const d = this.actions(...b);
+      d.classList.add('cmd-row');
+      return d;
+    };
+    const out: HTMLElement[] = [
+      this.heading('Arrange'),
+      row(this.cmdButton(c.front, '⤒ Front'), this.cmdButton(c.forward, '↑ Fwd'), this.cmdButton(c.backward, '↓ Back'), this.cmdButton(c.back, '⤓ Rear')),
+      row(
+        this.cmdButton(c.alignLeft, '⇤'), this.cmdButton(c.alignCenter, '⇹'), this.cmdButton(c.alignRight, '⇥'),
+        this.cmdButton(c.alignTop, '⤒'), this.cmdButton(c.alignMiddle, '⇳'), this.cmdButton(c.alignBottom, '⤓'),
+      ),
+    ];
+    if (multi) {
+      out.push(row(this.cmdButton(c.distH, '↔ Distribute'), this.cmdButton(c.distV, '↕ Distribute')));
+      // A view preference, not a map edit: no undo step
+      const wrap = document.createElement('label');
+      wrap.className = 'toggle';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = this.alignToMap;
+      input.addEventListener('change', () => {
+        this.alignToMap = input.checked;
+        this.renderProps();
+      });
+      const span = document.createElement('span');
+      span.textContent = 'Align to the map instead of the selection';
+      wrap.append(input, span);
+      out.push(wrap);
+    } else {
+      out.push(this.note('A single object aligns to the map.'));
+    }
+    out.push(
+      row(this.cmdButton(c.rotCW, '↻ 90°'), this.cmdButton(c.rotCCW, '↺ 90°'), this.cmdButton(c.flipH, '⇋ Flip'), this.cmdButton(c.flipV, '⇵ Flip')),
+    );
+    return out;
+  }
+
+  private multiProps(ids: number[]): HTMLElement[] {
+    const c = this.commands();
+    const objs = ids.map((i) => this.map.objects[i]);
+    const title = document.createElement('h4');
+    const g = objs[0].group;
+    title.textContent = g !== undefined && objs.every((o) => o.group === g) ? `Group ${g} · ${ids.length} objects` : `${ids.length} objects selected`;
+    const b = objectsBounds(objs);
+    const row = (...bs: HTMLButtonElement[]) => {
+      const d = this.actions(...bs);
+      d.classList.add('cmd-row');
+      return d;
+    };
+    return [
+      title,
+      this.note(`${objs.filter((o) => o.role === 'path').length} paths, ${objs.filter((o) => o.role === 'wall').length} walls · ${sizeText(b.w, b.h)} · first picked: #${ids[0] + 1}`),
+      ...this.arrangeProps(true),
+      this.heading('Group'),
+      row(this.cmdButton(c.group, 'Group'), this.cmdButton(c.ungroup, 'Ungroup'), this.cmdButton(c.regroup, 'Regroup')),
+      this.heading('Merge shapes'),
+      row(
+        this.cmdButton(c.union, 'Union'), this.cmdButton(c.combine, 'Combine'), this.cmdButton(c.fragment, 'Fragment'),
+        this.cmdButton(c.intersect, 'Intersect'), this.cmdButton(c.subtract, 'Subtract'),
+      ),
+      this.note('The result is a freeform shape that keeps the type, movement and rotation of the first picked object. Subtract removes the others from the first.'),
+      this.heading('Type'),
+      row(this.cmdButton(c.makePath, 'All paths'), this.cmdButton(c.makeWall, 'All walls')),
+      this.actions(
+        this.button('Duplicate', () => this.duplicateSelected()),
+        this.button('Delete', () => this.deleteSelected(), 'danger'),
+      ),
+    ];
   }
 
   /** Rebuild the theme panel only when the theme actually changed, so open controls keep focus */
@@ -1062,6 +1917,32 @@ export class Editor {
 
   // ───────────────────────── Drawing ─────────────────────────
 
+  /** Small pill with object info, placed just above-right of (x, y) and kept inside the map */
+  private drawInfoLabel(text: string, x: number, y: number, u: number): void {
+    const { ctx, map } = this;
+    ctx.font = `600 ${12 * u}px ${FONT_MAIN}`;
+    const padX = 7 * u;
+    const w = ctx.measureText(text).width + padX * 2;
+    const h = 20 * u;
+    const lx = Math.max(2 * u, Math.min(x + 6 * u, map.width - w - 2 * u));
+    const ly = Math.max(2 * u, Math.min(y - h - 6 * u, map.height - h - 2 * u));
+    ctx.save();
+    ctx.shadowColor = 'rgba(36,52,80,0.25)';
+    ctx.shadowBlur = 6 * u * ctx.getTransform().a;
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.beginPath();
+    ctx.roundRect(lx, ly, w, h, h / 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(36,52,80,0.25)';
+    ctx.lineWidth = 1 * u;
+    ctx.stroke();
+    ctx.fillStyle = COLORS.ink;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, lx + padX, ly + h / 2 + 0.5 * u);
+  }
+
   private draw(): void {
     if (!this.visible) return;
     const { ctx, map } = this;
@@ -1099,11 +1980,12 @@ export class Editor {
       ctx.setLineDash([]);
     }
 
-    const selIndex = this.sel?.kind === 'object' ? this.sel.i : -1;
+    const selIndex = this.selectedIndex();
+    const selIds = new Set(this.selIds());
 
-    // Routes and pivots of every dynamic object (faint), the selected one highlighted
+    // Routes and pivots of every dynamic object (faint), the selected ones highlighted
     map.objects.forEach((o, i) => {
-      const selected = i === selIndex;
+      const selected = selIds.has(i);
       if (o.motion) {
         const route = new CompiledMotion(o.motion, shapeCenter(o.shape)).route();
         if (route.length >= 4) {
@@ -1117,7 +1999,7 @@ export class Editor {
           ctx.setLineDash([]);
         }
       }
-      if (o.rotation && !selected) {
+      if (o.rotation && i !== selIndex) {
         ctx.fillStyle = COLORS.pivot;
         ctx.beginPath();
         ctx.arc(o.rotation.pivot.x, o.rotation.pivot.y, 2.5 * u, 0, Math.PI * 2);
@@ -1136,6 +2018,93 @@ export class Editor {
       if (zone) ctx.rect(zone.x, zone.y, zone.w, zone.h);
       else traceObject(ctx, selObj!, IDENTITY);
       ctx.stroke();
+      ctx.setLineDash([]);
+
+      // "#4 · ID 5 · 120×40" at the top-right of the selection (group members: the group's box too)
+      const o = this.selectedObject();
+      const b = zone ?? (o ? shapeBounds(o.shape) : null);
+      if (b) {
+        const kind = this.sel?.kind;
+        const label = o
+          ? `#${selIndex + 1} · ID ${objectToolId(o)} · ${sizeText(b.w, b.h)}`
+          : `${kind === 'start' ? 'START' : 'GOAL'} · ID ${ZONE_IDS[kind === 'start' ? 'start' : 'goal']} · ${sizeText(b.w, b.h)}`;
+        this.drawInfoLabel(label, b.x + b.w, b.y, u);
+      }
+    }
+
+    // Multi-selection: every member outlined, plus one box around them all
+    if (selIds.size > 1) {
+      ctx.strokeStyle = COLORS.select;
+      ctx.lineWidth = 1.5 * u;
+      ctx.setLineDash([5 * u, 4 * u]);
+      ctx.beginPath();
+      for (const i of selIds) if (objs[i]) traceObject(ctx, objs[i], IDENTITY);
+      ctx.stroke();
+      const members = [...selIds].map((i) => map.objects[i]).filter(Boolean);
+      const b = objectsBounds(members);
+      const pad = 4 * u;
+      ctx.setLineDash([2 * u, 3 * u]);
+      ctx.lineWidth = 1 * u;
+      ctx.strokeRect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
+      ctx.setLineDash([]);
+      // Small squares at the box corners, like a selection frame
+      ctx.fillStyle = '#fff';
+      for (const c of rectCorners({ x: b.x - pad, y: b.y - pad, w: b.w + pad * 2, h: b.h + pad * 2 })) {
+        ctx.fillRect(c.x - 3 * u, c.y - 3 * u, 6 * u, 6 * u);
+        ctx.strokeRect(c.x - 3 * u, c.y - 3 * u, 6 * u, 6 * u);
+      }
+      const g = members[0].group;
+      const grouped = g !== undefined && members.every((o) => o.group === g);
+      this.drawInfoLabel(`${grouped ? `Group ${g} · ` : ''}${members.length} objects · ${sizeText(b.w, b.h)}`, b.x + b.w + pad, b.y - pad, u);
+    } else if (selIndex >= 0 && map.objects[selIndex]?.group !== undefined) {
+      // A single member picked out of its group: show the group's extent faintly
+      const g = map.objects[selIndex].group;
+      const b = objectsBounds(map.objects.filter((o) => o.group === g));
+      ctx.strokeStyle = COLORS.select;
+      ctx.globalAlpha = 0.5;
+      ctx.lineWidth = 1 * u;
+      ctx.setLineDash([2 * u, 3 * u]);
+      ctx.strokeRect(b.x - 4 * u, b.y - 4 * u, b.w + 8 * u, b.h + 8 * u);
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+
+    // Pivot snap targets while dragging a pivot: the exact center is easy to find
+    const dr = this.drag;
+    const so = this.selectedObject();
+    if (dr?.type === 'handle' && dr.h.kind === 'pivot' && so) {
+      for (const t of this.pivotTargets(so)) {
+        const center = t.label !== 'Vertex' && t.label !== 'Corner' && t.label !== 'Edge middle';
+        ctx.strokeStyle = center ? COLORS.pivot : 'rgba(36,52,80,0.55)';
+        ctx.lineWidth = 1.2 * u;
+        const r = (center ? 6 : 3.5) * u;
+        ctx.beginPath();
+        ctx.moveTo(t.p.x - r, t.p.y);
+        ctx.lineTo(t.p.x + r, t.p.y);
+        ctx.moveTo(t.p.x, t.p.y - r);
+        ctx.lineTo(t.p.x, t.p.y + r);
+        ctx.stroke();
+      }
+      if (this.pivotSnap) {
+        const p = this.pivotSnap.p;
+        ctx.strokeStyle = COLORS.pivot;
+        ctx.lineWidth = 2 * u;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 10 * u, 0, Math.PI * 2);
+        ctx.stroke();
+        this.drawInfoLabel(`${this.pivotSnap.label} (${Math.round(p.x * 10) / 10}, ${Math.round(p.y * 10) / 10})`, p.x + 8 * u, p.y - 4 * u, u);
+      }
+    }
+
+    // Rubber-band selection box
+    if (dr?.type === 'marquee') {
+      const r = rectFromCorners({ x: dr.x0, y: dr.y0 }, { x: dr.x1, y: dr.y1 });
+      ctx.fillStyle = 'rgba(58,159,240,0.1)';
+      ctx.strokeStyle = COLORS.select;
+      ctx.lineWidth = 1 * u;
+      ctx.setLineDash([4 * u, 3 * u]);
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
       ctx.setLineDash([]);
     }
 
@@ -1227,7 +2196,7 @@ export class Editor {
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = COLORS.ink;
-      ctx.font = `${12 * u}px ui-monospace, monospace`;
+      ctx.font = `600 ${12 * u}px ${FONT_MAIN}`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
       ctx.fillText(`${r.w}×${r.h}`, r.x, r.y - 3 * u);

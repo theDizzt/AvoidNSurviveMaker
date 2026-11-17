@@ -18,7 +18,8 @@ export interface PolyPoint extends Point {
 export type Shape =
   | { type: 'rect'; x: number; y: number; w: number; h: number }
   | { type: 'ellipse'; cx: number; cy: number; rx: number; ry: number }
-  | { type: 'poly'; points: PolyPoint[] };
+  /** `free`: a freeform shape (drawn with the freeform tool or made by merging shapes), even if it has no curved vertices */
+  | { type: 'poly'; points: PolyPoint[]; free?: boolean };
 
 /** path: safe floor (once a map has any path, everything outside paths is deadly). wall: deadly. */
 export type Role = 'path' | 'wall';
@@ -65,6 +66,8 @@ export interface MapObject {
   shape: Shape;
   motion?: Motion;
   rotation?: Rotation;
+  /** Editor-only grouping: objects sharing a group id are selected and moved together */
+  group?: number;
 }
 
 export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker';
