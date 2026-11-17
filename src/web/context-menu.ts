@@ -48,6 +48,8 @@ function buildMenu(items: MenuItem[], level: number): HTMLElement {
   menu.className = 'ctx-menu';
   menu.setAttribute('role', 'menu');
   menu.dataset.level = String(level);
+  // A right-click on the menu itself never opens the browser's menu
+  menu.addEventListener('contextmenu', (e) => e.preventDefault());
   subClosers.set(menu, () => closeSub());
   let openSub: { item: HTMLElement; sub: HTMLElement } | null = null;
   let timer = 0;

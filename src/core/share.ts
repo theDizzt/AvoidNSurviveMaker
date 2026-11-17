@@ -1,5 +1,5 @@
-import type { MapData } from './types';
-import { validateMap } from './validate';
+import type { MapData, MapPack } from './types';
+import { validateMap, validatePack } from './validate';
 
 /**
  * Map <-> URL share code.
@@ -29,16 +29,15 @@ async function pipe(bytes: Uint8Array, stream: GenericTransformStream): Promise<
   return new Uint8Array(await new Response(piped).arrayBuffer());
 }
 
-export async function encodeMap(map: MapData): Promise<string> {
-  const bytes = new TextEncoder().encode(JSON.stringify(map));
+async function encodeJson(value: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
   if (typeof CompressionStream !== 'undefined') {
     return 'z' + toBase64Url(await pipe(bytes, new CompressionStream('deflate-raw')));
   }
   return 'j' + toBase64Url(bytes);
 }
 
-/** Decode a share code and return the validated map. Throws on failure. */
-export async function decodeMap(code: string): Promise<MapData> {
+async function decodeJson(code: string): Promise<unknown> {
   const kind = code[0];
   let bytes = fromBase64Url(code.slice(1));
   if (kind === 'z') {
@@ -47,6 +46,24 @@ export async function decodeMap(code: string): Promise<MapData> {
   } else if (kind !== 'j') {
     throw new Error('Unknown share code format');
   }
-  if (bytes.length > 2_000_000) throw new Error('Map data is too large');
-  return validateMap(JSON.parse(new TextDecoder().decode(bytes)));
+  if (bytes.length > 20_000_000) throw new Error('Data is too large');
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+export function encodeMap(map: MapData): Promise<string> {
+  return encodeJson(map);
+}
+
+/** Decode a share code and return the validated map. Throws on failure. */
+export async function decodeMap(code: string): Promise<MapData> {
+  return validateMap(await decodeJson(code));
+}
+
+/** Map packs use the same code format (shared as `#p=` links) */
+export function encodePack(pack: MapPack): Promise<string> {
+  return encodeJson(pack);
+}
+
+export async function decodePack(code: string): Promise<MapPack> {
+  return validatePack(await decodeJson(code));
 }

@@ -156,6 +156,35 @@ export class CompiledMotion {
     return out;
   }
 
+  /**
+   * Distance travelled along the route at time t: keeps growing on loops, goes back down on the
+   * way back of a ping-pong. Used to spin rolling objects.
+   */
+  distanceAt(t: number): number {
+    if (this.pass <= 0) return 0;
+    let tt = t - this.src.delay;
+    if (tt <= 0) return 0;
+    const { pass } = this;
+    const total = this.legs.reduce((s, l) => s + l.len, 0);
+    let laps = 0;
+    if (this.src.repeat === 'once') {
+      tt = Math.min(tt, pass);
+    } else if (this.src.repeat === 'pingpong') {
+      tt %= pass * 2;
+      if (tt > pass) tt = pass * 2 - tt;
+    } else {
+      laps = Math.floor(tt / pass);
+      tt -= laps * pass;
+    }
+    let d = laps * total;
+    for (const leg of this.legs) {
+      if (tt <= leg.dur) return d + (leg.dur > 0 ? ease(this.src.easing, tt / leg.dur) : 1) * leg.len;
+      tt -= leg.dur;
+      d += leg.len;
+    }
+    return d;
+  }
+
   /** The full route of the anchor as one flat polyline, for drawing in the editor */
   route(): number[] {
     const out: number[] = [];

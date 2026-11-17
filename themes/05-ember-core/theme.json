@@ -1,0 +1,48 @@
+{
+  "format": 1,
+  "id": "lava",
+  "name": "Ember Core",
+  "description": "The hottest path to the goal. Spikes thrust from the walls of the forge.",
+  "author": "Avoid N Survive",
+  "released": "2026-11-17",
+  "unlockStars": 180,
+  "colors": [
+    "#ff9a5c",
+    "#e2365f"
+  ],
+  "cover": "cover.svg",
+  "style": {
+    "badge": {
+      "kind": "plate",
+      "primary": "#c9962b",
+      "secondary": "#5a3410",
+      "numberColor": "#ffffff",
+      "titleColor": "#ffe9c8",
+      "font": "serif",
+      "pad": 2,
+      "showTitle": true
+    },
+    "maze": {
+      "wall": {
+        "fill": {
+          "type": "gradient",
+          "style": "radial",
+          "from": "#ffb000",
+          "to": "#e0002b",
+          "angle": 0
+        },
+        "edge": "#ffd29a"
+      },
+      "path": {
+        "fill": {
+          "type": "pattern",
+          "pattern": "diagonal",
+          "color": "#3d2a20",
+          "background": "#2e1f18",
+          "size": 14
+        },
+        "edge": "#9a6440"
+      }
+    }
+  }
+}

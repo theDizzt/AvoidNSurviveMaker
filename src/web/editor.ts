@@ -5,26 +5,39 @@ import {
   alignOffset, distributeOffsets, objectsBounds, reorder, shapeCentroid, translateObject, turnObjects, unionRect,
   type AlignMode, type Turn, type ZOrder,
 } from '../core/arrange';
+import { gameplayKey } from '../core/level';
+import { initialChannels } from '../core/switches';
 import { mergeShapes, type MergeOp } from '../core/merge';
-import { polyOutline, shapeBounds, shapeCenter } from '../core/shape';
+import { flattenShape, polyOutline, shapeBounds, shapeCenter } from '../core/shape';
 import { encodeMap } from '../core/share';
 import type {
-  Easing, MapData, MapObject, Motion, MotionType, Point, PolyPoint, Rect, Repeat, Role, Rotation, Shape,
+  Easing, LinkAction, MapData, MapObject, Motion, MotionType, Point, PolyPoint, Rect, Repeat, Role, Rotation, Shape,
+  TriggerKind,
 } from '../core/types';
-import { createEmptyMap, DEFAULT_MOTION, defaultRotation, LIMITS, mapWarnings, validateMap } from '../core/validate';
-import { beginFrame, clientToMap, COLORS, drawMap, FONT_MAIN, fitCanvas, traceObject, unitsPerPx } from './render';
+import { SWITCH_COLORS, switchColor } from '../core/colors';
+import { boulderShape, spikeShape } from '../core/hazards';
+import { BeamCaster } from '../core/laser';
+import { createEmptyMap, DEFAULT_MOTION, defaultRotation, LIMITS, mapErrors, mapWarnings, validateMap } from '../core/validate';
+import {
+  beginFrame, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, FONT_MAIN, fitCanvas, TEXT_BASE_FONTS, traceObject, unitsPerPx,
+} from './render';
 import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
 import { renderThemePanel } from './theme-panel';
+import { fontPicker } from './font-picker';
 
 // ───────────────────────── Tools ─────────────────────────
 
-type ShapeKind = 'rect' | 'ellipse' | 'poly' | 'free';
+type ShapeKind = 'rect' | 'ellipse' | 'poly' | 'free' | 'sector';
 type Behavior = 'static' | 'moving' | 'rotating';
 interface ObjectTool {
   kind: 'object';
   role: Role;
   behavior: Behavior;
   shape: ShapeKind;
+  /** role 'trigger': which kind of switch / zone */
+  trigger?: TriggerKind;
+  /** Walls with a built-in behavior */
+  special?: 'spike' | 'boulder' | 'disc' | 'blade';
 }
 type Tool = { kind: 'select' } | { kind: 'zone'; zone: 'start' | 'goal' } | ObjectTool;
 
@@ -51,12 +64,37 @@ const ICONS: Record<ShapeKind, string> = {
   ellipse: '<circle cx="12" cy="12" r="8"/>',
   poly: '<polygon points="12,3 21,10 17.5,20 6.5,20 3,10"/>',
   free: '<path d="M4 18 C3 9 9 3 13 7 S 21 8 20 15 S 9 21 4 18 Z"/>',
+  sector: '<path d="M5 19 L5 5 A14 14 0 0 1 19 19 Z"/>',
 };
 
+/** Special objects (#27–42): fixed palette numbers, independent of moving / rotating */
+const SPECIAL_IDS = {
+  sectorPath: 27, sectorWall: 28, spike: 29, boulder: 30, coin: 31, laser: 37, mirror: 38, portal: 39, door: 40, dark: 41, globalDark: 42,
+  disc: 43, blade: 44, movingDisc: 45, movingBlade: 46, text: 47, safe: 48,
+} as const;
+const TRIGGER_IDS: Record<TriggerKind, number> = { switch: 32, timer: 33, hold: 34, startZone: 35, stopZone: 36 };
+const TRIGGER_NAMES: Record<TriggerKind, string> = {
+  switch: 'Switch', timer: 'Timer Switch', hold: 'Hold Switch', startZone: 'Event Start Zone', stopZone: 'Event Stop Zone',
+};
+/** Switch buttons are always square */
+const isButton = (k: TriggerKind | undefined) => k === 'switch' || k === 'timer' || k === 'hold';
+
+const ROLE_NAMES: Record<Role, string> = {
+  path: 'Path', wall: 'Wall', coin: 'Coin', dark: 'Darkness Area', trigger: 'Switch', door: 'Auto Door', laser: 'Laser', mirror: 'Mirror', portal: 'Portal',
+  text: 'Text Box', safe: 'Safe Zone',
+};
+/** Objects that always stay square */
+const isSquare = (o: { role: Role; trigger?: { kind: TriggerKind }; saw?: { kind: string } }) => o.role === 'portal' || o.role === 'laser' || isButton(o.trigger?.kind) || o.saw?.kind === 'disc';
+
 function toolLabel(t: ObjectTool): string {
-  const shape = SHAPES.find(([k]) => k === t.shape)![1];
+  if (t.role === 'trigger') return TRIGGER_NAMES[t.trigger ?? 'switch'];
+  if (t.special === 'spike') return 'Spike Stake';
+  if (t.special === 'boulder') return 'Rolling Boulder';
+  if (t.special === 'disc' || t.special === 'blade') return `${t.behavior === 'moving' ? 'Moving ' : ''}${t.special === 'disc' ? 'Circular Grinder' : 'Saw Blade'}`;
+  if (t.role !== 'path' && t.role !== 'wall') return ROLE_NAMES[t.role];
+  const shape = t.shape === 'sector' ? 'Sector' : SHAPES.find(([k]) => k === t.shape)![1];
   const beh = t.behavior === 'moving' ? 'Moving ' : t.behavior === 'rotating' ? 'Rotating ' : '';
-  return `${beh}${shape} ${t.role === 'path' ? 'Path' : 'Wall'}`;
+  return `${beh}${shape} ${ROLE_NAMES[t.role]}`;
 }
 
 /** Freeform: drawn with the freeform tool, made by merging, or any polygon with curved vertices */
@@ -68,13 +106,33 @@ function describeObject(o: MapObject): string {
   const shape =
     o.shape.type === 'rect' ? 'Rectangle'
       : o.shape.type === 'ellipse' ? 'Circle'
-        : isFreeform(o.shape) ? 'Freeform' : 'Polygon';
+        : o.shape.type === 'sector' ? 'Sector'
+          : isFreeform(o.shape) ? 'Freeform' : 'Polygon';
   const beh = o.rotation ? 'Rotating ' : o.motion ? 'Moving ' : '';
-  return `${beh}${shape} ${o.role === 'path' ? 'Path' : 'Wall'}`;
+  if (o.role === 'trigger') return `${beh}${switchColor(o.trigger?.color ?? 0).name} ${TRIGGER_NAMES[o.trigger?.kind ?? 'switch']}`;
+  if (o.spike) return 'Spike Stake';
+  if (o.boulder) return 'Rolling Boulder';
+  if (o.saw) return `${o.motion ? 'Moving ' : ''}${o.saw.kind === 'disc' ? 'Circular Grinder' : 'Saw Blade'}`;
+  if (o.role === 'laser' || o.role === 'portal') return `${beh}${switchColor((o.laser ?? o.portal)!.color).name} ${ROLE_NAMES[o.role]}`;
+  if (o.role !== 'path' && o.role !== 'wall') return `${beh}${ROLE_NAMES[o.role]}`;
+  return `${beh}${shape} ${ROLE_NAMES[o.role]}`;
 }
 
-/** The palette number (1–26) of the tool that makes this kind of object */
+/** The palette number of the tool that makes this kind of object */
 function objectToolId(o: MapObject): number {
+  if (o.role === 'coin') return SPECIAL_IDS.coin;
+  if (o.role === 'dark') return SPECIAL_IDS.dark;
+  if (o.role === 'door') return SPECIAL_IDS.door;
+  if (o.role === 'laser') return SPECIAL_IDS.laser;
+  if (o.role === 'mirror') return SPECIAL_IDS.mirror;
+  if (o.role === 'portal') return SPECIAL_IDS.portal;
+  if (o.spike) return SPECIAL_IDS.spike;
+  if (o.boulder) return SPECIAL_IDS.boulder;
+  if (o.saw) return o.saw.kind === 'disc' ? (o.motion ? SPECIAL_IDS.movingDisc : SPECIAL_IDS.disc) : o.motion ? SPECIAL_IDS.movingBlade : SPECIAL_IDS.blade;
+  if (o.role === 'text') return SPECIAL_IDS.text;
+  if (o.role === 'safe') return SPECIAL_IDS.safe;
+  if (o.role === 'trigger') return TRIGGER_IDS[o.trigger?.kind ?? 'switch'];
+  if (o.shape.type === 'sector') return o.role === 'path' ? SPECIAL_IDS.sectorPath : SPECIAL_IDS.sectorWall;
   const shape = o.shape.type === 'rect' ? 0 : o.shape.type === 'ellipse' ? 1 : isFreeform(o.shape) ? 3 : 2;
   const group = GROUPS.find(
     (g) => 'role' in g && g.role === o.role && g.behavior === (o.rotation ? 'rotating' : o.motion ? 'moving' : 'static'),
@@ -98,7 +156,11 @@ type Handle =
   | { kind: 'corner'; j: number }
   | { kind: 'vertex'; j: number }
   | { kind: 'marker'; j: number }
-  | { kind: 'pivot' };
+  | { kind: 'pivot' }
+  /** Sector: the two arc ends (angles) and the arc middle (radius) */
+  | { kind: 'arc'; part: 'start' | 'end' | 'radius' }
+  /** Laser: beam direction */
+  | { kind: 'aim' };
 type Drag =
   | { type: 'box'; x0: number; y0: number; x1: number; y1: number; square: boolean }
   | {
@@ -132,6 +194,8 @@ export interface EditorElements {
   hint: HTMLElement;
   palette: HTMLElement;
   theme: HTMLElement;
+  /** Level settings: title, number, cursor color, star times */
+  level: HTMLElement;
   snap: HTMLInputElement;
   preview: HTMLInputElement;
   gridTop: HTMLInputElement;
@@ -238,10 +302,15 @@ function rectCorners(r: Rect): Point[] {
 
 export class Editor {
   onTest: (map: MapData) => void = () => {};
+  /** Called after every change to the map (the map pack panel listens) */
+  onChange: () => void = () => {};
 
   private map: MapData;
   private compiledCache: CompiledObject[] | null = null;
+  /** gameplayKey() of the map as last cleared in test play (sharing needs a verified clear) */
   private verifiedJson: string | null = null;
+  /** Clear time of that test play, used to suggest star times */
+  private lastClearMs: number | null = null;
   private history: string[] = [];
   private future: string[] = [];
   private tool: Tool = { kind: 'select' };
@@ -264,6 +333,10 @@ export class Editor {
   /** Consecutive arrow-key nudges of the same selection share one undo step */
   private lastNudge: { key: string; t: number } | null = null;
   private helpBox: HTMLElement | null = null;
+  /** Switch color for the next switch / door / link (the last one picked) */
+  private lastColor = 0;
+  /** Palette button for #42 global darkness (pressed while the map has it) */
+  private globalDarkBtn: HTMLButtonElement | null = null;
   /** Align / distribute relative to the map instead of the selection */
   private alignToMap = false;
   /** Members of the last ungrouped group, for "Regroup" (valid while the object list keeps its layout) */
@@ -370,18 +443,45 @@ export class Editor {
   }
 
   /** If the map cleared in test play matches the one being edited, mark it shareable */
-  markVerified(map: MapData): void {
-    const json = JSON.stringify(map);
-    if (json === JSON.stringify(this.map)) {
-      this.verifiedJson = json;
+  markVerified(map: MapData, timeMs?: number): void {
+    const key = gameplayKey(map);
+    if (key === gameplayKey(this.map)) {
+      this.verifiedJson = key;
+      if (timeMs !== undefined) this.lastClearMs = timeMs;
       this.changed();
     }
   }
 
+  /** The map being edited (a copy) */
+  getMap(): MapData {
+    return clone(this.map);
+  }
+
+  /** Has this map (by its gameplay) been cleared in test play? Defaults to the map being edited */
+  isVerified(map: MapData = this.map): boolean {
+    return this.verifiedJson === gameplayKey(map);
+  }
+
+  /** Open a map; `verified` carries over a clear made earlier (e.g. a level stored in a map pack) */
+  openMap(map: MapData, verified: boolean): void {
+    this.loadMap(map);
+    if (verified) {
+      this.verifiedJson = gameplayKey(map);
+      this.changed();
+    }
+  }
+
+
   private get compiled(): CompiledObject[] {
-    this.compiledCache ??= this.map.objects.map(compileObject);
+    if (!this.compiledCache) {
+      this.compiledCache = this.map.objects.map(compileObject);
+      this.beamCaster = null;
+    }
     return this.compiledCache;
   }
+
+  /** Laser preview; rebuilt with the compiled objects */
+  private beamCaster: BeamCaster | null = null;
 
   /** Call after any in-place change to map objects */
   private dirty(): void {
@@ -440,12 +540,73 @@ export class Editor {
       }
       box.append(h, row);
     }
+
+    // Special objects
+    const h = document.createElement('h4');
+    h.className = 'pal-title';
+    h.textContent = 'Special';
+    const row = document.createElement('div');
+    row.className = 'pal-row';
+    const sectorPath: ObjectTool = { kind: 'object', role: 'path', behavior: 'static', shape: 'sector' };
+    const sectorWall: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'sector' };
+    const coin: ObjectTool = { kind: 'object', role: 'coin', behavior: 'static', shape: 'ellipse' };
+    const dark: ObjectTool = { kind: 'object', role: 'dark', behavior: 'static', shape: 'rect' };
+    const svg = (inner: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${inner}</svg>`;
+    addButton(row, sectorPath, `${svg(ICONS.sector)}<span class="pal-num">27</span>`, '#27 Sector Path', 'pal-path pal-static');
+    addButton(row, sectorWall, `${svg(ICONS.sector)}<span class="pal-num">28</span>`, '#28 Sector Wall', 'pal-wall pal-static');
+    addButton(row, coin, `${svg('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="4" fill="none"/>')}<span class="pal-num">31</span>`, '#31 Coin', 'pal-coin');
+    const trig = (kind: TriggerKind): ObjectTool => ({ kind: 'object', role: 'trigger', behavior: 'static', shape: 'rect', trigger: kind });
+    const btn = '<rect x="4" y="4" width="16" height="16" rx="3"/><rect x="7.5" y="7.5" width="9" height="9" rx="2" fill="#fff" fill-opacity="0.55"/>';
+    addButton(row, trig('switch'), `${svg(btn)}<span class="pal-num">32</span>`, '#32 Switch', 'pal-switch');
+    addButton(row, trig('timer'), `${svg(`${btn}<path d="M12 12 L12 8 A4 4 0 0 1 16 12 Z" fill="#243450" fill-opacity="0.5"/>`)}<span class="pal-num">33</span>`, '#33 Timer Switch', 'pal-switch');
+    addButton(row, trig('hold'), `${svg(`${btn}<circle cx="12" cy="12" r="2" fill="#243450"/>`)}<span class="pal-num">34</span>`, '#34 Hold Switch', 'pal-switch');
+    addButton(row, trig('startZone'), `${svg('<rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="3 2"/><path d="M10 9 L15 12 L10 15 Z" fill="#c2577b"/>')}<span class="pal-num">35</span>`, '#35 Event Start Zone', 'pal-zone-ev');
+    addButton(row, trig('stopZone'), `${svg('<rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="3 2"/><rect x="9.5" y="9.5" width="5" height="5" fill="#c2577b"/>')}<span class="pal-num">36</span>`, '#36 Event Stop Zone', 'pal-zone-ev');
+    const door: ObjectTool = { kind: 'object', role: 'door', behavior: 'static', shape: 'rect' };
+    addButton(row, door, `${svg('<rect x="2" y="9" width="9" height="6"/><rect x="13" y="9" width="9" height="6"/><path d="M8 6 L5 6 M16 6 L19 6" />')}<span class="pal-num">40</span>`, '#40 Auto Door', 'pal-door');
+    addButton(row, dark, `${svg('<rect x="4" y="4" width="16" height="16" rx="2"/>')}<span class="pal-num">41</span>`, '#41 Darkness Area', 'pal-dark');
+    const spike: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'poly', special: 'spike' };
+    const boulder: ObjectTool = { kind: 'object', role: 'wall', behavior: 'moving', shape: 'poly', special: 'boulder' };
+    const laser: ObjectTool = { kind: 'object', role: 'laser', behavior: 'static', shape: 'rect' };
+    const mirror: ObjectTool = { kind: 'object', role: 'mirror', behavior: 'static', shape: 'poly' };
+    const portal: ObjectTool = { kind: 'object', role: 'portal', behavior: 'static', shape: 'rect' };
+    addButton(row, spike, `${svg('<path d="M3 21 L18 6 L21 3 L17 7 Z" stroke-linejoin="round"/><path d="M5 19 L8 22 M2 16 L5 19" />')}<span class="pal-num">29</span>`, '#29 Spike Stake', 'pal-wall pal-moving');
+    addButton(row, boulder, `${svg('<polygon points="12,3 14.6,7.6 19.8,6.2 18.4,11.4 21,14 16.4,16.6 17.8,21.8 12.6,20.4 10,23 7.4,18.4 2.2,19.8 3.6,14.6 1,12 5.6,9.4 4.2,4.2 9.4,5.6" transform="scale(0.9) translate(1.3 0)"/>')}<span class="pal-num">30</span>`, '#30 Rolling Boulder', 'pal-wall pal-moving');
+    addButton(row, laser, `${svg('<rect x="3" y="8" width="8" height="8" rx="1.5"/><path d="M11 12 L22 12" stroke="#e2486c" stroke-width="2.4"/>')}<span class="pal-num">37</span>`, '#37 Laser', 'pal-laser');
+    addButton(row, mirror, `${svg('<path d="M4 20 L20 4" stroke-width="4" stroke="#8fa3bf"/><path d="M4 20 L20 4" stroke-width="1.4" stroke="#fff"/>')}<span class="pal-num">38</span>`, '#38 Mirror', 'pal-mirror');
+    addButton(row, portal, `${svg('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="5" fill="none"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">39</span>`, '#39 Teleport Portal', 'pal-portal');
+    const sawTool = (special: 'disc' | 'blade', behavior: Behavior): ObjectTool => ({ kind: 'object', role: 'wall', behavior, shape: special === 'disc' ? 'ellipse' : 'rect', special });
+    const discIcon = '<path d="M12 2 L14 5 L17.6 4.2 L18 7.9 L21.4 9.5 L19.6 12.7 L21.4 15.9 L18 17.4 L17.6 21.1 L14 20.3 L12 23 L10 20.3 L6.4 21.1 L6 17.4 L2.6 15.9 L4.4 12.7 L2.6 9.5 L6 7.9 L6.4 4.2 L10 5 Z" transform="scale(0.92) translate(1 0)"/><circle cx="12" cy="12.5" r="2.6" fill="#fff"/>';
+    const bladeIcon = '<path d="M2 9 L4 7 L6 9 L8 7 L10 9 L12 7 L14 9 L16 7 L18 9 L20 7 L22 9 L22 15 L20 17 L18 15 L16 17 L14 15 L12 17 L10 15 L8 17 L6 15 L4 17 L2 15 Z"/>';
+    const route = '<path d="M15 21 L22 21 M19.5 18.5 L22 21 L19.5 23.5" stroke-width="1.6" fill="none"/>';
+    addButton(row, sawTool('disc', 'static'), `${svg(discIcon)}<span class="pal-num">43</span>`, '#43 Circular Grinder', 'pal-saw');
+    addButton(row, sawTool('blade', 'static'), `${svg(bladeIcon)}<span class="pal-num">44</span>`, '#44 Saw Blade', 'pal-saw');
+    addButton(row, sawTool('disc', 'moving'), `${svg(discIcon + route)}<span class="pal-num">45</span>`, '#45 Moving Circular Grinder', 'pal-saw');
+    addButton(row, sawTool('blade', 'moving'), `${svg(bladeIcon + route)}<span class="pal-num">46</span>`, '#46 Moving Saw Blade', 'pal-saw');
+    const textTool: ObjectTool = { kind: 'object', role: 'text', behavior: 'static', shape: 'rect' };
+    const safeTool: ObjectTool = { kind: 'object', role: 'safe', behavior: 'static', shape: 'rect' };
+    addButton(row, textTool, `${svg('<path d="M5 6 L19 6 M12 6 L12 19 M9 19 L15 19" stroke-width="2.6" fill="none" stroke-linecap="round"/>')}<span class="pal-num">47</span>`, '#47 Text Box', 'pal-text');
+    addButton(row, safeTool, `${svg('<rect x="3" y="3" width="18" height="18" rx="2" fill-opacity="0.45"/><path d="M12 6.5 L16.5 8.3 L16.2 12.4 C15.8 15 14 16.6 12 17.6 C10 16.6 8.2 15 7.8 12.4 L7.5 8.3 Z" fill="#fff"/>')}<span class="pal-num">48</span>`, '#48 Safe Zone', 'pal-safe');
+    // #42 is a map setting, not an object: the button toggles it
+    const g = document.createElement('button');
+    g.type = 'button';
+    g.className = 'pal-btn pal-global-dark';
+    g.title = '#42 Global darkness (toggle)';
+    g.setAttribute('aria-label', g.title);
+    g.innerHTML = `${svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="#fff"/>')}<span class="pal-num">42</span>`;
+    g.addEventListener('click', () => this.edit(() => {
+      if (this.map.darkness) delete this.map.darkness;
+      else this.map.darkness = { light: 60 };
+    }));
+    this.globalDarkBtn = g;
+    row.append(g);
+    box.append(h, row);
   }
 
   private setTool(tool: Tool): void {
     this.finishModes();
     this.tool = tool;
-    if (tool.kind === 'object') this.lastObjectTool = tool;
+    if (tool.kind === 'object' && (tool.role === 'path' || tool.role === 'wall') && tool.shape !== 'sector' && !tool.special) this.lastObjectTool = tool;
     for (const { btn, tool: t } of this.paletteButtons) {
       btn.setAttribute('aria-pressed', String(JSON.stringify(t) === JSON.stringify(tool)));
     }
@@ -510,11 +671,15 @@ export class Editor {
     this.syncInputs();
     this.renderProps();
     this.renderTheme();
+    this.renderLevel();
+    this.globalDarkBtn?.setAttribute('aria-pressed', String(!!this.map.darkness));
 
     const msgs: { text: string; error: boolean }[] = [];
     try {
       validateMap(this.map);
-      this.valid = true;
+      const errors = mapErrors(this.map);
+      this.valid = errors.length === 0;
+      for (const e of errors) msgs.push({ text: e, error: true });
       for (const w of mapWarnings(this.map)) msgs.push({ text: w, error: false });
     } catch (err) {
       this.valid = false;
@@ -529,7 +694,7 @@ export class Editor {
       }),
     );
 
-    const verified = this.verifiedJson === JSON.stringify(this.map);
+    const verified = this.isVerified();
     this.el.share.disabled = !verified || !this.valid;
     this.el.verify.textContent = verified ? '✅ Clear verified — ready to share' : 'To share, first clear the map yourself in test play';
     this.el.verify.className = verified ? 'verify ok' : 'verify';
@@ -537,6 +702,7 @@ export class Editor {
     this.el.undo.disabled = this.history.length === 0;
     this.el.redo.disabled = this.future.length === 0;
     this.updateHint();
+    this.onChange();
   }
 
   private save(): void {
@@ -594,7 +760,11 @@ export class Editor {
       text = `Drag to set the ${this.tool.zone === 'start' ? 'START' : 'GOAL'} area`;
     } else {
       const t = this.tool;
-      const how = t.shape === 'poly' || t.shape === 'free' ? 'Click to place points' : t.shape === 'ellipse' ? 'Drag to draw (Shift for a perfect circle)' : 'Drag to draw (Shift for a square)';
+      const how = t.special === 'spike' ? 'Drag from the base to the tip (the tip is where it thrusts)'
+        : t.special === 'boulder' ? 'Click to place it, then click route markers for it to roll along'
+          : t.role === 'mirror' ? 'Drag from one end of the mirror to the other'
+            : t.role === 'laser' ? 'Click to place the emitter, then drag the orange diamond to aim'
+              : t.role === 'portal' ? 'Click to place a portal; same-colored portals connect' : t.shape === 'sector' ? 'Drag outward from the apex (the drag direction is the middle of the slice)' : t.role === 'coin' ? 'Click to place a coin (always 24×24)' : t.shape === 'poly' || t.shape === 'free' ? 'Click to place points' : t.shape === 'ellipse' ? 'Drag to draw (Shift for a perfect circle)' : 'Drag to draw (Shift for a square)';
       const after = t.behavior === 'moving' ? ', then click to place route markers' : t.behavior === 'rotating' ? '; it spins around its center (drag the purple pivot to move the axis)' : '';
       text = `${toolLabel(t)}: ${how}${after}`;
     }
@@ -617,13 +787,21 @@ export class Editor {
 
   private hitTest(p: Point): Hit {
     const objs = this.compiled;
-    for (let i = objs.length - 1; i >= 0; i--) {
-      if (objs[i].role === 'wall' && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
+    const zoneTrigger = (i: number) => !isButton(this.map.objects[i]?.trigger?.kind);
+    for (const role of ['coin', 'portal', 'laser', 'trigger', 'wall', 'door', 'mirror'] as const) {
+      for (let i = objs.length - 1; i >= 0; i--) {
+        if (role === 'trigger' && zoneTrigger(i)) continue;
+        if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
+      }
     }
     if (pointInRect(p.x, p.y, this.map.goal)) return { kind: 'goal' };
     if (pointInRect(p.x, p.y, this.map.start)) return { kind: 'start' };
-    for (let i = objs.length - 1; i >= 0; i--) {
-      if (objs[i].role === 'path' && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
+    // Darkness areas last, so whatever lies under one can still be clicked
+    for (const role of ['path', 'trigger', 'dark'] as const) {
+      for (let i = objs.length - 1; i >= 0; i--) {
+        if (role === 'trigger' && !zoneTrigger(i)) continue;
+        if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
+      }
     }
     return null;
   }
@@ -708,8 +886,23 @@ export class Editor {
     if (!o) return out; // no handles for multi-selections
     if (o.rotation) out.push({ h: { kind: 'pivot' }, p: o.rotation.pivot });
     o.motion?.points.forEach((p, j) => out.push({ h: { kind: 'marker', j }, p }));
-    if (o.shape.type === 'poly') o.shape.points.forEach((p, j) => out.push({ h: { kind: 'vertex', j }, p }));
-    else rectCorners(shapeBounds(o.shape)).forEach((p, j) => out.push({ h: { kind: 'corner', j }, p }));
+    const s = o.shape;
+    if (o.role === 'coin') return out; // fixed size: only route markers / pivot
+    if (o.laser) {
+      const b = shapeBounds(o.shape);
+      const a = (o.laser.angle * Math.PI) / 180;
+      const r = Math.max(b.w, b.h) / 2 + 22;
+      out.unshift({ h: { kind: 'aim' }, p: { x: b.x + b.w / 2 + Math.cos(a) * r, y: b.y + b.h / 2 + Math.sin(a) * r } });
+    }
+    if (s.type === 'poly') s.points.forEach((p, j) => out.push({ h: { kind: 'vertex', j }, p }));
+    else if (s.type === 'sector') {
+      const at = (deg: number) => ({ x: s.cx + Math.cos((deg * Math.PI) / 180) * s.r, y: s.cy + Math.sin((deg * Math.PI) / 180) * s.r });
+      out.push({ h: { kind: 'arc', part: 'radius' }, p: at(s.start + s.sweep / 2) });
+      if (s.sweep < 360) {
+        out.push({ h: { kind: 'arc', part: 'start' }, p: at(s.start) });
+        out.push({ h: { kind: 'arc', part: 'end' }, p: at(s.start + s.sweep) });
+      }
+    } else rectCorners(shapeBounds(s)).forEach((p, j) => out.push({ h: { kind: 'corner', j }, p }));
     return out;
   }
 
@@ -797,7 +990,8 @@ export class Editor {
       return;
     }
 
-    if (tool.kind === 'object' && (tool.shape === 'poly' || tool.shape === 'free')) {
+    // Polygon / freeform tools place points one by one (spike, boulder and mirror tools drag instead)
+    if (tool.kind === 'object' && (tool.shape === 'poly' || tool.shape === 'free') && !tool.special && tool.role !== 'mirror') {
       this.draft = { tool, points: [tool.shape === 'free' && !e.shiftKey ? { ...p, smooth: true } : p] };
       this.clearSelection();
       this.updateHint();
@@ -823,6 +1017,7 @@ export class Editor {
     const c = shapeCentroid(s);
     if (Math.hypot(c.x - out[0].p.x, c.y - out[0].p.y) > 0.5) out.push({ p: c, label: 'Center of mass' });
     if (s.type === 'poly') s.points.forEach((v) => out.push({ p: { x: v.x, y: v.y }, label: 'Vertex' }));
+    else if (s.type === 'sector') out.push({ p: { x: s.cx, y: s.cy }, label: 'Apex' });
     else {
       const b = shapeBounds(s);
       rectCorners(b).forEach((v) => out.push({ p: v, label: 'Corner' }));
@@ -843,7 +1038,7 @@ export class Editor {
     if (d.type === 'box') {
       d.x1 = p.x;
       d.y1 = p.y;
-      d.square = e.shiftKey;
+      d.square = e.shiftKey || (this.tool.kind === 'object' && (this.tool.role === 'coin' || this.tool.role === 'portal' || isButton(this.tool.trigger)));
       return;
     }
     if (d.type === 'marquee') {
@@ -902,13 +1097,36 @@ export class Editor {
       }
       this.pivotSnap = best;
       o.rotation.pivot = best ? { x: Math.round(best.p.x * 100) / 100, y: Math.round(best.p.y * 100) / 100 } : p;
+    } else if (h.kind === 'aim' && o.laser) {
+      const b = shapeBounds(o.shape);
+      const deg = (Math.atan2(raw.y - (b.y + b.h / 2), raw.x - (b.x + b.w / 2)) * 180) / Math.PI;
+      o.laser.angle = ((Math.round(this.el.snap.checked ? Math.round(deg / 15) * 15 : deg) % 360) + 360) % 360;
+    } else if (h.kind === 'arc' && o.shape.type === 'sector') {
+      const s = o.shape;
+      const deg = (Math.atan2(raw.y - s.cy, raw.x - s.cx) * 180) / Math.PI;
+      // Angles snap to 15° steps while Snap is on
+      const ang = this.el.snap.checked ? Math.round(deg / 15) * 15 : Math.round(deg);
+      const norm = (a: number) => ((a % 360) + 360) % 360;
+      if (h.part === 'radius') s.r = Math.max(4, this.snapv(Math.hypot(raw.x - s.cx, raw.y - s.cy)));
+      else if (h.part === 'start') {
+        const end = s.start + s.sweep;
+        s.sweep = norm(end - ang) || 360;
+        s.start = norm(ang);
+      } else {
+        s.sweep = norm(ang - s.start) || 360;
+      }
     } else if (h.kind === 'marker' && o.motion) o.motion.points[h.j] = p;
     else if (h.kind === 'vertex' && o.shape.type === 'poly') o.shape.points[h.j] = { ...o.shape.points[h.j], x: p.x, y: p.y };
     else if (h.kind === 'corner') {
       const opposite = rectCorners(shapeBounds(d.orig.shape))[(h.j + 2) % 4];
-      const r = rectFromCorners(opposite, p);
+      let r = rectFromCorners(opposite, p);
       r.w = Math.max(2, r.w);
       r.h = Math.max(2, r.h);
+      if (isSquare(o)) {
+        // Switch buttons, portals and laser emitters stay square
+        const s = Math.max(r.w, r.h);
+        r = { x: p.x < opposite.x ? opposite.x - s : opposite.x, y: p.y < opposite.y ? opposite.y - s : opposite.y, w: s, h: s };
+      }
       if (o.shape.type === 'rect') o.shape = { type: 'rect', ...r };
       else if (o.shape.type === 'ellipse') o.shape = { type: 'ellipse', cx: r.x + r.w / 2, cy: r.y + r.h / 2, rx: r.w / 2, ry: r.h / 2 };
     }
@@ -966,6 +1184,31 @@ export class Editor {
     }
     if (tool.kind !== 'object') return;
 
+    if (tool.shape === 'sector') return this.addObject(tool, this.sectorFromDrag(d));
+    if (tool.special === 'spike' || tool.role === 'mirror') return this.addObject(tool, this.lineShapeFromDrag(tool, d));
+    if (tool.special === 'boulder') return this.addObject(tool, { type: 'poly', points: boulderShape(d.x0, d.y0, 26) });
+    // Lasers 24×24 and portals 40×40, square, centered on the click
+    if (tool.role === 'laser' || tool.role === 'portal') {
+      const size = tool.role === 'laser' ? 24 : 40;
+      r = { x: d.x0 - size / 2, y: d.y0 - size / 2, w: size, h: size };
+    }
+    // Coins are always 24×24, centered on the click
+    if (tool.role === 'coin') r = { x: d.x0 - LIMITS.coinSize / 2, y: d.y0 - LIMITS.coinSize / 2, w: LIMITS.coinSize, h: LIMITS.coinSize };
+    // A plain click drops a switch 40×40, an event zone 80×80, a door 120×20
+    if (r.w < 4 && r.h < 4 && (tool.role === 'trigger' || tool.role === 'door')) {
+      const [w, h] = tool.role === 'door' ? [120, 20] : isButton(tool.trigger) ? [40, 40] : [80, 80];
+      r = { x: d.x0 - w / 2, y: d.y0 - h / 2, w, h };
+    }
+    // Grinders 48×48, saw blades 120×20, text boxes 200×50, safe zones 100×100
+    if (r.w < 4 && r.h < 4 && (tool.special === 'disc' || tool.special === 'blade' || tool.role === 'text' || tool.role === 'safe')) {
+      const [w, h] = tool.special === 'disc' ? [48, 48] : tool.special === 'blade' ? [120, 20] : tool.role === 'text' ? [200, 50] : [100, 100];
+      r = { x: d.x0 - w / 2, y: d.y0 - h / 2, w, h };
+    }
+    if (tool.special === 'disc') {
+      // Always round
+      const s = Math.max(r.w, r.h);
+      r = { x: r.x + r.w / 2 - s / 2, y: r.y + r.h / 2 - s / 2, w: s, h: s };
+    }
     // A plain click (no drag) drops a default-sized shape
     if (r.w < 4 && r.h < 4) r = { x: d.x0 - 30, y: d.y0 - 30, w: 60, h: 60 };
     if (r.w < 2 || r.h < 2) return;
@@ -973,6 +1216,38 @@ export class Editor {
       ? { type: 'ellipse', cx: r.x + r.w / 2, cy: r.y + r.h / 2, rx: r.w / 2, ry: r.h / 2 }
       : { type: 'rect', ...r };
     this.addObject(tool, shape);
+  }
+
+  /** Spike: drag from the base to the tip. Mirror: drag from one end to the other */
+  private lineShapeFromDrag(tool: ObjectTool, d: { x0: number; y0: number; x1: number; y1: number }): Shape {
+    const a = { x: d.x0, y: d.y0 };
+    let b = { x: d.x1, y: d.y1 };
+    if (Math.hypot(b.x - a.x, b.y - a.y) < 6) b = tool.special === 'spike' ? { x: a.x, y: a.y - 60 } : { x: a.x + 80, y: a.y };
+    if (tool.special === 'spike') return { type: 'poly', points: spikeShape(a, b, 16) };
+    // A thin plate along the line
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const nx = (-(b.y - a.y) / len) * 3;
+    const ny = ((b.x - a.x) / len) * 3;
+    const r = (v: number) => Math.round(v * 100) / 100;
+    return {
+      type: 'poly',
+      points: [
+        { x: r(a.x + nx), y: r(a.y + ny) }, { x: r(b.x + nx), y: r(b.y + ny) },
+        { x: r(b.x - nx), y: r(b.y - ny) }, { x: r(a.x - nx), y: r(a.y - ny) },
+      ],
+    };
+  }
+
+  /** Sector tool: drag from the apex outward; the drag direction is the middle of a 90° slice */
+  private sectorFromDrag(d: { x0: number; y0: number; x1: number; y1: number }): Shape {
+    let r = Math.hypot(d.x1 - d.x0, d.y1 - d.y0);
+    let dir = (Math.atan2(d.y1 - d.y0, d.x1 - d.x0) * 180) / Math.PI;
+    if (r < 4) {
+      r = 60;
+      dir = -90; // a plain click: a slice pointing up
+    }
+    if (this.el.snap.checked) dir = Math.round(dir / 15) * 15;
+    return { type: 'sector', cx: d.x0, cy: d.y0, r: Math.round(r), start: (((dir - 45) % 360) + 360) % 360, sweep: 90 };
   }
 
   private closeDraft(): void {
@@ -990,6 +1265,28 @@ export class Editor {
     const o: MapObject = { role: tool.role, shape };
     if (tool.behavior === 'rotating') o.rotation = defaultRotation(o);
     if (tool.behavior === 'moving') o.motion = { ...DEFAULT_MOTION, points: [] };
+    if (tool.role === 'trigger') {
+      const kind = tool.trigger ?? 'switch';
+      o.trigger = { kind, color: this.lastColor };
+      if (kind === 'timer') o.trigger.duration = 3000;
+      if (kind === 'hold') o.trigger.duration = 1000;
+    }
+    if (tool.role === 'door') o.door = { mode: 'auto', color: this.lastColor, moveMs: 600, waitMs: 1000 };
+    if (tool.special === 'boulder') o.boulder = true;
+    if (tool.special === 'disc') o.saw = { kind: 'disc', clockwise: true, spin: 720, stroke: 0, strokeMs: 0 };
+    if (tool.special === 'blade') o.saw = { kind: 'blade', clockwise: true, spin: 0, stroke: 24, strokeMs: 400 };
+    if (tool.role === 'text') o.text = { text: 'Text', color: '#243450', font: 'main', size: 24, bold: true, align: 'center', outlineWidth: 3, background: '#ffffffb3' };
+    if (tool.special === 'spike' && shape.type === 'poly') {
+      const [tip, b1, b2] = shape.points;
+      const base = { x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2 };
+      const reach = Math.round(Math.hypot(tip.x - base.x, tip.y - base.y));
+      o.spike = { angle: Math.round((Math.atan2(tip.y - base.y, tip.x - base.x) * 180) / Math.PI), reach, thrustMs: 120, returnMs: 900, waitMs: 900, delay: 0 };
+    }
+    if (tool.role === 'laser') o.laser = { color: this.lastColor, angle: 0, on: true };
+    if (tool.role === 'portal') {
+      const same = this.map.objects.filter((m) => m.portal?.color === this.lastColor).length;
+      o.portal = { color: this.lastColor, order: same, mode: 'both' };
+    }
     this.edit(() => this.map.objects.push(o));
     const i = this.map.objects.length - 1;
     if (tool.behavior === 'moving') this.markerMode = i;
@@ -1217,7 +1514,8 @@ export class Editor {
     const toMap = this.alignToMap || (zone ? true : units.length < 2);
     const cmd = (label: string, enabled: boolean, run: () => void, keys?: string): Command => ({ label, enabled, run, keys });
     const align = (mode: AlignMode, label: string) => cmd(label, n > 0 || !!zone, () => this.align(mode));
-    const merge = (op: MergeOp, label: string) => cmd(label, n >= 2, () => this.merge(op));
+    const mergeable = ids.every((i) => (objs[i].role === 'path' || objs[i].role === 'wall' || objs[i].role === 'dark') && !objs[i].spike && !objs[i].boulder && !objs[i].saw);
+    const merge = (op: MergeOp, label: string) => cmd(label, n >= 2 && mergeable, () => this.merge(op));
     return {
       cut: cmd('Cut', n > 0, () => this.copySelected() && this.deleteSelected(), 'Ctrl+X'),
       copy: cmd('Copy', n > 0, () => this.copySelected(), 'Ctrl+C'),
@@ -1266,8 +1564,8 @@ export class Editor {
       pivotCenter: cmd('Pivot to center', rotating.length > 0, () => this.setPivots(false)),
       pivotCentroid: cmd('Pivot to center of mass', rotating.length > 0 && rotating.some((i) => objs[i].shape.type === 'poly'), () => this.setPivots(true)),
 
-      makePath: cmd('Make path', ids.some((i) => objs[i].role !== 'path'), () => this.edit(() => ids.forEach((i) => (objs[i].role = 'path')))),
-      makeWall: cmd('Make wall', ids.some((i) => objs[i].role !== 'wall'), () => this.edit(() => ids.forEach((i) => (objs[i].role = 'wall')))),
+      makePath: cmd('Make path', ids.some((i) => objs[i].role === 'wall' && !objs[i].saw), () => this.edit(() => ids.forEach((i) => objs[i].role === 'wall' && !objs[i].saw && (objs[i].role = 'path')))),
+      makeWall: cmd('Make wall', ids.some((i) => objs[i].role === 'path'), () => this.edit(() => ids.forEach((i) => objs[i].role === 'path' && (objs[i].role = 'wall')))),
     };
   }
 
@@ -1681,9 +1979,17 @@ export class Editor {
     title.textContent = `#${idx + 1} · ID ${objectToolId(o)} · ${describeObject(o)}${o.group !== undefined ? ` · Group ${o.group}` : ''}`;
     const parts: HTMLElement[] = [title];
 
-    parts.push(this.group(
-      this.selectField<Role>('Type', o.role, [['path', 'Path (safe floor)'], ['wall', 'Wall (deadly)']], (v) => (o.role = v), true),
-    ));
+    if ((o.role === 'path' || o.role === 'wall') && !o.saw) {
+      parts.push(this.group(
+        this.selectField<Role>('Type', o.role, [['path', 'Path (safe floor)'], ['wall', 'Wall (deadly)']], (v) => (o.role = v), true),
+      ));
+    } else if (o.role === 'coin' || o.role === 'dark') {
+      parts.push(this.note(o.role === 'coin'
+        ? 'Touch every coin before GOAL opens. Coins can move and rotate like other objects.'
+        : 'Hides the cursor and its trail while they are inside it. Shown see-through in the editor.'));
+    } else if (o.role === 'safe') {
+      parts.push(this.note('Nothing can hurt the cursor in here: walls, obstacles, saws and lasers passing through are harmless, and it counts as floor.'));
+    }
 
     // Shape
     const s = o.shape;
@@ -1694,6 +2000,11 @@ export class Editor {
         this.numField('Width', s.w, (v) => (s.w = Math.max(1, Math.round(v)))),
         this.numField('Height', s.h, (v) => (s.h = Math.max(1, Math.round(v)))),
       ));
+    } else if (o.role === 'coin' && s.type === 'ellipse') {
+      parts.push(this.group(
+        this.numField('Center X', s.cx, (v) => (s.cx = Math.round(v))),
+        this.numField('Center Y', s.cy, (v) => (s.cy = Math.round(v))),
+      ));
     } else if (s.type === 'ellipse') {
       parts.push(this.group(
         this.numField('Center X', s.cx, (v) => (s.cx = Math.round(v))),
@@ -1701,11 +2012,33 @@ export class Editor {
         this.numField('Radius X', s.rx, (v) => (s.rx = Math.max(1, Math.round(v)))),
         this.numField('Radius Y', s.ry, (v) => (s.ry = Math.max(1, Math.round(v)))),
       ));
+    } else if (s.type === 'sector') {
+      parts.push(this.group(
+        this.numField('Apex X', s.cx, (v) => (s.cx = Math.round(v))),
+        this.numField('Apex Y', s.cy, (v) => (s.cy = Math.round(v))),
+        this.numField('Radius', s.r, (v) => (s.r = Math.max(1, Math.round(v)))),
+        this.numField('Start angle (°)', s.start, (v) => (s.start = ((Math.round(v) % 360) + 360) % 360), 15),
+        this.numField('Sweep (°)', s.sweep, (v) => (s.sweep = Math.min(360, Math.max(1, Math.round(v)))), 15),
+      ));
+      parts.push(this.note('0° points right, 90° down. Drag the arc ends to change the angles, the arc middle for the radius.'));
     } else {
       const curved = s.points.filter((p) => p.smooth).length;
       parts.push(this.note(`${s.points.length} vertices (${curved} curved). Double-click a vertex to toggle curve.`));
     }
 
+    if (o.trigger) parts.push(...this.triggerProps(o));
+    if (o.door) parts.push(...this.doorProps(o));
+    if (o.spike) parts.push(...this.spikeProps(o));
+    if (o.saw) parts.push(...this.sawProps(o));
+    if (o.text) parts.push(...this.textProps(o));
+    if (o.boulder) parts.push(this.heading('Rolling boulder'), this.note(o.motion ? 'Rolls along its route: it spins by the distance it travels.' : 'Give it a route under Movement (Place markers) so it can roll.'));
+    if (o.laser) parts.push(...this.laserProps(o));
+    if (o.portal) parts.push(...this.portalProps(o));
+    if (o.role === 'mirror') parts.push(this.heading('Mirror'), this.note('Laser beams bounce off every side. Drag its corners to angle it, or make it move or rotate.'));
+    if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'mirror') parts.push(...this.linkProps(o));
+
+    // Movement (a spike's thrust is its movement)
+    if (!o.spike) {
     // Movement
     parts.push(this.heading('Movement'), this.toggle('Moves along a route', !!o.motion, (on) => {
       if (on) {
@@ -1748,6 +2081,10 @@ export class Editor {
       ));
     }
 
+    }
+
+    // Rotation (a boulder spins by rolling, a saw by itself)
+    if (!o.boulder && !o.saw) {
     // Rotation
     parts.push(this.heading('Rotation'), this.toggle('Rotates around a pivot', !!o.rotation, (on) => {
       if (on) o.rotation = defaultRotation(o);
@@ -1769,12 +2106,242 @@ export class Editor {
       parts.push(this.actions(this.button('Center pivot', () => this.edit(() => (r.pivot = shapeCenter(o.shape))))));
     }
 
+    }
+
     parts.push(...this.arrangeProps(false));
     parts.push(this.actions(
       this.button('Duplicate', () => this.duplicateSelected()),
       this.button('Delete', () => this.deleteSelected(), 'danger'),
     ));
     box.replaceChildren(...parts);
+  }
+
+  /** 16 color swatches */
+  private colorPicker(value: number, apply: (c: number) => void): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'swatches';
+    wrap.setAttribute('role', 'radiogroup');
+    SWITCH_COLORS.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'swatch';
+      b.style.background = c.hex;
+      b.title = c.name;
+      b.setAttribute('aria-label', c.name);
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(i === value));
+      b.addEventListener('click', () => {
+        this.lastColor = i;
+        this.edit(() => apply(i));
+      });
+      wrap.append(b);
+    });
+    return wrap;
+  }
+
+  private triggerProps(o: MapObject): HTMLElement[] {
+    const t = o.trigger!;
+    const out: HTMLElement[] = [this.heading(TRIGGER_NAMES[t.kind]), this.colorPicker(t.color, (c) => (t.color = c))];
+    const fields: HTMLElement[] = [];
+    if (t.kind === 'switch' || t.kind === 'timer') {
+      fields.push(this.selectField('Pressed by', t.click ? 'click' : 'touch', [['touch', 'Touching it'], ['click', 'Clicking on it']], (v) => {
+        if (v === 'click') t.click = true;
+        else delete t.click;
+      }));
+    }
+    if (t.kind === 'timer' || t.kind === 'hold') {
+      fields.push(this.numField(t.kind === 'timer' ? 'ON for (s)' : 'Hold for (s)', (t.duration ?? 1000) / 1000,
+        (v) => (t.duration = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1));
+    }
+    if (fields.length) out.push(this.group(...fields));
+    if (t.kind === 'switch' || t.kind === 'hold') {
+      out.push(this.toggle('Starts ON', !!t.initial, (on) => {
+        if (on) t.initial = true;
+        else delete t.initial;
+      }));
+    }
+    if (isButton(t.kind)) {
+      out.push(this.toggle('Can be switched back', !t.once, (on) => {
+        if (on) delete t.once;
+        else t.once = true;
+      }));
+    }
+    const linked = this.map.objects.filter((m) => m.link?.color === t.color || (m.door?.mode === 'switch' && m.door.color === t.color)).length;
+    const what = {
+      switch: 'Each press turns the color ON or OFF.',
+      timer: 'Turns the color ON; it goes OFF again when the time runs out.',
+      hold: 'Stay on it to switch the color ON or OFF; the wipe shows your progress.',
+      startZone: 'Entering it turns the color ON.',
+      stopZone: 'Entering it turns the color OFF.',
+    }[t.kind];
+    out.push(this.note(`${what} ${linked} object${linked === 1 ? ' is' : 's are'} linked to ${switchColor(t.color).name}.`));
+    return out;
+  }
+
+  private spikeProps(o: MapObject): HTMLElement[] {
+    const s = o.spike!;
+    const sec = (v: number) => v / 1000;
+    const ms = (v: number) => Math.round(Math.min(LIMITS.maxDelay, Math.max(0.01, v)) * 1000);
+    return [
+      this.heading('Spike stake'),
+      this.group(
+        this.numField('Direction (°)', s.angle, (v) => (s.angle = ((Math.round(v) % 360) + 360) % 360), 15),
+        this.numField('Reach', s.reach, (v) => (s.reach = Math.max(1, Math.round(v))), 5),
+        this.numField('Thrust (s)', sec(s.thrustMs), (v) => (s.thrustMs = ms(v)), 0.05),
+        this.numField('Return (s)', sec(s.returnMs), (v) => (s.returnMs = ms(v)), 0.1),
+        this.numField('Rest (s)', sec(s.waitMs), (v) => (s.waitMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0, v)) * 1000)), 0.1),
+        this.numField('Start delay (s)', sec(s.delay), (v) => (s.delay = Math.round(Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, v)) * 1000)), 0.1),
+      ),
+      this.note('Rests, thrusts out fast, then slides back slowly. The dashed line shows how far it reaches.'),
+    ];
+  }
+
+  private sawProps(o: MapObject): HTMLElement[] {
+    const s = o.saw!;
+    if (s.kind === 'disc') {
+      return [
+        this.heading('Circular grinder'),
+        this.group(
+          this.selectField('Spin', s.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (s.clockwise = v === 'cw')),
+          this.numField('Speed (°/s)', s.spin, (v) => (s.spin = Math.min(LIMITS.maxRotSpeed, Math.max(0, Math.round(v)))), 90),
+        ),
+        this.note('Deadly. Throws dust where it cuts into a wall. Give it a route under Movement to make it travel (#45).'),
+      ];
+    }
+    const sec = (v: number) => v / 1000;
+    return [
+      this.heading('Saw blade'),
+      this.group(
+        this.numField('Stroke (px)', s.stroke, (v) => (s.stroke = Math.max(0, Math.round(v))), 4),
+        this.numField('Stroke time (s)', sec(s.strokeMs), (v) => (s.strokeMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.05),
+      ),
+      this.note('Deadly. Saws back and forth along its long side and throws dust where it cuts into a wall. Give it a route under Movement to make it travel (#46).'),
+    ];
+  }
+
+  private textProps(o: MapObject): HTMLElement[] {
+    const t = o.text!;
+    const area = document.createElement('textarea');
+    area.rows = 3;
+    area.maxLength = 500;
+    area.value = t.text;
+    area.addEventListener('change', () => this.edit(() => (t.text = area.value)));
+    const colorInput = (value: string, apply: (v: string) => void) => {
+      const c = document.createElement('input');
+      c.type = 'color';
+      c.value = value;
+      c.addEventListener('change', () => this.edit(() => apply(c.value.toLowerCase())));
+      return c;
+    };
+    const font = document.createElement('select');
+    for (const [v, label] of TEXT_BASE_FONTS) font.append(new Option(label, v, false, v === t.font));
+    fontPicker(font, t.font);
+    font.addEventListener('change', () => this.edit(() => (t.font = font.value)));
+    const out: HTMLElement[] = [
+      this.heading('Text box'),
+      this.field('Text', area, true),
+      this.group(
+        this.field('Font', font, true),
+        this.numField('Size', t.size, (v) => (t.size = Math.min(200, Math.max(6, Math.round(v)))), 2),
+        this.field('Color', colorInput(t.color, (v) => (t.color = v))),
+        this.selectField('Align', t.align, [['left', 'Left'], ['center', 'Center'], ['right', 'Right']], (v) => (t.align = v)),
+      ),
+      this.toggle('Bold', t.bold, (on) => (t.bold = on)),
+      this.toggle('Outline', !!t.outline, (on) => {
+        if (on) t.outline = '#ffffff';
+        else delete t.outline;
+      }),
+    ];
+    if (t.outline) {
+      out.push(this.group(
+        this.field('Outline color', colorInput(t.outline, (v) => (t.outline = v))),
+        this.numField('Outline width', t.outlineWidth, (v) => (t.outlineWidth = Math.min(20, Math.max(0, v))), 0.5),
+      ));
+    }
+    out.push(this.toggle('Background', !!t.background, (on) => {
+      if (on) t.background = '#ffffffb3';
+      else delete t.background;
+    }));
+    if (t.background) {
+      const bg = t.background;
+      const alpha = parseInt(bg.slice(7, 9), 16) / 255;
+      const hex2 = (a: number) => Math.round(Math.min(1, Math.max(0, a)) * 255).toString(16).padStart(2, '0');
+      out.push(this.group(
+        this.field('Background', colorInput(bg.slice(0, 7), (v) => (t.background = v + bg.slice(7, 9)))),
+        this.numField('Opacity (%)', Math.round(alpha * 100), (v) => (t.background = bg.slice(0, 7) + hex2(v / 100)), 5),
+      ));
+    }
+    out.push(this.note('Only decoration: the cursor can pass over text freely. Long lines wrap to the box width.'));
+    return out;
+  }
+
+  private laserProps(o: MapObject): HTMLElement[] {
+    const l = o.laser!;
+    const out: HTMLElement[] = [
+      this.heading('Laser'),
+      this.colorPicker(l.color, (c) => (l.color = c)),
+      this.group(this.numField('Direction (°)', l.angle, (v) => (l.angle = ((Math.round(v) % 360) + 360) % 360), 15)),
+      this.toggle('Beam on at the start', l.on, (on) => (l.on = on)),
+      this.toggle('A switch flips it on / off', l.switchColor !== undefined, (on) => {
+        if (on) l.switchColor = this.lastColor;
+        else delete l.switchColor;
+      }),
+    ];
+    if (l.switchColor !== undefined) {
+      const sc = l.switchColor;
+      out.push(this.colorPicker(sc, (c) => (l.switchColor = c)), this.note(`While the ${switchColor(sc).name} switch is ON, the beam is ${l.on ? 'off' : 'on'}.`));
+    }
+    out.push(this.note('Drag the orange diamond to aim. The beam bounces off mirrors and stops at walls and doors.'));
+    return out;
+  }
+
+  private portalProps(o: MapObject): HTMLElement[] {
+    const p = o.portal!;
+    const same = this.map.objects.filter((m) => m.portal?.color === p.color).length;
+    return [
+      this.heading('Teleport portal'),
+      this.colorPicker(p.color, (c) => (p.color = c)),
+      this.group(
+        this.selectField('Direction', p.mode, [['both', 'Both ways'], ['in', 'Entrance only'], ['out', 'Exit only']], (v) => (p.mode = v), true),
+        this.numField('Order', p.order + 1, (v) => (p.order = Math.max(0, Math.min(9999, Math.round(v) - 1)))),
+      ),
+      this.note(`Touching it pulls the cursor to its center, then sends it to the next ${switchColor(p.color).name} portal by order (${same} on this map).`),
+    ];
+  }
+
+  private doorProps(o: MapObject): HTMLElement[] {
+    const d = o.door!;
+    const out: HTMLElement[] = [
+      this.heading('Auto door'),
+      this.group(
+        this.selectField('Opens', d.mode, [['auto', 'By itself (cycle)'], ['switch', 'While a switch is ON']], (v) => (d.mode = v), true),
+        this.numField('Open / close time (s)', d.moveMs / 1000, (v) => (d.moveMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1),
+        ...(d.mode === 'auto' ? [this.numField('Stays open / shut (s)', d.waitMs / 1000, (v) => (d.waitMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0, v)) * 1000)), 0.1)] : []),
+      ),
+    ];
+    if (d.mode === 'switch') out.push(this.colorPicker(d.color, (c) => (d.color = c)));
+    out.push(this.note('The door splits across its long side and both halves slide apart. Touching it is deadly, like a wall.'));
+    return out;
+  }
+
+  private linkProps(o: MapObject): HTMLElement[] {
+    const out: HTMLElement[] = [this.heading('Switch link'), this.toggle('Reacts to a switch', !!o.link, (on) => {
+      if (on) o.link = { color: this.lastColor, action: o.motion || o.rotation ? 'start' : 'remove' };
+      else delete o.link;
+    })];
+    const l = o.link;
+    if (l) {
+      out.push(
+        this.colorPicker(l.color, (c) => (l.color = c)),
+        this.group(this.selectField<LinkAction>('While ON', l.action, [
+          ['start', 'Moves (starts moving)'],
+          ['stop', 'Stops moving'],
+          ['remove', 'Is removed'],
+        ], (v) => (l.action = v), true)),
+        this.note('"Moves" objects stay still until the color turns ON; "Stops" objects move until then.'),
+      );
+    }
+    return out;
   }
 
   /** A button that runs an arrange command (disabled when it can't apply) */
@@ -1873,6 +2440,104 @@ export class Editor {
     );
   }
 
+  /** Rebuild the level settings only when they changed, so a field being typed in keeps focus */
+  private renderedLevel: string | null = null;
+  private renderLevel(): void {
+    const m = this.map;
+    const json = JSON.stringify([m.title, m.level, m.cursorColor, m.stars, this.lastClearMs, m.darkness, m.difficulty]);
+    if (json === this.renderedLevel) return;
+    this.renderedLevel = json;
+
+    const title = document.createElement('input');
+    title.maxLength = LIMITS.maxText;
+    title.placeholder = m.name;
+    title.value = m.title ?? '';
+    title.addEventListener('change', () => this.edit(() => {
+      const v = title.value.trim().slice(0, LIMITS.maxText);
+      if (v) m.title = v;
+      else delete m.title;
+    }));
+
+    const level = document.createElement('input');
+    level.type = 'number';
+    level.min = '1';
+    level.max = String(LIMITS.maxLevel);
+    level.step = '1';
+    level.placeholder = 'None';
+    level.value = m.level !== undefined ? String(m.level) : '';
+    level.addEventListener('change', () => this.edit(() => {
+      const v = Math.round(Number(level.value));
+      if (level.value.trim() && v >= 1) m.level = Math.min(LIMITS.maxLevel, v);
+      else delete m.level;
+    }));
+
+    const difficulty = document.createElement('input');
+    difficulty.type = 'number';
+    difficulty.min = '1';
+    difficulty.max = '10';
+    difficulty.step = '0.25';
+    difficulty.placeholder = '1.00';
+    difficulty.value = m.difficulty !== undefined ? m.difficulty.toFixed(2) : '';
+    difficulty.addEventListener('change', () => this.edit(() => {
+      const v = Number(difficulty.value);
+      if (difficulty.value.trim() && Number.isFinite(v)) m.difficulty = Math.round(Math.min(10, Math.max(1, v)) * 100) / 100;
+      else delete m.difficulty;
+    }));
+
+    const color = document.createElement('input');
+    color.type = 'color';
+    color.value = m.cursorColor ?? COLORS.cursor;
+    color.addEventListener('change', () => this.edit(() => (m.cursorColor = color.value.toLowerCase())));
+    const resetColor = this.button('Default', () => m.cursorColor && this.edit(() => delete m.cursorColor));
+    resetColor.disabled = !m.cursorColor;
+    const colorRow = document.createElement('div');
+    colorRow.className = 'color-row';
+    colorRow.append(color, resetColor);
+
+    const parts: HTMLElement[] = [
+      this.group(
+        this.field('Level title', title, true),
+        this.field('Level number', level),
+        this.field('Difficulty (1–10)', difficulty),
+        this.field('Cursor color', colorRow, true),
+      ),
+      this.note('The title and number are shown in game; the file name above is used for exports.'),
+    ];
+
+    parts.push(this.toggle('Star ratings', !!m.stars, (on) => {
+      if (!on) return void delete m.stars;
+      // Suggest times from the last test clear, else 10 / 20 / 30 s
+      const t = this.lastClearMs;
+      const round = (ms: number) => Math.max(100, Math.ceil(ms / 100) * 100);
+      m.stars = t !== null
+        ? { three: round(t * 1.1), two: round(t * 1.5), one: round(t * 2) }
+        : { three: 10_000, two: 20_000, one: 30_000 };
+    }));
+    const s = m.stars;
+    if (s) {
+      const sec = (key: 'three' | 'two' | 'one', label: string) =>
+        this.numField(label, s[key] / 1000, (v) => (s[key] = Math.round(Math.min(LIMITS.maxStarTime, Math.max(0.1, v) * 1000))), 0.1);
+      parts.push(
+        this.group(sec('three', '★★★ within (s)'), sec('two', '★★ within (s)'), sec('one', '★ within (s)')),
+        this.note(this.lastClearMs !== null
+          ? `Your last test clear: ${(this.lastClearMs / 1000).toFixed(3)}s. Slower than the ★ time earns no star.`
+          : 'Clear times at or under each value earn that many stars. Slower than the ★ time earns no star.'),
+      );
+    }
+    parts.push(this.toggle('Global darkness (#42)', !!m.darkness, (on) => {
+      if (on) m.darkness = { light: 60 };
+      else delete m.darkness;
+    }));
+    const dk = m.darkness;
+    if (dk) {
+      parts.push(
+        this.group(this.numField('Light radius', dk.light, (v) => (dk.light = Math.round(Math.min(LIMITS.maxLight, Math.max(LIMITS.minLight, v)))), 4)),
+        this.note(`The map is dark during a run; only a light of this radius (at least ${LIMITS.minLight}) around the cursor shows it. The editor previews it around your mouse.`),
+      );
+    }
+    this.el.level.replaceChildren(...parts);
+  }
+
   private startMarkers(i: number): void {
     this.draft = null;
     this.markerMode = i;
@@ -1951,7 +2616,23 @@ export class Editor {
     const preview = this.el.preview.checked;
     beginFrame(ctx, map);
     const t = preview ? performance.now() - this.previewStart : 0;
-    drawMap(ctx, map, objs, t, { gridOnTop: this.el.gridTop.checked });
+    this.beamCaster ??= new BeamCaster(map, objs);
+    const beams = this.beamCaster.any ? this.beamCaster.beams({ timeOf: () => t, channels: initialChannels(map) }) : [];
+    drawMap(ctx, map, objs, t, { gridOnTop: this.el.gridTop.checked, beams, now: performance.now() });
+    // Spikes: how far they thrust
+    ctx.setLineDash([4 * u, 3 * u]);
+    ctx.strokeStyle = 'rgba(226,72,108,0.7)';
+    ctx.lineWidth = 1.2 * u;
+    for (const o of map.objects) {
+      if (!o.spike || o.shape.type !== 'poly') continue;
+      const tip = o.shape.points[0];
+      const a = (o.spike.angle * Math.PI) / 180;
+      ctx.beginPath();
+      ctx.moveTo(tip.x, tip.y);
+      ctx.lineTo(tip.x + Math.cos(a) * o.spike.reach, tip.y + Math.sin(a) * o.spike.reach);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
 
     // The map is drawn as one seamless floor and one wall mass, so overlapping pieces (or a wall
     // on the wall-colored area outside the paths) would be invisible while editing. Outline each one.
@@ -1965,6 +2646,17 @@ export class Editor {
       ctx.stroke();
     }
     ctx.setLineDash([]);
+
+    // Darkness areas see-through, so what's under them stays editable
+    drawDarkAreas(ctx, objs, t, 0.55);
+    ctx.setLineDash([5 * u, 4 * u]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.beginPath();
+    for (const o of objs) if (o.role === 'dark') traceObject(ctx, o, transformAt(o, t, pose));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Global darkness: a light preview around the mouse
+    if (map.darkness && this.hover) drawGlobalDark(ctx, map, [{ x: this.hover.x, y: this.hover.y, r: map.darkness.light }], 0.3);
 
     // While previewing, show where dynamic objects rest (their editing position)
     if (preview) {
@@ -2005,6 +2697,20 @@ export class Editor {
         ctx.arc(o.rotation.pivot.x, o.rotation.pivot.y, 2.5 * u, 0, Math.PI * 2);
         ctx.fill();
       }
+    });
+
+    // Switch links: a colored dot at the top-left of every linked object / switch-operated door
+    map.objects.forEach((o) => {
+      const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : undefined);
+      if (c === undefined) return;
+      const b = shapeBounds(o.shape);
+      ctx.fillStyle = switchColor(c).hex;
+      ctx.strokeStyle = COLORS.ink;
+      ctx.lineWidth = 1.2 * u;
+      ctx.beginPath();
+      ctx.arc(b.x + 2 * u, b.y + 2 * u, 5 * u, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
     });
 
     // Selection outline
@@ -2127,6 +2833,16 @@ export class Editor {
         ctx.moveTo(p.x, p.y - 4 * u);
         ctx.lineTo(p.x, p.y + 4 * u);
         ctx.stroke();
+      } else if (h.kind === 'aim') {
+        ctx.fillStyle = COLORS.routeSelected;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y - 7 * u);
+        ctx.lineTo(p.x + 7 * u, p.y);
+        ctx.lineTo(p.x, p.y + 7 * u);
+        ctx.lineTo(p.x - 7 * u, p.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
       } else if (h.kind === 'marker') {
         markerNo++;
         ctx.fillStyle = COLORS.routeSelected;
@@ -2188,7 +2904,25 @@ export class Editor {
       ctx.strokeStyle = COLORS.ink;
       ctx.lineWidth = 1 * u;
       ctx.beginPath();
-      if (this.tool.kind === 'object' && this.tool.shape === 'ellipse') {
+      let label = `${r.w}×${r.h}`;
+      const tl = this.tool.kind === 'object' ? this.tool : null;
+      if (tl && (tl.special === 'spike' || tl.role === 'mirror')) {
+        const s = this.lineShapeFromDrag(tl, d);
+        if (s.type === 'poly') {
+          s.points.forEach((q, k) => (k ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+          ctx.closePath();
+          label = `${Math.round(Math.hypot(d.x1 - d.x0, d.y1 - d.y0))}`;
+        }
+      } else if (this.tool.kind === 'object' && this.tool.shape === 'sector') {
+        const s = this.sectorFromDrag(d);
+        if (s.type === 'sector') {
+          const ring = flattenShape(s).poly;
+          ctx.moveTo(ring[0], ring[1]);
+          for (let k = 2; k < ring.length; k += 2) ctx.lineTo(ring[k], ring[k + 1]);
+          ctx.closePath();
+          label = `r ${s.r}`;
+        }
+      } else if (this.tool.kind === 'object' && this.tool.shape === 'ellipse') {
         ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2);
       } else {
         ctx.rect(r.x, r.y, r.w, r.h);
@@ -2199,7 +2933,7 @@ export class Editor {
       ctx.font = `600 ${12 * u}px ${FONT_MAIN}`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(`${r.w}×${r.h}`, r.x, r.y - 3 * u);
+      ctx.fillText(label, r.x, r.y - 3 * u);
     }
 
     // Marker placement preview

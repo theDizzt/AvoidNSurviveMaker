@@ -1,0 +1,81 @@
+{
+  "v": 2,
+  "name": "workshop08",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 420,
+    "w": 60,
+    "h": 180
+  },
+  "goal": {
+    "x": 1740,
+    "y": 420,
+    "w": 60,
+    "h": 180
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 420,
+        "w": 1560,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 960,
+        "cy": 510,
+        "rx": 240,
+        "ry": 240
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 960,
+        "cy": 510,
+        "rx": 120,
+        "ry": 120
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 940,
+        "y": 270,
+        "w": 40,
+        "h": 480
+      },
+      "rotation": {
+        "pivot": {
+          "x": 960,
+          "y": 510
+        },
+        "speed": 90,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    }
+  ],
+  "title": "Rotate",
+  "level": 8,
+  "difficulty": 1.15,
+  "stars": {
+    "three": 1400,
+    "two": 1700,
+    "one": 2000
+  }
+}

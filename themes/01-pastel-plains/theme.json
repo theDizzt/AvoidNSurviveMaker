@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "id": "pastel",
+  "name": "Pastel Plains",
+  "description": "First steps through soft corridors. Learn to stay on the path and dodge moving walls.",
+  "author": "Avoid N Survive",
+  "released": "2026-11-17",
+  "unlockStars": 0,
+  "colors": [
+    "#9fe2ff",
+    "#c3b5ff"
+  ],
+  "cover": "cover.svg",
+  "style": {
+    "badge": {
+      "kind": "pill",
+      "primary": "#ffffff",
+      "secondary": "#3a9ff0",
+      "numberColor": "#2b86e0",
+      "titleColor": "#243450",
+      "font": "title",
+      "pad": 0,
+      "showTitle": true
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "format": 1,
+  "id": "forest",
+  "name": "Whisper Woods",
+  "description": "Winding trails between the trees, and stones that roll down the slopes.",
+  "author": "Avoid N Survive",
+  "released": "2026-11-17",
+  "unlockStars": 30,
+  "colors": [
+    "#a6eccb",
+    "#3f8f63"
+  ],
+  "cover": "cover.svg",
+  "style": {
+    "badge": {
+      "kind": "ring",
+      "primary": "#e0aa6c",
+      "secondary": "#8a5a2b",
+      "numberColor": "#1d140b",
+      "titleColor": "#f4ead8",
+      "font": "serif",
+      "pad": 0,
+      "showTitle": true
+    },
+    "maze": {
+      "wall": {
+        "fill": {
+          "type": "pattern",
+          "pattern": "diagonal",
+          "color": "#3f7a4b",
+          "background": "#244a2d",
+          "size": 12
+        },
+        "edge": "#8fd694"
+      },
+      "path": {
+        "fill": {
+          "type": "gradient",
+          "style": "linear",
+          "from": "#4a3b28",
+          "to": "#2f2619",
+          "angle": 90
+        },
+        "edge": "#9b8460"
+      }
+    }
+  }
+}

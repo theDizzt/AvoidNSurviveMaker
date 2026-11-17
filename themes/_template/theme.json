@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "id": "my-theme",
+  "name": "My Theme",
+  "description": "What this world is about.",
+  "author": "Your name",
+  "authorUrl": "https://example.com",
+  "released": "2026-01-01",
+  "unlockStars": 0,
+  "colors": [
+    "#9fe2ff",
+    "#c3b5ff"
+  ],
+  "cover": "cover.png",
+  "style": {
+    "cursorColor": "#2b86e0",
+    "badge": {
+      "kind": "pill",
+      "primary": "#ffffff",
+      "secondary": "#3a9ff0",
+      "numberColor": "#2b86e0",
+      "titleColor": "#243450",
+      "font": "title",
+      "pad": 0,
+      "showTitle": true,
+      "caption": ""
+    }
+  }
+}

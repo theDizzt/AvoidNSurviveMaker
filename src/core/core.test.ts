@@ -379,3 +379,74 @@ describe('share', () => {
     await expect(decodeMap('xabc')).rejects.toThrow();
   });
 });
+
+describe('saws, text boxes and safe zones (#43–48)', () => {
+  const disc = { kind: 'disc' as const, clockwise: true, spin: 720, stroke: 0, strokeMs: 0 };
+  const blade = { kind: 'blade' as const, clockwise: true, spin: 0, stroke: 40, strokeMs: 400 };
+
+  it('a moving wall passes harmlessly over a cursor in a safe zone', () => {
+    const map = baseMap(
+      [
+        wall({ x: 95, y: 45, w: 10, h: 10 }, { motion: motion({ points: [{ x: 300, y: 50 }], speed: 100 }) }),
+        { role: 'safe', shape: { type: 'rect', x: 130, y: 30, w: 40, h: 40 } },
+      ],
+      { start: { x: 140, y: 40, w: 20, h: 20 } },
+    );
+    const sim = new Simulation(validateMap(map));
+    sim.start(150, 50);
+    sim.advanceTo(3000);
+    expect(sim.status).toBe('playing');
+  });
+
+  it('a safe zone counts as floor on a map with paths', () => {
+    const map = baseMap(
+      [path({ x: 0, y: 0, w: 100, h: 100 }), { role: 'safe', shape: { type: 'rect', x: 100, y: 0, w: 100, h: 100 } }],
+      { start: { x: 0, y: 0, w: 20, h: 20 } },
+    );
+    const sim = new Simulation(validateMap(map));
+    sim.start(10, 10);
+    sim.feed(100, 150, 50);
+    expect(sim.status).toBe('playing');
+    sim.feed(200, 250, 50);
+    expect(sim.endReason).toBe('void');
+  });
+
+  it('a grinder is deadly and stays round', () => {
+    const map = validateMap(baseMap(
+      [wall({ x: 180, y: 30, w: 40, h: 50 }, { saw: disc })],
+      { start: { x: 0, y: 40, w: 20, h: 20 } },
+    ));
+    const s = map.objects[0].shape;
+    expect(s.type === 'ellipse' && s.rx === s.ry && s.rx === 20).toBe(true);
+    const sim = new Simulation(map);
+    sim.start(10, 55);
+    sim.feed(100, 300, 55);
+    expect(sim.endReason).toBe('mover');
+  });
+
+  it('a saw blade saws back and forth along its long side', () => {
+    // blade 100×10 at x 100–200; it reaches 20px further right a quarter stroke in (100 ms)
+    const map = validateMap(baseMap(
+      [wall({ x: 100, y: 45, w: 100, h: 10 }, { saw: blade })],
+      { start: { x: 205, y: 40, w: 20, h: 20 } },
+    ));
+    const sim = new Simulation(map);
+    sim.start(212, 50);
+    sim.advanceTo(1000);
+    expect(sim.endReason).toBe('mover');
+    // right edge 200 + 20·sin(2πt/400) reaches 212 at t = asin(0.6)·400 / 2π
+    expect(sim.endTime).toBeCloseTo((Math.asin(12 / 20) * 400) / (2 * Math.PI), 0);
+  });
+
+  it('text boxes keep their settings and never block the cursor', () => {
+    const map = validateMap(baseMap(
+      [{ role: 'text', shape: { type: 'rect', x: 50, y: 30, w: 200, h: 40 }, text: { text: 'Hello', color: '#112233', font: 'paperlogy-bold', size: 20, bold: true, align: 'left', outline: '#ffffff', outlineWidth: 2, background: '#00000080' } }],
+      { start: { x: 0, y: 40, w: 20, h: 20 } },
+    ));
+    expect(map.objects[0].text).toMatchObject({ text: 'Hello', font: 'paperlogy-bold', background: '#00000080', align: 'left' });
+    const sim = new Simulation(map);
+    sim.start(10, 50);
+    sim.feed(100, 300, 50);
+    expect(sim.status).toBe('playing');
+  });
+});

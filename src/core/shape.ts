@@ -86,7 +86,24 @@ export function flattenShape(s: Shape): FlatShape {
     }
     case 'poly':
       return bounds(new Float64Array(polyOutline(s.points)));
+    case 'sector':
+      return bounds(new Float64Array(sectorOutline(s)));
   }
+}
+
+/** Outline of a sector: the apex, then the arc (a full circle has no apex) */
+export function sectorOutline(s: Extract<Shape, { type: 'sector' }>): number[] {
+  const full = s.sweep >= 360;
+  const arc = (Math.min(360, s.sweep) * Math.PI) / 180;
+  const a0 = (s.start * Math.PI) / 180;
+  const n = Math.min(512, Math.max(full ? 24 : 2, Math.ceil((arc * s.r) / CURVE_STEP)));
+  const out: number[] = full ? [] : [s.cx, s.cy];
+  const steps = full ? n : n + 1;
+  for (let i = 0; i < steps; i++) {
+    const a = a0 + (arc * i) / n;
+    out.push(s.cx + Math.cos(a) * s.r, s.cy + Math.sin(a) * s.r);
+  }
+  return out;
 }
 
 export function shapeBounds(s: Shape): Rect {
@@ -95,7 +112,8 @@ export function shapeBounds(s: Shape): Rect {
       return { x: s.x, y: s.y, w: s.w, h: s.h };
     case 'ellipse':
       return { x: s.cx - s.rx, y: s.cy - s.ry, w: s.rx * 2, h: s.ry * 2 };
-    case 'poly': {
+    case 'poly':
+    case 'sector': {
       const f = flattenShape(s);
       return { x: f.minX, y: f.minY, w: f.maxX - f.minX, h: f.maxY - f.minY };
     }
@@ -117,5 +135,7 @@ export function translateShape(s: Shape, dx: number, dy: number): Shape {
       return { ...s, cx: s.cx + dx, cy: s.cy + dy };
     case 'poly':
       return { ...s, points: s.points.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) };
+    case 'sector':
+      return { ...s, cx: s.cx + dx, cy: s.cy + dy };
   }
 }

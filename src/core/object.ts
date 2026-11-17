@@ -1,3 +1,4 @@
+import { BladeMotion, Roller, SawSpin, SpikeMover } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
 import { flattenShape, shapeCenter } from './shape';
 import type { MapData, MapObject, Point, Rect, Role } from './types';
@@ -22,8 +23,10 @@ export interface CompiledObject {
   readonly minY: number;
   readonly maxX: number;
   readonly maxY: number;
-  readonly motion: CompiledMotion | null;
-  readonly rotation: CompiledRotation | null;
+  /** Moves the object over time (a route, or a spike's thrust) */
+  readonly motion: { offsetAt(t: number, out: Point): Point } | null;
+  /** Turns the object over time (a rotation, or a boulder rolling) */
+  readonly rotation: { angleAt(t: number): number } | null;
   readonly px: number;
   readonly py: number;
   readonly dynamic: boolean;
@@ -33,9 +36,21 @@ const tmp: Point = { x: 0, y: 0 };
 
 export function compileObject(o: MapObject): CompiledObject {
   const flat = flattenShape(o.shape);
-  const motion = o.motion ? new CompiledMotion(o.motion, shapeCenter(o.shape)) : null;
-  const rotation = o.rotation ? new CompiledRotation(o.rotation) : null;
-  const pivot = o.rotation?.pivot ?? { x: 0, y: 0 };
+  const center = shapeCenter(o.shape);
+  const route = o.motion ? new CompiledMotion(o.motion, center) : null;
+  const saw = o.role === 'wall' ? o.saw : undefined;
+  // A saw blade saws along its long side
+  const axis = flat.maxX - flat.minX >= flat.maxY - flat.minY ? { x: 1, y: 0 } : { x: 0, y: 1 };
+  const motion = o.spike ? new SpikeMover(o.spike)
+    : saw?.kind === 'blade' ? new BladeMotion(route?.moves ? route : null, axis, saw)
+      : route;
+  // A boulder spins about its own center by the distance it has rolled; a grinder spins steadily
+  const rotation = o.boulder && route?.moves
+    ? new Roller(route, Math.min(flat.maxX - flat.minX, flat.maxY - flat.minY) / 2)
+    : saw?.kind === 'disc' ? new SawSpin(saw)
+      : saw ? null
+        : o.rotation ? new CompiledRotation(o.rotation) : null;
+  const pivot = o.boulder || saw ? center : o.rotation?.pivot ?? { x: 0, y: 0 };
   return {
     src: o,
     role: o.role,
@@ -44,7 +59,8 @@ export function compileObject(o: MapObject): CompiledObject {
     rotation: rotation && rotation.dur > 0 ? rotation : null,
     px: pivot.x,
     py: pivot.y,
-    dynamic: !!motion?.moves || (!!rotation && rotation.dur > 0),
+    // Switch-linked objects can move, stop or vanish during a run, so they are drawn on their own
+    dynamic: !!motion?.moves || (!!rotation && rotation.dur > 0) || !!o.link || !!saw,
   };
 }
 

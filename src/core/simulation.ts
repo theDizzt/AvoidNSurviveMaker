@@ -1,11 +1,16 @@
 import { pointInPoly, pointInRect, segmentPolyCrossings, segmentRectEntry } from './geometry';
-import { compileMap, compileZone, toLocal, transformAt, type CompiledObject, type Transform } from './object';
+import { compileMap, compileObject, compileZone, toLocal, toWorld, transformAt, type CompiledObject, type Transform } from './object';
+import { autoDoorOpen, doorPanels, initialChannels } from './switches';
+import { BeamCaster, beamHit, type Beam } from './laser';
+
+/** How long a portal pulls the cursor to its center before teleporting (ms) */
+export const PORTAL_PULL_MS = 160;
 import type { MapData, Point } from './types';
 
 export type SimStatus = 'ready' | 'playing' | 'dead' | 'cleared';
 export type AbortReason = 'left' | 'blur' | 'pointer';
 /** wall: static wall · mover: moving/rotating wall · void: outside the paths (counts as wall) · bounds: left the map */
-export type EndReason = 'wall' | 'mover' | 'void' | 'bounds' | AbortReason;
+export type EndReason = 'wall' | 'mover' | 'void' | 'bounds' | 'laser' | AbortReason;
 
 /** t: ms since the run started (START click), sub-millisecond precision preserved */
 export interface ReplaySample {
@@ -17,6 +22,8 @@ export interface ReplaySample {
 export interface Replay {
   v: 1;
   samples: ReplaySample[];
+  /** Clicks during the run (click-activated switches), in time order */
+  clicks?: ReplaySample[];
   abort?: { reason: AbortReason };
 }
 
@@ -51,9 +58,72 @@ export class Simulation {
   /** Exact time (ms, fractional) of death or clear */
   endTime = 0;
 
+  /** Per map object: 1 once that coin has been collected (always 0 for other objects) */
+  readonly collected: Uint8Array;
+  /** Number of coins on the map */
+  readonly coinTotal: number;
+  coinsLeft: number;
+
   private readonly hasPaths: boolean;
-  /** Objects used for collision: map objects + START/GOAL as safe floor when the map has paths */
+  /** Objects used for collision: paths and walls + START/GOAL as safe floor when the map has paths */
   private readonly solids: readonly CompiledObject[];
+  /** The first `safeCount` solids are safe zones */
+  private readonly safeCount: number = 0;
+  /** Indices (into `objects`) of the coins */
+  private readonly coins: readonly number[];
+
+  // ── Switches ──
+  /** Per switch color: 1 while ON */
+  readonly channels: Uint8Array;
+  /** Per object: the time its motion is at (linked objects only move while allowed) */
+  readonly clock: Float64Array;
+  /** Per object: 1 while removed by its switch link (or a collected coin) */
+  readonly hidden: Uint8Array;
+  /** Per object (doors): how far open, 0–1 */
+  readonly doorOpen: Float64Array;
+  /** Per object (timer / hold switches): remaining time / hold progress, 0–1, for drawing */
+  readonly progress: Float64Array;
+  private readonly triggers: readonly number[];
+  private readonly linked: readonly number[];
+  private readonly doors: readonly number[];
+  /** Per solid: map object index (−1 for START / GOAL), and the door it belongs to (−1 if none) */
+  private readonly solidSrc: Int32Array;
+  private readonly solidDoor: Int32Array;
+  /** Per solid: slide vector of a door half when fully open */
+  private readonly solidSlide: Float64Array;
+  /** Per channel: time its timer runs out */
+  private readonly timerEnd = new Float64Array(16);
+  /** Per object: timer switch end time (drawing), trigger used (once), cursor inside, hold time, hold fired */
+  private readonly timerObjEnd: Float64Array;
+  private readonly used: Uint8Array;
+  private readonly inside: Uint8Array;
+  private readonly holdAcc: Float64Array;
+  private readonly holdFired: Uint8Array;
+  /** Per object / door: clock and openness at the end of the segment being checked */
+  private readonly clockB: Float64Array;
+  private readonly openB: Float64Array;
+  private clicks: ReplaySample[] = [];
+
+  // ── Lasers ──
+  /** Beams at the current time (for drawing and the next tick's sweep test) */
+  beams: Beam[] = [];
+  private pendingBeams: Beam[] = [];
+  private readonly caster: BeamCaster;
+
+  // ── Portals ──
+  /**
+   * The virtual cursor is the mouse position plus this offset: a browser can't move the real
+   * mouse, so after a teleport the cursor keeps following the mouse from the new place.
+   */
+  offX = 0;
+  offY = 0;
+  /** Number of teleports so far (the trail breaks at each) */
+  teleports = 0;
+  /** Being pulled into a portal: from the touch point to its center, then on to `dest` */
+  pull: { start: number; end: number; fromX: number; fromY: number; toX: number; toY: number; dest: number } | null = null;
+  private readonly portals: readonly number[];
+  /** Portal just arrived at: ignored until the cursor leaves it */
+  private portalCooldown = -1;
   /** Per object: local segment endpoints [ax, ay, bx, by] for the segment being checked */
   private readonly local: Float64Array;
   private readonly relevant: Int32Array;
@@ -68,7 +138,70 @@ export class Simulation {
     this.map = map;
     this.objects = compileMap(map);
     this.hasPaths = this.objects.some((o) => o.role === 'path');
-    this.solids = this.hasPaths ? [...this.objects, compileZone(map.start), compileZone(map.goal)] : this.objects;
+    // Coins, triggers, darkness areas and text don't block or support the cursor. A door is two
+    // sliding wall halves. Safe zones come first: inside one, nothing else matters.
+    const solids: CompiledObject[] = [];
+    const src: number[] = [];
+    const doorOf: number[] = [];
+    const slide: number[] = [];
+    this.objects.forEach((o, i) => {
+      if (o.role !== 'safe') return;
+      solids.push(o);
+      src.push(i);
+      doorOf.push(-1);
+      slide.push(0, 0);
+    });
+    this.safeCount = solids.length;
+    this.objects.forEach((o, i) => {
+      if (o.role === 'path' || o.role === 'wall' || o.role === 'laser') {
+        // A laser emitter's body is as deadly as a wall
+        solids.push(o.role === 'laser' ? { ...o, role: 'wall' } : o);
+        src.push(i);
+        doorOf.push(-1);
+        slide.push(0, 0);
+      } else if (o.role === 'door' && map.objects[i].shape.type === 'rect') {
+        const s = map.objects[i].shape as { x: number; y: number; w: number; h: number };
+        for (const half of doorPanels(s)) {
+          solids.push({ ...compileObject({ role: 'wall', shape: { type: 'rect', ...half.rect } }), dynamic: true });
+          src.push(i);
+          doorOf.push(i);
+          slide.push(half.slide.x, half.slide.y);
+        }
+      }
+    });
+    if (this.hasPaths) {
+      solids.push(compileZone(map.start), compileZone(map.goal));
+      src.push(-1, -1);
+      doorOf.push(-1, -1);
+      slide.push(0, 0, 0, 0);
+    }
+    this.solids = solids;
+    this.solidSrc = Int32Array.from(src);
+    this.solidDoor = Int32Array.from(doorOf);
+    this.solidSlide = Float64Array.from(slide);
+    this.coins = this.objects.flatMap((o, i) => (o.role === 'coin' ? [i] : []));
+    this.triggers = this.objects.flatMap((o, i) => (o.role === 'trigger' ? [i] : []));
+    this.linked = map.objects.flatMap((o, i) => (o.link ? [i] : []));
+    this.doors = this.objects.flatMap((o, i) => (o.role === 'door' ? [i] : []));
+    const n = this.objects.length;
+    this.channels = new Uint8Array(16);
+    this.clock = new Float64Array(n);
+    this.hidden = new Uint8Array(n);
+    this.doorOpen = new Float64Array(n);
+    this.progress = new Float64Array(n);
+    this.timerObjEnd = new Float64Array(n);
+    this.used = new Uint8Array(n);
+    this.inside = new Uint8Array(n);
+    this.holdAcc = new Float64Array(n);
+    this.holdFired = new Uint8Array(n);
+    this.clockB = new Float64Array(n);
+    this.openB = new Float64Array(n);
+    this.coinTotal = this.coins.length;
+    this.coinsLeft = this.coinTotal;
+    this.collected = new Uint8Array(this.objects.length);
+    this.portals = this.objects.flatMap((o, i) => (o.role === 'portal' ? [i] : []));
+    this.caster = new BeamCaster(map, this.objects);
+    this.resetSwitches();
     this.local = new Float64Array(this.solids.length * 4);
     this.relevant = new Int32Array(this.solids.length);
   }
@@ -89,7 +222,16 @@ export class Simulation {
     this.endReason = null;
     this.endTime = 0;
     this.abortReason = null;
+    this.collected.fill(0);
+    this.coinsLeft = this.coinTotal;
+    this.resetSwitches();
+    this.offX = 0;
+    this.offY = 0;
+    this.teleports = 0;
+    this.pull = null;
+    this.portalCooldown = -1;
     this.samples = [{ t: 0, x, y }];
+    this.clicks = [];
     // Check whether we already overlap something at the moment of starting
     this.checkSegment(0, x, y, 0, x, y);
     return true;
@@ -100,27 +242,50 @@ export class Simulation {
     if (this.status !== 'playing' || !(t > this.time)) return;
     if (!Number.isFinite(t) || !Number.isFinite(x) || !Number.isFinite(y)) return;
     this.samples.push({ t, x, y });
+    const rx = x;
+    const ry = y;
 
-    const st = this.time;
-    const sx = this.x;
-    const sy = this.y;
-    const dt = t - st;
+    let st = this.time;
+    let sx = this.x;
+    let sy = this.y;
 
-    while (this.status === 'playing') {
+    while (this.status === 'playing' && this.time < t) {
+      const pull = this.pull;
+      if (pull) {
+        // Pulled toward the portal's center regardless of the mouse, then teleported
+        const end = Math.min(t, pull.end, this.tick + 1);
+        const f = (end - pull.start) / (pull.end - pull.start);
+        const px = pull.fromX + (pull.toX - pull.fromX) * f;
+        const py = pull.fromY + (pull.toY - pull.fromY) * f;
+        this.checkSegment(this.time, this.x, this.y, end, px, py);
+        if (this.status !== 'playing') return;
+        if (end === this.tick + 1) this.tick = end;
+        this.time = end;
+        this.x = px;
+        this.y = py;
+        if (end === pull.end) this.teleport(rx, ry);
+        st = this.time;
+        sx = this.x;
+        sy = this.y;
+        continue;
+      }
+      // Where the cursor is heading: the mouse plus the teleport offset
+      const tx = rx + this.offX;
+      const ty = ry + this.offY;
       const boundary = this.tick + 1;
       if (t < boundary) {
-        this.checkSegment(this.time, this.x, this.y, t, x, y);
+        this.checkSegment(this.time, this.x, this.y, t, tx, ty);
         if (this.status === 'playing') {
           this.time = t;
-          this.x = x;
-          this.y = y;
+          this.x = tx;
+          this.y = ty;
         }
         return;
       }
       // Cut the segment at the next 1 ms boundary and check that piece
-      const f = (boundary - st) / dt;
-      const bx = sx + (x - sx) * f;
-      const by = sy + (y - sy) * f;
+      const f = (boundary - st) / (t - st);
+      const bx = sx + (tx - sx) * f;
+      const by = sy + (ty - sy) * f;
       this.checkSegment(this.time, this.x, this.y, boundary, bx, by);
       if (this.status !== 'playing') return;
       this.time = boundary;
@@ -131,9 +296,64 @@ export class Simulation {
     }
   }
 
+  /** End of a portal pull: appear at the destination portal's center */
+  private teleport(rx: number, ry: number): void {
+    const pull = this.pull!;
+    this.pull = null;
+    const o = this.objects[pull.dest];
+    transformAt(o, this.clock[pull.dest], tfA);
+    toWorld(o, tfA, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, pA);
+    this.x = pA.x;
+    this.y = pA.y;
+    this.offX = this.x - rx;
+    this.offY = this.y - ry;
+    this.portalCooldown = pull.dest;
+    this.teleports++;
+  }
+
+  /** The portal a teleport from portal `i` arrives at: the next one of its color (by order) that allows exits */
+  private portalExit(i: number): number {
+    const color = this.map.objects[i].portal!.color;
+    const ring = this.portals
+      .filter((j) => this.map.objects[j].portal!.color === color && !this.hidden[j])
+      .sort((a, b) => this.map.objects[a].portal!.order - this.map.objects[b].portal!.order || a - b);
+    const at = ring.indexOf(i);
+    for (let k = 1; k < ring.length; k++) {
+      const j = ring[(at + k) % ring.length];
+      if (this.map.objects[j].portal!.mode !== 'in') return j;
+    }
+    return -1;
+  }
+
+  /**
+   * A click during the run at time t (cursor at x, y): first catches up to t, then activates any
+   * click-operated switch under the cursor.
+   */
+  click(t: number, x: number, y: number): void {
+    if (this.status !== 'playing') return;
+    if (t > this.time) this.feed(t, x, y);
+    if (this.status !== 'playing') return;
+    this.clicks.push({ t: this.time, x: this.x, y: this.y });
+    for (const i of this.triggers) {
+      const trig = this.map.objects[i].trigger!;
+      if (!trig.click || this.hidden[i]) continue;
+      const o = this.objects[i];
+      let lx = this.x;
+      let ly = this.y;
+      if (o.dynamic) {
+        toLocal(o, transformAt(o, this.clock[i], tfA), this.x, this.y, pA);
+        lx = pA.x;
+        ly = pA.y;
+      }
+      if (pointInPoly(lx, ly, o.poly)) this.activate(i, this.time);
+    }
+    this.updateDerived(this.time);
+  }
+
   /** When the mouse is idle and no events arrive, advance time assuming the cursor stayed put */
   advanceTo(t: number): void {
-    this.feed(t, this.x, this.y);
+    // The mouse is where it last was (not the cursor, which may be offset by a teleport)
+    this.feed(t, this.x - this.offX, this.y - this.offY);
   }
 
   /** Fail due to an external cause: cursor left the window, focus lost, etc. */
@@ -147,6 +367,7 @@ export class Simulation {
 
   getReplay(): Replay {
     const r: Replay = { v: 1, samples: this.samples.slice() };
+    if (this.clicks.length) r.clicks = this.clicks.slice();
     if (this.abortReason) r.abort = { reason: this.abortReason };
     return r;
   }
@@ -158,13 +379,24 @@ export class Simulation {
     this.relevantCount = 0;
     for (let i = 0; i < solids.length; i++) {
       const o = solids[i];
+      const srcIdx = this.solidSrc[i];
+      if (srcIdx >= 0 && this.hidden[srcIdx]) continue; // removed by a switch
       let ax = xa;
       let ay = ya;
       let bx = xb;
       let by = yb;
-      if (o.dynamic) {
-        toLocal(o, transformAt(o, ta, tfA), xa, ya, pA);
-        toLocal(o, transformAt(o, tb, tfB), xb, yb, pB);
+      const door = this.solidDoor[i];
+      if (door >= 0) {
+        // Door half: its local frame is its closed position
+        const sx = this.solidSlide[i * 2];
+        const sy = this.solidSlide[i * 2 + 1];
+        ax -= sx * this.doorOpen[door];
+        ay -= sy * this.doorOpen[door];
+        bx -= sx * this.openB[door];
+        by -= sy * this.openB[door];
+      } else if (o.dynamic) {
+        toLocal(o, transformAt(o, this.clock[srcIdx] ?? ta, tfA), xa, ya, pA);
+        toLocal(o, transformAt(o, this.clockB[srcIdx] ?? tb, tfB), xb, yb, pB);
         ax = pA.x;
         ay = pA.y;
         bx = pB.x;
@@ -183,6 +415,24 @@ export class Simulation {
     crossings.sort((p, q) => p - q);
   }
 
+  /** Is (x, y) inside a safe zone at time t? */
+  private inSafeZone(x: number, y: number, t: number): boolean {
+    for (let i = 0; i < this.safeCount; i++) {
+      const o = this.solids[i];
+      const srcIdx = this.solidSrc[i];
+      if (this.hidden[srcIdx]) continue;
+      let lx = x;
+      let ly = y;
+      if (o.dynamic) {
+        toLocal(o, transformAt(o, this.clockB[srcIdx] ?? t, tfA), x, y, pA);
+        lx = pA.x;
+        ly = pA.y;
+      }
+      if (pointInPoly(lx, ly, o.poly)) return true;
+    }
+    return false;
+  }
+
   /** What the cursor is touching at fraction u of the prepared segment: null = safe */
   private hazardAt(u: number): 'wall' | 'mover' | 'void' | null {
     const { solids, local, relevant } = this;
@@ -194,6 +444,7 @@ export class Simulation {
       const x = local[i * 4] + (local[i * 4 + 2] - local[i * 4]) * u;
       const y = local[i * 4 + 1] + (local[i * 4 + 3] - local[i * 4 + 1]) * u;
       if (!pointInPoly(x, y, o.poly)) continue;
+      if (o.role === 'safe') return null;
       if (o.role === 'wall') return o.dynamic ? 'mover' : 'wall';
       onPath = true;
     }
@@ -203,10 +454,11 @@ export class Simulation {
   /** Check the cursor's movement over [ta,tb] (within one 1 ms tick) */
   private checkSegment(ta: number, xa: number, ya: number, tb: number, xb: number, yb: number): void {
     const { map } = this;
+    this.beginSegment(ta, tb);
     this.prepare(ta, xa, ya, tb, xb, yb);
 
     let deathU = Infinity;
-    let reason: 'wall' | 'mover' | 'void' | 'bounds' | null = this.hazardAt(0);
+    let reason: 'wall' | 'mover' | 'void' | 'bounds' | 'laser' | null = this.hazardAt(0);
     if (reason) {
       deathU = 0;
     } else {
@@ -227,6 +479,18 @@ export class Simulation {
       }
     }
 
+    // Laser beams (where they are at the end of this tick; swept area since its start)
+    if (this.caster.any) {
+      this.pendingBeams = this.caster.beams({
+        timeOf: (i) => this.clockB[i], hidden: this.hidden, doorOpen: this.openB, channels: this.channels,
+      });
+      const u = beamHit(this.pendingBeams, this.beams, xa, ya, xb, yb);
+      if (u >= 0 && u < deathU && !this.inSafeZone(xa + (xb - xa) * u, ya + (yb - ya) * u, tb)) {
+        deathU = u;
+        reason = 'laser';
+      }
+    }
+
     // Leaving the map bounds
     let exit = Infinity;
     if (xb < 0) exit = Math.min(exit, xa / (xa - xb));
@@ -238,14 +502,262 @@ export class Simulation {
       reason = 'bounds';
     }
 
+    // Coins touched before dying are collected; remember when the last one was picked up
+    let lastCoinU = -Infinity;
+    if (this.coinsLeft > 0) {
+      const hits = this.coinHits(xa, ya, xb, yb, deathU);
+      if (this.coinsLeft === 0) lastCoinU = hits;
+    }
+
     const g = map.goal;
-    const goal = segmentRectEntry(xa, ya, xb, yb, g.x, g.y, g.w, g.h);
+    let goal = segmentRectEntry(xa, ya, xb, yb, g.x, g.y, g.w, g.h);
+    if (this.coinsLeft > 0) {
+      goal = -1; // GOAL stays locked until every coin is collected
+    } else if (goal >= 0 && lastCoinU > goal) {
+      // The last coin was collected after entering GOAL: it counts if the cursor is still inside then
+      const px = xa + (xb - xa) * lastCoinU;
+      const py = ya + (yb - ya) * lastCoinU;
+      goal = pointInRect(px, py, g) ? lastCoinU : -1;
+    }
     // On a tie, death wins
     if (goal >= 0 && goal < deathU) {
       this.finish('cleared', null, goal, ta, xa, ya, tb, xb, yb);
     } else if (reason) {
       this.finish('dead', reason, deathU, ta, xa, ya, tb, xb, yb);
+    } else {
+      this.endSegment(ta, xa, ya, tb, xb, yb);
     }
+  }
+
+  // ───────────────────────── Switches ─────────────────────────
+
+  private resetSwitches(): void {
+    this.channels.set(initialChannels(this.map));
+    this.timerEnd.fill(Infinity);
+    this.timerObjEnd.fill(-Infinity);
+    this.used.fill(0);
+    this.inside.fill(0);
+    this.holdAcc.fill(0);
+    this.holdFired.fill(0);
+    this.progress.fill(0);
+    for (let i = 0; i < this.clock.length; i++) this.clock[i] = 0;
+    for (const d of this.doors) {
+      const door = this.map.objects[d].door!;
+      this.doorOpen[d] = door.mode === 'auto' ? autoDoorOpen(door, 0) : this.channels[door.color];
+    }
+    this.updateDerived(0);
+    // caster is created after the first reset in the constructor
+    this.beams = this.caster?.any
+      ? this.caster.beams({ timeOf: () => 0, hidden: this.hidden, doorOpen: this.doorOpen, channels: this.channels })
+      : [];
+  }
+
+  /** Does the linked object's motion run with the current switch states? */
+  private runs(i: number): boolean {
+    const link = this.map.objects[i].link;
+    if (!link || link.action === 'remove') return true;
+    const on = this.channels[link.color] === 1;
+    return link.action === 'start' ? on : !on;
+  }
+
+  /** Timers that ran out, then everybody's clock / door position at the end of the segment */
+  private beginSegment(ta: number, tb: number): void {
+    for (let c = 0; c < 16; c++) {
+      if (this.timerEnd[c] <= ta) {
+        this.timerEnd[c] = Infinity;
+        this.channels[c] = 0;
+      }
+    }
+    this.updateDerived(ta);
+    const dt = tb - ta;
+    for (let i = 0; i < this.clock.length; i++) this.clockB[i] = tb;
+    for (const i of this.linked) this.clockB[i] = this.clock[i] + (this.runs(i) ? dt : 0);
+    for (const d of this.doors) {
+      const door = this.map.objects[d].door!;
+      if (door.mode === 'auto') this.openB[d] = autoDoorOpen(door, tb);
+      else {
+        const dir = this.channels[door.color] ? 1 : -1;
+        this.openB[d] = Math.min(1, Math.max(0, this.doorOpen[d] + (dir * dt) / door.moveMs));
+      }
+    }
+  }
+
+  /** Commit the segment, then let triggers react to where the cursor went */
+  private endSegment(ta: number, xa: number, ya: number, tb: number, xb: number, yb: number): void {
+    this.clock.set(this.clockB);
+    for (const d of this.doors) this.doorOpen[d] = this.openB[d];
+    if (this.caster.any) this.beams = this.pendingBeams;
+    this.checkPortals(xa, ya, xb, yb, tb);
+    const dt = tb - ta;
+    const out: number[] = [];
+    for (const i of this.triggers) {
+      if (this.hidden[i]) continue;
+      const trig = this.map.objects[i].trigger!;
+      const o = this.objects[i];
+      let ax = xa;
+      let ay = ya;
+      let bx = xb;
+      let by = yb;
+      if (o.dynamic) {
+        // Clocks were already committed, so the start of the segment is approximated by its end
+        toLocal(o, transformAt(o, this.clock[i], tfA), xa, ya, pA);
+        toLocal(o, transformAt(o, this.clock[i], tfB), xb, yb, pB);
+        ax = pA.x;
+        ay = pA.y;
+        bx = pB.x;
+        by = pB.y;
+      }
+      const near = !(Math.max(ax, bx) < o.minX || Math.min(ax, bx) > o.maxX || Math.max(ay, by) < o.minY || Math.min(ay, by) > o.maxY);
+      let touched = false;
+      let insideB = false;
+      let crossed = false;
+      if (near) {
+        insideB = pointInPoly(bx, by, o.poly);
+        out.length = 0;
+        if (ax !== bx || ay !== by) segmentPolyCrossings(ax, ay, bx, by, o.poly, out);
+        crossed = out.length > 0;
+        touched = insideB || crossed || pointInPoly(ax, ay, o.poly);
+      }
+      const was = this.inside[i] === 1;
+      const entered = !was && touched;
+      this.inside[i] = insideB ? 1 : 0;
+      if (trig.kind === 'hold') {
+        if (insideB && was && !crossed) this.holdAcc[i] += dt;
+        else if (insideB) this.holdAcc[i] = dt * (1 - (out.length ? Math.max(...out) : 0));
+        else {
+          this.holdAcc[i] = 0;
+          this.holdFired[i] = 0;
+        }
+        if (!this.holdFired[i] && this.holdAcc[i] >= (trig.duration ?? 1000)) {
+          this.holdFired[i] = 1;
+          this.activate(i, tb);
+        }
+      } else if (entered && !trig.click) {
+        this.activate(i, tb);
+      }
+    }
+    this.updateDerived(tb);
+  }
+
+  /** Touching a portal starts the pull toward its center */
+  private checkPortals(xa: number, ya: number, xb: number, yb: number, tb: number): void {
+    if (!this.portals.length) return;
+    const out: number[] = [];
+    for (const i of this.portals) {
+      if (this.hidden[i]) continue;
+      const o = this.objects[i];
+      let ax = xa;
+      let ay = ya;
+      let bx = xb;
+      let by = yb;
+      if (o.dynamic) {
+        toLocal(o, transformAt(o, this.clock[i], tfA), xa, ya, pA);
+        toLocal(o, transformAt(o, this.clock[i], tfB), xb, yb, pB);
+        ax = pA.x;
+        ay = pA.y;
+        bx = pB.x;
+        by = pB.y;
+      }
+      out.length = 0;
+      if (ax !== bx || ay !== by) segmentPolyCrossings(ax, ay, bx, by, o.poly, out);
+      const touching = pointInPoly(bx, by, o.poly) || out.length > 0;
+      if (i === this.portalCooldown) {
+        if (!touching) this.portalCooldown = -1; // left the arrival portal: it works again
+        continue;
+      }
+      if (!touching || this.pull || this.map.objects[i].portal!.mode === 'out') continue;
+      const dest = this.portalExit(i);
+      if (dest < 0) continue;
+      transformAt(o, this.clock[i], tfA);
+      toWorld(o, tfA, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, pA);
+      this.pull = { start: tb, end: tb + PORTAL_PULL_MS, fromX: xb, fromY: yb, toX: pA.x, toY: pA.y, dest };
+    }
+  }
+
+  /** A trigger fires */
+  private activate(i: number, t: number): void {
+    const trig = this.map.objects[i].trigger!;
+    if (trig.once && this.used[i]) return;
+    this.used[i] = 1;
+    const c = trig.color;
+    switch (trig.kind) {
+      case 'switch':
+      case 'hold':
+        this.channels[c] ^= 1;
+        if (!this.channels[c]) this.timerEnd[c] = Infinity;
+        break;
+      case 'timer': {
+        const end = t + (trig.duration ?? 3000);
+        this.channels[c] = 1;
+        this.timerEnd[c] = Math.max(this.timerEnd[c] === Infinity ? -Infinity : this.timerEnd[c], end);
+        this.timerObjEnd[i] = end;
+        break;
+      }
+      case 'startZone':
+        this.channels[c] = 1;
+        break;
+      case 'stopZone':
+        this.channels[c] = 0;
+        this.timerEnd[c] = Infinity;
+        break;
+    }
+  }
+
+  /** Removal flags and drawing progress from the current switch states */
+  private updateDerived(t: number): void {
+    for (const i of this.linked) {
+      const link = this.map.objects[i].link!;
+      this.hidden[i] = (link.action === 'remove' && this.channels[link.color] === 1) || this.collected[i] === 1 ? 1 : 0;
+    }
+    for (const i of this.coins) if (this.collected[i]) this.hidden[i] = 1;
+    for (const i of this.triggers) {
+      const trig = this.map.objects[i].trigger!;
+      if (trig.kind === 'timer') {
+        const end = this.timerObjEnd[i];
+        this.progress[i] = this.channels[trig.color] && end > t ? (end - t) / (trig.duration ?? 3000) : 0;
+      } else if (trig.kind === 'hold') {
+        this.progress[i] = Math.min(1, this.holdAcc[i] / (trig.duration ?? 1000));
+      }
+    }
+  }
+
+  /**
+   * Collect every coin the segment touches before `limit`. Returns the fraction at which the
+   * latest of them was touched (-Infinity if none).
+   */
+  private coinHits(xa: number, ya: number, xb: number, yb: number, limit: number): number {
+    let latest = -Infinity;
+    const out: number[] = [];
+    for (const i of this.coins) {
+      if (this.collected[i]) continue;
+      const o = this.objects[i];
+      let ax = xa;
+      let ay = ya;
+      let bx = xb;
+      let by = yb;
+      if (this.hidden[i] && !this.collected[i]) continue; // removed by a switch
+      if (o.dynamic) {
+        toLocal(o, transformAt(o, this.clock[i], tfA), xa, ya, pA);
+        toLocal(o, transformAt(o, this.clockB[i], tfB), xb, yb, pB);
+        ax = pA.x;
+        ay = pA.y;
+        bx = pB.x;
+        by = pB.y;
+      }
+      if (Math.max(ax, bx) < o.minX || Math.min(ax, bx) > o.maxX || Math.max(ay, by) < o.minY || Math.min(ay, by) > o.maxY) continue;
+      let u = -1;
+      if (pointInPoly(ax, ay, o.poly)) u = 0;
+      else if (ax !== bx || ay !== by) {
+        out.length = 0;
+        segmentPolyCrossings(ax, ay, bx, by, o.poly, out);
+        if (out.length) u = Math.min(...out);
+      }
+      if (u < 0 || u > limit) continue;
+      this.collected[i] = 1;
+      this.coinsLeft--;
+      latest = Math.max(latest, u);
+    }
+    return latest;
   }
 
   private finish(
@@ -266,7 +778,14 @@ export function runReplay(map: MapData, replay: Replay): Simulation {
   const sim = new Simulation(map);
   const [first, ...rest] = replay.samples;
   if (!first || first.t !== 0 || !sim.start(first.x, first.y)) return sim;
-  for (const s of rest) sim.feed(s.t, s.x, s.y);
+  const clicks = replay.clicks ?? [];
+  let k = 0;
+  for (const s of rest) {
+    // Clicks happen after the samples up to their time
+    while (k < clicks.length && clicks[k].t < s.t) sim.click(clicks[k].t, clicks[k].x, clicks[k].y), k++;
+    sim.feed(s.t, s.x, s.y);
+  }
+  while (k < clicks.length) sim.click(clicks[k].t, clicks[k].x, clicks[k].y), k++;
   if (replay.abort) sim.abort(replay.abort.reason);
   return sim;
 }

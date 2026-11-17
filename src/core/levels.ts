@@ -1,84 +1,9 @@
 import type { MapData } from './types';
 
-/** Built-in levels, 960×540 (16:9). */
-export const BUILTIN_LEVELS: MapData[] = [
-  {
-    v: 2,
-    name: '1. Tutorial - Zigzag Corridor',
-    author: 'Built-in',
-    width: 960,
-    height: 540,
-    start: {x: 70, y: 238, w: 64, h: 64},
-    goal: {x: 826, y: 238, w: 64, h: 64},
-    objects: [
-      {role: 'path', shape: {type: 'rect', x: 0, y: 194, w: 960, h: 152}},
-      {role: 'wall', shape: {type: 'rect', x: 372, y: 194, w: 22, h: 98}},
-      {role: 'wall', shape: {type: 'rect', x: 588, y: 248, w: 22, h: 98}},
-    ],
-  },
-  {
-    v: 2,
-    name: '2. Moving Walls',
-    author: 'Built-in',
-    width: 960,
-    height: 540,
-    start: {x: 70, y: 22, w: 64, h: 64},
-    goal: {x: 826, y: 454, w: 64, h: 64},
-    objects: [
-      {role: 'wall', shape: {type: 'rect', x: 372, y: 0, w: 22, h: 324}},
-      {role: 'wall', shape: {type: 'rect', x: 566, y: 216, w: 22, h: 324}},
-      {role: 'wall', shape: {type: 'rect', x: 273, y: 0, w: 26, h: 151}, motion: {type: 'linear', points: [{x: 286, y: 464}], speed: 281, repeat: 'pingpong', easing: 'none', delay: 0, clockwise: true}},
-      {role: 'wall', shape: {type: 'rect', x: 467, y: 0, w: 26, h: 151}, motion: {type: 'linear', points: [{x: 480, y: 464}], speed: 281, repeat: 'pingpong', easing: 'none', delay: -700, clockwise: true}},
-      {role: 'wall', shape: {type: 'rect', x: 661, y: 0, w: 26, h: 151}, motion: {type: 'linear', points: [{x: 674, y: 464}], speed: 281, repeat: 'pingpong', easing: 'none', delay: -1400, clockwise: true}},
-    ],
-  },
-  {
-    v: 2,
-    name: '3. Patrol Zone',
-    author: 'Built-in',
-    width: 960,
-    height: 540,
-    start: {x: 64, y: 27, w: 54, h: 54},
-    goal: {x: 836, y: 454, w: 54, h: 54},
-    objects: [
-      {role: 'wall', shape: {type: 'rect', x: 0, y: 108, w: 804, h: 65}},
-      {role: 'wall', shape: {type: 'rect', x: 156, y: 281, w: 804, h: 65}},
-      {role: 'wall', shape: {type: 'rect', x: 242, y: 22, w: 44, h: 64}, motion: {type: 'linear', points: [{x: 718, y: 54}], speed: 270, repeat: 'pingpong', easing: 'none', delay: 0, clockwise: true}},
-      {role: 'wall', shape: {type: 'rect', x: 309, y: 173, w: 18, h: 65}, motion: {type: 'linear', points: [{x: 318, y: 248}], speed: 65, repeat: 'pingpong', easing: 'none', delay: 0, clockwise: true}},
-      {role: 'wall', shape: {type: 'rect', x: 471, y: 173, w: 18, h: 65}, motion: {type: 'linear', points: [{x: 480, y: 248}], speed: 65, repeat: 'pingpong', easing: 'none', delay: -333, clockwise: true}},
-      {role: 'wall', shape: {type: 'rect', x: 633, y: 173, w: 18, h: 65}, motion: {type: 'linear', points: [{x: 642, y: 248}], speed: 65, repeat: 'pingpong', easing: 'none', delay: -666, clockwise: true}},
-      {role: 'wall', shape: {type: 'rect', x: 291, y: 362, w: 54, h: 54}, motion: {type: 'linear', points: [{x: 750, y: 389}, {x: 750, y: 497}, {x: 318, y: 497}], speed: 346, repeat: 'loop', easing: 'none', delay: 0, clockwise: true}},
-    ],
-  },
-  {
-    v: 2,
-    name: '4. Spin Cycle',
-    author: 'Built-in',
-    width: 960,
-    height: 540,
-    start: {x: 70, y: 238, w: 64, h: 64},
-    goal: {x: 826, y: 238, w: 64, h: 64},
-    objects: [
-      {role: 'wall', shape: {type: 'rect', x: 264, y: 0, w: 108, h: 140}},
-      {role: 'wall', shape: {type: 'rect', x: 264, y: 400, w: 108, h: 140}},
-      {role: 'wall', shape: {type: 'rect', x: 307, y: 151, w: 22, h: 238}, rotation: {pivot: {x: 318, y: 270}, speed: 60, angle: 360, clockwise: true, repeat: 'loop', easing: 'none', delay: 0}},
-      {role: 'wall', shape: {type: 'ellipse', cx: 610, cy: 140, rx: 30, ry: 30}, motion: {type: 'circle', points: [{x: 610, y: 270}], speed: 259, repeat: 'loop', easing: 'none', delay: 0, clockwise: true}},
-      {role: 'wall', shape: {type: 'rect', x: 631, y: 261, w: 173, h: 18}, rotation: {pivot: {x: 718, y: 270}, speed: 90, angle: 90, clockwise: false, repeat: 'loop', easing: 'inOut', delay: 0}},
-    ],
-  },
-  {
-    v: 2,
-    name: '5. Floating Bridge',
-    author: 'Built-in',
-    width: 960,
-    height: 540,
-    start: {x: 70, y: 238, w: 64, h: 64},
-    goal: {x: 826, y: 238, w: 64, h: 64},
-    objects: [
-      {role: 'path', shape: {type: 'poly', points: [{x: 0, y: 205}, {x: 167, y: 162, smooth: true}, {x: 286, y: 248, smooth: true}, {x: 404, y: 205}, {x: 404, y: 335}, {x: 286, y: 378, smooth: true}, {x: 167, y: 292, smooth: true}, {x: 0, y: 335}]}},
-      {role: 'path', shape: {type: 'rect', x: 394, y: 216, w: 86, h: 108}, motion: {type: 'linear', points: [{x: 631, y: 270}], speed: 130, repeat: 'pingpong', easing: 'inOut', delay: 1000, clockwise: true}},
-      {role: 'path', shape: {type: 'ellipse', cx: 772, cy: 270, rx: 119, ry: 97}},
-      {role: 'wall', shape: {type: 'rect', x: 718, y: 264, w: 108, h: 12}, rotation: {pivot: {x: 772, y: 270}, speed: 45, angle: 360, clockwise: true, repeat: 'loop', easing: 'none', delay: 0}},
-    ],
-  },
-];
+/**
+ * Built-in levels: the first official theme's levels, read from themes/01-pastel-plains/levels/.
+ * (All official themes are loaded by src/web/theme-registry.ts; this export is kept for tests.)
+ */
+const files = import.meta.glob<MapData>('../../themes/01-pastel-plains/levels/*.json', { eager: true, import: 'default' });
+
+export const BUILTIN_LEVELS: MapData[] = Object.keys(files).sort().map((k) => files[k]);

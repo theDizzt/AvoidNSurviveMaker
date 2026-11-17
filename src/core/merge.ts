@@ -162,7 +162,7 @@ function polygonToShape(p: Polygon, maxPoints: number, smoothable: boolean): Sha
 }
 
 function isCurved(s: Shape): boolean {
-  return s.type === 'ellipse' || (s.type === 'poly' && s.points.some((p) => p.smooth));
+  return s.type === 'ellipse' || s.type === 'sector' || (s.type === 'poly' && s.points.some((p) => p.smooth));
 }
 
 /**

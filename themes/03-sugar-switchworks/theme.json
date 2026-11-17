@@ -1,0 +1,48 @@
+{
+  "format": 1,
+  "id": "candy",
+  "name": "Sugar Switchworks",
+  "description": "Switches, sliding doors and sweet traps. Press the right color at the right time.",
+  "author": "Avoid N Survive",
+  "released": "2026-11-17",
+  "unlockStars": 70,
+  "colors": [
+    "#ffb8d9",
+    "#ffd59e"
+  ],
+  "cover": "cover.svg",
+  "style": {
+    "badge": {
+      "kind": "slant",
+      "primary": "#e2365f",
+      "secondary": "#ffffff",
+      "numberColor": "#e2365f",
+      "titleColor": "#ffffff",
+      "font": "heavy",
+      "pad": 2,
+      "showTitle": true
+    },
+    "maze": {
+      "wall": {
+        "fill": {
+          "type": "pattern",
+          "pattern": "stripes",
+          "color": "#ff6fae",
+          "background": "#ffd1e6",
+          "size": 14
+        },
+        "edge": "#ffffff"
+      },
+      "path": {
+        "fill": {
+          "type": "pattern",
+          "pattern": "dots",
+          "color": "#bfe2ff",
+          "background": "#7fb6e6",
+          "size": 14
+        },
+        "edge": "#ffffff"
+      }
+    }
+  }
+}

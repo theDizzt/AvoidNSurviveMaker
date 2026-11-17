@@ -1,0 +1,214 @@
+{
+  "v": 2,
+  "name": "workshop02",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 180,
+    "y": 420,
+    "w": 60,
+    "h": 180
+  },
+  "goal": {
+    "x": 1680,
+    "y": 420,
+    "w": 60,
+    "h": 180
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 420,
+        "w": 1440,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 1440,
+        "cy": 420,
+        "r": 120,
+        "start": 270,
+        "sweep": 90
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 1440,
+        "cy": 600,
+        "r": 120,
+        "start": 0,
+        "sweep": 90
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 480,
+        "cy": 420,
+        "r": 120,
+        "start": 180,
+        "sweep": 90
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 480,
+        "cy": 600,
+        "r": 120,
+        "start": 90,
+        "sweep": 90
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 480,
+        "y": 300,
+        "w": 960,
+        "h": 420
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 960,
+            "y": 420
+          },
+          {
+            "x": 870,
+            "y": 510
+          },
+          {
+            "x": 960,
+            "y": 600
+          },
+          {
+            "x": 1050,
+            "y": 510
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 690,
+            "y": 630
+          },
+          {
+            "x": 600,
+            "y": 720
+          },
+          {
+            "x": 690,
+            "y": 810
+          },
+          {
+            "x": 780,
+            "y": 720
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1230,
+            "y": 630
+          },
+          {
+            "x": 1140,
+            "y": 720
+          },
+          {
+            "x": 1230,
+            "y": 810
+          },
+          {
+            "x": 1320,
+            "y": 720
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1230,
+            "y": 210
+          },
+          {
+            "x": 1140,
+            "y": 300
+          },
+          {
+            "x": 1230,
+            "y": 390
+          },
+          {
+            "x": 1320,
+            "y": 300
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 690,
+            "y": 210
+          },
+          {
+            "x": 600,
+            "y": 300
+          },
+          {
+            "x": 690,
+            "y": 390
+          },
+          {
+            "x": 780,
+            "y": 300
+          }
+        ]
+      }
+    }
+  ],
+  "title": "Shape",
+  "level": 2,
+  "cursorColor": "#df2a2a",
+  "difficulty": 1,
+  "stars": {
+    "three": 1000,
+    "two": 1300,
+    "one": 1700
+  }
+}

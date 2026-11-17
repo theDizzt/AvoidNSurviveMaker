@@ -1,8 +1,14 @@
+import { levelLabel, starGoals, starsFor, starText } from '../core/level';
+import { DEFAULT_BADGE, type BadgeStyle } from '../core/theme-pack';
+import { badgeImage, drawLevelBadge } from './badge';
 import { formatTime, Simulation, type EndReason, type Replay } from '../core/simulation';
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
 import { options } from './options';
-import { beginFrame, clientToMap, COLORS, drawBanner, drawMap, drawStopwatch, drawTrail, fitCanvas, mapPointer } from './render';
+import {
+  beginFrame, clientToMap, COLORS, drawBanner, drawDarkAreas, drawGlobalDark, drawMap, drawStopwatch, drawTrail, fitCanvas,
+  FONT_MAIN, mapPointer, unitsPerPx,
+} from './render';
 
 /**
  * When the mouse is idle and no events arrive, the simulation advances "in place",
@@ -10,12 +16,15 @@ import { beginFrame, clientToMap, COLORS, drawBanner, drawMap, drawStopwatch, dr
  */
 const IDLE_MARGIN_MS = 40;
 const TRAIL_POINTS = 800;
+/** On-screen size (CSS px) of the virtual cursor that replaces the system cursor during a run */
+const CURSOR_PX = 8;
 
 const REASON_TEXT: Record<EndReason, string> = {
   wall: 'Touched a wall',
   mover: 'Hit a moving obstacle',
   void: 'Touched a wall',
   bounds: 'Left the map',
+  laser: 'Hit a laser',
   left: 'Cursor left the window',
   blur: 'Window lost focus',
   pointer: 'Pointer input was interrupted',
@@ -34,6 +43,10 @@ export class PlayController {
   onClear: ((map: MapData, replay: Replay, time: number) => void) | null = null;
   /** Called when the player presses Esc */
   onExit: (() => void) | null = null;
+  /** Level badge design of the theme being played (null = the default look) */
+  badge: { style: BadgeStyle; imageUrl?: string } | null = null;
+  /** Shown after a clear when there is a next level, e.g. "N: next level" */
+  nextHint: string | null = null;
 
   private map!: MapData;
   private sim!: Simulation;
@@ -103,6 +116,10 @@ export class PlayController {
     if (this.map) fitCanvas(this.el.canvas, this.map);
   }
 
+  get status(): Simulation['status'] {
+    return this.sim?.status ?? 'ready';
+  }
+
   hide(): void {
     this.abort('blur');
     this.visible = false;
@@ -114,7 +131,13 @@ export class PlayController {
   }
 
   private onDown(e: PointerEvent): void {
-    if (e.button !== 0 || this.sim.status === 'playing') return;
+    if (e.button !== 0) return;
+    if (this.sim.status === 'playing') {
+      // Clicks during a run press click-operated switches
+      const p = clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
+      this.sim.click(e.timeStamp - this.t0, p.x, p.y);
+      return;
+    }
     const p = clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
     const sim = new Simulation(this.map);
     if (!sim.start(p.x, p.y)) return;
@@ -122,7 +145,19 @@ export class PlayController {
     this.sim = sim;
     this.t0 = e.timeStamp;
     this.trail = [p.x, p.y];
+    this.trailTeleports = 0;
     this.notified = false;
+    // Hide the system cursor right away instead of on the next frame
+    this.el.root.classList.add('running');
+  }
+
+  private trailTeleports = 0;
+
+  /** No trail line across a teleport */
+  private breakTrailOnTeleport(): void {
+    if (this.sim.teleports === this.trailTeleports) return;
+    this.trailTeleports = this.sim.teleports;
+    this.trail.push(NaN, NaN, this.sim.x, this.sim.y);
   }
 
   private onSamples(list: readonly PointerEvent[]): void {
@@ -134,6 +169,7 @@ export class PlayController {
     for (const ev of list) {
       toMap(ev.clientX, ev.clientY, p);
       sim.feed(ev.timeStamp - this.t0, p.x, p.y);
+      this.breakTrailOnTeleport();
       this.trail.push(sim.x, sim.y);
       if (sim.status !== 'playing') break;
     }
@@ -148,6 +184,7 @@ export class PlayController {
     if (sim.status === 'playing') {
       const target = now - this.t0 - IDLE_MARGIN_MS;
       if (target > sim.time) sim.advanceTo(target);
+      this.breakTrailOnTeleport();
     }
     const running = sim.status === 'playing';
     if (running !== this.el.root.classList.contains('running')) this.el.root.classList.toggle('running', running);
@@ -175,23 +212,54 @@ export class PlayController {
 
   private draw(now: number): void {
     const { ctx, map, sim } = this;
+    const t = sim.status === 'ready' ? 0 : sim.time;
     beginFrame(ctx, map);
-    drawMap(ctx, map, sim.objects, sim.status === 'ready' ? 0 : sim.time);
-    if (options.showTrail) drawTrail(ctx, this.trail);
+    const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress };
+    drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now });
+    if (options.showTrail) drawTrail(ctx, this.trail, map.cursorColor);
 
     if (sim.status === 'playing') {
-      ctx.fillStyle = COLORS.cursor;
+      // The system cursor is hidden during a run (CSS .running); this dot is exactly where the
+      // simulation has the cursor, so what you see is what is checked for collisions
+      const u = unitsPerPx(this.el.canvas, map);
+      const r = (CURSOR_PX / 2) * u;
+      ctx.fillStyle = map.cursorColor ?? COLORS.cursor;
       ctx.beginPath();
-      ctx.arc(sim.x, sim.y, 3, 0, Math.PI * 2);
+      ctx.arc(sim.x, sim.y, r, 0, Math.PI * 2);
       ctx.fill();
+      // Thin light rim so the dot stays visible on dark walls and floors
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = u;
+      ctx.beginPath();
+      ctx.arc(sim.x, sim.y, r - u / 2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Darkness goes over the cursor and trail; the timer and messages stay readable on top
+    drawDarkAreas(ctx, sim.objects, t, 1, state);
+    if (map.darkness && (sim.status === 'playing' || sim.status === 'ready')) {
+      const light = map.darkness.light;
+      const s = map.start;
+      drawGlobalDark(ctx, map, sim.status === 'playing'
+        ? [{ x: sim.x, y: sim.y, r: light }]
+        : [{ x: s.x + s.w / 2, y: s.y + s.h / 2, r: Math.max(light, Math.hypot(s.w, s.h) / 2 + 12) }]);
+    }
+
+    // Level number (large) and title (small) at the top-left; the coin count goes below it
+    const style = this.badge?.style ?? { ...DEFAULT_BADGE, numberColor: map.cursorColor ?? COLORS.cursor };
+    const top = drawLevelBadge(ctx, map, style, badgeImage(this.badge?.imageUrl), now);
+
+    if (sim.status === 'playing') {
       if (options.showTimer) drawStopwatch(ctx, map, now - this.t0, now);
+      if (sim.coinTotal) this.drawCoinCount(top);
     } else if (sim.status === 'ready') {
-      drawBanner(
-        ctx, map, 'Click the START area to begin',
-        sim.objects.some((o) => o.role === 'path')
-          ? 'Stay on the paths and reach GOAL without touching walls'
-          : 'Reach GOAL without touching walls, obstacles, or the map edge',
-      );
+      // The level number / title sit at the top-left; the banner says how to start
+      const goals = starGoals(map);
+      const coins = sim.coinTotal ? `Collect all ${sim.coinTotal} coin${sim.coinTotal === 1 ? '' : 's'}, then reach GOAL` : '';
+      const rule = sim.objects.some((o) => o.role === 'path')
+        ? 'Stay on the paths and reach GOAL without touching walls'
+        : 'Reach GOAL without touching walls, obstacles, or the map edge';
+      drawBanner(ctx, map, 'Click the START area to begin', [coins || (goals ? '' : rule), goals].filter(Boolean).join(' · '));
     } else if (sim.status === 'dead') {
       ctx.strokeStyle = COLORS.hit;
       ctx.lineWidth = 3;
@@ -204,8 +272,39 @@ export class PlayController {
       drawBanner(ctx, map, `Failed · ${formatTime(sim.endTime)}s`, `${REASON_TEXT[sim.endReason!]} — click START to retry`, '#e2486c');
     } else {
       const best = this.best.get(JSON.stringify(map));
-      drawBanner(ctx, map, `Cleared! ${formatTime(sim.endTime)}s`, best !== undefined ? `Best ${formatTime(best)}s — click START to try again` : '', '#d48f00');
+      const stars = starsFor(map, sim.endTime);
+      const bestStars = best !== undefined ? starsFor(map, best) : null;
+      const sub = [
+        best !== undefined ? `Best ${formatTime(best)}s${bestStars !== null ? ` (${bestStars} star${bestStars === 1 ? '' : 's'})` : ''}` : '',
+        this.nextHint ?? 'click START to try again',
+      ].filter(Boolean).join(' — ');
+      drawBanner(ctx, map, `${stars !== null ? `${starText(stars)}  ` : ''}Cleared! ${formatTime(sim.endTime)}s`, sub, '#d48f00');
     }
+  }
+
+  /** "● 2 / 5" pill at the top-left (below the level label) while coins remain to be found */
+  private drawCoinCount(y: number): void {
+    const { ctx, sim } = this;
+    const text = `${sim.coinTotal - sim.coinsLeft} / ${sim.coinTotal}`;
+    ctx.save();
+    ctx.font = `700 15px ${FONT_MAIN}`;
+    const w = ctx.measureText(text).width + 40;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath();
+    ctx.roundRect(12, y, w, 28, 14);
+    ctx.fill();
+    ctx.fillStyle = COLORS.coin;
+    ctx.strokeStyle = COLORS.coinEdge;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(28, y + 14, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = sim.coinsLeft ? COLORS.ink : '#1b9a72';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 42, y + 15);
+    ctx.restore();
   }
 
   private updateText(now: number): void {
@@ -215,7 +314,7 @@ export class PlayController {
         : sim.status === 'ready' ? 'Ready'
           : sim.status === 'cleared' ? `Cleared · ${formatTime(sim.endTime)}s`
             : `Failed · ${REASON_TEXT[sim.endReason!]}`;
-    this.el.status.textContent = `${this.map.name}${this.map.author ? ` (by ${this.map.author})` : ''} — ${state}`;
+    this.el.status.textContent = `${levelLabel(this.map)}${this.map.author ? ` (by ${this.map.author})` : ''} — ${state}`;
 
     const s = this.stats.summary();
     const rows: [string, string][] = [

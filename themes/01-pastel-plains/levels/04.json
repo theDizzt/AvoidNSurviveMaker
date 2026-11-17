@@ -1,0 +1,109 @@
+{
+  "v": 2,
+  "name": "4. Spin Cycle",
+  "author": "Built-in",
+  "width": 960,
+  "height": 540,
+  "start": {
+    "x": 70,
+    "y": 238,
+    "w": 64,
+    "h": 64
+  },
+  "goal": {
+    "x": 826,
+    "y": 238,
+    "w": 64,
+    "h": 64
+  },
+  "objects": [
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 264,
+        "y": 0,
+        "w": 108,
+        "h": 140
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 264,
+        "y": 400,
+        "w": 108,
+        "h": 140
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 307,
+        "y": 151,
+        "w": 22,
+        "h": 238
+      },
+      "rotation": {
+        "pivot": {
+          "x": 318,
+          "y": 270
+        },
+        "speed": 60,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 610,
+        "cy": 140,
+        "rx": 30,
+        "ry": 30
+      },
+      "motion": {
+        "type": "circle",
+        "points": [
+          {
+            "x": 610,
+            "y": 270
+          }
+        ],
+        "speed": 259,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 631,
+        "y": 261,
+        "w": 173,
+        "h": 18
+      },
+      "rotation": {
+        "pivot": {
+          "x": 718,
+          "y": 270
+        },
+        "speed": 90,
+        "angle": 90,
+        "clockwise": false,
+        "repeat": "loop",
+        "easing": "inOut",
+        "delay": 0
+      }
+    }
+  ]
+}

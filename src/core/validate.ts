@@ -1,9 +1,10 @@
 import { pointInPoly, pointInRect } from './geometry';
 import { compileObject, toWorld, transformAt, type Transform } from './object';
-import { shapeCenter } from './shape';
+import { switchColor } from './colors';
+import { shapeBounds, shapeCenter } from './shape';
 import {
-  MAP_VERSION,
-  type Easing, type Fill, type MapData, type MapObject, type Motion, type PatternKind, type Point, type PolyPoint, type Rect,
+  MAP_VERSION, PACK_VERSION,
+  type Door, type Easing, type Fill, type MapData, type MapPack, type Trigger, type TriggerKind, type MapObject, type Motion, type PatternKind, type Point, type PolyPoint, type Rect,
   type Repeat, type Rotation, type Shape, type SurfaceStyle, type Theme,
 } from './types';
 
@@ -18,6 +19,15 @@ export const LIMITS = {
   maxAngle: 36000,
   maxDelay: 600_000,
   maxText: 60,
+  maxLevel: 9999,
+  /** Longest star time (ms) */
+  maxStarTime: 3_600_000,
+  maxPackLevels: 200,
+  /** Coins are always this size (diameter) */
+  coinSize: 24,
+  /** Global darkness light radius */
+  minLight: 16,
+  maxLight: 2000,
 } as const;
 
 export class MapValidationError extends Error {}
@@ -79,8 +89,18 @@ function point(v: unknown, name: string, W: number, H: number): Point {
 
 function shape(v: unknown, name: string, W: number, H: number): Shape {
   const o = obj(v, name);
-  const type = oneOf(o.type, `${name}.type`, ['rect', 'ellipse', 'poly'] as const);
+  const type = oneOf(o.type, `${name}.type`, ['rect', 'ellipse', 'poly', 'sector'] as const);
   if (type === 'rect') return { type, ...rect(o, name, W, H) };
+  if (type === 'sector') {
+    return {
+      type,
+      cx: num(o.cx, `${name}.cx`, -W, W * 2),
+      cy: num(o.cy, `${name}.cy`, -H, H * 2),
+      r: num(o.r, `${name}.r`, 1, Math.max(W, H)),
+      start: num(o.start, `${name}.start`, -720, 720),
+      sweep: num(o.sweep, `${name}.sweep`, 1, 360),
+    };
+  }
   if (type === 'ellipse') {
     return {
       type,
@@ -125,10 +145,39 @@ function rotation(v: unknown, name: string, W: number, H: number): Rotation {
   };
 }
 
+function colorIndex(v: unknown, name: string): number {
+  const c = num(v, name, 0, 15);
+  if (!Number.isInteger(c)) fail(`${name}: must be a color number 0–15`);
+  return c;
+}
+
+const TRIGGER_KINDS = ['switch', 'timer', 'hold', 'startZone', 'stopZone'] as const satisfies readonly TriggerKind[];
+
+function trigger(v: unknown, name: string): Trigger {
+  const o = obj(v, name);
+  const kind = oneOf(o.kind, `${name}.kind`, TRIGGER_KINDS);
+  const t: Trigger = { kind, color: colorIndex(o.color, `${name}.color`) };
+  if (o.click === true && (kind === 'switch' || kind === 'timer')) t.click = true;
+  if (o.initial === true && (kind === 'switch' || kind === 'hold')) t.initial = true;
+  if (o.once === true && kind !== 'startZone' && kind !== 'stopZone') t.once = true;
+  if (kind === 'timer' || kind === 'hold') t.duration = num(o.duration, `${name}.duration`, 50, LIMITS.maxDelay);
+  return t;
+}
+
+function door(v: unknown, name: string): Door {
+  const o = obj(v, name);
+  return {
+    mode: oneOf(o.mode, `${name}.mode`, ['auto', 'switch'] as const),
+    color: colorIndex(o.color, `${name}.color`),
+    moveMs: num(o.moveMs, `${name}.moveMs`, 50, LIMITS.maxDelay),
+    waitMs: num(o.waitMs, `${name}.waitMs`, 0, LIMITS.maxDelay),
+  };
+}
+
 function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
   const o = obj(v, name);
   const out: MapObject = {
-    role: oneOf(o.role, `${name}.role`, ['path', 'wall'] as const),
+    role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe'] as const),
     shape: shape(o.shape, `${name}.shape`, W, H),
   };
   if (o.motion !== undefined) out.motion = motion(o.motion, `${name}.motion`, W, H);
@@ -136,6 +185,86 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
   if (o.group !== undefined) {
     const g = num(o.group, `${name}.group`, 1, 1e9);
     if (Number.isInteger(g)) out.group = g;
+  }
+  if (out.role === 'coin') {
+    // Coins are always a 24×24 circle, centered where the shape was
+    const c = shapeCenter(out.shape);
+    out.shape = { type: 'ellipse', cx: c.x, cy: c.y, rx: LIMITS.coinSize / 2, ry: LIMITS.coinSize / 2 };
+  }
+  if (out.role === 'trigger') out.trigger = trigger(o.trigger, `${name}.trigger`);
+  if (out.role === 'door') {
+    if (out.shape.type !== 'rect') fail(`${name}: a door must be a rectangle`);
+    out.door = door(o.door, `${name}.door`);
+  }
+  if (out.role === 'wall' && o.spike !== undefined) {
+    const s = obj(o.spike, `${name}.spike`);
+    out.spike = {
+      angle: num(s.angle, `${name}.spike.angle`, -720, 720),
+      reach: num(s.reach, `${name}.spike.reach`, 1, Math.max(W, H)),
+      thrustMs: num(s.thrustMs, `${name}.spike.thrustMs`, 10, LIMITS.maxDelay),
+      returnMs: num(s.returnMs, `${name}.spike.returnMs`, 10, LIMITS.maxDelay),
+      waitMs: num(s.waitMs, `${name}.spike.waitMs`, 0, LIMITS.maxDelay),
+      delay: num(s.delay, `${name}.spike.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
+    };
+    delete out.motion; // a spike's own thrust is its movement
+  }
+  if (out.role === 'wall' && o.boulder === true && !out.spike) {
+    out.boulder = true;
+    delete out.rotation; // it spins by rolling
+  }
+  if (out.role === 'wall' && o.saw !== undefined && !out.spike && !out.boulder) {
+    const s = obj(o.saw, `${name}.saw`);
+    const kind = oneOf(s.kind, `${name}.saw.kind`, ['disc', 'blade'] as const);
+    out.saw = {
+      kind,
+      clockwise: s.clockwise !== false,
+      spin: kind === 'disc' ? num(s.spin, `${name}.saw.spin`, 0, LIMITS.maxRotSpeed) : 0,
+      stroke: kind === 'blade' ? num(s.stroke, `${name}.saw.stroke`, 0, Math.max(W, H)) : 0,
+      strokeMs: kind === 'blade' ? num(s.strokeMs, `${name}.saw.strokeMs`, 50, LIMITS.maxDelay) : 0,
+    };
+    delete out.rotation; // a saw's own spin / sawing is its rotation
+    const b = shapeBounds(out.shape);
+    if (kind === 'disc') {
+      // Always a circle
+      const r = Math.max(1, Math.min(b.w, b.h) / 2);
+      out.shape = { type: 'ellipse', cx: b.x + b.w / 2, cy: b.y + b.h / 2, rx: r, ry: r };
+    } else if (out.shape.type !== 'rect') {
+      out.shape = { type: 'rect', ...b };
+    }
+  }
+  if (out.role === 'text') {
+    const t = obj(o.text, `${name}.text`);
+    if (out.shape.type !== 'rect') out.shape = { type: 'rect', ...shapeBounds(out.shape) };
+    const hex8 = (v: unknown) => (typeof v === 'string' && /^#[0-9a-fA-F]{8}$/.test(v) ? v.toLowerCase() : undefined);
+    out.text = {
+      text: typeof t.text === 'string' ? t.text.slice(0, 500) : '',
+      color: color(t.color, `${name}.text.color`),
+      font: typeof t.font === 'string' && /^[\w -]{1,40}$/.test(t.font) ? t.font : 'main',
+      size: num(t.size, `${name}.text.size`, 6, 200),
+      bold: t.bold === true,
+      align: t.align === 'left' || t.align === 'right' ? t.align : 'center',
+      outlineWidth: typeof t.outlineWidth === 'number' ? Math.max(0, Math.min(20, t.outlineWidth)) : 3,
+    };
+    if (t.outline !== undefined) out.text.outline = color(t.outline, `${name}.text.outline`);
+    const bg = hex8(t.background);
+    if (bg) out.text.background = bg;
+  }
+  if (out.role === 'laser') {
+    const l = obj(o.laser, `${name}.laser`);
+    out.laser = { color: colorIndex(l.color, `${name}.laser.color`), angle: num(l.angle, `${name}.laser.angle`, -720, 720), on: l.on !== false };
+    if (l.switchColor !== undefined) out.laser.switchColor = colorIndex(l.switchColor, `${name}.laser.switchColor`);
+  }
+  if (out.role === 'portal') {
+    const p = obj(o.portal, `${name}.portal`);
+    out.portal = {
+      color: colorIndex(p.color, `${name}.portal.color`),
+      order: num(p.order, `${name}.portal.order`, 0, 9999),
+      mode: oneOf(p.mode, `${name}.portal.mode`, ['both', 'in', 'out'] as const),
+    };
+  }
+  if (o.link !== undefined && (out.role === 'path' || out.role === 'wall' || out.role === 'coin' || out.role === 'dark' || out.role === 'mirror')) {
+    const l = obj(o.link, `${name}.link`);
+    out.link = { color: colorIndex(l.color, `${name}.link.color`), action: oneOf(l.action, `${name}.link.action`, ['start', 'stop', 'remove'] as const) };
   }
   return out;
 }
@@ -226,7 +355,42 @@ export function validateMap(input: unknown): MapData {
     objects: arr(o.objects, 'objects', LIMITS.maxObjects).map((m, i) => mapObject(m, `objects[${i}]`, W, H)),
   };
   if (o.theme !== undefined) map.theme = theme(o.theme, 'theme');
+  const title = text(o.title, 'title').trim();
+  if (title) map.title = title;
+  if (o.level !== undefined) {
+    const level = num(o.level, 'level', 1, LIMITS.maxLevel);
+    if (!Number.isInteger(level)) fail('level: must be a whole number');
+    map.level = level;
+  }
+  if (o.cursorColor !== undefined) map.cursorColor = color(o.cursorColor, 'cursorColor');
+  if (o.difficulty !== undefined) map.difficulty = Math.round(num(o.difficulty, 'difficulty', 1, 10) * 100) / 100;
+  if (o.darkness !== undefined) {
+    map.darkness = { light: num(obj(o.darkness, 'darkness').light, 'darkness.light', LIMITS.minLight, LIMITS.maxLight) };
+  }
+  if (o.stars !== undefined) {
+    const s = obj(o.stars, 'stars');
+    map.stars = {
+      three: num(s.three, 'stars.three', 1, LIMITS.maxStarTime),
+      two: num(s.two, 'stars.two', 1, LIMITS.maxStarTime),
+      one: num(s.one, 'stars.one', 1, LIMITS.maxStarTime),
+    };
+  }
   return map;
+}
+
+/** Validate a map pack (file or share link); every level is validated like a single map */
+export function validatePack(input: unknown): MapPack {
+  const o = obj(input, 'pack');
+  if (o.pack !== PACK_VERSION) fail(`Unsupported map pack version (${String(o.pack)})`);
+  const levels = arr(o.levels, 'levels', LIMITS.maxPackLevels).map((m, i) => {
+    try {
+      return validateMap(m);
+    } catch (err) {
+      return fail(`Level ${i + 1}: ${(err as Error).message}`);
+    }
+  });
+  if (levels.length === 0) fail('A map pack needs at least one level');
+  return { pack: PACK_VERSION, name: text(o.name, 'name') || 'Untitled pack', author: text(o.author, 'author'), levels };
 }
 
 /** Does the object (posed at time t) overlap the rect? Checks vertices both ways, good enough for warnings. */
@@ -245,6 +409,29 @@ function overlapsRect(m: MapObject, r: Rect, t: number): boolean {
   return corners.some(([x, y]) => pointInPoly(x, y, world));
 }
 
+/**
+ * Problems that make a map unplayable as intended. The editor shows them as errors and won't
+ * share the map until they are fixed.
+ */
+export function mapErrors(map: MapData): string[] {
+  const out: string[] = [];
+  const colors = new Set(map.objects.filter((o) => o.trigger).map((o) => o.trigger!.color));
+  map.objects.forEach((o, i) => {
+    const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : o.laser?.switchColor);
+    if (c !== undefined && !colors.has(c)) {
+      out.push(`Object #${i + 1} is linked to the ${switchColor(c).name} switch, but the map has no ${switchColor(c).name} switch or event zone.`);
+    }
+    if (o.portal) {
+      const p = o.portal;
+      const others = map.objects.filter((q, j) => j !== i && q.portal?.color === p.color);
+      const name = switchColor(p.color).name;
+      if (!others.length) out.push(`Portal #${i + 1} has no other ${name} portal to lead to.`);
+      else if (p.mode !== 'out' && !others.some((q) => q.portal!.mode !== 'in')) out.push(`Portal #${i + 1} has no ${name} portal it can exit from (the others are entrance-only).`);
+    }
+  });
+  return out;
+}
+
 /** Things that are structurally valid but may cause problems in play */
 export function mapWarnings(map: MapData): string[] {
   const out: string[] = [];
@@ -260,6 +447,15 @@ export function mapWarnings(map: MapData): string[] {
   });
   map.objects.forEach((o, i) => {
     if (o.motion && o.motion.points.length === 0) out.push(`Object #${i + 1} is set to move but has no markers.`);
+  });
+  const s = map.stars;
+  if (s && !(s.three <= s.two && s.two <= s.one)) out.push('Star times should get longer from 3 stars to 1 star.');
+  map.objects.forEach((o, i) => {
+    if (o.role === 'coin' && overlapsRect(o, map.goal, 0)) out.push(`Coin #${i + 1} is inside GOAL; it is collected on the way in.`);
+    if (o.boulder && !o.motion) out.push(`Boulder #${i + 1} has no route, so it won't roll.`);
+    if (o.link && o.link.action !== 'remove' && !o.motion && !o.rotation && !o.spike) {
+      out.push(`Object #${i + 1} is set to ${o.link.action === 'start' ? 'start' : 'stop'} moving on a switch, but it doesn't move or rotate.`);
+    }
   });
   return out;
 }
@@ -289,7 +485,8 @@ export const DEFAULT_MOTION: Readonly<Motion> = {
 
 export function defaultRotation(o: MapObject): Rotation {
   return {
-    pivot: shapeCenter(o.shape),
+    // A sector spins around its apex like a radar sweep; everything else around its center
+    pivot: o.shape.type === 'sector' ? { x: o.shape.cx, y: o.shape.cy } : shapeCenter(o.shape),
     speed: 90,
     angle: 360,
     clockwise: true,

@@ -1,0 +1,49 @@
+{
+  "format": 1,
+  "id": "neon",
+  "name": "Neon Circuit",
+  "description": "Lasers, mirrors and portals in a city that never sleeps.",
+  "author": "Avoid N Survive",
+  "released": "2026-11-17",
+  "unlockStars": 120,
+  "colors": [
+    "#7a5cff",
+    "#ff4fd8"
+  ],
+  "cover": "cover.svg",
+  "style": {
+    "badge": {
+      "kind": "disc",
+      "primary": "#15151f",
+      "secondary": "#3a9ff0",
+      "numberColor": "#ffffff",
+      "titleColor": "#ffffff",
+      "font": "heavy",
+      "pad": 0,
+      "showTitle": true,
+      "caption": "♫ Now Playing"
+    },
+    "maze": {
+      "wall": {
+        "fill": {
+          "type": "gradient",
+          "style": "linear",
+          "from": "#ff2bd6",
+          "to": "#7a2bff",
+          "angle": 45
+        },
+        "edge": "#ffc2f3"
+      },
+      "path": {
+        "fill": {
+          "type": "pattern",
+          "pattern": "grid",
+          "color": "#1f4a6e",
+          "background": "#0b1a2a",
+          "size": 16
+        },
+        "edge": "#3ad7ff"
+      }
+    }
+  }
+}

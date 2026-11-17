@@ -60,6 +60,11 @@ function turnShape(s: Shape, c: Point, t: Turn): Shape {
     }
     case 'poly':
       return { ...s, points: s.points.map((p) => ({ ...p, ...turnPoint(p, c, t) })) };
+    case 'sector': {
+      const apex = turnPoint({ x: s.cx, y: s.cy }, c, t);
+      const start = t === 'cw' ? s.start + 90 : t === 'ccw' ? s.start - 90 : t === 'flipH' ? 180 - s.start - s.sweep : -s.start - s.sweep;
+      return { ...s, cx: apex.x, cy: apex.y, start: ((start % 360) + 360) % 360 };
+    }
   }
 }
 
@@ -77,6 +82,13 @@ export function turnObjects(objs: readonly MapObject[], t: Turn): MapObject[] {
     out.shape = turnShape(o.shape, c, t);
     const after = shapeCenter(out.shape);
     if (out.rotation) out.rotation.pivot = turnPoint(out.rotation.pivot, c, t);
+    // Directions turn too: a spike's thrust, a laser's beam
+    const turnAngle = (a: number) => {
+      const r = t === 'cw' ? a + 90 : t === 'ccw' ? a - 90 : t === 'flipH' ? 180 - a : -a;
+      return ((r % 360) + 360) % 360;
+    };
+    if (out.spike) out.spike.angle = turnAngle(out.spike.angle);
+    if (out.laser) out.laser.angle = turnAngle(out.laser.angle);
     if (out.motion) {
       const dx = after.x - before.x;
       const dy = after.y - before.y;
@@ -149,7 +161,7 @@ export function reorder(count: number, picked: readonly number[], op: ZOrder): n
 
 /** Area centroid (center of mass) of a shape's outline; falls back to the bounds center */
 export function shapeCentroid(s: Shape): Point {
-  if (s.type !== 'poly') return shapeCenter(s);
+  if (s.type !== 'poly' && s.type !== 'sector') return shapeCenter(s);
   const { poly } = flattenShape(s);
   let a = 0;
   let cx = 0;

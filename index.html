@@ -21,17 +21,41 @@
     <!-- Main menu -->
     <div id="menu-screen" class="screen menu" hidden>
       <div id="account-bar" class="account-bar"></div>
-      <div class="menu-inner">
+      <div class="menu-inner menu-diamonds">
         <h1 class="logo">Avoid <span>N</span> Survive</h1>
         <p class="tagline">Dodge with your mouse. Survive to the goal.</p>
-        <nav class="menu-buttons" aria-label="Main menu">
-          <button type="button" id="menu-start" class="menu-btn primary">Start Game</button>
-          <button type="button" id="menu-options" class="menu-btn">Options</button>
-          <button type="button" id="menu-editor" class="menu-btn">Map Editor</button>
+        <!-- A grid turned 45°: every cell is a diamond; Start Game spans 2×2 -->
+        <nav class="dia-wrap" id="menu-dia" aria-label="Main menu">
+          <div class="dgrid" style="--cols: 3">
+            <button type="button" id="menu-start" class="dtile dtile-primary" style="grid-column: 1 / span 2; grid-row: 1 / span 2">
+              <span class="dtile-in"><strong>Start Game</strong><small>Choose a world</small></span>
+            </button>
+            <button type="button" id="menu-editor" class="dtile" style="grid-column: 3; grid-row: 1">
+              <span class="dtile-in"><span class="dicon">✎</span><strong>Map Editor</strong></span>
+            </button>
+            <button type="button" id="menu-theme-editor" class="dtile" style="grid-column: 3; grid-row: 2">
+              <span class="dtile-in"><span class="dicon">🎨</span><strong>Theme Editor</strong></span>
+            </button>
+            <button type="button" id="menu-options" class="dtile" style="grid-column: 1; grid-row: 3">
+              <span class="dtile-in"><span class="dicon">⚙</span><strong>Options</strong></span>
+            </button>
+            <span class="dtile dtile-deco" style="grid-column: 2; grid-row: 3" aria-hidden="true"></span>
+            <span class="dtile dtile-stars" style="grid-column: 3; grid-row: 3">
+              <span class="dtile-in"><span class="dtotal-star">★</span><strong id="menu-stars">0</strong><small>stars</small></span>
+            </span>
+          </div>
         </nav>
         <p id="menu-version" class="menu-foot"></p>
       </div>
     </div>
+
+    <!-- Campaign: world (theme) select and level select, built by campaign-ui.ts -->
+    <div id="themes-screen" class="screen menu dscreen" hidden></div>
+    <div id="levels-screen" class="screen menu dscreen" hidden></div>
+    <!-- Level intro of themes with a custom intro screen -->
+    <div id="intro-screen" class="screen custom-screen" hidden></div>
+    <!-- Theme editor: built by theme-editor.ts -->
+    <div id="theme-editor-screen" class="screen menu dscreen te-screen" hidden></div>
 
     <!-- Account: sign in / create account -->
     <div id="auth-screen" class="screen menu" hidden>
@@ -116,7 +140,20 @@
         </div>
         <div class="menu-buttons">
           <button type="button" id="options-back" class="menu-btn primary">Back</button>
+          <button type="button" id="options-licenses" class="menu-btn subtle">Font licenses</button>
           <button type="button" id="options-reset" class="menu-btn subtle">Reset to defaults</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Font copyright and licenses -->
+    <div id="licenses-screen" class="screen menu" hidden>
+      <div class="menu-inner licenses-inner">
+        <h2 class="logo logo-sm">Font licenses</h2>
+        <p class="muted licenses-intro">Fonts bundled with the game, with the copyright and license stated by each font file.</p>
+        <div id="licenses-list" class="licenses-list"></div>
+        <div class="menu-buttons">
+          <button type="button" id="licenses-back" class="menu-btn primary">Back</button>
         </div>
       </div>
     </div>
@@ -129,11 +166,12 @@
           <div class="hud-row">
             <select id="level-select" aria-label="Select map"></select>
             <button type="button" id="btn-back-editor" hidden>← Back to editor</button>
+            <button type="button" id="btn-next-level" title="N" hidden>Next level ▶</button>
             <button type="button" id="btn-play-edit">Open in editor</button>
             <button type="button" id="btn-fullscreen" class="btn-fullscreen" title="F">Fullscreen</button>
             <button type="button" id="btn-play-menu" title="Esc">Main Menu</button>
           </div>
-          <p class="hud-keys">R reset · F fullscreen · Esc main menu</p>
+          <p class="hud-keys">R reset · N next level · F fullscreen · Esc main menu</p>
           <p id="play-status" class="status"></p>
         </div>
         <details id="debug-panel" class="debug play-debug" open>
@@ -181,11 +219,15 @@
             <section>
               <h3>Map info</h3>
               <div class="fields">
-                <label class="field wide"><span>Name</span><input id="map-name" maxlength="60" /></label>
+                <label class="field wide"><span>File name</span><input id="map-name" maxlength="60" /></label>
                 <label class="field wide"><span>Author</span><input id="map-author" maxlength="60" /></label>
                 <label class="field wide"><span>Size (16:9)</span><select id="map-size"></select></label>
               </div>
             </section>
+            <details class="theme-section" open>
+              <summary><h3>Level settings</h3></summary>
+              <div id="level-panel"></div>
+            </details>
             <details class="theme-section">
               <summary><h3>Theme</h3></summary>
               <div id="theme-panel"></div>
@@ -208,6 +250,10 @@
               <input type="file" id="import-file" accept=".json,application/json" hidden />
               <button type="button" id="btn-new" class="danger">New map</button>
             </section>
+            <details class="theme-section">
+              <summary><h3>Map pack</h3></summary>
+              <div id="pack-panel"></div>
+            </details>
           </div>
         </aside>
       </section>
