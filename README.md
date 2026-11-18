@@ -1,148 +1,52 @@
 # Avoid N Survive Maker
 
-A web-based "avoid the walls with your mouse" maze game, with a built-in map editor. Get from START to GOAL without touching a wall, a moving obstacle, or the edge of the map.
+마우스로 벽을 피해 미로를 빠져나가는 웹 게임입니다. 맵 에디터가 내장되어 있어 직접 맵을 만들고 공유할 수도 있습니다.
 
-## Version
+## 게임 방법
 
-The game version lives in the [`VERSION`](VERSION) file as `Update N` (e.g. `Update 20`) and is shown on the loading screen and the main menu. Bump the number there with each update.
+- **START** 영역 안을 클릭하면 도전이 시작됩니다.
+- 커서를 움직여 **GOAL** 까지 이동하면 클리어입니다.
+- 벽, 움직이는 장애물, 레이저에 닿거나 맵 밖으로 나가면 실패합니다.
+- 커서가 브라우저 창을 벗어나거나, 창의 포커스를 잃거나(탭 전환 등), 터치·펜을 떼도 실패로 처리됩니다.
+- 판정은 1 ms 단위로 이루어집니다. 아무리 빠르게 움직여도 벽을 뚫고 지나갈 수 없고, 마우스를 멈추고 있어도 다가오는 장애물에 닿으면 실패합니다.
 
-## Getting started
-
-**Windows, quickest way:** double-click `run-dev.bat`. It installs dependencies on first run, starts the dev server, and opens the game in your browser. Saving any file reloads the page automatically (CSS changes apply instantly without a reload). Press Ctrl+C in the console window to stop.
-
-Or from a terminal:
-
-```bash
-npm install
-npm run dev       # dev server (http://localhost:5173)
-npm test          # core unit tests
-npm run build     # static site in dist/ — deploy as-is to GitHub Pages, Vercel, etc.
-```
-
-> `pointerrawupdate` is only available in secure contexts (HTTPS or localhost). Deploy over HTTPS.
-
-## Project structure
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the pieces fit together.
-
-```
-src/
-  core/            # No DOM dependencies — reusable on a server later (replay verification)
-    types.ts       # Map schema (MapData v2): objects = shape × role × motion/rotation
-    geometry.ts    # Segment/polygon crossings, point-in-polygon, rect helpers
-    shape.ts       # Rect / circle / polygon / freeform → one polygon used for both drawing and collision
-    motion.ts      # Routes (straight, curve, circle), repeat, easing, rotation — closed-form in time
-    object.ts      # Compiled objects and their pose (translate + rotate around a pivot) at time t
-    simulation.ts  # Fixed 1 ms tick simulation and replays
-    account.ts     # Nickname / email / password rules, Name#0042 formatting
-    theme.ts       # Theme presets and color helpers
-    validate.ts    # Validation and warnings for external maps
-    share.ts       # Map <-> URL share code (deflate-raw + base64url)
-    levels.ts      # Built-in levels
-  web/
-    input.ts       # High-precision input (pointerrawupdate + getCoalescedEvents), polling-rate measurement
-    play.ts        # Play screen
-    editor.ts      # Map editor
-    render.ts      # Canvas rendering
-    preload.ts     # Loading screen tasks (fonts, account, shared map) with progress and timeout
-    backdrop.ts    # Menu backgrounds: autopilot demo run, grid, theme colors
-    theme-panel.ts # Map theme editor (solid / gradient / pattern fills)
-    auth/          # Supabase sign-up / sign-in, email verification, Turnstile CAPTCHA
-    options.ts     # Player options (cursor trail, run timer, debug panel), saved per browser
-    main.ts        # Screen flow: preload → main menu → play / options / map editor
-  assets/
-    fonts/         # Web fonts (.woff2)
-    images/        # Sprites, backgrounds, icons
-    sounds/        # Sound effects and music
-```
-
-### Using assets
-
-Files in `src/assets/` go through Vite: import them and you get a hashed, cache-safe URL in the build.
-
-```ts
-import hitSound from '../assets/sounds/hit.mp3';
-const audio = new Audio(hitSound);
-```
-
-```css
-@font-face {
-  font-family: 'GameFont';
-  src: url('../assets/fonts/game-font.woff2') format('woff2');
-  font-display: swap;
-}
-```
-
-Use a root-level `public/` folder only for files that must keep a fixed URL (e.g. `favicon.ico`, `robots.txt`); those are copied to `dist/` as-is.
-
-## Accounts
-
-Players can create an account (email, password, nickname, CAPTCHA), verify their email, and sign in.
-Names are shown as `Nickname#1234`: a random 4-digit tag keeps `nickname + tag` unique, so up to 9999
-players can share a nickname. Backed by Supabase; setup steps (database migration, auth settings,
-Turnstile, `.env.local`) are in [docs/ACCOUNTS.md](docs/ACCOUNTS.md). Without that setup the game runs
-offline and the account screen says so.
-
-## Map editor
-
-Every object is a **shape** (rectangle, circle, polygon, freeform) with a **role** and an optional **behavior**:
-
-- **Path** — safe floor. Once a map has any path, everything outside the paths is treated as wall: it's deadly and drawn in the wall style. START and GOAL always count as floor.
-- **Wall** — deadly everywhere.
-- **Moving** — follows a route of markers: straight, curve (smooth spline through the markers) or circle (orbit around a center marker). Options: repeat (loop / ping-pong / once), speed, smooth start/end (easing per leg), start delay (negative = start partway through).
-- **Rotating** — spins around a draggable pivot. Options: speed, angle per cycle (360 + loop = continuous spin), direction, repeat, smooth start/end, start delay. Rotating objects can also have a route.
-
-The game screen is always **16:9**: the play screen fills the largest 16:9 area of the window (press **F** or the Fullscreen button to use the whole monitor), with a small HUD that hides while a run is in progress. New maps are 1920×1080; the editor offers 640×360 up to 1920×1080. Maps made in another ratio still open, centered with bars around them.
-
-The palette lists all 26 tools by number:
-
-| # | Tools |
+| 키 | 동작 |
 |---|---|
-| 1–4 | Rectangle / circle / polygon / freeform **path** |
-| 5–8 | Rectangle / circle / polygon / freeform **wall** |
-| 9–10 | START area, GOAL area |
-| 11–14 | Moving paths |
-| 15–18 | Rotating paths |
-| 19–22 | Moving walls |
-| 23–26 | Rotating walls |
+| **R** | 다시 시작 |
+| **F** | 전체 화면 |
+| **Esc** | 나가기 |
 
-The editor uses the same full-window 16:9 canvas. The **Tools**, **Level** (map info, level settings, theme, share) and **Object** (the selected object's options) panels float on top: drag them by their title bar, collapse them with the −/+ button (or a double-click on the title bar), or press **H** to hide them all. **▶ Test play** (T) sits in the top bar. Their positions are remembered.
+## 캠페인
 
-The grid is 60×60 (a 1920×1080 map is 32×18 cells); **Grid on top** in the editor draws it over walls and obstacles. Static paths and walls are drawn as one floor and one wall mass, so pieces join without seams; walls cast a soft shadow onto the floor.
+- 16개의 챕터(월드)가 있고, 챕터마다 최대 21개의 레벨이 있습니다.
+- 클리어 시간에 따라 별을 최대 3개까지 받습니다. 별을 모으면 새로운 챕터가 열립니다.
+- 레벨마다 난이도(1.00–10.00)가 표시되고, 챕터마다 고유한 색상·배지·배경 음악이 있습니다.
+- 아직 맵이 없는 챕터는 **Coming soon** 으로 표시됩니다.
 
-Editing: drag to draw rectangles/circles (Shift = square/circle), click to place polygon points (freeform: click = curved point, Shift+click = sharp corner; click the first point or Enter to close). With Select (V): drag to move, drag handles to reshape, double-click a polygon vertex to toggle curve, double-click an edge to add a vertex, Alt+click a vertex to remove it. Ctrl+Z / Ctrl+Y undo/redo, Ctrl+D duplicate, Delete removes. Maps saved in the older v1 format are migrated automatically.
+## 미로 구성 요소
 
-### Themes
+- **길(Path)**: 안전한 바닥입니다. 맵에 길이 하나라도 있으면, 길 바깥은 모두 벽이 됩니다.
+- **벽(Wall)**: 닿으면 실패합니다.
+- **움직이는 / 회전하는 오브젝트**: 경로(직선·곡선·원)를 따라 이동하거나 축을 중심으로 회전합니다.
+- **코인**: 모두 모아야 GOAL 이 열립니다.
+- **스위치와 문**: 스위치를 밟으면 연결된 문이 열리거나 오브젝트가 움직이기 시작합니다.
+- **레이저, 거울, 포털, 가시, 톱날, 바위, 어둠** 등 다양한 장치가 있습니다.
 
-Each map can carry its own look (Map Editor → **Theme**), saved with the map and kept in share links. Two surfaces are styled separately:
+## 맵 에디터
 
-- **Walls & obstacles** (static, moving and rotating walls)
-- **Paths**
+- 사각형, 원, 다각형, 자유 곡선으로 길과 벽을 그리고, 이동 경로·회전·가속/감속·시작 지연 등을 설정할 수 있습니다.
+- 맵마다 벽과 길의 색상과 채우기(단색, 그라데이션, 패턴)를 바꿀 수 있습니다.
+- 만든 맵은 **Test play** 로 직접 클리어해야 공유할 수 있습니다. 맵을 수정하면 다시 클리어해야 합니다.
+- 공유는 URL 링크 하나로 이루어지며, 서버가 필요 없습니다. JSON 파일로 내보내고 불러올 수도 있습니다.
 
-Each surface gets an outline color and a fill: **solid**, **gradient** (linear with an angle, or radial; two colors) or **pattern** (stripes, diagonal, dots, grid, checker; color, background, tile size). Gradients and patterns are laid out in each object's own frame, so they move and rotate with it. Presets: Default, Neon, Lava, Forest, Candy, Mono — pick one and tweak it, or build your own.
+## 테마 에디터
 
-## How 1 ms hit detection works
+- 여러 레벨을 묶어 나만의 월드(테마 팩)를 만들 수 있습니다. 표지 이미지, 배지, 색상, 배경 음악, 레벨 선택 화면을 직접 꾸밀 수 있습니다.
+- 테마 팩은 `.zip` 파일로 내보내고 불러올 수 있습니다.
 
-1. **Input**: Listens to `pointerrawupdate` (when supported) or `pointermove`, and uses `getCoalescedEvents()` to recover every raw sample batched between frames. Each sample's `timeStamp` is used as its time.
-2. **Simulation**: The cursor path between samples is treated as line segments, split at every 1 ms boundary, and checked continuously.
-   - Each piece is mapped into every object's own frame (undoing its movement and rotation), so moving and rotating objects become static polygons and the cursor's path becomes a relative-motion segment. Nothing can be skipped over, no matter how fast the cursor or the object moves.
-   - All boundary crossings along the piece are collected and each interval between them is checked: safe = on a path (or the map has none) and inside no wall.
-   - If the mouse is idle, the render loop still advances time, so an obstacle running into a stationary cursor counts as a hit (with a 40 ms margin for input latency).
-3. **Deterministic**: The same input samples always produce the same result. `getReplay()` / `runReplay()` let a server re-verify a recorded run.
+## 계정
 
-The real sample interval is capped by the mouse's polling rate (1000 Hz → 1 ms, 125 Hz → 8 ms). You can check it in the **input precision debug** panel below the play area.
-
-## Anti-cheat
-
-- The run only starts when you click inside the START area.
-- The run fails if the cursor leaves the browser window (`pointerout`), the window loses focus (`blur`, tab switch), or a touch/pen pointer is lifted.
-- A map can only be shared after its creator clears it in test play; any edit resets that verification.
-
-## Roadmap
-
-- [x] 1 ms simulation with continuous collision detection
-- [x] High-precision input and debug display
-- [x] Map editor: 26 tools (paths/walls × rectangle/circle/polygon/freeform × static/moving/rotating, START/GOAL), routes with markers, easing, undo/redo, autosave, JSON import/export
-- [x] URL sharing (no server)
-- [x] Accounts: Supabase sign-up / sign-in with email verification, CAPTCHA, `Nickname#tag`
-- [ ] Map browser/search/likes, leaderboards, server-side replay verification
+- 이메일, 비밀번호, 닉네임으로 가입하면 `닉네임#1234` 형식의 이름을 받습니다.
+- 로그인하면 레벨 기록(최고 시간, 별), 플레이 시간, 사망 횟수가 저장되고 **Stats** 화면에서 확인할 수 있습니다.
+- 레벨 선택 화면에서 레벨별 순위표를 볼 수 있습니다.
+- 계정 없이도 게임을 즐길 수 있으며, 진행 상황은 브라우저에 저장됩니다.

@@ -151,6 +151,19 @@ try {
   assert.equal((await board('workshop/0')).length, 2);
   assert.ok((await board('workshop/0')).every((r) => r.is_me === false));
   console.log('PASS: leaderboards rank verified records only, are public, and expose no user ids');
+
+  // Temporary: every record counts as verified
+  await db.exec('reset role');
+  await db.exec(await readFile(new URL('../supabase/migrations/20261118030000_records_always_verified.sql', import.meta.url), 'utf8'));
+  assert.equal(Number(await scalar('select count(*) from public.level_records where not verified')), 0);
+  await asUser(b);
+  await submit([{ key: 'workshop/1', best_ms: 500, stars: 2 }]);
+  await submit([{ key: 'workshop/1', best_ms: 400, stars: 3 }]); // an improvement stays verified
+  assert.equal(await scalar("select verified from public.level_records where level_key = 'workshop/1'"), true);
+  rows = await board('workshop/1');
+  assert.deepEqual(rows.map((r) => [Number(r.place), r.best_ms, r.is_me]), [[1, 400, true]]);
+  await assert.rejects(db.query('update public.level_records set verified = false'), /permission denied/);
+  console.log('PASS: records-always-verified: existing and new records are ranked; clients still cannot write directly');
 } finally {
   await db.close();
 }

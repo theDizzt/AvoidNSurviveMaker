@@ -35,6 +35,19 @@ describe('theme packs', () => {
     expect(averageDifficulty([{ ...lv[0], difficulty: 5 }, withoutDifficulty])).toBe(3);
   });
 
+  it('places official levels by their level number', async () => {
+    const { assignSlots } = await import('../core/theme-pack');
+    const { createEmptyMap } = await import('../core/validate');
+    const at = (level?: number) => ({ ...createEmptyMap(), ...(level !== undefined ? { level } : {}) });
+    // desert01, 02, 03, 09: level 9 goes to slot 8, not slot 3
+    expect(assignSlots([at(1), at(2), at(3), at(9)])).toEqual([0, 1, 2, 8]);
+    // No number, a taken number or one past the chapter: first free slot
+    expect(assignSlots([at(2), at(), at(2), at(99)])).toEqual([1, 0, 2, 3]);
+    const desert = OFFICIAL_THEMES.find((t) => t.info.id === 'desert')!;
+    expect(themedLevel(desert, 8)?.name).toBe('desert09');
+    expect(themedLevel(desert, 3)).toBeNull();
+  });
+
   it('reads theme.json leniently', () => {
     const info = validateThemeInfo({ format: 1, id: 'a b!', name: 'X', colors: ['#fff', 'nope'], style: { badge: { kind: 'weird', pad: 9 } } });
     expect(info.id).toBe('ab');

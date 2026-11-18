@@ -1,62 +1,35 @@
-# Security boundaries
+# 보안 경계
 
-## Untrusted imports
+## 신뢰할 수 없는 가져오기
 
-Shared map input is capped at 20,000,000 bytes before JSON parsing. Compressed
-shares are consumed incrementally and cancelled when decoded output exceeds the
-budget. Encoded input is also capped before base64 decoding.
+공유 맵 입력은 JSON 파싱 전에 20,000,000바이트로 제한됩니다. 압축된 공유 코드는 점진적으로 읽으며, 디코딩된 출력이 한도를 넘으면 중단합니다. 인코딩된 입력도 base64 디코딩 전에 크기를 제한합니다.
 
-Theme ZIP imports run in a dedicated worker with a 15-second timeout. Limits:
-30 MiB compressed, 30 MiB per decoded entry, 60 MiB total decoded data, and 2048
-entries. Limits count actual output, not only ZIP header sizes. Unsafe paths and
-duplicate paths are rejected. Small compressed chunks bound temporary inflate
-output. These limits apply to all entries, including unused assets.
+테마 ZIP 가져오기는 전용 워커에서 15초 타임아웃으로 실행됩니다. 제한: 압축 30 MiB, 디코딩된 항목당 30 MiB, 디코딩된 전체 데이터 60 MiB, 항목 2048개. 제한은 ZIP 헤더의 크기만이 아니라 실제 출력을 기준으로 셉니다. 안전하지 않은 경로와 중복 경로는 거부됩니다. 작은 압축 청크 단위로 처리해 임시 inflate 출력을 제한합니다. 이 제한은 사용하지 않는 에셋을 포함한 모든 항목에 적용됩니다.
 
-## Database deployment
+## 데이터베이스 배포
 
-After the previous four migrations, apply
-[`20261118000000_security_hardening.sql`](../supabase/migrations/20261118000000_security_hardening.sql).
-This repository change alone does not update a deployed Supabase database.
+앞의 네 마이그레이션 다음에
+[`20261118000000_security_hardening.sql`](../supabase/migrations/20261118000000_security_hardening.sql) 을 적용합니다.
+저장소의 변경만으로는 배포된 Supabase 데이터베이스가 바뀌지 않습니다.
 
-- Full profiles are readable only by their owner. `public_profiles` exposes only
-  `id`, `nickname`, and `discriminator`, intentionally through a view owned by the
-  migration role. Activity timestamps and play duration are not public.
-- Direct client writes to profiles and records are revoked. RPCs authenticate the
-  caller and fix the search path.
-- Play-time updates lock the profile row and consume a server-time budget, with
-  no repeatable grace bonus. At most one hour of unclaimed time is available.
-  This bounds inflation; a browser still cannot prove it was visible or actively
-  playing. Existing inflated totals are not rewritten automatically.
-- Record submissions are limited to 1 MiB, 2000 entries per batch, and 2000 stored
-  records per account. Per-account locking prevents concurrent quota bypass.
-  Keys must match the theme ID / index format. Invalid entries are ignored;
-  exceeding the account quota rejects the entire batch. Existing rows are retained.
-- All existing and newly submitted browser records are **unverified personal
-  backups**. `verified` defaults to false and cannot be changed by clients.
-  An improvement submitted by a browser clears any previous verification flag.
-  Do not build rankings, rewards, or access control from these rows; the level
-  leaderboard (`level_leaderboard`) ranks only `verified = true` rows. A future
-  trusted verifier must load the authoritative map/version, validate and replay
-  bounded input, and derive times and stars itself before publishing records.
+- 전체 프로필은 본인만 읽을 수 있습니다. `public_profiles` 는 `id`, `nickname`, `discriminator` 만 노출하며, 의도적으로 마이그레이션 역할이 소유한 뷰를 통해 제공합니다. 활동 시각과 플레이 시간은 공개되지 않습니다.
+- 클라이언트가 profiles 와 records 에 직접 쓰는 권한은 회수되어 있습니다. RPC 는 호출자를 인증하고 search path 를 고정합니다.
+- 플레이 시간 갱신은 프로필 행을 잠그고 서버 시간 기준 예산을 소모하며, 반복해서 받을 수 있는 유예 보너스는 없습니다. 청구되지 않은 시간은 최대 1시간까지만 쓸 수 있습니다. 이는 부풀리기의 상한을 정할 뿐이며, 브라우저가 실제로 화면에 보였거나 플레이 중이었음을 증명할 수는 없습니다. 이미 부풀려진 합계는 자동으로 고쳐지지 않습니다.
+- 기록 제출은 1 MiB, 배치당 2000개 항목, 계정당 저장 기록 2000개로 제한됩니다. 계정별 잠금으로 동시 요청을 이용한 한도 우회를 막습니다. 키는 테마 ID / 인덱스 형식과 일치해야 합니다. 잘못된 항목은 무시되며, 계정 한도를 넘으면 배치 전체가 거부됩니다. 기존 행은 유지됩니다.
+- 기존 기록과 새로 제출되는 브라우저 기록은 모두 **미검증 개인 백업**입니다. `verified` 의 기본값은 false 이며 클라이언트가 바꿀 수 없습니다. 브라우저가 더 좋은 기록을 제출하면 이전의 검증 표시는 지워집니다. 이 행을 바탕으로 순위, 보상, 접근 제어를 만들지 마세요. 레벨 순위표(`level_leaderboard`)는 `verified = true` 인 행만 순위에 올립니다.
+- **임시 예외:** `20261118030000_records_always_verified.sql` 은 모든 기록(기존과 신규)을 검증된 것으로 표시합니다. 따라서 현재 순위표에는 검증되지 않은 브라우저 기록이 표시되며, 위조된 시간도 순위에 오릅니다. 리플레이 검증기가 생기면 `submit_level_records()` 를 `false` 로 저장하는 버전으로 교체하세요. 앞으로 만들 신뢰할 수 있는 검증기는 권위 있는 맵/버전을 불러오고, 제한된 입력을 검증·재생하고, 시간과 별을 직접 계산한 뒤에 기록을 공개해야 합니다.
 
-Server-side CAPTCHA, email confirmation, request rate limits, and production
-grants must also be configured in Supabase. They are not controlled by the web
-bundle. Never put a service-role secret in a `VITE_` environment variable.
+서버 측 CAPTCHA, 이메일 인증, 요청 속도 제한, 운영 권한(grant)도 Supabase 에서 설정해야 합니다. 이들은 웹 번들이 제어하지 않습니다. service-role secret 을 `VITE_` 환경 변수에 절대 넣지 마세요.
 
-## Regression checks
+## 회귀 검사
 
-`npm test` includes adversarial compressed shares, falsified ZIP size headers,
-expanded size/count limits, unsafe paths, and normal ZIP/share round trips.
+`npm test` 에는 악의적인 압축 공유 코드, 크기 헤더를 조작한 ZIP, 확장된 크기/개수 제한, 안전하지 않은 경로, 정상 ZIP/공유 코드 왕복 테스트가 포함되어 있습니다.
 
-To test the SQL in an isolated, in-memory PostgreSQL engine without credentials:
+자격 증명 없이 격리된 인메모리 PostgreSQL 엔진에서 SQL 을 테스트하려면:
 
 ```sh
 npm install --prefix temp/security-db --no-save --package-lock=false @electric-sql/pglite
 node scripts/security-db.test.mjs
 ```
 
-The temporary runtime is gitignored and is not an application dependency. Tests
-apply every migration, emulate Supabase roles and `auth.uid()`, and check RLS,
-public view columns, RPC permissions, repeated play-time reports, quota rollback,
-input limits, and unverified record handling. Real Supabase deployment settings
-and concurrent requests should still be checked in staging.
+임시 런타임은 git 에서 무시되며 애플리케이션 의존성이 아닙니다. 테스트는 모든 마이그레이션을 적용하고, Supabase 역할과 `auth.uid()` 를 흉내 내며, RLS, 공개 뷰 컬럼, RPC 권한, 반복된 플레이 시간 보고, 한도 초과 시 롤백, 입력 제한, 미검증 기록 처리를 확인합니다. 실제 Supabase 배포 설정과 동시 요청은 스테이징 환경에서 따로 확인해야 합니다.

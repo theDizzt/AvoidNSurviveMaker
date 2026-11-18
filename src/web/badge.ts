@@ -22,6 +22,11 @@ const FONTS = new Proxy(BASE, {
   get: (base, k: string) => base[k] ?? (isLibraryFont(k) ? libraryFontCss(k) : FONT_TITLE),
 }) as Record<BadgeFont, string>;
 
+/** CSS font-family of a badge font (library fonts start loading on first use) */
+export function badgeFontCss(font: BadgeFont): string {
+  return FONTS[font];
+}
+
 const images = new Map<string, HTMLImageElement>();
 
 /** Image for a URL, loading it the first time (drawn once it has loaded) */

@@ -126,6 +126,13 @@ body {
     radial-gradient(1100px 700px at 15% 0%, rgba(255, 255, 255, 0.22), transparent 60%),
     linear-gradient(135deg, var(--bg-a, #9fe2ff), var(--bg-b, #c3b5ff));
 }
+/* A theme's designed level select background: its colors (top to bottom) and image, as designed */
+.app-bg[data-mode="theme"].bg-designed::before {
+  background:
+    linear-gradient(rgba(0, 0, 0, var(--bg-dim, 0)), rgba(0, 0, 0, var(--bg-dim, 0))),
+    var(--bg-img, none) center / var(--bg-size, cover) var(--bg-repeat, no-repeat),
+    linear-gradient(180deg, var(--bg-a), var(--bg-b));
+}
 
 /* ───────────────────────── Controls ───────────────────────── */
 
@@ -909,10 +916,17 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 .dtheme.locked { filter: grayscale(0.85) brightness(0.85); }
 .dlock { font-weight: 700; font-size: 15px; }
 
-/* Level select: side panel (theme card + leaderboard of the hovered level) beside the lattice.
- * Under 900px (SIDE_BREAKPOINT in campaign-ui.ts) it stacks above the lattice. */
-.dlevels-body { width: min(1500px, 100%); display: flex; align-items: flex-start; justify-content: center; gap: 28px; }
-.dside { flex: 0 0 300px; display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 130px); overflow-y: auto; }
+/* Level select: side panel (theme card + leaderboard of the hovered level) and the lattice, laid
+ * out at their natural size and scaled together to the window (fitLevels in campaign-ui.ts). */
+#levels-screen { align-content: center; padding-top: 0; }
+.dlevels-fit { position: relative; flex: none; }
+.dlevels-body {
+  position: absolute; left: 0; top: 0; transform-origin: 0 0;
+  display: flex; align-items: center; justify-content: center; gap: 28px;
+}
+.dlevels-body.stacked { flex-direction: column; }
+.dlevels-body .lattice-wrap { flex: none; }
+.dside { flex: none; width: 300px; display: flex; flex-direction: column; gap: 12px; }
 .dside-card {
   padding: 16px 18px; border-radius: 18px;
   background: rgba(255, 255, 255, 0.82); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
@@ -920,12 +934,13 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 }
 .dside-theme { display: flex; flex-direction: column; gap: 6px; }
 .dside-chapter { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
-.dside-name { margin: 0; font-family: var(--font-title); font-size: 24px; line-height: 1.15; }
+.dside-name { margin: 0; font-family: var(--level-font, var(--font-title)); font-size: 24px; line-height: 1.15; }
 .dside-score { font-weight: 700; font-size: 14px; }
 .dside-star { color: #e0a100; font-family: 'Segoe UI Symbol', 'Apple Symbols', 'Noto Sans Symbols 2', sans-serif; }
 .dside-desc { margin: 2px 0 0; font-size: 13px; line-height: 1.5; color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
 .dside-meta { font-size: 12px; color: var(--muted); }
-.dside-board { display: flex; flex-direction: column; gap: 10px; min-height: 180px; }
+.dside-board { display: flex; flex-direction: column; gap: 10px; height: 300px; }
+.dside-board-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .dside-board-head { display: flex; flex-direction: column; gap: 2px; }
 .dside-board-title { margin: 0; font-size: 15px; }
 .dside-board-sub { color: var(--muted); font-size: 12px; min-height: 1.2em; }
@@ -945,10 +960,27 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 .dboard-time { font-variant-numeric: tabular-nums; font-weight: 700; }
 .dboard .dstars { font-size: 11px; }
 .dboard-gap { text-align: center; color: var(--muted); line-height: 1; }
-@media (max-width: 900px) {
-  .dlevels-body { flex-direction: column; align-items: center; }
-  .dside { flex: none; width: min(560px, 100%); max-height: none; overflow: visible; }
+
+/* Themes with a designed level select: the panel, leaderboard and stars tile take its colors */
+.th-designed .dside-card {
+  background: color-mix(in srgb, var(--th-surface) 88%, transparent);
+  color: var(--th-text);
+  border-color: color-mix(in srgb, var(--th-border) 55%, transparent);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
 }
+.th-designed .dside-chapter { color: var(--th-accent); }
+.th-designed .dside-desc, .th-designed .dboard-name, .th-designed .dboard-time { color: var(--th-text); }
+.th-designed .dside-meta, .th-designed .dside-board-sub, .th-designed .dside-note,
+.th-designed .dboard-place, .th-designed .dboard-gap, .th-designed .tag-num { color: color-mix(in srgb, var(--th-text) 65%, transparent); opacity: 1; }
+.th-designed .dside-star { color: var(--th-accent); }
+.th-designed .dboard-row:nth-child(odd) { background: color-mix(in srgb, var(--th-text) 7%, transparent); }
+.th-designed .dboard-row.me { background: color-mix(in srgb, var(--th-accent) 28%, transparent); box-shadow: inset 0 0 0 1px var(--th-accent); }
+.th-designed .dboard .dstars .on { color: var(--th-text); }
+.th-designed .dlevel-stars {
+  background: var(--th-accent); color: var(--th-text);
+  border: 2px solid var(--th-border);
+}
+.th-designed .dlevel-stars .dtotal-star { color: var(--th-text); }
 
 /* Level lattice: 21 diamonds in zig-zag rows */
 .lattice-wrap { position: relative; }
@@ -958,7 +990,27 @@ button.dlevel:hover:not(:disabled), button.dlevel:focus-visible { transform: rot
 .dlevel.cleared { background: linear-gradient(135deg, var(--c1), var(--c2)); color: #fff; }
 .dlevel.cleared .dtile-in { text-shadow: 0 1px 6px rgba(20, 30, 60, 0.35); }
 .dlevel.soon { background: rgba(255, 255, 255, 0.4); color: var(--muted); box-shadow: none; }
-.dlevel-no { font-size: 24px !important; }
+.dlevel-no { font-size: 24px !important; font-family: var(--level-font, var(--font-title)) !important; }
+.dlevel-total { font-size: 24px !important; }
+/* Level select extras under the levels: total stars and Back */
+.dlevel-stars { background: linear-gradient(135deg, #fff4c4, #ffd25e); }
+.dlevel-stars .dtotal-star { font-size: 18px; }
+.dlevel-back { background: rgba(255, 255, 255, 0.9); }
+.dlevel-back strong { font-size: 18px !important; }
+/* Themes with a designed level select (info.screens.select): its button and Back colors */
+.lattice.lv-designed .dlevel:not(.dlevel-stars):not(.dlevel-back) {
+  background: var(--lv-fill); color: var(--lv-number);
+  border: var(--lv-border-w) solid var(--lv-border); backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+.lattice.lv-designed .dlevel.alt:not(.cleared) { background: var(--lv-fill2); }
+.lattice.lv-designed .dlevel.cleared { background: var(--lv-cleared); }
+.lattice.lv-designed .dlevel .dtile-in { text-shadow: none; }
+.lattice.lv-designed .dlevel-no { text-shadow: 0 0 10px var(--lv-glow, transparent); }
+.lattice.lv-designed .dlevel.soon { opacity: 0.45; }
+.lattice.bk-designed .dlevel-back {
+  background: var(--bk-fill, rgba(255, 255, 255, 0.9)); color: var(--bk-color, var(--text));
+  border: var(--bk-border-w) solid var(--bk-border, transparent);
+}
 .dlevel-best { font-size: 10px !important; }
 .dstars { font-size: 13px; letter-spacing: 1px; }
 .dstars .on { color: #f2b200; }

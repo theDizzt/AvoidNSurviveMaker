@@ -1,26 +1,25 @@
-# Bundled fonts: copyright and licenses
+# 번들 폰트: 저작권과 라이선스
 
-The game shows this list in **Options → Licenses**. The data lives in
-`src/core/font-catalog.ts`; keep both in sync when adding or removing a font.
+게임은 이 목록을 **Options → Licenses** 에 표시합니다. 데이터는
+`src/core/font-catalog.ts` 에 있으므로, 폰트를 추가하거나 뺄 때 두 곳을 함께 맞춰 주세요.
 
-Fonts licensed for personal use only or sold commercially are not bundled. License kinds are what each font file states in its own metadata (name table):
+개인 사용 전용이거나 유료로 판매되는 폰트는 번들하지 않습니다. 라이선스 종류는 각 폰트 파일이 자체 메타데이터(name 테이블)에 적어 둔 내용을 따릅니다.
 
-- **OFL** — SIL Open Font License 1.1 (full text: [OFL.txt](OFL.txt)). Free to bundle and
-  redistribute with the game, as long as the copyright notice and license come with it.
-- **Check** — the file doesn't state a license; confirm the distributor's terms before a
-  public release.
+- **OFL** — SIL Open Font License 1.1 (전문: [OFL.txt](OFL.txt)). 저작권 고지와 라이선스를 함께
+  제공하면 게임에 자유롭게 번들하고 재배포할 수 있습니다.
+- **Check** — 파일에 라이선스가 명시되어 있지 않습니다. 공개 출시 전에 배포처의 약관을 확인하세요.
 
-## Interface (`main/`, `title/`, `timer/`)
+## 인터페이스 (`main/`, `title/`, `timer/`)
 
-| Font | File | Copyright | License |
+| 폰트 | 파일 | 저작권 | 라이선스 |
 |---|---|---|---|
 | Mango Ddobak L / R / B | `main/MangoDdobak-*.ttf` | © MANGOBOARD. Font designed by Earlyfont | Check |
 | GS Hyejaroun Bold | `title/GSHYEJAROUNTTF-Bold.ttf` | © 2026 GS Retail Co., Ltd. (Tlab Inc.) — hyejaroun.com | Check |
 | HS Duggobi | `timer/HS두꺼비체.ttf` | © 2017 Hyun S. Choi — hp0.blog.me | Check |
 
-## Library (`etc/`) — usable in themes by id
+## 라이브러리 (`etc/`) — 테마에서 id 로 사용 가능
 
-| Id | Font | File | Copyright | License |
+| Id | 폰트 | 파일 | 저작권 | 라이선스 |
 |---|---|---|---|---|
 | `barriecito` | Barriecito | `Barriecito-Regular.ttf` | © 2018 The Barriecito Project Authors (Pablo Cosgaya & Sergio Jiménez) | OFL |
 | `caesar-dressing` | Caesar Dressing | `CaesarDressing-Regular.ttf` | © 2011 Open Window, RFN "Caesar Dressing" | OFL |
@@ -46,4 +45,4 @@ Fonts licensed for personal use only or sold commercially are not bundled. Licen
 | `napjak-block` | Gabia Napjak Block | `gabia_napjakBlock.ttf` | © 2015 Gabia | Check |
 | `gunhami` | GFC Gunhami Talks | `gunham.ttf` | © Gyeongnam Football Club (YoonDesign Inc.) | Check |
 
-RFN = Reserved Font Name.
+RFN = Reserved Font Name (예약 폰트 이름).

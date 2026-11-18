@@ -12,7 +12,7 @@ import { customTheme } from './theme-registry';
 import { installTooltips } from './tooltip';
 import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-ui';
 import { levelKey, recordClear, themeUnlocked, totalStars } from './progress';
-import { themedLevel, type ThemeEntry } from '../core/theme-pack';
+import { filledSlots, themedLevel, type ThemeEntry } from '../core/theme-pack';
 import { OFFICIAL_THEMES, allThemes, badgeFor, chapterMusicFor } from './theme-registry';
 import { onOptionsChange, options, resetOptions, setOption } from './options';
 import { PlayController } from './play';
@@ -291,8 +291,10 @@ function mapFor(key: string): MapData | null {
 function nextKey(): string | null {
   const c = campaignOf(currentKey);
   if (c) {
-    const key = `c:${themeKey(c.theme)}:${c.index + 1}`;
-    return mapFor(key) ? key : null;
+    // The next slot that holds a level (chapters can have empty "Soon" slots in between)
+    const next = filledSlots(c.theme).find((i) => i > c.index);
+    const key = next !== undefined ? `c:${themeKey(c.theme)}:${next}` : null;
+    return key && mapFor(key) ? key : null;
   }
   const [kind, n] = currentKey.split(':');
   if (kind !== 'p' && kind !== 'b') return null;
@@ -335,7 +337,7 @@ function renderLevelOptions(): void {
     if (!t.levels.length || !themeUnlocked(t)) return;
     const g = document.createElement('optgroup');
     g.label = t.official ? t.info.name : `Custom: ${t.info.name}`;
-    g.append(...t.levels.map((_, i) => new Option(levelLabel(themedLevel(t, i)!), `c:${themeKey(t)}:${i}`)));
+    g.append(...filledSlots(t).map((i) => new Option(levelLabel(themedLevel(t, i)!), `c:${themeKey(t)}:${i}`)));
     groups.push(g);
   });
   levelSelect.replaceChildren(...groups);

@@ -68,6 +68,14 @@ export class Backdrop {
       const [a, b] = bg ? [bg.color, bg.color2 ?? bg.color] : theme?.info.colors ?? ['#9fe2ff', '#c3b5ff'];
       this.root.style.setProperty('--bg-a', a);
       this.root.style.setProperty('--bg-b', b);
+      // A designed background is drawn as designed (style.css .bg-designed): image, fit and dim
+      this.root.classList.toggle('bg-designed', !!bg);
+      const img = bg?.image && theme?.assets[bg.image];
+      if (img) this.root.style.setProperty('--bg-img', `url("${img}")`);
+      else this.root.style.removeProperty('--bg-img');
+      this.root.style.setProperty('--bg-size', bg?.fit === 'contain' ? 'contain' : bg?.fit === 'tile' ? 'auto' : 'cover');
+      this.root.style.setProperty('--bg-repeat', bg?.fit === 'tile' ? 'repeat' : 'no-repeat');
+      this.root.style.setProperty('--bg-dim', String(bg?.dim ?? 0));
     }
     if (mode === this.mode) return;
     this.mode = mode;

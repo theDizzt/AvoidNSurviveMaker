@@ -114,6 +114,11 @@ export interface ThemeEntry {
   /** Every file of the pack (images, fonts) by its path in the pack → URL */
   assets: Record<string, string>;
   official: boolean;
+  /**
+   * Official themes: the level slot (0-based) of each entry of `levels`, from its level number, so
+   * "level 9" sits in slot 9 even while levels 4–8 don't exist yet. Unset = slots follow `levels`.
+   */
+  slots?: number[];
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -196,9 +201,44 @@ export function maxStars(entry: ThemeEntry): number {
   return levelSlots(entry) * STARS_PER_LEVEL;
 }
 
+/**
+ * Slot of each level of an official theme: its level number (1-based) when that slot is free,
+ * otherwise the first free slot. Levels are taken in the given (file name) order.
+ */
+export function assignSlots(levels: readonly MapData[], total = LEVELS_PER_THEME): number[] {
+  const used = new Set<number>();
+  const slots = levels.map((m) => {
+    const want = m.level !== undefined ? m.level - 1 : -1;
+    if (want >= 0 && want < total && !used.has(want)) {
+      used.add(want);
+      return want;
+    }
+    return -1;
+  });
+  return slots.map((s) => {
+    if (s >= 0) return s;
+    let free = 0;
+    while (used.has(free)) free++;
+    used.add(free);
+    return free;
+  });
+}
+
+/** The level in slot `index` (undefined for an empty slot) */
+export function levelAt(entry: ThemeEntry, index: number): MapData | undefined {
+  if (!entry.slots) return entry.levels[index];
+  const k = entry.slots.indexOf(index);
+  return k >= 0 ? entry.levels[k] : undefined;
+}
+
+/** Slots that hold a level, in order */
+export function filledSlots(entry: ThemeEntry): number[] {
+  return entry.slots ? [...entry.slots].sort((a, b) => a - b) : entry.levels.map((_, i) => i);
+}
+
 /** A level ready to play: the theme's maze colors applied where the level has none */
 export function themedLevel(entry: ThemeEntry, index: number): MapData | null {
-  const m = entry.levels[index];
+  const m = levelAt(entry, index);
   if (!m || index >= levelSlots(entry)) return null;
   const out: MapData = { ...m, level: m.level ?? index + 1, title: m.title ?? m.name.replace(/^\d+\.\s*/, '') };
   if (!out.theme && entry.info.style.maze) out.theme = entry.info.style.maze;

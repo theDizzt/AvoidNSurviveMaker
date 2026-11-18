@@ -1,7 +1,7 @@
 import { formatPlayTime } from '../core/account';
 import { formatTime } from '../core/simulation';
 import { formatUtc } from '../core/time';
-import { levelSlots, STARS_PER_LEVEL } from '../core/theme-pack';
+import { levelAt, levelSlots, STARS_PER_LEVEL } from '../core/theme-pack';
 import type { Account } from './auth/account';
 import type { AccountDeaths, DeathTracker } from './auth/deaths';
 import type { AccountRecord, RecordSync } from './auth/records';
@@ -110,7 +110,7 @@ export class StatsUI {
       const cleared = recs.filter(Boolean) as AccountRecord[];
       const title = t.official ? `Chapter ${String(ti + 1).padStart(2, '0')} · ${t.info.name}` : `Custom · ${t.info.name}`;
       sections.push(this.section(title, `${cleared.length} / ${slots} cleared · ★ ${cleared.reduce((s, r) => s + r.stars, 0)} / ${slots * STARS_PER_LEVEL}`,
-        recs.map((r, i) => [`${i + 1}. ${t.levels[i]?.title ?? t.levels[i]?.name.replace(/^\d+\.\s*/, '') ?? ''}`, r, levelDeaths[levelKey(t, i)] ?? 0])));
+        recs.map((r, i) => [`${i + 1}. ${levelAt(t, i)?.title ?? levelAt(t, i)?.name.replace(/^\d+\.\s*/, '') ?? ''}`, r, levelDeaths[levelKey(t, i)] ?? 0])));
     }
     // Records for levels this build doesn't know (older or other custom packs)
     if (byKey.size) sections.push(this.section('Other levels', `${byKey.size} record${byKey.size === 1 ? '' : 's'}`, [...byKey].map(([k, r]) => [k, r, levelDeaths[k] ?? 0])));

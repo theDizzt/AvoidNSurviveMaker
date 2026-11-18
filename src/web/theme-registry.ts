@@ -1,4 +1,4 @@
-import { LEVELS_PER_THEME, MAX_PACK_LEVELS, validateThemeInfo, type ThemeEntry, type ThemeInfo } from '../core/theme-pack';
+import { assignSlots, LEVELS_PER_THEME, MAX_PACK_LEVELS, validateThemeInfo, type ThemeEntry, type ThemeInfo } from '../core/theme-pack';
 import type { MapData, Theme } from '../core/types';
 import { validateMap } from '../core/validate';
 
@@ -43,7 +43,9 @@ function loadBundled(): { folder: string; entry: ThemeEntry }[] {
     const assets: Record<string, string> = {};
     for (const [p, url] of Object.entries(assetFiles)) if (p.startsWith(prefix)) assets[p.slice(prefix.length)] = url;
     const image = (name?: string) => (name ? assets[name] : undefined);
-    out.push({ folder, entry: { info, levels, coverUrl: image(info.cover), badgeUrl: image(info.style.badge.image), assets, official } });
+    // Official chapters place each level by its level number (gaps stay empty "Soon" slots)
+    const slots = official ? assignSlots(levels) : undefined;
+    out.push({ folder, entry: { info, levels, coverUrl: image(info.cover), badgeUrl: image(info.style.badge.image), assets, official, ...(slots ? { slots } : {}) } });
   }
   return out.sort((a, b) => a.folder.localeCompare(b.folder));
 }

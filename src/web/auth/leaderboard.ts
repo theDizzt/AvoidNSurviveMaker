@@ -13,7 +13,7 @@ export interface LeaderboardRow {
 
 export type LeaderboardResult =
   | { ok: true; rows: LeaderboardRow[] }
-  | { ok: false; reason: 'unconfigured' | 'unavailable' };
+  | { ok: false; reason: 'unconfigured' | 'missing' | 'unavailable' };
 
 /** Reuse a fetched board for this long, so hovering back and forth doesn't refetch */
 const CACHE_MS = 60_000;
@@ -30,7 +30,11 @@ export function fetchLeaderboard(levelKey: string, limit = 10): Promise<Leaderbo
   const result = (async (): Promise<LeaderboardResult> => {
     try {
       const { data, error } = await supabase!.rpc('level_leaderboard', { p_key: levelKey, p_limit: limit });
-      if (error) return { ok: false, reason: 'unavailable' };
+      if (error) {
+        // The function doesn't exist yet: 20261118020000_leaderboard.sql hasn't been run on this project
+        const missing = error.code === 'PGRST202' || error.code === '42883' || /could not find the function/i.test(error.message);
+        return { ok: false, reason: missing ? 'missing' : 'unavailable' };
+      }
       const rows = ((data as LeaderboardRow[] | null) ?? []).map((r) => ({
         ...r, place: Number(r.place), best_ms: Number(r.best_ms), stars: Number(r.stars), discriminator: Number(r.discriminator),
       }));

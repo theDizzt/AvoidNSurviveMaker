@@ -1,8 +1,7 @@
-# Architecture
+# 아키텍처
 
-Avoid N Survive Maker is a static, single-page web game (TypeScript + Vite, no UI framework).
-It has two code layers, content folders read at build time, and an optional Supabase backend for
-accounts.
+Avoid N Survive Maker 는 정적인 단일 페이지 웹 게임입니다(TypeScript + Vite, UI 프레임워크 없음).
+코드 계층 두 개, 빌드 시 읽어 들이는 콘텐츠 폴더, 계정을 위한 선택적 Supabase 백엔드로 이루어져 있습니다.
 
 ```mermaid
 flowchart TB
@@ -25,58 +24,50 @@ flowchart TB
   SCREENS <-->|auth, RPC| SB[(Supabase<br/>auth.users · profiles · level_records)]
 ```
 
-## 1. Layers
+## 1. 계층
 
-| Layer | Folder | Rule |
+| 계층 | 폴더 | 규칙 |
 |---|---|---|
-| Core | `src/core/` | Pure TypeScript, **no DOM**. Map schema, geometry, simulation, validation, theme pack format. Can run in Node (tests) or later on a server to verify replays. |
-| Web | `src/web/` | Everything that touches the DOM, canvas, audio, storage or network. Imports core, never the other way. |
-| Content | `themes/`, `custom-themes/`, `src/assets/` | JSON levels, theme packs, fonts and music, bundled at build time by Vite. |
-| Backend | `supabase/migrations/` | SQL only: tables, row level security and `security definer` RPCs. No server code of our own. |
+| Core | `src/core/` | 순수 TypeScript, **DOM 없음**. 맵 스키마, 기하, 시뮬레이션, 검증, 테마 팩 형식. Node(테스트)에서 실행할 수 있고, 나중에 서버에서 리플레이 검증에 쓸 수 있습니다. |
+| Web | `src/web/` | DOM, 캔버스, 오디오, 저장소, 네트워크를 다루는 모든 코드. core 를 import 하며, 반대 방향은 없습니다. |
+| Content | `themes/`, `custom-themes/`, `src/assets/` | JSON 레벨, 테마 팩, 폰트, 음악. 빌드 시 Vite 가 번들합니다. |
+| Backend | `supabase/migrations/` | SQL 만 있음: 테이블, row level security, `security definer` RPC. 자체 서버 코드는 없습니다. |
 
-`src/core/index.ts` re-exports the core API. Unit tests live next to the code (`*.test.ts`, Vitest).
+`src/core/index.ts` 가 core API 를 다시 내보냅니다. 단위 테스트는 코드 옆에 있습니다(`*.test.ts`, Vitest).
 
 ## 2. Core (`src/core`)
 
-### Map model
-- **`types.ts`**: `MapData` (format v2). A map has a size, START and GOAL rectangles, and a list of
-  `MapObject`s. Each object is **shape × role × behaviour**:
-  - shape: rect, circle, polygon or freeform (`shape.ts` turns every shape into one closed polygon,
-    used for both drawing and collision)
-  - role: `path`, `wall`, `coin`, `dark`, `trigger` (switch), `door`, `laser`, `mirror`, `portal`, `text`, `safe`
-  - behaviour: route motion and rotation (`motion.ts`), spikes, saws and boulders (`hazards.ts`),
-    switch links (`switches.ts`)
-- Optional per-map look (`theme`: wall and path fills), star times, darkness, level number and title.
-- **`validate.ts`**: the only way external JSON becomes a `MapData`. It checks every field and migrates the v1 format.
-- **`share.ts`**: map ⇄ URL code (deflate-raw + base64url) for share links (`#m=…`).
+### 맵 모델
+- **`types.ts`**: `MapData`(형식 v2). 맵은 크기, START 와 GOAL 사각형, `MapObject` 목록을 가집니다. 각 오브젝트는 **모양 × 역할 × 동작** 입니다.
+  - 모양: rect, circle, polygon, freeform (`shape.ts` 가 모든 모양을 하나의 닫힌 다각형으로 바꾸며, 그리기와 충돌에 함께 사용)
+  - 역할: `path`, `wall`, `coin`, `dark`, `trigger`(스위치), `door`, `laser`, `mirror`, `portal`, `text`, `safe`
+  - 동작: 경로 이동과 회전(`motion.ts`), 가시·톱날·바위(`hazards.ts`), 스위치 연결(`switches.ts`)
+- 맵별 선택 항목: 모양(`theme`: 벽과 길 채우기), 별 기준 시간, 어둠, 레벨 번호와 제목.
+- **`validate.ts`**: 외부 JSON 이 `MapData` 가 되는 유일한 통로입니다. 모든 필드를 검사하고 v1 형식을 변환합니다.
+- **`share.ts`**: 공유 링크(`#m=…`)를 위한 맵 ⇄ URL 코드(deflate-raw + base64url).
 
-### Simulation (`simulation.ts`)
-- Deterministic, **fixed 1 ms tick**. The cursor path between input samples is treated as line
-  segments, split at every millisecond.
-- `object.ts` compiles each object once (`compileMap`). Its pose at time *t* is closed-form:
-  `world = R(θ)·(local − pivot) + pivot + d`. Collision tests run in each object's local frame, so a
-  moving obstacle becomes a static polygon and nothing can be skipped over.
-- Safe = inside a path (or the map has no paths) **and** inside no wall. Coins, switches, doors,
-  lasers (`laser.ts`) and portals are all part of the same tick.
-- The same samples always give the same result, so a `Replay` can be re-run (`runReplay`) to verify a clear.
+### 시뮬레이션 (`simulation.ts`)
+- 결정론적이며 **고정 1 ms 틱** 입니다. 입력 샘플 사이의 커서 경로를 선분으로 보고 1밀리초마다 나눕니다.
+- `object.ts` 가 각 오브젝트를 한 번 컴파일합니다(`compileMap`). 시간 *t* 에서의 자세는 닫힌 식입니다:
+  `world = R(θ)·(local − pivot) + pivot + d`. 충돌 검사는 각 오브젝트의 로컬 좌표계에서 하므로, 움직이는 장애물이 정지한 다각형이 되어 어떤 것도 건너뛸 수 없습니다.
+- 안전 = 길 안(또는 맵에 길이 없음) **이고** 어떤 벽 안에도 없음. 코인, 스위치, 문, 레이저(`laser.ts`), 포털 모두 같은 틱에서 처리됩니다.
+- 같은 샘플은 항상 같은 결과를 내므로, `Replay` 를 다시 실행(`runReplay`)해 클리어를 검증할 수 있습니다.
 
-### Other core modules
-| File | Purpose |
+### 기타 core 모듈
+| 파일 | 용도 |
 |---|---|
-| `level.ts` | Stars for a clear time, star-goal text |
-| `theme-pack.ts` | Theme pack format (`theme.json`): info, colors, badge style, maze colors, music, custom screens; `themedLevel()` applies a theme to a level |
-| `screen-layout.ts` | Layout schema for custom level-select screens (a 1280×720 stage of elements) |
-| `arrange.ts`, `merge.ts` | Editor operations: align, flip, z-order; merge shapes (polygon-clipping) |
-| `account.ts` | Nickname, email and password rules (mirrored by the database), `Name#0042`, play time format |
-| `time.ts` | All displayed timestamps are UTC (`formatUtc`) |
-| `font-catalog.ts`, `colors.ts`, `theme.ts` | Bundled font list and licenses, the 16 switch colors, map theme presets |
+| `level.ts` | 클리어 시간에 따른 별, 별 목표 문구 |
+| `theme-pack.ts` | 테마 팩 형식(`theme.json`): 정보, 색상, 배지 스타일, 미로 색상, 음악, 커스텀 화면. `themedLevel()` 이 레벨에 테마를 적용 |
+| `screen-layout.ts` | 커스텀 레벨 선택 화면의 레이아웃 스키마 (1280×720 스테이지의 요소들) |
+| `arrange.ts`, `merge.ts` | 에디터 작업: 정렬, 뒤집기, z-순서, 모양 합치기(polygon-clipping) |
+| `account.ts` | 닉네임, 이메일, 비밀번호 규칙(데이터베이스와 동일), `Name#0042`, 플레이 시간 형식 |
+| `time.ts` | 표시되는 모든 시각은 UTC (`formatUtc`) |
+| `font-catalog.ts`, `colors.ts`, `theme.ts` | 번들 폰트 목록과 라이선스, 스위치 색상 16가지, 맵 테마 프리셋 |
 
 ## 3. Web (`src/web`)
 
-### Screen flow (`main.ts`)
-All screens are sections in `index.html`. `main.ts` owns a single `current: Screen` and switches
-with `show(next)`. That runs an iris transition (`iris-transition.ts`), then `showImmediately`, which
-hides the other screens and calls the hooks for the new one: render, focus, music, background.
+### 화면 흐름 (`main.ts`)
+모든 화면은 `index.html` 의 섹션입니다. `main.ts` 가 하나의 `current: Screen` 을 갖고 `show(next)` 로 전환합니다. 이 함수는 아이리스 전환(`iris-transition.ts`)을 실행한 뒤 `showImmediately` 를 호출하여, 다른 화면을 숨기고 새 화면의 훅(렌더, 포커스, 음악, 배경)을 실행합니다.
 
 ```mermaid
 stateDiagram-v2
@@ -99,70 +90,63 @@ stateDiagram-v2
   auth --> verify
 ```
 
-| Screen | Module | Notes |
+| 화면 | 모듈 | 비고 |
 |---|---|---|
-| preload | `preload.ts` | Loads fonts, account session and shared map, with a progress bar and timeout |
-| menu | `index.html` + `main.ts` | 45°-rotated tile grid (`fitRotatedGrid`), 3D layered logo (CSS) |
-| themes / levels | `campaign-ui.ts`, `screen-render.ts` | World and level select; themes can ship a custom level-select layout |
-| play | `play.ts` | Canvas game loop; HUD panel hidden, keyboard shortcuts R / N / F / Esc |
-| editor | `editor.ts`, `theme-panel.ts`, `float-panel.ts`, `context-menu.ts` | Map editor, theme presets (incl. chapter themes) |
-| themeEditor | `theme-editor.ts`, `screen-designer.ts`, `theme-zip.ts` | Theme packs: colors, badge, cover, music, levels, custom screens; zip import/export |
-| options / licenses | `options.ts`, `menu-music.ts`, `font-licenses.ts` | Volumes, trail, timer, debug panel, menu music override, record sync |
-| stats | `stats-ui.ts` | Reads the profile and `level_records` straight from the database |
-| auth / verify | `auth/auth-ui.ts` | Sign-up, sign-in, email verification |
+| preload | `preload.ts` | 폰트, 계정 세션, 공유 맵을 진행률 표시와 타임아웃과 함께 불러옴 |
+| menu | `index.html` + `main.ts` | 45° 회전한 타일 그리드(`fitRotatedGrid`), 3D 레이어 로고(CSS) |
+| themes / levels | `campaign-ui.ts`, `screen-render.ts` | 월드와 레벨 선택. 테마가 커스텀 레벨 선택 레이아웃을 가질 수 있음 |
+| play | `play.ts` | 캔버스 게임 루프. HUD 패널 숨김, 단축키 R / N / F / Esc |
+| editor | `editor.ts`, `theme-panel.ts`, `float-panel.ts`, `context-menu.ts` | 맵 에디터, 테마 프리셋(챕터 테마 포함) |
+| themeEditor | `theme-editor.ts`, `screen-designer.ts`, `theme-zip.ts` | 테마 팩: 색상, 배지, 표지, 음악, 레벨, 커스텀 화면, zip 가져오기/내보내기 |
+| options / licenses | `options.ts`, `menu-music.ts`, `font-licenses.ts` | 볼륨, 잔상, 타이머, 디버그 패널, 메뉴 음악 교체, 기록 동기화 |
+| stats | `stats-ui.ts` | 프로필과 `level_records` 를 데이터베이스에서 직접 읽음 |
+| auth / verify | `auth/auth-ui.ts` | 가입, 로그인, 이메일 인증 |
 
-### Play loop (`play.ts` + `input.ts`)
-1. `input.ts` collects every pointer sample (`pointerrawupdate` + `getCoalescedEvents`, ~1 ms at 1000 Hz).
-2. Clicking inside START creates a `Simulation` and starts the run. Each sample is `feed()`-ed with its event timestamp.
-3. Each animation frame calls `advanceTo(now − margin)`, so time keeps passing while the mouse is idle.
-4. `render.ts` draws the map at `sim.time` with the simulation's state: hidden objects, switch
-   clocks, door openness, beams, coins left. A locked GOAL is dark gray and shows `collected/total`.
-5. When the run is cleared, `onClear(map, replay, time)` goes to `main.ts`, which records progress
-   and marks editor maps as verified for sharing.
+### 플레이 루프 (`play.ts` + `input.ts`)
+1. `input.ts` 가 모든 포인터 샘플을 모읍니다(`pointerrawupdate` + `getCoalescedEvents`, 1000 Hz 에서 약 1 ms).
+2. START 안을 클릭하면 `Simulation` 을 만들고 도전을 시작합니다. 각 샘플은 이벤트 타임스탬프와 함께 `feed()` 됩니다.
+3. 애니메이션 프레임마다 `advanceTo(now − margin)` 을 호출하므로, 마우스가 멈춰 있어도 시간이 흐릅니다.
+4. `render.ts` 가 `sim.time` 시점의 맵을 시뮬레이션 상태(숨겨진 오브젝트, 스위치 시계, 문 열림 정도, 빔, 남은 코인)와 함께 그립니다. 잠긴 GOAL 은 짙은 회색이며 `collected/total` 을 표시합니다.
+5. 클리어하면 `onClear(map, replay, time)` 이 `main.ts` 로 전달되어, 진행 상황을 기록하고 에디터 맵을 공유 가능(검증됨)으로 표시합니다.
 
-### Rendering (`render.ts`, `badge.ts`, `theme-pattern.ts`)
-- One 16:9 canvas per screen, letterboxed by `fitCanvas` and `beginFrame`.
-- Static walls and floor are pre-rendered into a cached layer per scale and theme. Only moving
-  objects are redrawn each frame.
-- `badge.ts` draws the level number and title badge at the top-left in the theme's design. Editor
-  maps that use a chapter preset get that chapter's badge.
+### 렌더링 (`render.ts`, `badge.ts`, `theme-pattern.ts`)
+- 화면마다 16:9 캔버스 하나를 쓰며, `fitCanvas` 와 `beginFrame` 이 레터박스를 처리합니다.
+- 고정된 벽과 바닥은 배율과 테마별로 캐시된 레이어에 미리 그립니다. 움직이는 오브젝트만 매 프레임 다시 그립니다.
+- `badge.ts` 는 왼쪽 위에 테마 디자인으로 레벨 번호와 제목 배지를 그립니다. 챕터 프리셋을 쓰는 에디터 맵은 그 챕터의 배지를 받습니다.
 
-### Themes and content (`theme-registry.ts`)
-- `import.meta.glob` bundles every `themes/*/theme.json`, its levels and its assets (images, fonts, music) at build time.
-- `CHAPTER_FOLDERS` fixes the 16 official chapters in order (21 level slots each). `custom-themes/` holds presets for the theme editor.
-- One player-made custom pack can be loaded from a zip and is stored in localStorage.
-- `chapterForTheme(map.theme)` finds the chapter whose maze colors exactly match a map's. That
-  choice decides editor music and badge design.
+### 테마와 콘텐츠 (`theme-registry.ts`)
+- `import.meta.glob` 이 빌드 시 모든 `themes/*/theme.json` 과 그 레벨, 에셋(이미지, 폰트, 음악)을 번들합니다.
+- `CHAPTER_FOLDERS` 가 공식 챕터 16개의 순서를 정합니다(각 21개 레벨 슬롯). `custom-themes/` 에는 테마 에디터용 프리셋이 있습니다.
+- 플레이어가 만든 커스텀 팩 하나를 zip 으로 불러올 수 있으며, localStorage 에 저장됩니다.
+- `chapterForTheme(map.theme)` 은 미로 색상이 맵과 정확히 일치하는 챕터를 찾습니다. 이 결과로 에디터 음악과 배지 디자인이 정해집니다.
 
-### Background and audio
-- **`backdrop.ts`**: one fixed layer behind all screens. Its `data-mode` is set per screen:
-  - `demo`: main menu and most screens
-  - `grid`: world select, map editor, theme editor
-  - `theme`: level select, in the theme's colors
-  - `none`: play
-- **`demo-pilot.ts`**: the main menu demo. It plans a cursor route with space-time A* on a coarse
-  grid, in time slices so frames never stall. The real `Simulation` then plays the route.
-- **`audio.ts`**: Web Audio graph `track fade → music gain → master gain`, plus an effects gain. Music
-  crossfades on change (0.9 s out, 1.2 s in). The last two decoded tracks are cached.
-  - Menu screens play the menu music.
-  - Level select and play use the theme's own music.
-  - The map editor plays its chapter preset's music, or the menu music.
+### 배경과 오디오
+- **`backdrop.ts`**: 모든 화면 뒤에 있는 고정 레이어 하나. 화면마다 `data-mode` 를 설정합니다.
+  - `demo`: 메인 메뉴와 대부분의 화면
+  - `grid`: 월드 선택, 맵 에디터, 테마 에디터
+  - `theme`: 레벨 선택, 테마 색상으로
+  - `none`: 플레이
+- **`demo-pilot.ts`**: 메인 메뉴 시연. 거친 그리드에서 시공간 A* 로 커서 경로를 계획하며, 프레임이 멈추지 않도록 시간을 나눠 계산합니다. 그 경로를 실제 `Simulation` 이 재생합니다.
+- **`audio.ts`**: Web Audio 그래프 `track fade → music gain → master gain`, 그리고 효과음 gain. 음악이 바뀌면 크로스페이드합니다(0.9초 페이드아웃, 1.2초 페이드인). 마지막으로 디코딩한 트랙 두 개를 캐시합니다.
+  - 메뉴 화면은 메뉴 음악을 재생합니다.
+  - 레벨 선택과 플레이는 테마의 음악을 씁니다.
+  - 맵 에디터는 챕터 프리셋의 음악, 없으면 메뉴 음악을 재생합니다.
 
-## 4. State and persistence
+## 4. 상태와 저장
 
-| Data | Where | Module |
+| 데이터 | 위치 | 모듈 |
 |---|---|---|
-| Options (volumes, trail, timer…) | localStorage | `options.ts` |
-| Menu music override | IndexedDB (Blob) | `menu-music.ts` |
-| Campaign progress (best ms, stars) per level key | localStorage `avoid-n-survive:progress` | `progress.ts` |
-| Editor draft + verification | localStorage | `editor.ts` |
-| Custom theme pack | localStorage (data URLs) | `theme-registry.ts` |
-| Unsent play time / records per account | localStorage, retried later | `auth/playtime.ts`, `auth/records.ts` |
-| Account, play time, level records | Supabase | `auth/*` |
+| 옵션 (볼륨, 잔상, 타이머 등) | localStorage | `options.ts` |
+| 메뉴 음악 교체 | IndexedDB (Blob) | `menu-music.ts` |
+| 레벨 키별 캠페인 진행 (최고 ms, 별) | localStorage `avoid-n-survive:progress` | `progress.ts` |
+| 에디터 초안 + 검증 상태 | localStorage | `editor.ts` |
+| 커스텀 테마 팩 | localStorage (data URL) | `theme-registry.ts` |
+| 계정별 미전송 플레이 시간 / 기록 | localStorage, 나중에 재시도 | `auth/playtime.ts`, `auth/records.ts` |
+| 계정, 플레이 시간, 레벨 기록 | Supabase | `auth/*` |
 
-Level keys: `<theme id>/<index>` for chapters, `custom:<theme id>/<index>` for custom packs.
+레벨 키: 챕터는 `<theme id>/<index>`, 커스텀 팩은 `custom:<theme id>/<index>`.
 
-## 5. Backend (Supabase)
+## 5. 백엔드 (Supabase)
 
 ```mermaid
 erDiagram
@@ -184,34 +168,29 @@ erDiagram
   }
 ```
 
-- **Sign-up**: email + password + nickname, protected by a Turnstile CAPTCHA (`auth/captcha.ts`).
-  The email is verified with PKCE (`?code=`), so the URL hash stays free for share links. A database
-  trigger assigns a random, unique `#tag` for the nickname.
-- **Play time**: `add_play_time(seconds)` every 30 s while the tab is visible. The server caps each
-  report to the real elapsed time, so several tabs can't double count.
-- **Level records**:
-  - Every clear goes up with `submit_level_records(jsonb)`.
-  - The server merges, keeping the lowest `best_ms` and the highest `stars`.
-  - **Options → Sync records** uploads all local records and downloads the account's records.
-  - Row level security: players read only their own rows.
-- Clients never write tables directly. Every write is a `security definer` function that checks `auth.uid()`.
-- Without `.env.local` (no Supabase keys) the game runs fully offline. Account features are simply unavailable.
+- **가입**: 이메일 + 비밀번호 + 닉네임, Turnstile CAPTCHA 로 보호(`auth/captcha.ts`). 이메일은 PKCE(`?code=`)로 인증하므로 URL 해시는 공유 링크용으로 비어 있습니다. 데이터베이스 트리거가 닉네임에 대해 무작위의 유일한 `#tag` 를 부여합니다.
+- **플레이 시간**: 탭이 보이는 동안 30초마다 `add_play_time(seconds)`. 서버가 각 보고를 실제 경과 시간으로 제한하므로 여러 탭이 중복으로 셀 수 없습니다.
+- **레벨 기록**:
+  - 클리어할 때마다 `submit_level_records(jsonb)` 로 올립니다.
+  - 서버는 병합하여 가장 낮은 `best_ms` 와 가장 높은 `stars` 를 유지합니다.
+  - **Options → Sync records** 는 로컬 기록을 모두 올리고 계정의 기록을 내려받습니다.
+  - Row level security: 플레이어는 자신의 행만 읽습니다.
+- 클라이언트는 테이블에 직접 쓰지 않습니다. 모든 쓰기는 `auth.uid()` 를 확인하는 `security definer` 함수를 거칩니다.
+- `.env.local`(Supabase 키)이 없으면 게임은 완전히 오프라인으로 동작하며, 계정 기능만 사용할 수 없습니다.
 
-## 6. Build and tooling
+## 6. 빌드와 도구
 
-- `npm run dev`: Vite dev server (or `run-dev.bat` on Windows).
-- `npm run build`: `tsc --noEmit` + `vite build`. The output in `dist/` is a static site, served with `base: './'` so it works from a sub-path.
-- `npm test`: Vitest unit tests for core logic and theme pack loading.
-- `VERSION` holds the displayed version (`Update N`).
-- `scripts/make-chapter-themes.ps1` rebuilds the planned chapters' artwork and theme packs (chapters 2–16).
+- `npm run dev`: Vite 개발 서버 (Windows 에서는 `run-dev.bat`).
+- `npm run build`: `tsc --noEmit` + `vite build`. `dist/` 의 결과물은 정적 사이트이며, `base: './'` 로 빌드되어 하위 경로에서도 동작합니다.
+- `npm test`: core 로직과 테마 팩 로딩에 대한 Vitest 단위 테스트.
+- `VERSION` 에 표시 버전(`Update N`)이 있습니다.
+- `scripts/make-chapter-themes.ps1` 은 계획된 챕터(2–16)의 아트워크와 테마 팩을 다시 만듭니다.
 
-## 7. Design principles
+## 7. 설계 원칙
 
-- **Determinism first**: gameplay depends only on input samples and map data, never on frame rate,
-  so clears can be replayed and verified.
-- **Core stays DOM-free**, so the same rules can run on a server.
-- **Validate at the boundary**: every map, theme or pack from outside goes through `validate*` before use.
-- **Content is data**: chapters, levels, badges, screens and music are JSON and asset files, not code.
-- **Offline-capable**: accounts are an optional layer on top of local progress.
-- **Writes only through server functions**: the database rules (caps, merges, uniqueness) are
-  enforced in SQL, not trusted to the client.
+- **결정론 우선**: 게임 플레이는 입력 샘플과 맵 데이터에만 의존하고 프레임 레이트에는 의존하지 않으므로, 클리어를 재생하고 검증할 수 있습니다.
+- **Core 는 DOM 없이 유지**: 같은 규칙을 서버에서도 실행할 수 있습니다.
+- **경계에서 검증**: 외부에서 들어오는 모든 맵, 테마, 팩은 사용 전에 `validate*` 를 거칩니다.
+- **콘텐츠는 데이터**: 챕터, 레벨, 배지, 화면, 음악은 코드가 아니라 JSON 과 에셋 파일입니다.
+- **오프라인 가능**: 계정은 로컬 진행 위에 얹은 선택적 계층입니다.
+- **쓰기는 서버 함수로만**: 데이터베이스 규칙(제한, 병합, 유일성)은 클라이언트를 믿지 않고 SQL 에서 강제합니다.

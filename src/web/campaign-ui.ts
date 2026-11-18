@@ -2,11 +2,13 @@ import { formatTime } from '../core/simulation';
 import { averageDifficulty, LEVELS_PER_THEME, levelSlots, maxStars, STARS_PER_THEME, themedLevel, type ThemeEntry } from '../core/theme-pack';
 import { formatTag } from '../core/account';
 import { fetchLeaderboard, type LeaderboardRow } from './auth/leaderboard';
+import { badgeFontCss } from './badge';
 import { renderTag } from './player-tag';
 import { levelKey, levelRecord, themeStars, themeUnlocked, totalStars } from './progress';
 import { customTheme, OFFICIAL_SLOTS, OFFICIAL_THEMES, setCustomTheme } from './theme-registry';
 import { readThemeZip } from './theme-zip';
-import { renderScreen, type ScreenData } from './screen-render';
+import type { LayoutElement, LevelButtonStyle } from '../core/screen-layout';
+import type { ScreenData } from './screen-render';
 
 /** Theme screen data, including progress and optional level details */
 export function screenData(t: ThemeEntry, level?: number): ScreenData {
@@ -77,16 +79,52 @@ function starRow(n: number): HTMLElement {
 
 const diff = (v: number) => `◆ ${v.toFixed(2)}`;
 
-/** Below this window width the level select's side panel stacks above the lattice (style.css) */
-const SIDE_BREAKPOINT = 900;
+/**
+ * Colors from a theme's designed level select screen (info.screens.select): its level grid buttons
+ * and Back button. The layout itself is always the standard one; only these colors carry over.
+ */
+function selectDesign(t: ThemeEntry): { button?: LevelButtonStyle; back?: LayoutElement; text?: string; background?: string } {
+  const select = t.info.screens?.select;
+  const els = select?.elements ?? [];
+  return {
+    button: els.find((e) => e.kind === 'levelGrid')?.button,
+    back: els.find((e) => e.kind === 'back'),
+    // The design's text color: its first colored text (e.g. the title)
+    text: els.find((e) => e.kind === 'text' && e.color)?.color,
+    background: select?.background.color,
+  };
+}
+
+/**
+ * Colors for the whole level select (side panel, leaderboard, stars tile) from a theme's designed
+ * level select; null for themes without one (they keep the default light look).
+ */
+function selectPalette(t: ThemeEntry): Record<string, string> | null {
+  const d = selectDesign(t);
+  if (!d.button && !d.text) return null;
+  const text = d.text ?? d.button?.numberColor ?? '#ffffff';
+  const surface = d.background ?? d.button?.fill ?? '#202020';
+  const accent = d.button?.clearedFill ?? d.button?.fill2 ?? text;
+  return {
+    '--th-text': text,
+    '--th-surface': surface,
+    '--th-accent': accent,
+    '--th-border': d.button?.border ?? text,
+  };
+}
+
+/** Level select: space between the side panel and the lattice, and how far it may scale up */
+const LEVELS_GAP = 28;
+const LEVELS_MAX_SCALE = 2;
 /** Wait this long on a hovered level before loading its leaderboard */
 const BOARD_DELAY_MS = 120;
 
-/** Lay out diamonds in zig-zag rows; returns the lattice size */
-function placeLattice(tiles: HTMLElement[], size: number, perRow: number, gap = 6): { w: number; h: number } {
+/** Lay out diamonds in zig-zag rows (null = an empty slot); returns the lattice size */
+function placeLattice(tiles: (HTMLElement | null)[], size: number, perRow: number, gap = 6): { w: number; h: number } {
   const step = (size * Math.SQRT2) / 2 + gap;
   const rowGap = step * 2.2;
   tiles.forEach((t, i) => {
+    if (!t) return;
     const row = Math.floor(i / perRow);
     const col = i % perRow;
     t.style.width = t.style.height = `${size}px`;
@@ -121,21 +159,53 @@ export class CampaignUI {
 
   /** Re-fit whichever screen is showing */
   fit(): void {
-    for (const root of [this.themesRoot, this.levelsRoot]) {
-      const wrap = root.querySelector<HTMLElement>('.lattice-wrap');
-      const lat = root.querySelector<HTMLElement>('.lattice');
-      if (!wrap || !lat || root.hidden) continue;
-      const w = lat.offsetWidth;
-      const h = lat.offsetHeight;
-      const room = root === this.themesRoot ? 250 : 170;
-      // Level select: the side panel takes its column when it sits beside the lattice
-      const side = root.querySelector<HTMLElement>('.dside');
-      const sideW = side && window.innerWidth > SIDE_BREAKPOINT ? side.offsetWidth + 28 : 0;
-      const fit = Math.min(1.2, (window.innerWidth * 0.94 - sideW) / w, (window.innerHeight - room) / h);
-      wrap.style.width = `${w * fit}px`;
-      wrap.style.height = `${h * fit}px`;
-      lat.style.transform = `scale(${fit})`;
-    }
+    this.fitLevels();
+    const root = this.themesRoot;
+    const wrap = root.querySelector<HTMLElement>('.lattice-wrap');
+    const lat = root.querySelector<HTMLElement>('.lattice');
+    if (!wrap || !lat || root.hidden) return;
+    const w = lat.offsetWidth;
+    const h = lat.offsetHeight;
+    const fit = Math.min(1.2, (window.innerWidth * 0.94) / w, (window.innerHeight - 250) / h);
+    wrap.style.width = `${w * fit}px`;
+    wrap.style.height = `${h * fit}px`;
+    lat.style.transform = `scale(${fit})`;
+  }
+
+  /**
+   * Level select: the side panel and the lattice are laid out at their natural size, then scaled as
+   * one piece to fill the window — up or down. Side by side or stacked, whichever ends up larger
+   * (stacked wins on tall, narrow windows).
+   */
+  private fitLevels(): void {
+    const root = this.levelsRoot;
+    const box = root.querySelector<HTMLElement>('.dlevels-fit');
+    const body = root.querySelector<HTMLElement>('.dlevels-body');
+    const side = root.querySelector<HTMLElement>('.dside');
+    const wrap = root.querySelector<HTMLElement>('.lattice-wrap');
+    const lat = root.querySelector<HTMLElement>('.lattice');
+    if (!box || !body || !side || !wrap || !lat || root.hidden) return;
+    const lw = lat.offsetWidth;
+    const lh = lat.offsetHeight;
+    wrap.style.width = `${lw}px`;
+    wrap.style.height = `${lh}px`;
+    lat.style.transform = '';
+    const sw = side.offsetWidth;
+    const sh = side.offsetHeight;
+    const availW = Math.max(200, root.clientWidth - 32);
+    const availH = Math.max(200, window.innerHeight - 36);
+    const scaleFor = (w: number, h: number) => Math.min(LEVELS_MAX_SCALE, availW / w, availH / h);
+    const row = { w: sw + LEVELS_GAP + lw, h: Math.max(sh, lh) };
+    const col = { w: Math.max(sw, lw), h: sh + LEVELS_GAP + lh };
+    const stacked = scaleFor(col.w, col.h) > scaleFor(row.w, row.h);
+    const size = stacked ? col : row;
+    const scale = scaleFor(size.w, size.h);
+    body.classList.toggle('stacked', stacked);
+    body.style.width = `${size.w}px`;
+    body.style.height = `${size.h}px`;
+    body.style.transform = `scale(${scale})`;
+    box.style.width = `${size.w * scale}px`;
+    box.style.height = `${size.h * scale}px`;
   }
 
   private async loadZip(): Promise<void> {
@@ -279,27 +349,40 @@ export class CampaignUI {
 
   renderLevels(t: ThemeEntry): void {
     this.theme = t;
-    // A theme with its own level select screen
-    const custom = t.info.screens?.select;
-    this.levelsRoot.classList.toggle('custom-screen', !!custom);
-    if (custom) {
-      const host = el('div', 'se-full');
-      this.levelsRoot.replaceChildren(host);
-      renderScreen(host, custom, screenData(t), { onLevel: (i) => this.onPlay(t, i), onBack: () => this.onBack('levels') });
-      requestAnimationFrame(() => host.querySelector<HTMLElement>('.se-level:not(:disabled)')?.focus({ preventScroll: true }));
-      return;
-    }
+    // Every theme uses this layout; a theme's own designed level select screen
+    // (info.screens.select) isn't used here, only its background (backdrop.ts)
     const side = this.sidePanel(t);
     const lattice = el('div', 'lattice');
     lattice.style.setProperty('--c1', t.info.colors[0]);
     lattice.style.setProperty('--c2', t.info.colors[1]);
+    const design = selectDesign(t);
+    if (design.button) {
+      const b = design.button;
+      lattice.classList.add('lv-designed');
+      lattice.style.setProperty('--lv-fill', b.fill);
+      lattice.style.setProperty('--lv-fill2', b.fill2 ?? b.fill);
+      lattice.style.setProperty('--lv-cleared', b.clearedFill ?? b.fill);
+      lattice.style.setProperty('--lv-border', b.border);
+      lattice.style.setProperty('--lv-border-w', `${b.borderWidth}px`);
+      lattice.style.setProperty('--lv-number', b.numberColor);
+      if (b.numberGlow) lattice.style.setProperty('--lv-glow', b.numberGlow);
+    }
+    if (design.back) {
+      const k = design.back;
+      lattice.classList.add('bk-designed');
+      if (k.fill) lattice.style.setProperty('--bk-fill', k.fill);
+      if (k.border) lattice.style.setProperty('--bk-border', k.border);
+      lattice.style.setProperty('--bk-border-w', `${k.borderWidth ?? 0}px`);
+      if (k.color) lattice.style.setProperty('--bk-color', k.color);
+    }
     let first: HTMLButtonElement | null = null;
     const tiles: HTMLElement[] = [];
     const slots = levelSlots(t);
     for (let i = 0; i < slots; i++) {
       const map = themedLevel(t, i);
       const rec = levelRecord(t, i);
-      const b = el('button', `dtile dlevel${map ? '' : ' soon'}${rec ? ' cleared' : ''}`);
+      // .alt: every other button (the design's second fill)
+      const b = el('button', `dtile dlevel${map ? '' : ' soon'}${rec ? ' cleared' : ''}${i % 2 ? ' alt' : ''}`);
       b.type = 'button';
       const parts: (HTMLElement | string)[] = [el('strong', 'dlevel-no', String(i + 1))];
       if (map) {
@@ -317,23 +400,56 @@ export class CampaignUI {
       b.append(inner(...parts));
       tiles.push(b);
     }
-    lattice.append(...tiles);
     // Long custom packs: more zig-zag rows (the screen scrolls past what fits)
-    const size = placeLattice(tiles, 92, slots > 42 ? 9 : 7);
+    const perRow = slots > 42 ? 9 : 7;
+    // One more row under the levels: total stars below the 3rd column (level 17 of 21), Back below
+    // the 5th (level 19). Both stay in the upper half of the zig-zag, so they interlock with the row above.
+    const extra = Math.ceil(slots / perRow) * perRow;
+    const layout: (HTMLElement | null)[] = Array.from({ length: extra + perRow }, (_, i) => tiles[i] ?? null);
+    layout[extra + 2] = this.starsTile();
+    layout[extra + 4] = this.backTile();
+    lattice.append(...layout.filter((x): x is HTMLElement => !!x));
+    const size = placeLattice(layout, 92, perRow);
     lattice.style.width = `${size.w}px`;
     lattice.style.height = `${size.h}px`;
     const wrap = el('div', 'lattice-wrap');
     wrap.append(lattice);
     const body = el('div', 'dlevels-body');
     body.append(side.panel, wrap);
+    // The theme's level number font (its badge font) for the theme title and the level numbers
+    body.style.setProperty('--level-font', badgeFontCss(t.info.style.badge.font));
+    // The whole screen follows the theme's designed colors (style.css .th-designed)
+    const palette = selectPalette(t);
+    body.classList.toggle('th-designed', !!palette);
+    for (const [k, v] of Object.entries(palette ?? {})) body.style.setProperty(k, v);
+    const fitBox = el('div', 'dlevels-fit');
+    fitBox.append(body);
     const firstPlayable = Array.from({ length: slots }, (_, i) => i).find((i) => themedLevel(t, i));
     if (firstPlayable !== undefined) side.show(firstPlayable);
-    // Stars and difficulty live in the side panel's theme card
-    this.levelsRoot.replaceChildren(this.header(t.info.name, '', () => this.onBack('levels')), body);
+    // No header: total stars and Back are diamonds in the lattice
+    this.levelsRoot.replaceChildren(fitBox);
     requestAnimationFrame(() => {
       this.fit();
       first?.focus({ preventScroll: true });
     });
+  }
+
+  /** Level select: total stars collected in the official worlds, as a lattice diamond */
+  private starsTile(): HTMLElement {
+    const d = el('div', 'dtile dlevel dlevel-stars');
+    d.title = 'Stars collected in the official worlds';
+    d.append(inner(el('span', 'dtotal-star', '★'), el('strong', 'dlevel-total', String(totalStars()))));
+    return d;
+  }
+
+  /** Level select: back to the chapter select, as a lattice diamond */
+  private backTile(): HTMLElement {
+    const b = el('button', 'dtile dlevel dlevel-back');
+    b.type = 'button';
+    b.title = 'Back (Esc)';
+    b.append(inner(el('strong', '', 'Back')));
+    b.addEventListener('click', () => this.onBack('levels'));
+    return b;
   }
 
   /**
@@ -359,7 +475,7 @@ export class CampaignUI {
     const board = el('section', 'dside-card dside-board');
     board.setAttribute('aria-live', 'polite');
     const head = el('div', 'dside-board-head');
-    const title = el('h4', 'dside-board-title', 'Leaderboard');
+    const title = el('h4', 'dside-board-title', '');
     const sub = el('small', 'dside-board-sub', '');
     head.append(title, sub);
     const content = el('div', 'dside-board-body');
@@ -374,7 +490,9 @@ export class CampaignUI {
       if (i === shown) return;
       shown = i;
       const map = themedLevel(t, i);
-      title.textContent = `Leaderboard · Level ${i + 1}`;
+      // 'Level 1-01' (chapter-level); custom packs have no chapter number
+      const no = String(i + 1).padStart(2, '0');
+      title.textContent = chapter >= 0 ? `Level ${chapter + 1}-${no}` : `Level ${no}`;
       sub.textContent = map?.title ?? '';
       window.clearTimeout(timer);
       const run = ++token;
@@ -386,9 +504,11 @@ export class CampaignUI {
           if (!r.ok) {
             return note(r.reason === 'unconfigured'
               ? 'Leaderboards need accounts, which are not set up on this server.'
-              : "Couldn't load the leaderboard. Check your connection.");
+              : r.reason === 'missing'
+                ? 'Leaderboards are not set up on the server yet.'
+                : "Couldn't load the leaderboard. Check your connection.");
           }
-          if (!r.rows.length) return note('No verified records yet. Clears appear here once they are verified.');
+          if (!r.rows.length) return note('No records yet. Be the first to clear it!');
           content.replaceChildren(this.boardList(r.rows));
         });
       }, BOARD_DELAY_MS);

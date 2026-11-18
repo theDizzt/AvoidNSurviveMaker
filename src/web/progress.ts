@@ -1,5 +1,5 @@
 import { starsFor } from '../core/level';
-import { STARS_PER_LEVEL, type ThemeEntry } from '../core/theme-pack';
+import { filledSlots, STARS_PER_LEVEL, type ThemeEntry } from '../core/theme-pack';
 import type { MapData } from '../core/types';
 import { OFFICIAL_THEMES } from './theme-registry';
 
@@ -100,7 +100,7 @@ export function mergeRecords(incoming: Record<string, LevelRecord>): number {
 }
 
 export function themeStars(theme: ThemeEntry): number {
-  return theme.levels.reduce((s, _, i) => s + (records[key(theme, i)]?.stars ?? 0), 0);
+  return filledSlots(theme).reduce((s, i) => s + (records[key(theme, i)]?.stars ?? 0), 0);
 }
 
 /** Stars over the official themes (what unlocks worlds) */
