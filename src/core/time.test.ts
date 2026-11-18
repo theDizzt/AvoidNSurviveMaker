@@ -3,12 +3,18 @@ import { displayTime, recordTime } from './time';
 import { formatTime } from './simulation';
 
 describe('leaderboard millisecond precision', () => {
-  it('shows the same time before and after a server round trip', () => {
-    for (const ms of [7918.49, 7918.5, 7918.99, 999.999]) {
-      expect(formatTime(ms)).toBe(formatTime(recordTime(ms)));
-      expect(displayTime(ms)).toBe(recordTime(ms));
-    }
-    expect(formatTime(7918.7)).toBe('7.919');
+  it.each([
+    [7918.49, 7918, '7.918'],
+    [7918.5, 7918, '7.918'],
+    [7918.99, 7918, '7.918'],
+    [999.999, 999, '0.999'],
+    [1000, 1000, '1.000'],
+    [(690 / 700) * 1000, 985, '0.985'],
+  ])('truncates %s ms to %s ms and displays %s', (raw, stored, text) => {
+    expect(recordTime(raw)).toBe(stored);
+    expect(displayTime(raw)).toBe(stored);
+    expect(formatTime(raw)).toBe(text);
+    expect(formatTime(recordTime(raw))).toBe(text);
   });
   it('preserves zero for the ready timer and the server minimum for clears', () => {
     expect(displayTime(0)).toBe(0);

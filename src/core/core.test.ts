@@ -137,6 +137,7 @@ describe('Simulation', () => {
     sim.feed(1000, 710, 10);
     expect(sim.status).toBe('cleared');
     expect(sim.endTime).toBeCloseTo((690 / 700) * 1000, 9);
+    // Preserve exact collision timing; discard fractional ms for display and records.
     expect(formatTime(sim.endTime)).toBe('0.985');
   });
 

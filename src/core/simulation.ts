@@ -1,4 +1,5 @@
 import { pointInPoly, pointInRect, segmentPolyCrossings, segmentRectEntry } from './geometry';
+import { displayTime } from './time';
 import { compileMap, compileObject, compileZone, toLocal, toWorld, transformAt, type CompiledObject, type Transform } from './object';
 import { autoDoorOpen, doorPanels, initialChannels } from './switches';
 import { BeamCaster, beamHit, type Beam } from './laser';
@@ -790,9 +791,9 @@ export function runReplay(map: MapData, replay: Replay): Simulation {
   return sim;
 }
 
-/** ms → "12.345" (1 ms resolution, rounded like server records) */
+/** ms → "12.345" (fractional milliseconds discarded, like saved records) */
 export function formatTime(ms: number): string {
-  return (Math.round(Math.max(0, ms)) / 1000).toFixed(3);
+  return (displayTime(ms) / 1000).toFixed(3);
 }
 
 /** ms → "12.345s": the one way a run time is shown, in every language */

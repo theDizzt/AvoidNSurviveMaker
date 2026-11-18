@@ -14,8 +14,8 @@ export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Millisecond precision shared by the leaderboard, saved records and result UI. */
-export const recordTime = (ms: number): number => Math.max(1, Math.round(ms));
+/** Discard fractional milliseconds; the server requires clear records to be at least 1 ms. */
+export const recordTime = (ms: number): number => Math.max(1, displayTime(ms));
 
 /** Ready/running timers may display zero; completed clears use recordTime. */
-export const displayTime = (ms: number): number => Math.max(0, Math.round(ms));
+export const displayTime = (ms: number): number => Math.max(0, Math.floor(ms));
