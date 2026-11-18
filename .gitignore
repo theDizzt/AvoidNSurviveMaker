@@ -6,3 +6,6 @@ dist
 .env.*.local
 /memo
 /temp
+.vercel
+.env*
+!.env.example
