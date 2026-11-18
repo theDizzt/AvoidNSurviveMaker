@@ -7,6 +7,7 @@ import { isLibraryFont } from '../core/font-catalog';
 import { formatSeconds } from '../core/simulation';
 import { ensureLibraryFont, libraryFontCss } from './library-fonts';
 import { STARS_PER_LEVEL, type ThemeInfo } from '../core/theme-pack';
+import type { TextEffects } from '../core/text-effects';
 import { FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
 
 /**
@@ -131,6 +132,17 @@ function applyText(node: HTMLElement, e: LayoutElement, scope: string, defaults:
   node.style.textAlign = e.align ?? 'center';
   node.style.justifyContent = e.align === 'left' ? 'flex-start' : e.align === 'right' ? 'flex-end' : 'center';
   textEffects(node.querySelector<HTMLElement>('.se-label') ?? node, e, e.size ?? defaults.size, e.color ?? defaults.color);
+}
+
+/** Text effects on any element (e.g. the level select's numbers and titles); `color` is the text color */
+export function applyTextFx(node: HTMLElement, fx: TextEffects | undefined, size: number, color: string): void {
+  if (!fx) return;
+  textEffects(node, {
+    id: '', kind: 'text', x: 0, y: 0, w: 0, h: 0,
+    stroke: fx.outline, strokeWidth: fx.outline ? fx.outlineWidth : undefined,
+    shadow: fx.shadow ? true : undefined, shadowColor: fx.shadow,
+    glow: fx.glow, gradient: fx.gradient, depth: fx.depth, depthColor: fx.depthColor,
+  }, size, color);
 }
 
 /**

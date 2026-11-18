@@ -480,6 +480,8 @@
   "te.numberFont": "数字字体",
   "te.titleFont": "标题字体",
   "te.sameAsNumber": "与数字相同",
+  "te.numberEffects": "数字文字效果",
+  "te.titleEffects": "标题文字效果",
   "te.design": "Design",
   "te.numberDigits": "Number digits",
   "te.caption": "Caption",
@@ -598,6 +600,7 @@
   "ed.pressedBy": "Pressed by",
   "ed.startsOn": "Starts ON",
   "ed.canBeSwitchedBack": "Can be switched back",
+  "ed.revertWhenOff": "关闭时，移动的物体回到原位",
   "ed.spikeStake": "Spike stake",
   "ed.direction2": "Direction (°)",
   "ed.reach": "Reach",
@@ -941,5 +944,13 @@
   "te.translationHint": "Shown instead of the text above while the game is in this language. Leave a field empty to use the text above.",
   "preload.zhMainFont": "Chinese font",
   "preload.zhTitleFont": "Chinese title font",
-  "fontPicker.chinese": "Chinese"
+  "fontPicker.chinese": "Chinese",
+  "editor.zoomIn": "放大 (+)",
+  "editor.zoomOut": "缩小 (−)",
+  "editor.zoomReset": "显示整个地图 (0)",
+  "ed.scWheelZoom": "以鼠标位置为中心缩放",
+  "ed.scZoomInOut": "放大 / 缩小",
+  "ed.scZoomReset": "显示整个地图",
+  "ed.scPan": "移动视图",
+  "ed.minimapHint": "点击或拖动以移动视图"
 }

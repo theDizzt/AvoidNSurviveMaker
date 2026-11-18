@@ -163,6 +163,7 @@ function trigger(v: unknown, name: string): Trigger {
   if (o.click === true && (kind === 'switch' || kind === 'timer')) t.click = true;
   if (o.initial === true && (kind === 'switch' || kind === 'hold')) t.initial = true;
   if (o.once === true && kind !== 'startZone' && kind !== 'stopZone') t.once = true;
+  if (o.revert === true) t.revert = true;
   if (kind === 'timer' || kind === 'hold') t.duration = num(o.duration, `${name}.duration`, 50, LIMITS.maxDelay);
   return t;
 }

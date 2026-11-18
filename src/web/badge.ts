@@ -2,7 +2,7 @@ import { DEFAULT_BADGE, type BadgeFont, type BadgeStyle } from '../core/theme-pa
 import type { MapData } from '../core/types';
 import { isLibraryFont } from '../core/font-catalog';
 import { libraryFontCss } from './library-fonts';
-import { FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
+import { fillTextFx, FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
 
 /**
  * The in-game level badge at the top-left: the level number in a theme-specific design, with
@@ -61,14 +61,19 @@ function bigNumber(ctx: CanvasRenderingContext2D, text: string, x: number, y: nu
   }
   ctx.textAlign = opts.align ?? 'center';
   ctx.textBaseline = 'middle';
-  if (opts.outline) {
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = Math.max(3, s * 0.12);
-    ctx.strokeStyle = opts.outline;
-    ctx.strokeText(text, x, y);
-  }
-  ctx.fillStyle = b.numberColor;
-  ctx.fillText(text, x, y);
+  // The theme's own effects; its outline replaces the design's
+  const fx = b.numberFx;
+  fillTextFx(ctx, text, x, y, s, {
+    ...fx,
+    color: b.numberColor,
+    outline: fx?.outline ?? opts.outline,
+    outlineWidth: fx?.outline ? fx.outlineWidth : Math.max(3, s * 0.12) / 2,
+  });
+}
+
+/** A level title line with the theme's title effects (textBaseline must be 'middle') */
+function titleText(ctx: CanvasRenderingContext2D, b: BadgeStyle, text: string, x: number, y: number, size: number, maxWidth?: number): void {
+  fillTextFx(ctx, text, x, y, size, { ...b.titleFx, color: b.titleColor }, maxWidth);
 }
 
 /** Caption + title to the right of the badge graphic, on a soft plate so it reads on any map */
@@ -97,9 +102,8 @@ function titleBlock(ctx: CanvasRenderingContext2D, map: MapData, b: BadgeStyle, 
     ctx.globalAlpha = 1;
   }
   if (title) {
-    ctx.fillStyle = b.titleColor;
     ctx.font = `700 22px ${titleFontCss(b, FONTS[b.font === 'timer' ? 'title' : b.font])}`;
-    ctx.fillText(title, x + 2, cy + (cap ? 8 : 0));
+    titleText(ctx, b, title, x + 2, cy + (cap ? 8 : 0), 22);
   }
   return x + w;
 }
@@ -287,11 +291,10 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
         ctx.save();
         ctx.translate(110, 76);
         ctx.rotate(-0.24);
-        ctx.fillStyle = b.titleColor;
         ctx.font = `800 17px ${titleFontCss(b, FONTS[b.font])}`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(map.title ?? map.name, 0, 0, 140);
+        titleText(ctx, b, map.title ?? map.name, 0, 0, 17, 140);
         ctx.restore();
       }
       bottom = 130;
@@ -380,9 +383,8 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
         ctx.globalAlpha = 1;
       }
       if (title) {
-        ctx.fillStyle = b.titleColor;
         ctx.font = `600 15px ${titleFontCss(b, FONT_MAIN)}`;
-        ctx.fillText(title, 28 + nw + gap, base + (b.caption ? 7 : 2));
+        titleText(ctx, b, title, 28 + nw + gap, base + (b.caption ? 7 : 2), 15);
       }
       bottom = 12 + h;
     }

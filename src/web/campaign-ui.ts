@@ -10,7 +10,7 @@ import { customTheme, OFFICIAL_SLOTS, OFFICIAL_THEMES, setCustomTheme } from './
 import { chapterLevelCode } from '../core/level';
 import { readThemeZip } from './theme-zip';
 import type { LayoutElement, LevelButtonStyle } from '../core/screen-layout';
-import type { ScreenData } from './screen-render';
+import { applyTextFx, type ScreenData } from './screen-render';
 
 /** Theme screen data, including progress and optional level details */
 export function screenData(t: ThemeEntry, level?: number): ScreenData {
@@ -353,7 +353,10 @@ export class CampaignUI {
       // .alt: every other button (the design's second fill)
       const b = el('button', `dtile dlevel${map ? '' : ' soon'}${rec ? ' cleared' : ''}${i % 2 ? ' alt' : ''}`);
       b.type = 'button';
-      const parts: (HTMLElement | string)[] = [el('strong', 'dlevel-no', String(i + 1))];
+      const no = el('strong', 'dlevel-no', String(i + 1));
+      // The theme's level number effects (24px: .dlevel-no)
+      applyTextFx(no, t.info.style.badge.numberFx, 24, design.button?.numberColor ?? t.info.style.badge.numberColor);
+      const parts: (HTMLElement | string)[] = [no];
       if (map) {
         parts.push(starRow(rec?.stars ?? 0), el('small', 'dlevel-diff', diff(map.difficulty ?? 1)));
         if (rec) parts.push(el('small', 'dlevel-best', formatSeconds(rec.best)));
@@ -449,6 +452,8 @@ export class CampaignUI {
     const head = el('div', 'dside-board-head');
     const title = el('h4', 'dside-board-title', '');
     const sub = el('small', 'dside-board-sub', '');
+    // The level title wears the theme's title effects (12px: .dside-board-sub)
+    applyTextFx(sub, t.info.style.badge.titleFx, 12, t.info.style.badge.titleColor);
     head.append(title, sub);
     const content = el('div', 'dside-board-body');
     board.append(head, content);

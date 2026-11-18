@@ -277,9 +277,27 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   font-size: 13px;
   transition: opacity 0.2s ease;
 }
+/* Back button on the ready screen (bottom-left, clear of the level badge and the stopwatch) */
+.play-back {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2;
+  padding: 8px 18px 8px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: opacity 0.2s ease;
+}
+.play-back::before { content: '←'; margin-right: 6px; }
 /* While a run is in progress: get out of the way (no clicks, no covering the map) */
 .play-view.running .play-hud,
-.play-view.running .play-debug { opacity: 0; pointer-events: none; }
+.play-view.running .play-debug,
+.play-view.running .play-back { opacity: 0; pointer-events: none; }
 
 /* Glass panels */
 .panel, .palette, .debug {
@@ -334,6 +352,24 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 }
 .editor-bar button { padding: 5px 12px; border-radius: 999px; }
 .bar-sep { width: 1px; height: 22px; background: var(--border-strong); }
+.editor-bar .zoom-btn { padding: 5px 10px; min-width: 32px; font-weight: 700; }
+.editor-bar .zoom-level { padding: 5px 8px; min-width: 58px; font-variant-numeric: tabular-nums; }
+/* Viewport map while zoomed in: the whole map with the visible area framed (click or drag to move).
+   Bottom center above the hint, clear of the side panels */
+.editor-minimap {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  z-index: 3;
+  border-radius: 8px;
+  border: 2px solid #fff;
+  box-shadow: 0 4px 18px rgba(20, 30, 50, 0.35);
+  background: #fff;
+  cursor: pointer;
+  touch-action: none;
+}
+.editor-minimap[hidden] { display: none; }
 /* Floating panels: drag by the title bar, collapse with the toggle */
 .editor-float {
   position: absolute;
@@ -985,18 +1021,18 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 .dside-note { margin: 8px 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .dboard { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .dboard-row {
-  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; align-items: center; gap: 8px;
-  padding: 6px 8px; border-radius: 10px; font-size: 13px;
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 10px; font-size: 12px;
 }
 .dboard-row:nth-child(odd) { background: rgba(58, 159, 240, 0.06); }
 .dboard-row.me { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
-.dboard-place { font-family: var(--font-title); font-size: 15px; text-align: center; color: var(--muted); }
+.dboard-place { font-family: var(--font-title); font-size: 13px; text-align: center; color: var(--muted); }
 .dboard-row.top1 .dboard-place { color: #e0a100; }
 .dboard-row.top2 .dboard-place { color: #8d99a8; }
 .dboard-row.top3 .dboard-place { color: #c07a3a; }
 .dboard-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .dboard-time { font-variant-numeric: tabular-nums; font-weight: 700; }
-.dboard .dstars { font-size: 11px; }
+.dboard .dstars { font-size: 10px; }
 .dboard-gap { text-align: center; color: var(--muted); line-height: 1; }
 
 /* Themes with a designed level select: the panel, leaderboard and stars tile take its colors */
@@ -1203,6 +1239,11 @@ button.se-back:hover, button.se-start:hover, button.se-back:focus-visible, butto
 .sd-help dt { font-family: Consolas, monospace; color: var(--accent); }
 .sd-help dd { margin: 0; color: var(--muted); }
 .te-fonts { display: flex; flex-direction: column; gap: 6px; }
+/* Text effect rows in the level badge section: checkbox, color, size */
+.te-fx-head { margin: 6px 0 0; font-weight: 700; font-size: 13px; }
+.te-fx-row { display: flex; align-items: center; gap: 6px; }
+.te-fx-row input[type='number'] { width: 64px; }
+.te-fx-row input:disabled { opacity: 0.4; }
 .te-font-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: center; }
 .te-font-sample { font-size: 20px; }
 

@@ -1,0 +1,313 @@
+{
+  "v": 2,
+  "name": "workshop20",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 240,
+    "y": 480,
+    "w": 120,
+    "h": 120
+  },
+  "goal": {
+    "x": 1080,
+    "y": 480,
+    "w": 120,
+    "h": 120
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1200,
+        "cy": 540,
+        "rx": 450,
+        "ry": 450
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 340,
+        "y": 510,
+        "w": 420,
+        "h": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 840,
+        "y": 600,
+        "w": 240,
+        "h": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 900,
+        "y": 420,
+        "w": 360,
+        "h": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1020,
+        "y": 480,
+        "w": 60,
+        "h": 240
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 900,
+        "y": 300,
+        "w": 60,
+        "h": 180
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1020,
+        "y": 240,
+        "w": 360,
+        "h": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1140,
+        "y": 80,
+        "w": 60,
+        "h": 280
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1320,
+        "y": 360,
+        "w": 360,
+        "h": 60
+      }
+    },
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": 940,
+        "y": 520,
+        "w": 40,
+        "h": 40
+      },
+      "trigger": {
+        "kind": "switch",
+        "color": 0,
+        "once": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1200,
+        "y": 420,
+        "w": 60,
+        "h": 480
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1200,
+        "y": 600,
+        "w": 360,
+        "h": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1500,
+        "y": 480,
+        "w": 60,
+        "h": 180
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1380,
+        "y": 360,
+        "w": 60,
+        "h": 180
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1320,
+        "y": 720,
+        "w": 360,
+        "h": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1020,
+        "y": 840,
+        "w": 360,
+        "h": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 900,
+        "y": 720,
+        "w": 60,
+        "h": 300
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 1199.9962350499577,
+        "cy": 539.9997646903148,
+        "r": 450,
+        "start": 165,
+        "sweep": 270
+      },
+      "rotation": {
+        "pivot": {
+          "x": 1199.9962350499577,
+          "y": 539.9997646903148
+        },
+        "speed": 60,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1080,
+        "y": 630,
+        "w": 120,
+        "h": 30
+      },
+      "link": {
+        "color": 0,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1080,
+        "y": 660,
+        "w": 120,
+        "h": 30
+      },
+      "link": {
+        "color": 3,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": 1240,
+        "y": 160,
+        "w": 40,
+        "h": 40
+      },
+      "trigger": {
+        "kind": "switch",
+        "color": 3,
+        "once": true
+      }
+    },
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": 820,
+        "y": 700,
+        "w": 40,
+        "h": 40
+      },
+      "trigger": {
+        "kind": "switch",
+        "color": 5,
+        "once": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1080,
+        "y": 690,
+        "w": 120,
+        "h": 30
+      },
+      "link": {
+        "color": 5,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 720,
+        "y": 600,
+        "w": 120,
+        "h": 60
+      },
+      "link": {
+        "color": 5,
+        "action": "remove"
+      }
+    }
+  ],
+  "title": "Radar",
+  "level": 20,
+  "difficulty": 3,
+  "stars": {
+    "three": 7200,
+    "two": 9200,
+    "one": 13200
+  }
+}

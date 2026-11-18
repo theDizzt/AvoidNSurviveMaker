@@ -94,6 +94,9 @@ const editor = new Editor({
   undo: $<HTMLButtonElement>('btn-undo'),
   redo: $<HTMLButtonElement>('btn-redo'),
   shortcuts: $<HTMLButtonElement>('btn-shortcuts'),
+  zoomIn: $<HTMLButtonElement>('btn-zoom-in'),
+  zoomOut: $<HTMLButtonElement>('btn-zoom-out'),
+  zoomReset: $<HTMLButtonElement>('btn-zoom-reset'),
   name: $<HTMLInputElement>('map-name'),
   author: $<HTMLInputElement>('map-author'),
   size: $<HTMLSelectElement>('map-size'),
@@ -467,6 +470,7 @@ nextLevelBtn.addEventListener('click', () => {
 $('btn-editor-menu').addEventListener('click', () => show('menu'));
 backToEditor.addEventListener('click', showEditor);
 $('btn-play-menu').addEventListener('click', () => leavePlay());
+$('btn-play-back').addEventListener('click', () => leavePlay());
 
 // Fullscreen: on a 16:9 monitor the game then fills the entire screen
 const fullscreenButtons = [...document.querySelectorAll<HTMLButtonElement>('.btn-fullscreen')];

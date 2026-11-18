@@ -8,6 +8,7 @@ import {
   type BadgeFont, type BadgeKind, type BadgeStyle, type ThemeEntry, type ThemeInfo, type ThemeText,
 } from '../core/theme-pack';
 import type { MapData } from '../core/types';
+import type { TextEffects } from '../core/text-effects';
 import { createEmptyMap, validateMap, validatePack } from '../core/validate';
 import { badgeImage, drawLevelBadge } from './badge';
 import { beginFrame, drawMap, fitCanvas } from './render';
@@ -350,6 +351,61 @@ export class ThemeEditor {
     return input;
   }
 
+  /** Text effect rows (outline, shadow, neon, gradient, 3D): a checkbox, a color and maybe a size each */
+  private fxFields(current: TextEffects | undefined, apply: (fx: TextEffects | undefined) => void): HTMLElement[] {
+    const fx: TextEffects = { ...current };
+    type ColorKey = 'outline' | 'shadow' | 'glow' | 'gradient' | 'depthColor';
+    type SizeKey = 'outlineWidth' | 'depth';
+    const row = (label: string, key: ColorKey, def: string, size?: { key: SizeKey; def: number; min: number; max: number; step: number }) => {
+      const on = el('input');
+      on.type = 'checkbox';
+      on.checked = key === 'depthColor' ? !!fx.depth : !!fx[key];
+      const c = el('input');
+      c.type = 'color';
+      c.value = fx[key] ?? def;
+      const n = size ? el('input') : null;
+      if (n && size) {
+        n.type = 'number';
+        n.min = String(size.min);
+        n.max = String(size.max);
+        n.step = String(size.step);
+        n.value = String(fx[size.key] ?? size.def);
+      }
+      const sync = () => {
+        if (on.checked) {
+          fx[key] = c.value.toLowerCase();
+          if (n && size) {
+            const v = Number(n.value);
+            const clamped = Math.min(size.max, Math.max(size.min, Number.isFinite(v) ? v : size.def));
+            fx[size.key] = size.key === 'depth' ? Math.round(clamped) : clamped;
+          }
+        } else {
+          delete fx[key];
+          if (size) delete fx[size.key];
+        }
+        c.disabled = !on.checked;
+        if (n) n.disabled = !on.checked;
+        apply(Object.keys(fx).length ? { ...fx } : undefined);
+        this.save();
+      };
+      c.disabled = !on.checked;
+      if (n) n.disabled = !on.checked;
+      on.addEventListener('change', sync);
+      c.addEventListener('input', () => on.checked && sync());
+      n?.addEventListener('change', () => on.checked && sync());
+      const wrap = el('div', 'te-fx-row');
+      wrap.append(on, c, ...(n ? [n] : []));
+      return this.field(label, wrap);
+    };
+    return [
+      row(tr('common.outline'), 'outline', '#1a2233', { key: 'outlineWidth', def: 2, min: 0.5, max: 20, step: 0.5 }),
+      row(tr('fx.shadow'), 'shadow', '#000000'),
+      row(tr('fx.glow'), 'glow', '#3ae8ff'),
+      row(tr('fx.gradient'), 'gradient', '#ff7a3a'),
+      row(tr('fx.depth'), 'depthColor', '#1a2233', { key: 'depth', def: 4, min: 1, max: 30, step: 1 }),
+    ];
+  }
+
   private color(value: string, apply: (v: string) => void): HTMLInputElement {
     const input = el('input');
     input.type = 'color';
@@ -594,6 +650,16 @@ export class ThemeEditor {
         this.field(tr('te.secondColor'), this.color(badge.secondary, (v) => b({ secondary: v }))),
         this.field(tr('common.numberColor'), this.color(badge.numberColor, (v) => b({ numberColor: v }))),
         this.field(tr('te.titleColor'), this.color(badge.titleColor, (v) => b({ titleColor: v }))),
+        el('p', 'field wide te-fx-head', tr('te.numberEffects')),
+        ...this.fxFields(badge.numberFx, (fx) => {
+          if (fx) badge.numberFx = fx;
+          else delete badge.numberFx;
+        }),
+        el('p', 'field wide te-fx-head', tr('te.titleEffects')),
+        ...this.fxFields(badge.titleFx, (fx) => {
+          if (fx) badge.titleFx = fx;
+          else delete badge.titleFx;
+        }),
         toggle,
         this.field(tr('te.badgeImageCustomImageDesign'), this.image(badge.image, 'badge', (n) => {
           if (n) badge.image = n;

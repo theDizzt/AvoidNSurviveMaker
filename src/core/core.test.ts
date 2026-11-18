@@ -357,6 +357,41 @@ describe('Simulation', () => {
   });
 });
 
+describe('switch revert', () => {
+  // A timer switch ON for 200 ms; a wall linked to it moves only while ON
+  const run = (revert: boolean) => {
+    const map = validateMap(baseMap([
+      { role: 'trigger', shape: { type: 'rect', x: 40, y: 0, w: 20, h: 20 }, trigger: { kind: 'timer', color: 1, duration: 200, ...(revert ? { revert: true } : {}) } },
+      wall({ x: 400, y: 400, w: 20, h: 20 }, { motion: motion({ points: [{ x: 900, y: 410 }], repeat: 'once' }), link: { color: 1, action: 'start' } }),
+    ]));
+    const sim = new Simulation(map);
+    sim.start(10, 10);
+    const at: Record<number, number> = {};
+    for (const [t, x] of [[10, 50], [20, 100], [150, 100], [210, 100], [300, 100], [600, 100]] as const) {
+      sim.feed(t, x, 10);
+      at[t] = sim.clock[1];
+    }
+    expect(sim.status).toBe('playing');
+    return at;
+  };
+  it('stopped objects stay put without it', () => {
+    const at = run(false);
+    expect(at[150]).toBeGreaterThan(0);
+    expect(at[600]).toBeCloseTo(at[300], 6);
+    expect(at[600]).toBeGreaterThan(150);
+  });
+  it('objects that move only while ON rewind to their start once OFF', () => {
+    const at = run(true);
+    expect(at[210]).toBeGreaterThan(150);
+    expect(at[300]).toBeLessThan(at[210]);
+    expect(at[600]).toBe(0);
+  });
+  it('the option survives validation', () => {
+    const t = { kind: 'switch', color: 2, revert: true } as const;
+    expect(validateMap(baseMap([{ role: 'trigger', shape: { type: 'rect', x: 40, y: 0, w: 20, h: 20 }, trigger: t }])).objects[0].trigger?.revert).toBe(true);
+  });
+});
+
 describe('validateMap', () => {
   it('all built-in levels are valid and playable', () => {
     // Warnings are advisory (a level may block GOAL on purpose), so only errors fail here

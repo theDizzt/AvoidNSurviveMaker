@@ -480,6 +480,8 @@
   "te.numberFont": "Number font",
   "te.titleFont": "Title font",
   "te.sameAsNumber": "Same as the number",
+  "te.numberEffects": "Number effects",
+  "te.titleEffects": "Title effects",
   "te.design": "Design",
   "te.numberDigits": "Number digits",
   "te.caption": "Caption",
@@ -598,6 +600,7 @@
   "ed.pressedBy": "Pressed by",
   "ed.startsOn": "Starts ON",
   "ed.canBeSwitchedBack": "Can be switched back",
+  "ed.revertWhenOff": "When turned OFF, moving objects go back to where they started",
   "ed.spikeStake": "Spike stake",
   "ed.direction2": "Direction (°)",
   "ed.reach": "Reach",
@@ -941,5 +944,13 @@
   "te.translationHint": "Shown instead of the text above while the game is in this language. Leave a field empty to use the text above.",
   "preload.zhMainFont": "Chinese font",
   "preload.zhTitleFont": "Chinese title font",
-  "fontPicker.chinese": "Chinese"
+  "fontPicker.chinese": "Chinese",
+  "editor.zoomIn": "Zoom in (+)",
+  "editor.zoomOut": "Zoom out (−)",
+  "editor.zoomReset": "Show the whole map (0)",
+  "ed.scWheelZoom": "Zoom toward the mouse",
+  "ed.scZoomInOut": "Zoom in / out",
+  "ed.scZoomReset": "Show the whole map",
+  "ed.scPan": "Move the view",
+  "ed.minimapHint": "Click or drag to move the view"
 }

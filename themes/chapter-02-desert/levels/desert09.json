@@ -324,7 +324,7 @@
             "y": 180
           }
         ],
-        "speed": 420,
+        "speed": 300,
         "repeat": "pingpong",
         "easing": "inOut",
         "delay": 0,
@@ -348,7 +348,7 @@
             "y": 420
           }
         ],
-        "speed": 420,
+        "speed": 300,
         "repeat": "pingpong",
         "easing": "inOut",
         "delay": 0,
@@ -372,7 +372,7 @@
             "y": 660
           }
         ],
-        "speed": 420,
+        "speed": 300,
         "repeat": "pingpong",
         "easing": "inOut",
         "delay": 0,
@@ -396,7 +396,7 @@
             "y": 900
           }
         ],
-        "speed": 420,
+        "speed": 300,
         "repeat": "pingpong",
         "easing": "inOut",
         "delay": 0,
@@ -432,7 +432,7 @@
             "y": 180
           }
         ],
-        "speed": 320,
+        "speed": 240,
         "repeat": "loop",
         "easing": "inOut",
         "delay": 0,
@@ -468,7 +468,7 @@
             "y": 180
           }
         ],
-        "speed": 320,
+        "speed": 240,
         "repeat": "loop",
         "easing": "inOut",
         "delay": 0,
@@ -504,7 +504,7 @@
             "y": 420
           }
         ],
-        "speed": 320,
+        "speed": 240,
         "repeat": "loop",
         "easing": "inOut",
         "delay": 0,
@@ -540,7 +540,7 @@
             "y": 420
           }
         ],
-        "speed": 320,
+        "speed": 240,
         "repeat": "loop",
         "easing": "inOut",
         "delay": 0,
@@ -576,7 +576,7 @@
             "y": 660
           }
         ],
-        "speed": 320,
+        "speed": 240,
         "repeat": "loop",
         "easing": "inOut",
         "delay": 0,
@@ -608,10 +608,10 @@
   },
   "title": "Tafoni",
   "level": 9,
-  "difficulty": 3.5,
+  "difficulty": 3,
   "stars": {
-    "three": 6500,
-    "two": 10000,
-    "one": 16000
+    "three": 21000,
+    "two": 25500,
+    "one": 33000
   }
 }

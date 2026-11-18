@@ -480,6 +480,8 @@
   "te.numberFont": "숫자 폰트",
   "te.titleFont": "제목 폰트",
   "te.sameAsNumber": "숫자와 같게",
+  "te.numberEffects": "숫자 텍스트 효과",
+  "te.titleEffects": "제목 텍스트 효과",
   "te.design": "디자인",
   "te.numberDigits": "숫자 자릿수",
   "te.caption": "캡션",
@@ -598,6 +600,7 @@
   "ed.pressedBy": "작동 방식",
   "ed.startsOn": "켜진 상태로 시작",
   "ed.canBeSwitchedBack": "다시 끌 수 있음",
+  "ed.revertWhenOff": "꺼지면 움직인 오브젝트가 원래 자리로 되돌아감",
   "ed.spikeStake": "가시 말뚝",
   "ed.direction2": "방향 (°)",
   "ed.reach": "사거리",
@@ -941,5 +944,13 @@
   "te.translationHint": "게임 언어가 이 언어일 때 위의 문구 대신 표시됩니다. 비워 두면 위의 문구를 그대로 씁니다.",
   "preload.zhMainFont": "중국어 폰트",
   "preload.zhTitleFont": "중국어 제목 폰트",
-  "fontPicker.chinese": "중국어"
+  "fontPicker.chinese": "중국어",
+  "editor.zoomIn": "확대 (+)",
+  "editor.zoomOut": "축소 (−)",
+  "editor.zoomReset": "전체 맵 보기 (0)",
+  "ed.scWheelZoom": "마우스 위치를 중심으로 확대/축소",
+  "ed.scZoomInOut": "확대 / 축소",
+  "ed.scZoomReset": "전체 맵 보기",
+  "ed.scPan": "화면 이동",
+  "ed.minimapHint": "클릭하거나 드래그해서 화면 이동"
 }

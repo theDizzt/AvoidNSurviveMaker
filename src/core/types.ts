@@ -136,6 +136,11 @@ export interface Trigger {
   initial?: boolean;
   /** Works only once (can't be switched back) */
   once?: boolean;
+  /**
+   * When its color turns OFF, objects that move only while ON play their motion backwards to
+   * where they started (instead of stopping where they are)
+   */
+  revert?: boolean;
   /** timer: how long the color stays ON; hold: how long to stay on it (ms) */
   duration?: number;
 }

@@ -116,5 +116,9 @@ describe('font catalog', () => {
     expect(withTitleFont('serif')).toBe('serif');
     expect(withTitleFont('paperlogy-bold')).toBe('paperlogy-bold');
     expect(withTitleFont('no-such-font')).toBeUndefined();
+    const withFx = (numberFx: unknown) => validateThemeInfo({ ...base, style: { ...base.style, badge: { ...base.style.badge, numberFx } } } as never).style.badge.numberFx;
+    expect(withFx({ outline: '#FFFFFF', glow: '#3ae8ff', depth: 99, depthColor: '#000000' })).toEqual({ outline: '#ffffff', outlineWidth: 2, glow: '#3ae8ff', depth: 30, depthColor: '#000000' });
+    expect(withFx({ shadow: 'black', depth: 0 })).toBeUndefined();
+    expect(withFx('nope')).toBeUndefined();
   });
 });

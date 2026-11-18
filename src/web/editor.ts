@@ -21,7 +21,8 @@ import { boulderShape, spikeShape } from '../core/hazards';
 import { BeamCaster } from '../core/laser';
 import { createEmptyMap, DEFAULT_MOTION, defaultRotation, LIMITS, mapErrors, mapWarnings, validateMap } from '../core/validate';
 import {
-  beginFrame, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, FONT_MAIN, fitCanvas, TEXT_BASE_FONTS, traceObject, unitsPerPx,
+  beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, fittedView, FONT_MAIN, fitCanvas, setCamera, staticPicture,
+  TEXT_BASE_FONTS, traceObject, unitsPerPx,
 } from './render';
 import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
 import { renderThemePanel } from './theme-panel';
@@ -191,6 +192,9 @@ const HISTORY_LIMIT = 200;
 const HANDLE_PX = 7;
 /** Screen px within which a dragged pivot snaps to the shape's center points / vertices */
 const PIVOT_SNAP_PX = 10;
+/** Editor zoom: up to this many times the fitted size, by this factor per step (+ / − keys, buttons) */
+const MAX_ZOOM = 8;
+const ZOOM_STEP = 1.25;
 const IDENTITY: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
 
 const REPEAT_OPTIONS: [Repeat, string][] = [['loop', tr('ed.loop')], ['pingpong', tr('ed.pingPong')], ['once', tr('ed.once')]];
@@ -211,6 +215,9 @@ export interface EditorElements {
   undo: HTMLButtonElement;
   redo: HTMLButtonElement;
   shortcuts: HTMLButtonElement;
+  zoomIn: HTMLButtonElement;
+  zoomOut: HTMLButtonElement;
+  zoomReset: HTMLButtonElement;
   name: HTMLInputElement;
   author: HTMLInputElement;
   size: HTMLSelectElement;
@@ -286,6 +293,10 @@ const SHORTCUTS: [string, [string, string][]][] = [
     ['Backspace', tr('ed.removeLastPointWhileDrawing')],
   ]],
   [tr('ed.scGroupView'), [
+    ['Wheel', tr('ed.scWheelZoom')],
+    ['+ / −', tr('ed.scZoomInOut')],
+    ['0', tr('ed.scZoomReset')],
+    ['Space+Drag / Middle-drag', tr('ed.scPan')],
     ['N', tr('ed.toggleSnapToGrid')],
     ['P', tr('ed.toggleMotionPreview')],
     ['T', tr('ed.testPlay')],
@@ -359,6 +370,14 @@ export class Editor {
   /** Pivot snap target while dragging a pivot (drawn as a guide) */
   private pivotSnap: { p: Point; label: string } | null = null;
 
+  /** Zoom, and the map point at the middle of the canvas */
+  private readonly cam: Camera = { zoom: 1, x: 0, y: 0 };
+  /** Dragging the view (Space + drag or the middle button) */
+  private pan: { id: number; x: number; y: number; cx: number; cy: number; u: number } | null = null;
+  private spaceHeld = false;
+  /** Viewport map in the corner, shown while zoomed in */
+  private readonly minimap = document.createElement('canvas');
+
   constructor(private readonly el: EditorElements) {
     this.ctx = el.canvas.getContext('2d')!;
     this.map = createEmptyMap();
@@ -375,6 +394,7 @@ export class Editor {
       this.onContextMenu(e);
     });
     window.addEventListener('keydown', (e) => this.onKey(e));
+    this.setupZoom();
     const refit = () => fitCanvas(el.canvas, this.map);
     new ResizeObserver(refit).observe(el.canvas.parentElement!);
     window.addEventListener('resize', refit);
@@ -436,6 +456,131 @@ export class Editor {
     requestAnimationFrame(loop);
   }
 
+  private setupZoom(): void {
+    const { canvas } = this.el;
+    canvas.addEventListener('wheel', (e) => {
+      if (!this.visible) return;
+      e.preventDefault();
+      const step = e.deltaMode === 1 ? e.deltaY * 0.05 : e.deltaMode === 2 ? e.deltaY : e.deltaY * 0.0015;
+      this.zoomAt(this.pointer(e), Math.exp(-Math.max(-1, Math.min(1, step))));
+    }, { passive: false });
+    // Middle button pans instead of starting the browser's autoscroll
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 1) e.preventDefault();
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.code !== 'Space' || !this.spaceHeld) return;
+      this.spaceHeld = false;
+      this.updateCursor();
+    });
+    window.addEventListener('blur', () => {
+      this.spaceHeld = false;
+      this.updateCursor();
+    });
+    this.el.zoomIn.addEventListener('click', () => this.zoomAt({ x: this.cam.x, y: this.cam.y }, ZOOM_STEP));
+    this.el.zoomOut.addEventListener('click', () => this.zoomAt({ x: this.cam.x, y: this.cam.y }, 1 / ZOOM_STEP));
+    this.el.zoomReset.addEventListener('click', () => this.resetZoom());
+
+    const mini = this.minimap;
+    mini.className = 'editor-minimap';
+    mini.hidden = true;
+    mini.title = tr('ed.minimapHint');
+    (canvas.closest('.editor-view') ?? canvas.parentElement!).append(mini);
+    const centerOn = (e: PointerEvent) => {
+      const r = mini.getBoundingClientRect();
+      this.cam.x = ((e.clientX - r.left) / r.width) * this.map.width;
+      this.cam.y = ((e.clientY - r.top) / r.height) * this.map.height;
+      this.applyCamera();
+    };
+    mini.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      mini.setPointerCapture(e.pointerId);
+      centerOn(e);
+    });
+    mini.addEventListener('pointermove', (e) => {
+      if (mini.hasPointerCapture(e.pointerId)) centerOn(e);
+    });
+    mini.addEventListener('pointerup', (e) => {
+      if (mini.hasPointerCapture(e.pointerId)) mini.releasePointerCapture(e.pointerId);
+    });
+  }
+
+  /** Keep the zoom in range and the view on the map, then hand the camera to the renderer */
+  private applyCamera(): void {
+    const c = this.cam;
+    const { cssW, cssH, s } = fittedView(this.el.canvas, this.map);
+    c.zoom = Math.min(MAX_ZOOM, Math.max(1, c.zoom));
+    const axis = (v: number, half: number, size: number) => (half * 2 >= size - 1e-6 ? size / 2 : Math.min(size - half, Math.max(half, v)));
+    c.x = axis(c.x, cssW / 2 / (s * c.zoom), this.map.width);
+    c.y = axis(c.y, cssH / 2 / (s * c.zoom), this.map.height);
+    setCamera(this.el.canvas, c.zoom > 1 ? c : null);
+    const label = `${Math.round(c.zoom * 100)}%`;
+    if (this.el.zoomReset.textContent !== label) this.el.zoomReset.textContent = label;
+  }
+
+  /** Zoom by `factor`, keeping map point `p` where it is on screen */
+  private zoomAt(p: Point, factor: number): void {
+    const c = this.cam;
+    const z = Math.min(MAX_ZOOM, Math.max(1, c.zoom * factor));
+    if (z === c.zoom) return;
+    c.x = p.x - ((p.x - c.x) * c.zoom) / z;
+    c.y = p.y - ((p.y - c.y) * c.zoom) / z;
+    c.zoom = z;
+    this.applyCamera();
+  }
+
+  private resetZoom(): void {
+    this.cam.zoom = 1;
+    this.applyCamera();
+  }
+
+  private updateCursor(): void {
+    const tool = this.tool;
+    this.el.canvas.style.cursor = this.pan ? 'grabbing' : this.spaceHeld ? 'grab' : tool.kind === 'select' ? 'default' : 'crosshair';
+  }
+
+  /** The viewport map: the whole map, moving objects at rest, START/GOAL, and the visible area */
+  private drawMinimap(): void {
+    const mini = this.minimap;
+    const show = this.visible && this.cam.zoom > 1;
+    if (mini.hidden === show) mini.hidden = !show;
+    if (!show) return;
+    const { map } = this;
+    const cssW = 200;
+    const cssH = Math.max(40, Math.round((cssW * map.height) / map.width));
+    const dpr = window.devicePixelRatio || 1;
+    if (mini.width !== Math.round(cssW * dpr) || mini.height !== Math.round(cssH * dpr)) {
+      mini.width = Math.round(cssW * dpr);
+      mini.height = Math.round(cssH * dpr);
+      mini.style.width = `${cssW}px`;
+      mini.style.height = `${cssH}px`;
+    }
+    const g = mini.getContext('2d')!;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = COLORS.bg;
+    g.fillRect(0, 0, mini.width, mini.height);
+    const k = mini.width / map.width;
+    g.setTransform(k, 0, 0, mini.height / map.height, 0, 0);
+    const pic = staticPicture(this.compiled);
+    if (pic) g.drawImage(pic, 0, 0, map.width, map.height);
+    g.fillStyle = 'rgba(36,52,80,0.35)';
+    g.beginPath();
+    for (const o of this.compiled) if (o.dynamic) traceObject(g, o, IDENTITY);
+    g.fill();
+    g.fillStyle = COLORS.startEdge;
+    g.fillRect(map.start.x, map.start.y, map.start.w, map.start.h);
+    g.fillStyle = COLORS.goalEdge;
+    g.fillRect(map.goal.x, map.goal.y, map.goal.w, map.goal.h);
+    const { cssW: vw, cssH: vh, s } = fittedView(this.el.canvas, map);
+    const hw = vw / 2 / (s * this.cam.zoom);
+    const hh = vh / 2 / (s * this.cam.zoom);
+    g.fillStyle = 'rgba(58,159,240,0.14)';
+    g.fillRect(this.cam.x - hw, this.cam.y - hh, hw * 2, hh * 2);
+    g.strokeStyle = '#3a9ff0';
+    g.lineWidth = 2 / k;
+    g.strokeRect(this.cam.x - hw, this.cam.y - hh, hw * 2, hh * 2);
+  }
+
   show(): void {
     this.visible = true;
     fitCanvas(this.el.canvas, this.map);
@@ -443,6 +588,7 @@ export class Editor {
 
   hide(): void {
     this.visible = false;
+    this.minimap.hidden = true;
     closeContextMenu();
     this.finishModes();
     this.toggleHelp(false);
@@ -624,7 +770,7 @@ export class Editor {
     for (const { btn, tool: t } of this.paletteButtons) {
       btn.setAttribute('aria-pressed', String(JSON.stringify(t) === JSON.stringify(tool)));
     }
-    this.el.canvas.style.cursor = tool.kind === 'select' ? 'default' : 'crosshair';
+    this.updateCursor();
     this.updateHint();
   }
 
@@ -802,7 +948,8 @@ export class Editor {
   private hitTest(p: Point): Hit {
     const objs = this.compiled;
     const zoneTrigger = (i: number) => !isButton(this.map.objects[i]?.trigger?.kind);
-    for (const role of ['coin', 'portal', 'laser', 'trigger', 'wall', 'door', 'mirror'] as const) {
+    // Text boxes are drawn over everything, so they are picked first
+    for (const role of ['text', 'coin', 'portal', 'laser', 'trigger', 'wall', 'door', 'mirror'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
@@ -811,7 +958,7 @@ export class Editor {
     if (pointInRect(p.x, p.y, this.map.goal)) return { kind: 'goal' };
     if (pointInRect(p.x, p.y, this.map.start)) return { kind: 'start' };
     // Darkness areas last, so whatever lies under one can still be clicked
-    for (const role of ['path', 'trigger', 'dark'] as const) {
+    for (const role of ['safe', 'path', 'trigger', 'dark'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && !zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
@@ -929,6 +1076,13 @@ export class Editor {
   }
 
   private onDown(e: PointerEvent): void {
+    if (e.button === 1 || (e.button === 0 && this.spaceHeld)) {
+      e.preventDefault();
+      this.el.canvas.setPointerCapture(e.pointerId);
+      this.pan = { id: e.pointerId, x: e.clientX, y: e.clientY, cx: this.cam.x, cy: this.cam.y, u: unitsPerPx(this.el.canvas, this.map) };
+      this.updateCursor();
+      return;
+    }
     if (e.button !== 0) return;
     this.el.canvas.setPointerCapture(e.pointerId);
     const raw = this.pointer(e);
@@ -1043,6 +1197,13 @@ export class Editor {
   }
 
   private onMove(e: PointerEvent): void {
+    const pan = this.pan;
+    if (pan && e.pointerId === pan.id) {
+      this.cam.x = pan.cx - (e.clientX - pan.x) * pan.u;
+      this.cam.y = pan.cy - (e.clientY - pan.y) * pan.u;
+      this.applyCamera();
+      return;
+    }
     const raw = this.pointer(e);
     this.hover = raw;
     const d = this.drag;
@@ -1148,6 +1309,12 @@ export class Editor {
   }
 
   private onUp(e: PointerEvent): void {
+    if (this.pan && e.pointerId === this.pan.id) {
+      this.pan = null;
+      if (this.el.canvas.hasPointerCapture(e.pointerId)) this.el.canvas.releasePointerCapture(e.pointerId);
+      this.updateCursor();
+      return;
+    }
     const d = this.drag;
     this.drag = null;
     this.pivotSnap = null;
@@ -1361,6 +1528,16 @@ export class Editor {
       return;
     }
 
+    if (code === 'Space' && !mod) {
+      // Held: drag to pan. preventDefault also keeps a focused button from being pressed
+      e.preventDefault();
+      if (!this.spaceHeld) {
+        this.spaceHeld = true;
+        this.updateCursor();
+      }
+      return;
+    }
+
     const arrow = ARROWS[e.key];
     if (arrow && !mod) {
       if (this.draft || this.markerMode !== null || !this.sel) return;
@@ -1415,6 +1592,12 @@ export class Editor {
       this.updateHint();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       this.deleteSelected();
+    } else if (e.key === '+' || e.key === '=' || code === 'NumpadAdd') {
+      this.zoomAt(this.hover ?? { x: this.cam.x, y: this.cam.y }, ZOOM_STEP);
+    } else if (e.key === '-' || code === 'NumpadSubtract') {
+      this.zoomAt(this.hover ?? { x: this.cam.x, y: this.cam.y }, 1 / ZOOM_STEP);
+    } else if (code === 'Digit0' || code === 'Numpad0') {
+      this.resetZoom();
     } else if (e.repeat) {
       // Tool and toggle keys shouldn't fire repeatedly while held
     } else if (letter === 'v') {
@@ -2194,6 +2377,10 @@ export class Editor {
         else t.once = true;
       }));
     }
+    out.push(this.toggle(tr('ed.revertWhenOff'), !!t.revert, (on) => {
+      if (on) t.revert = true;
+      else delete t.revert;
+    }));
     const linked = this.map.objects.filter((m) => m.link?.color === t.color || (m.door?.mode === 'switch' && m.door.color === t.color)).length;
     const what = {
       switch: tr('ed.whatSwitch'),
@@ -2666,6 +2853,8 @@ export class Editor {
   private draw(): void {
     if (!this.visible) return;
     const { ctx, map } = this;
+    this.applyCamera();
+    this.drawMinimap();
     const u = unitsPerPx(this.el.canvas, map);
     const objs = this.compiled;
     const preview = this.el.preview.checked;

@@ -274,6 +274,8 @@
            controls stay in the page as the state behind the keyboard shortcuts (R, N, F, Esc). -->
       <section id="play-view" class="play-view" hidden>
         <div class="stage play-stage"><canvas id="play-canvas" data-fit="screen"></canvas></div>
+        <!-- Back to the level list (or the editor) before a run starts; hidden while running -->
+        <button type="button" id="btn-play-back" class="play-back" title="Esc" data-i18n="common.back"></button>
         <div class="play-hud" hidden>
           <div class="hud-row">
             <select id="level-select" data-i18n-aria-label="play.selectMap"></select>
@@ -306,6 +308,10 @@
           <button type="button" id="btn-undo" title="Ctrl+Z" data-i18n="common.undo"></button>
           <button type="button" id="btn-redo" title="Ctrl+Y" data-i18n="common.redo"></button>
           <button type="button" id="btn-shortcuts" title="?" aria-pressed="false" data-i18n="editor.shortcuts"></button>
+          <span class="bar-sep" aria-hidden="true"></span>
+          <button type="button" id="btn-zoom-out" class="zoom-btn" data-i18n-title="editor.zoomOut">−</button>
+          <button type="button" id="btn-zoom-reset" class="zoom-level" data-i18n-title="editor.zoomReset">100%</button>
+          <button type="button" id="btn-zoom-in" class="zoom-btn" data-i18n-title="editor.zoomIn">+</button>
           <span class="bar-sep" aria-hidden="true"></span>
           <button type="button" id="btn-panels" title="H" aria-pressed="false" data-i18n="editor.hidePanels"></button>
           <button type="button" id="btn-editor-fullscreen" class="btn-fullscreen" title="F" data-i18n="common.fullscreen"></button>

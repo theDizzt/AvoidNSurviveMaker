@@ -72,6 +72,7 @@ const RESERVED_HEIGHT = 190;
 /** Where the map sits inside its canvas, in CSS px */
 interface View {
   cssW: number;
+  cssH: number;
   /** CSS px per map unit */
   s: number;
   ox: number;
@@ -79,8 +80,32 @@ interface View {
 }
 const views = new WeakMap<HTMLCanvasElement, View>();
 
+/** Editor zoom: `zoom` times the fitted scale, with map point (x, y) at the middle of the canvas */
+export interface Camera {
+  zoom: number;
+  x: number;
+  y: number;
+}
+const cameras = new WeakMap<HTMLCanvasElement, Camera>();
+
+/** Zoom a canvas into its map (null or zoom 1 shows the whole map again) */
+export function setCamera(canvas: HTMLCanvasElement, cam: Camera | null): void {
+  if (cam && cam.zoom !== 1) cameras.set(canvas, { ...cam });
+  else cameras.delete(canvas);
+}
+
+/** The fitted view without zoom: canvas size in CSS px and CSS px per map unit */
+export function fittedView(canvas: HTMLCanvasElement, map: MapData): { cssW: number; cssH: number; s: number } {
+  const v = views.get(canvas);
+  return v ? { cssW: v.cssW, cssH: v.cssH, s: v.s } : { cssW: map.width, cssH: map.height, s: 1 };
+}
+
 function viewOf(canvas: HTMLCanvasElement, map: MapData): View {
-  return views.get(canvas) ?? { cssW: map.width, s: 1, ox: 0, oy: 0 };
+  const v = views.get(canvas) ?? { cssW: map.width, cssH: map.height, s: 1, ox: 0, oy: 0 };
+  const c = cameras.get(canvas);
+  if (!c) return v;
+  const s = v.s * c.zoom;
+  return { cssW: v.cssW, cssH: v.cssH, s, ox: v.cssW / 2 - c.x * s, oy: v.cssH / 2 - c.y * s };
 }
 
 /**
@@ -102,7 +127,7 @@ export function fitCanvas(canvas: HTMLCanvasElement, map: MapData): void {
   canvas.width = Math.round(cssW * dpr);
   canvas.height = Math.round(cssH * dpr);
   const s = Math.min(cssW / map.width, cssH / map.height);
-  views.set(canvas, { cssW, s, ox: (cssW - map.width * s) / 2, oy: (cssH - map.height * s) / 2 });
+  views.set(canvas, { cssW, cssH, s, ox: (cssW - map.width * s) / 2, oy: (cssH - map.height * s) / 2 });
 }
 
 /** Clear the frame (bars included) and make subsequent drawing use map coordinates, clipped to the map */
@@ -274,6 +299,10 @@ interface StaticLayer {
   wallPieces: HTMLCanvasElement;
   /** Scratch canvas for the per-frame wall mass */
   frame: HTMLCanvasElement;
+  /** Scratch canvas: floor + per-frame wall mass, drawn onto the map in one go */
+  composite: HTMLCanvasElement;
+  /** Layer pixels per map unit */
+  scale: number;
   /** Where the static walls are, for grinder dust (built on first use) */
   mask?: WallMask;
 }
@@ -357,7 +386,7 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   const [layer, s] = offscreen(w, h);
   s.drawImage(floor, 0, 0);
   drawWallMass(s, wallCanvas, theme, scale);
-  return { layer, floor, walls: wallCanvas, outside, wallPieces, frame: offscreen(w, h)[0] };
+  return { layer, floor, walls: wallCanvas, outside, wallPieces, frame: offscreen(w, h)[0], composite: offscreen(w, h)[0], scale };
 }
 
 /** The wall mass onto the floor: a soft shadow, then the walls with a thin rim in the edge color */
@@ -400,8 +429,21 @@ function tracePosed(g: CanvasRenderingContext2D, o: CompiledObject, t: number, h
 
 const layerCache = new WeakMap<readonly CompiledObject[], { key: string; layer: StaticLayer }>();
 
+/** The last static picture drawn for these objects (floor + walls, nothing moving), e.g. for a minimap */
+export function staticPicture(objects: readonly CompiledObject[]): HTMLCanvasElement | null {
+  return layerCache.get(objects)?.layer.layer ?? null;
+}
+
+/** Largest static layer while zoomed in (pixels per canvas); past it the layer is drawn upscaled */
+const ZOOMED_LAYER_MAX_PX = 8_300_000;
+
 function staticLayer(ctx: CanvasRenderingContext2D, map: MapData, objects: readonly CompiledObject[]): StaticLayer {
-  const scale = ctx.getTransform().a;
+  let scale = ctx.getTransform().a;
+  if (cameras.has(ctx.canvas as HTMLCanvasElement)) {
+    // While zooming, rebuild only at steps of √2 (not on every wheel tick), and cap the size
+    const cap = Math.sqrt(ZOOMED_LAYER_MAX_PX / (map.width * map.height));
+    scale = Math.min(cap, 2 ** (Math.ceil(Math.log2(scale) * 2 - 1e-9) / 2));
+  }
   const key = `${scale}|${map.width}x${map.height}|${JSON.stringify(map.theme ?? null)}|${map.start.x},${map.start.y},${map.start.w},${map.start.h}|${map.goal.x},${map.goal.y},${map.goal.w},${map.goal.h}`;
   const hit = layerCache.get(objects);
   if (hit && hit.key === key) return hit.layer;
@@ -600,7 +642,7 @@ export function drawMap(
   if (!moving) {
     ctx.drawImage(st.layer, 0, 0, map.width, map.height);
   } else {
-    const scale = ctx.getTransform().a;
+    const scale = st.scale;
     const g = st.frame.getContext('2d')!;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, st.frame.width, st.frame.height);
@@ -640,11 +682,13 @@ export function drawMap(
     });
     g.fillStyle = theme ? fillStyle(g, theme.wall.fill, { minX: 0, minY: 0, maxX: map.width, maxY: map.height }) : COLORS.wall;
     g.fill('nonzero');
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(st.floor, 0, 0);
-    drawWallMass(ctx, st.frame, theme, scale);
-    ctx.restore();
+    // Compose at layer resolution, then place it on the map (zoom and letterbox included)
+    const c = st.composite.getContext('2d')!;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, st.composite.width, st.composite.height);
+    c.drawImage(st.floor, 0, 0);
+    drawWallMass(c, st.frame, theme, scale);
+    ctx.drawImage(st.composite, 0, 0, map.width, map.height);
   }
 
   zone(ctx, map.start, COLORS.start, COLORS.startEdge, tr('zone.start'));
@@ -904,7 +948,20 @@ export interface TextFx {
 }
 
 /** One line of text with its effects, centered on `y` (needs textBaseline 'middle') */
-export function fillTextFx(ctx: CanvasRenderingContext2D, line: string, x: number, y: number, size: number, fx: TextFx): void {
+export function fillTextFx(ctx: CanvasRenderingContext2D, line: string, x: number, y: number, size: number, fx: TextFx, maxWidth?: number): void {
+  // Squeeze like fillText(…, maxWidth) does, for every layer at once
+  if (maxWidth !== undefined) {
+    const w = ctx.measureText(line).width;
+    if (w > maxWidth) {
+      // Scaling around x keeps the alignment (left / center / right are all relative to x)
+      ctx.save();
+      ctx.translate(x, 0);
+      ctx.scale(maxWidth / w, 1);
+      fillTextFx(ctx, line, 0, y, size, fx);
+      ctx.restore();
+      return;
+    }
+  }
   const ow = fx.outline && fx.outlineWidth ? fx.outlineWidth : 0;
   const depth = Math.min(30, fx.depth ?? 0);
   // The letter shape (outline included) in one color, for the shadow and the 3D sides

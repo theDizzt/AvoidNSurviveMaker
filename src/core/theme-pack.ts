@@ -3,6 +3,7 @@ import { todayUtc } from './time';
 import { isLibraryFont } from './font-catalog';
 import { readFonts, readScreens, type ThemeFont, type ThemeScreens } from './screen-layout';
 import type { MapData, Theme } from './types';
+import { readTextEffects, type TextEffects } from './text-effects';
 import { validateMap } from './validate';
 
 /**
@@ -40,6 +41,10 @@ export interface BadgeStyle {
   font: BadgeFont;
   /** Font of the level title (the number's font when omitted) */
   titleFont?: BadgeFont;
+  /** Effects on the level number (badge and level select) */
+  numberFx?: TextEffects;
+  /** Effects on the level title (badge and level select) */
+  titleFx?: TextEffects;
   /** Zero-pad the number to this many digits (0 = none): 2 → "03" */
   pad: number;
   showTitle: boolean;
@@ -176,6 +181,10 @@ export function validateThemeInfo(input: unknown): ThemeInfo {
     showTitle: b.showTitle !== false,
   };
   if (FONTS.includes(b.titleFont as BadgeFont) || isLibraryFont(b.titleFont as string)) badge.titleFont = b.titleFont as BadgeFont;
+  const numberFx = readTextEffects(b.numberFx);
+  if (numberFx) badge.numberFx = numberFx;
+  const titleFx = readTextEffects(b.titleFx);
+  if (titleFx) badge.titleFx = titleFx;
   if (str(b.caption)) badge.caption = str(b.caption, 40);
   if (str(b.image)) badge.image = str(b.image, 120);
   const info: ThemeInfo = {

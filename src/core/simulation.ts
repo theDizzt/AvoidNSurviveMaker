@@ -94,6 +94,8 @@ export class Simulation {
   readonly progress: Float64Array;
   private readonly triggers: readonly number[];
   private readonly linked: readonly number[];
+  /** Colors with a reverting trigger, as bits: their 'start' objects rewind while OFF */
+  private revertColors = 0;
   private readonly doors: readonly number[];
   /** Per solid: map object index (−1 for START / GOAL), and the door it belongs to (−1 if none) */
   private readonly solidSrc: Int32Array;
@@ -191,6 +193,7 @@ export class Simulation {
     this.coins = this.objects.flatMap((o, i) => (o.role === 'coin' ? [i] : []));
     this.triggers = this.objects.flatMap((o, i) => (o.role === 'trigger' ? [i] : []));
     this.linked = map.objects.flatMap((o, i) => (o.link ? [i] : []));
+    for (const o of map.objects) if (o.trigger?.revert) this.revertColors |= 1 << o.trigger.color;
     this.doors = this.objects.flatMap((o, i) => (o.role === 'door' ? [i] : []));
     const n = this.objects.length;
     this.channels = new Uint8Array(16);
@@ -582,6 +585,12 @@ export class Simulation {
     return link.action === 'start' ? on : !on;
   }
 
+  /** Does the (stopped) linked object play its motion backwards to its starting point? */
+  private rewinds(i: number): boolean {
+    const link = this.map.objects[i].link!;
+    return link.action === 'start' && (this.revertColors & (1 << link.color)) !== 0;
+  }
+
   /** Timers that ran out, then everybody's clock / door position at the end of the segment */
   private beginSegment(ta: number, tb: number): void {
     for (let c = 0; c < 16; c++) {
@@ -593,7 +602,11 @@ export class Simulation {
     this.updateDerived(ta);
     const dt = tb - ta;
     for (let i = 0; i < this.clock.length; i++) this.clockB[i] = tb;
-    for (const i of this.linked) this.clockB[i] = this.clock[i] + (this.runs(i) ? dt : 0);
+    for (const i of this.linked) {
+      if (this.runs(i)) this.clockB[i] = this.clock[i] + dt;
+      else if (this.rewinds(i)) this.clockB[i] = Math.max(0, this.clock[i] - dt);
+      else this.clockB[i] = this.clock[i];
+    }
     for (const d of this.doors) {
       const door = this.map.objects[d].door!;
       if (door.mode === 'auto') this.openB[d] = autoDoorOpen(door, tb);
