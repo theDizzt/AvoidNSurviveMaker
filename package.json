@@ -18,7 +18,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
     "fflate": "^0.8.2",
-    "polygon-clipping": "^0.15.7",
-    "vercel": "^66.0.0"
+    "polygon-clipping": "^0.15.7"
   }
 }
