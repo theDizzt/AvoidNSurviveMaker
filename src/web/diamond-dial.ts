@@ -46,6 +46,20 @@ function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, 
   return e;
 }
 
+let gradientId = 0;
+
+/** Blue → green along the track (left to right), for the dial and the progress fill */
+function trackGradient(): { defs: SVGDefsElement; url: string } {
+  const id = `ddial-grad-${++gradientId}`;
+  const defs = el('defs', {});
+  const grad = el('linearGradient', { id, x1: 0, y1: 0, x2: 1, y2: 0 });
+  for (const [offset, color] of [[0, '#3a7ff0'], [0.5, '#2a9fe0'], [1, '#3ddc84']] as const) {
+    grad.append(el('stop', { offset, 'stop-color': color }));
+  }
+  defs.append(grad);
+  return { defs, url: `url(#${id})` };
+}
+
 /** Draw `input` as a diamond dial inside its parent. Returns a refresh for value changes made in code. */
 export function installDiamondDial(input: HTMLInputElement): () => void {
   const min = Number(input.min || 0);
@@ -57,10 +71,11 @@ export function installDiamondDial(input: HTMLInputElement): () => void {
   const d = `M${pts.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join(' L')}`;
 
   const svg = el('svg', { class: 'ddial-svg', viewBox: `0 0 ${SIZE} ${SIZE}`, 'aria-hidden': 'true' });
+  const { defs, url } = trackGradient();
   const track = el('path', { class: 'ddial-track', d, pathLength: 1 });
-  const fill = el('path', { class: 'ddial-fill', d, pathLength: 1 });
+  const fill = el('path', { class: 'ddial-fill', d, pathLength: 1, stroke: url });
   const thumb = el('rect', { class: 'ddial-thumb', x: -8, y: -8, width: 16, height: 16, rx: 2 });
-  svg.append(track, fill, thumb);
+  svg.append(defs, track, fill, thumb);
   input.parentElement!.append(svg);
 
   const ratio = () => (Number(input.value) - min) / (max - min || 1);
@@ -109,4 +124,43 @@ export function installDiamondDial(input: HTMLInputElement): () => void {
   input.addEventListener('input', refresh);
   refresh();
   return refresh;
+}
+
+/**
+ * Read-only progress in the same diamond: the track (open at the bottom corner) fills clockwise,
+ * easing toward each new value. `onFrame` gets the ratio shown, e.g. to
+ * print a percentage in the gap. Returns a setter for the target ratio (0–1).
+ */
+export function installDiamondProgress(host: HTMLElement, onFrame: (shown: number) => void): (ratio: number) => void {
+  const pts = [pointAt(GAP), pointAt(0.25), pointAt(0.5), pointAt(0.75), pointAt(1 - GAP)];
+  const d = `M${pts.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join(' L')}`;
+  const svg = el('svg', { class: 'ddial-svg dprogress-svg', viewBox: `0 0 ${SIZE} ${SIZE}`, 'aria-hidden': 'true' });
+  const { defs, url } = trackGradient();
+  const track = el('path', { class: 'ddial-track', d, pathLength: 1 });
+  const fill = el('path', { class: 'ddial-fill', d, pathLength: 1, stroke: url });
+  svg.append(defs, track, fill);
+  host.append(svg);
+
+  let shown = 0;
+  let target = 0;
+  let raf = 0;
+  const draw = () => {
+    fill.setAttribute('stroke-dasharray', `${shown} 1`);
+    onFrame(shown);
+  };
+  const step = () => {
+    // Ease toward the target; snap when close so 100% is reached exactly
+    shown += (target - shown) * 0.18;
+    if (Math.abs(target - shown) < 0.002) shown = target;
+    draw();
+    raf = shown === target ? 0 : requestAnimationFrame(step);
+  };
+  draw();
+  return (ratio) => {
+    target = Math.min(1, Math.max(0, ratio));
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      shown = target;
+      draw();
+    } else if (!raf) raf = requestAnimationFrame(step);
+  };
 }

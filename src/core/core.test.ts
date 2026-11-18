@@ -417,6 +417,19 @@ describe('validateMap', () => {
     expect(() => validateMap({ ...createEmptyMap(), objects: [{ role: 'wall', shape: { type: 'poly', points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] } }] })).toThrow();
     expect(() => validateMap({ ...createEmptyMap(), objects: [{ role: 'lava', shape: { type: 'rect', x: 0, y: 0, w: 5, h: 5 } }] })).toThrow();
   });
+  it('fog and sand dust areas validate and never touch the cursor', () => {
+    const shape = { type: 'poly' as const, free: true, points: [{ x: 100, y: 0 }, { x: 300, y: 0 }, { x: 300, y: 200, smooth: true }, { x: 100, y: 200 }] };
+    const fog: MapObject = { role: 'fog', shape, fog: { kind: 'sand', density: 80 } };
+    expect(validateMap({ ...createEmptyMap(), objects: [fog] }).objects[0]).toEqual(fog);
+    expect(() => validateMap({ ...createEmptyMap(), objects: [{ ...fog, fog: { kind: 'sand', density: 120 } }] })).toThrow();
+    expect(() => validateMap({ ...createEmptyMap(), objects: [{ ...fog, fog: { kind: 'smoke', density: 50 } }] })).toThrow();
+    expect(() => validateMap({ ...createEmptyMap(), objects: [{ role: 'fog', shape }] })).toThrow();
+    // Walking straight through the fog to GOAL clears the level
+    const sim = new Simulation(baseMap([fog]));
+    sim.start(10, 10);
+    sim.feed(1000, 720, 20);
+    expect(sim.status).toBe('cleared');
+  });
   it('accepts every theme preset and keeps it through sharing', async () => {
     for (const p of THEME_PRESETS) {
       const map = { ...createEmptyMap(), ...(p.theme ? { theme: p.theme } : {}) };

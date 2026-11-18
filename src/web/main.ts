@@ -24,7 +24,7 @@ import { Account } from './auth/account';
 import { AuthUI, showToast } from './auth/auth-ui';
 import { PlayTimeTracker } from './auth/playtime';
 import { RecordSync } from './auth/records';
-import { installDiamondDial } from './diamond-dial';
+import { installDiamondDial, installDiamondProgress } from './diamond-dial';
 import { renderTag } from './player-tag';
 import { StatsUI } from './stats-ui';
 import { DeathTracker } from './auth/deaths';
@@ -113,8 +113,8 @@ const editor = new Editor({
 });
 
 const campaign = new CampaignUI($('themes-screen'), $('levels-screen'));
-const fitDia = (id: string, maxW: number, maxH: number) => fitRotatedGrid($(id), $(id).querySelector<HTMLElement>('.dgrid')!, maxW, maxH);
-const fitMenu = () => fitDia('menu-dia', Math.min(560, window.innerWidth * 0.9), window.innerHeight * 0.58);
+const fitDia = (id: string, maxW: number, maxH: number) => fitRotatedGrid($(id), $(id).querySelector<HTMLElement>('.dgrid')!, maxW, maxH, 1.5);
+const fitMenu = () => fitDia('menu-dia', Math.min(1000, window.innerWidth * 0.96), Math.max(320, Math.min(window.innerHeight * 0.8, window.innerHeight - 230)));
 /** Options and stats: larger panels; the screen scrolls rather than shrinking text too far */
 const fitPanel = (id: string) => {
   const wrap = $(id);
@@ -123,7 +123,7 @@ const fitPanel = (id: string) => {
   if (flat) {
     wrap.style.width = wrap.style.height = '';
     wrap.querySelector<HTMLElement>('.dgrid')!.style.transform = '';
-  } else fitDia(id, Math.min(860, window.innerWidth * 0.94), Math.max(480, window.innerHeight - 190));
+  } else fitDia(id, Math.min(1100, window.innerWidth * 0.96), Math.max(480, window.innerHeight - 150));
 };
 window.addEventListener('resize', () => {
   if (current === 'menu') fitMenu();
@@ -422,7 +422,7 @@ syncOptions();
 
 $('options-back').addEventListener('click', () => show('menu'));
 $('options-reset').addEventListener('click', resetOptions);
-$('options-licenses').addEventListener('click', () => show('licenses'));
+$('options-licenses').addEventListener('click', () => openLicenses('options'));
 
 // Language: saved, then the page reloads so every string (many are built at startup) switches
 const languageSelect = $<HTMLSelectElement>('opt-language');
@@ -438,9 +438,17 @@ languageSelect.addEventListener('change', () => {
   try { sessionStorage.setItem(REOPEN_OPTIONS_KEY, '1'); } catch { /* land on the menu instead */ }
   location.reload();
 });
-$('licenses-back').addEventListener('click', () => show('options'));
+/** The licenses list doubles as the Credits page; Back returns to where it was opened from */
+let licensesFrom: 'options' | 'menu' = 'options';
+const openLicenses = (from: 'options' | 'menu') => {
+  licensesFrom = from;
+  $('licenses-title').textContent = t(from === 'menu' ? 'menu.credits' : 'options.licenses');
+  show('licenses');
+};
+$('menu-credits').addEventListener('click', () => openLicenses('menu'));
+$('licenses-back').addEventListener('click', () => show(licensesFrom));
 screens.licenses.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') show('options');
+  if (e.key === 'Escape') show(licensesFrom);
 });
 $('menu-stats').addEventListener('click', () => show('stats'));
 $('menu-achievements').addEventListener('click', () => show('achievements'));
@@ -591,7 +599,9 @@ recordsButton.addEventListener('click', async () => {
   } else recordsStatus.textContent = result.message;
   showToast(result.ok ? t('records.syncedToast') : result.message, result.ok ? 'ok' : 'error');
 });
-new AuthUI(account, (screen) => show(screen));
+const authUI = new AuthUI(account, (screen) => show(screen));
+// Player tile: signed in → their stats, signed out → sign in
+$('menu-user').addEventListener('click', () => (account.user ? show('stats') : authUI.open('signin')));
 for (const s of [screens.auth, screens.verify]) {
   s.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') show('menu');
@@ -642,14 +652,15 @@ function sharedMapTask(): PreloadTask | null {
 }
 
 async function boot(): Promise<void> {
-  const bar = $('preload-bar');
+  const percent = $('preload-percent');
+  const setProgress = installDiamondProgress($('preload-dia'), (r) => (percent.textContent = `${Math.round(r * 100)}%`));
   const text = $('preload-text');
   const shared = sharedMapTask() ?? sharedPackTask();
   const accountTask: PreloadTask = { label: t('common.account'), run: () => account.init() };
   const tasks = [...FONT_TASKS, accountTask, ...(shared ? [shared] : [])];
 
   await runPreload(tasks, (done, total, label) => {
-    bar.style.width = `${Math.round((done / total) * 100)}%`;
+    setProgress(done / total);
     text.textContent = done === total ? t('preload.ready') : label;
   });
 

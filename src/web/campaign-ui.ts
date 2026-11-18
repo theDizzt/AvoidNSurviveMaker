@@ -38,12 +38,12 @@ export function screenData(t: ThemeEntry, level?: number): ScreenData {
  */
 
 /** Scale a 45°-turned grid to fit its wrapper (and size the wrapper to the turned grid) */
-export function fitRotatedGrid(wrap: HTMLElement, grid: HTMLElement, maxW: number, maxH: number): void {
+export function fitRotatedGrid(wrap: HTMLElement, grid: HTMLElement, maxW: number, maxH: number, maxScale = 1.15): void {
   const w = grid.offsetWidth;
   const h = grid.offsetHeight;
   if (!w || !h) return;
   const span = (w + h) / Math.SQRT2; // width and height of the turned grid
-  const fit = Math.min(1.15, maxW / span, maxH / span);
+  const fit = Math.min(maxScale, maxW / span, maxH / span);
   wrap.style.width = `${span * fit}px`;
   wrap.style.height = `${span * fit}px`;
   grid.style.transform = `translate(-50%, -50%) rotate(45deg) scale(${fit})`;

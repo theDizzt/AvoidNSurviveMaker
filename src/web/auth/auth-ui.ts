@@ -65,6 +65,11 @@ export class AuthUI {
     });
     $('verify-resend').addEventListener('click', () => void this.resend());
     $('verify-signin').addEventListener('click', () => this.open('signin'));
+    // Main-menu tile: Sign In when signed out, Sign Out when signed in
+    $('menu-account').addEventListener('click', () => {
+      if (this.account.user) void this.signOut();
+      else this.open('signin');
+    });
 
     // Live nickname preview: "Nickname#????" and byte counter
     const nick = this.input(this.signupForm, 'nickname');
@@ -200,40 +205,27 @@ export class AuthUI {
 
   // ───────────────────────── Badges ─────────────────────────
 
+  private async signOut(): Promise<void> {
+    await this.account.signOut();
+    showToast(tr('auth.signedOut'));
+  }
+
   private renderBadges(): void {
     const tag = this.account.tag;
-    const bar = $('account-bar');
+    const signedIn = this.account.user !== null;
+    $('menu-account-label').textContent = tr(signedIn ? 'auth.signOut' : 'auth.signIn');
+    $('menu-account').classList.toggle('signed-in', signedIn);
+    // Small player tile: nickname#tag and total play time (or "Guest")
+    const name = $('menu-user-name');
+    const time = $('menu-user-time');
     if (tag) {
-      const playTime = tr('auth.playTime', { time: formatPlayTime(this.account.profile?.total_play_seconds ?? 0) });
-      const name = document.createElement('span');
-      name.className = 'account-tag';
-      const tagText = document.createElement('strong');
-      renderTag(tagText, tag);
-      const time = document.createElement('small');
-      time.className = 'account-time';
-      time.textContent = playTime;
-      name.append(tagText, time);
-      const out = document.createElement('button');
-      out.type = 'button';
-      out.className = 'link-btn';
-      out.textContent = tr('auth.signOut');
-      out.addEventListener('click', async () => {
-        await this.account.signOut();
-        showToast(tr('auth.signedOut'));
-      });
-      bar.replaceChildren(name, out);
+      renderTag(name, tag);
+      time.textContent = formatPlayTime(this.account.profile?.total_play_seconds ?? 0);
+      $('menu-user').title = `${tag} · ${tr('auth.playTime', { time: time.textContent })}`;
     } else {
-      const signIn = document.createElement('button');
-      signIn.type = 'button';
-      signIn.className = 'pill-btn';
-      signIn.textContent = tr('auth.signIn');
-      signIn.addEventListener('click', () => this.open('signin'));
-      const join = document.createElement('button');
-      join.type = 'button';
-      join.className = 'pill-btn ghost';
-      join.textContent = tr('auth.createAccount');
-      join.addEventListener('click', () => this.open('signup'));
-      bar.replaceChildren(signIn, join);
+      name.textContent = tr('menu.guest');
+      time.textContent = '';
+      $('menu-user').title = tr('auth.signIn');
     }
   }
 

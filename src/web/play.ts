@@ -10,6 +10,7 @@ import { HighResPointer, InputStats } from './input';
 import { options } from './options';
 import { gameAudio } from './audio';
 import { DeathBurst } from './death-burst';
+import { drawFogAreas } from './fog';
 import {
   beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawDarkAreas, drawGlobalDark, drawMap, drawStopwatch, drawTrail, fitCanvas,
   FONT_MAIN, mapPointer, unitsPerPx,
@@ -272,7 +273,8 @@ export class PlayController {
       ctx.stroke();
     }
 
-    // Darkness goes over the cursor and trail; the timer and messages stay readable on top
+    // Fog, sand dust and darkness go over the cursor and trail; the timer and messages stay readable on top
+    drawFogAreas(ctx, map, sim.objects, t, now, 1, state);
     drawDarkAreas(ctx, sim.objects, t, 1, state);
     if (map.darkness && (sim.status === 'playing' || sim.status === 'ready')) {
       const light = map.darkness.light;

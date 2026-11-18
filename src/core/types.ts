@@ -34,8 +34,19 @@ export type Shape =
  * portal: teleports the cursor to the next portal of its color (see `portal`).
  * text: words drawn on the map, no effect on play (see `text`).
  * safe: a safe zone — nothing can kill the cursor while it is inside (it also counts as floor).
+ * fog: fog or sand dust drifting over the area, covering the cursor, obstacles and walls (see `fog`).
  */
-export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe';
+export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog';
+
+/** fog: grey-white fog (#49) · sand: blowing sand dust (#50) */
+export type FogKind = 'fog' | 'sand';
+
+/** Fog / sand dust area: no effect on play, only hides what lies under it */
+export interface Fog {
+  kind: FogKind;
+  /** How much it hides, 0–100 (100 = nothing under it shows) */
+  density: number;
+}
 
 /**
  * Saw (a wall): `disc` is a round grinder that spins (#43, #45 on a route), `blade` a rectangular
@@ -221,7 +232,7 @@ export interface MapObject {
   trigger?: Trigger;
   /** role 'door' */
   door?: Door;
-  /** Reacts to a switch color (paths, walls, coins, darkness areas) */
+  /** Reacts to a switch color (paths, walls, coins, darkness / fog areas) */
   link?: Link;
   /** Wall that thrusts like a spear (#29) */
   spike?: Spike;
@@ -235,6 +246,8 @@ export interface MapObject {
   saw?: Saw;
   /** role 'text' */
   text?: TextBox;
+  /** role 'fog' */
+  fog?: Fog;
 }
 
 export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal';

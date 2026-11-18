@@ -191,6 +191,50 @@ input:focus, select:focus, button:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(58, 159, 240, 0.22);
 }
+/*
+ * Dropdowns in the game's style: browsers with customizable <select> (appearance: base-select)
+ * get a glass list with rounded, accent-highlighted options; others keep the native list.
+ */
+@supports (appearance: base-select) {
+  select, ::picker(select) { appearance: base-select; }
+  select { display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; cursor: pointer; }
+  select::picker-icon { color: var(--muted); font-size: 0.8em; transition: rotate 0.15s ease; }
+  select:open::picker-icon { rotate: 180deg; }
+  ::picker(select) {
+    margin-block: 4px;
+    padding: 4px;
+    max-height: min(360px, 60vh);
+    overflow-y: auto;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: var(--glass);
+    -webkit-backdrop-filter: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    translate: 0 -4px;
+    transition: opacity 0.12s ease, translate 0.12s ease, overlay 0.12s allow-discrete, display 0.12s allow-discrete;
+  }
+  select:open::picker(select) { opacity: 1; translate: 0 0; }
+  @starting-style { select:open::picker(select) { opacity: 0; translate: 0 -4px; } }
+  option {
+    padding: 7px 14px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.1s ease;
+  }
+  option::checkmark { display: none; }
+  option:hover, option:focus-visible { background: var(--accent-soft); outline: none; }
+  option:checked { background: var(--gradient); color: var(--accent-ink); font-weight: 700; }
+  option:disabled { opacity: 0.45; cursor: not-allowed; }
+  optgroup { font-size: 12px; font-weight: 700; color: var(--muted); padding-top: 4px; }
+  optgroup option { font-weight: 400; }
+}
+
 input::placeholder { color: #9aa9be; }
 input[type="color"] { width: 100%; height: 34px; padding: 3px 4px; cursor: pointer; }
 
@@ -642,26 +686,50 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   .logo-mid { transform: translate(0.038em, 0.038em); }
 }
 
-/* Preload */
-.preload-inner { width: min(420px, 100%); display: flex; flex-direction: column; align-items: center; gap: 28px; }
-.preload .logo { font-size: clamp(34px, 7vw, 58px); }
-.progress {
-  width: 100%;
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.75);
-  border: 1px solid var(--border);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
+/* Preload: one large diamond (the volume dial's look, read-only) */
+.preload-inner { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.preload-dia {
+  --s: min(480px, 88vw, 70vh);
+  position: relative;
+  width: var(--s);
+  height: var(--s);
+  display: grid;
+  place-items: center;
 }
-.progress-bar {
-  width: 0;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #8fe3cf, #8ccdf5, #b9a8f3);
-  transition: width 0.25s ease;
+/* The tile: a rounded square turned 45°, its corners touching the box */
+.preload-dia::before {
+  content: '';
+  position: absolute;
+  inset: 14.645%;
+  transform: rotate(45deg);
+  border-radius: calc(var(--s) * 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 18px 48px rgba(58, 96, 150, 0.2);
 }
-.preload-text { margin: -12px 0 0; color: var(--muted); font-size: 14px; min-height: 1.5em; }
+.preload-dia .dprogress-svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: default; touch-action: auto; pointer-events: none; }
+.dprogress-svg .ddial-track, .dprogress-svg .ddial-fill { stroke-width: 6; }
+.preload-content { position: relative; display: flex; flex-direction: column; align-items: center; gap: calc(var(--s) * 0.03); max-width: 64%; text-align: center; }
+/* Logo stacked in three lines (Avoid / N / Survive), so it fits the diamond */
+.preload .logo { font-size: calc(var(--s) * 0.105); line-height: 0.98; }
+.preload .logo-layer { display: flex; flex-direction: column; align-items: center; }
+.preload .logo-n { font-size: 1.35em; line-height: 0.9; }
+.preload-text { margin: 0; color: var(--muted); font-size: clamp(11px, calc(var(--s) * 0.03), 14px); min-height: 1.5em; overflow-wrap: anywhere; }
+/* Percentage in the gap at the bottom corner of the track */
+.preload-percent {
+  position: absolute;
+  left: 50%;
+  top: 90%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: calc(var(--s) * 0.05);
+  color: #2a7fd0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 /* Menu */
 .menu-inner {
@@ -697,30 +765,8 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .menu-btn.subtle { font-size: 15px; font-weight: 400; padding: 10px 16px; color: var(--muted); }
 .menu-foot { margin: 18px 0 0; color: var(--muted); font-size: 12px; opacity: 0.8; }
 
-.account-bar {
-  position: absolute;
-  top: 18px;
-  right: 20px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 /* Player tag discriminator (#0639): lighter than the nickname */
 .tag-num { opacity: 0.5; font-weight: inherit; }
-.account-time { font-size: 11px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
-.account-tag {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.25;
-  padding: 6px 16px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  font-weight: 700;
-}
 
 /* Account */
 .auth-card {
@@ -782,7 +828,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .toast.error { color: var(--danger); }
 
 @media (prefers-reduced-motion: reduce) {
-  button, .menu-btn, .progress-bar, .screen, .app-bg::before, .app-bg::after, .app-bg canvas { transition: none; }
+  button, .menu-btn, .screen, .app-bg::before, .app-bg::after, .app-bg canvas { transition: none; }
 }
 
 /* Arrange buttons in the properties panel */
@@ -853,6 +899,12 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .pal-saw svg { fill: #c7ced8; stroke: #4b5361; }
 .pal-text svg { fill: none; stroke: #243450; }
 .pal-safe svg { fill: #8a8e96; stroke: #5a5e68; }
+.pal-fog svg { fill: #dfe6ee; stroke: #8796a8; }
+.pal-sand svg { fill: #e2c393; stroke: #a07848; }
+/* Slider with its value (fog density) */
+.range-field { display: flex; align-items: center; gap: 8px; }
+.range-field input[type="range"] { flex: 1; min-width: 60px; }
+.range-field output { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* 16-color switch picker */
 .swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin: 6px 0 8px; }
@@ -930,6 +982,31 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 .dtile-primary .dtile-in strong { font-size: 40px; text-shadow: 0 3px 12px rgba(10, 70, 80, 0.35); }
 .dtile-primary .dtile-in small { font-size: 15px; opacity: 0.95; }
 .dtile-deco { background: rgba(255, 255, 255, 0.35); box-shadow: none; }
+/* Main-menu account tile: Sign In / Sign Out */
+.dtile-account { background: linear-gradient(135deg, #f1f7ff, #cfe2ff); }
+.dtile-account.signed-in { background: linear-gradient(135deg, #fff1f1, #ffd3d3); }
+/* Silhouette icon behind a tile's label (upright, in the content box) */
+.dtile-icon {
+  position: absolute; z-index: -1; left: 50%; top: 50%;
+  width: 46%; height: 46%; transform: translate(-50%, -50%);
+  fill: #000; color: #000; opacity: 0.09; pointer-events: none;
+}
+.dtile-primary .dtile-icon { opacity: 0.14; }
+.dtile-stars .dtile-icon { opacity: 0.1; }
+/* Player tile: nickname#tag over the play time, cut short when too long */
+#menu-dia .dtile-user .dtile-in strong { font-size: 16px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dtile-user .dtile-in small { font-variant-numeric: tabular-nums; }
+a.dtile { display: block; text-decoration: none; color: var(--text); }
+a.dtile:hover, a.dtile:focus-visible {
+  transform: scale(1.05);
+  box-shadow: 0 16px 34px rgba(58, 96, 150, 0.28), 0 0 0 3px rgba(255, 255, 255, 0.9);
+  z-index: 1;
+  outline: none;
+}
+.dtile-discord { background: linear-gradient(135deg, #eef0ff, #cdd3ff); }
+/* Version label in the empty bottom cell: no tile, just text */
+.dtile-version { background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.dtile-version .dtile-in small { color: var(--muted); font-size: 19px; font-weight: 600; opacity: 0.9; }
 .dtile-stars { background: linear-gradient(135deg, #fff4c4, #ffd25e); }
 .dtile-stars strong { font-size: 30px !important; }
 .dtotal-star { color: #e0a100; font-size: 22px; line-height: 1; }
@@ -1372,7 +1449,6 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 .ddial-svg.dragging { cursor: grabbing; }
 .ddial-track, .ddial-fill { fill: none; stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; }
 .ddial-track { stroke: #c7d8eb; }
-.ddial-fill { stroke: #3a9ff0; }
 .ddial-thumb { fill: #468ee9; stroke: #fff; stroke-width: 3; filter: drop-shadow(1px 2px 3px #28599066); transition: fill 0.12s; }
 .ddial-svg:hover .ddial-thumb, .ddial-svg.dragging .ddial-thumb { fill: #6874ed; }
 .dvolume:has(input:focus-visible) .ddial-thumb { stroke: #326bc0; stroke-width: 4; }

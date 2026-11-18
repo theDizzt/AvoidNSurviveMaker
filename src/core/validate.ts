@@ -181,7 +181,7 @@ function door(v: unknown, name: string): Door {
 function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
   const o = obj(v, name);
   const out: MapObject = {
-    role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe'] as const),
+    role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog'] as const),
     shape: shape(o.shape, `${name}.shape`, W, H),
   };
   if (o.motion !== undefined) out.motion = motion(o.motion, `${name}.motion`, W, H);
@@ -274,7 +274,11 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
       mode: oneOf(p.mode, `${name}.portal.mode`, ['both', 'in', 'out'] as const),
     };
   }
-  if (o.link !== undefined && (out.role === 'path' || out.role === 'wall' || out.role === 'coin' || out.role === 'dark' || out.role === 'mirror')) {
+  if (out.role === 'fog') {
+    const f = obj(o.fog, `${name}.fog`);
+    out.fog = { kind: oneOf(f.kind, `${name}.fog.kind`, ['fog', 'sand'] as const), density: num(f.density, `${name}.fog.density`, 0, 100) };
+  }
+  if (o.link !== undefined && (out.role === 'path' || out.role === 'wall' || out.role === 'coin' || out.role === 'dark' || out.role === 'fog' || out.role === 'mirror')) {
     const l = obj(o.link, `${name}.link`);
     out.link = { color: colorIndex(l.color, `${name}.link.color`), action: oneOf(l.action, `${name}.link.action`, ['start', 'stop', 'remove'] as const) };
   }

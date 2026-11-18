@@ -13,7 +13,7 @@ import { mergeShapes, type MergeOp } from '../core/merge';
 import { flattenShape, polyOutline, shapeBounds, shapeCenter } from '../core/shape';
 import { encodeMap } from '../core/share';
 import type {
-  Easing, LinkAction, MapData, MapObject, Motion, MotionType, Point, PolyPoint, Rect, Repeat, Role, Rotation, Shape,
+  Easing, FogKind, LinkAction, MapData, MapObject, Motion, MotionType, Point, PolyPoint, Rect, Repeat, Role, Rotation, Shape,
   TriggerKind,
 } from '../core/types';
 import { SWITCH_COLORS, switchColor } from '../core/colors';
@@ -30,6 +30,7 @@ import { badgeFor, badgeTitle, chapterMazePresets } from './theme-registry';
 import { badgeImage, drawLevelBadge } from './badge';
 import { DEFAULT_BADGE } from '../core/theme-pack';
 import { fontPicker } from './font-picker';
+import { drawFogAreas } from './fog';
 
 // ───────────────────────── Tools ─────────────────────────
 
@@ -44,6 +45,8 @@ interface ObjectTool {
   trigger?: TriggerKind;
   /** Walls with a built-in behavior */
   special?: 'spike' | 'boulder' | 'disc' | 'blade';
+  /** role 'fog': fog or sand dust */
+  fog?: FogKind;
 }
 type Tool = { kind: 'select' } | { kind: 'zone'; zone: 'start' | 'goal' } | ObjectTool;
 
@@ -76,7 +79,7 @@ const ICONS: Record<ShapeKind, string> = {
 /** Special objects (#27–42): fixed palette numbers, independent of moving / rotating */
 const SPECIAL_IDS = {
   sectorPath: 27, sectorWall: 28, spike: 29, boulder: 30, coin: 31, laser: 37, mirror: 38, portal: 39, door: 40, dark: 41, globalDark: 42,
-  disc: 43, blade: 44, movingDisc: 45, movingBlade: 46, text: 47, safe: 48,
+  disc: 43, blade: 44, movingDisc: 45, movingBlade: 46, text: 47, safe: 48, fog: 49, sand: 50,
 } as const;
 const TRIGGER_IDS: Record<TriggerKind, number> = { switch: 32, timer: 33, hold: 34, startZone: 35, stopZone: 36 };
 const TRIGGER_NAMES: Record<TriggerKind, string> = {
@@ -87,8 +90,10 @@ const isButton = (k: TriggerKind | undefined) => k === 'switch' || k === 'timer'
 
 const ROLE_NAMES: Record<Role, string> = {
   path: tr('ed.namePath'), wall: tr('ed.nameWall'), coin: tr('ed.nameCoin'), dark: tr('ed.nameDark'), trigger: tr('ed.nameSwitch'), door: tr('ed.nameDoor'), laser: tr('ed.laser'), mirror: tr('ed.mirror'), portal: tr('ed.namePortal'),
-  text: tr('ed.textBox2'), safe: tr('ed.nameSafe'),
+  text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'),
 };
+/** "Fog" / "Sand Dust" */
+const fogName = (kind: FogKind | undefined) => tr(kind === 'sand' ? 'ed.nameSand' : 'ed.nameFog');
 /** Objects that always stay square */
 const isSquare = (o: { role: Role; trigger?: { kind: TriggerKind }; saw?: { kind: string } }) => o.role === 'portal' || o.role === 'laser' || isButton(o.trigger?.kind) || o.saw?.kind === 'disc';
 
@@ -101,6 +106,7 @@ function toolLabel(t: ObjectTool): string {
   if (t.role === 'trigger') return TRIGGER_NAMES[t.trigger ?? 'switch'];
   if (t.special === 'spike') return tr('ed.nameSpike');
   if (t.special === 'boulder') return tr('ed.nameBoulder');
+  if (t.role === 'fog') return fogName(t.fog);
   if (t.special === 'disc' || t.special === 'blade') return withBehavior(t.behavior === 'moving' ? 'moving' : 'static', tr(t.special === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (t.role !== 'path' && t.role !== 'wall') return ROLE_NAMES[t.role];
   const shape = t.shape === 'sector' ? tr('ed.shapeSector') : SHAPES.find(([k]) => k === t.shape)![1];
@@ -122,6 +128,7 @@ function describeObject(o: MapObject): string {
   if (o.role === 'trigger') return withBehavior(beh, tr('ed.colorName', { color: switchColor(o.trigger?.color ?? 0).name, name: TRIGGER_NAMES[o.trigger?.kind ?? 'switch'] }));
   if (o.spike) return tr('ed.nameSpike');
   if (o.boulder) return tr('ed.nameBoulder');
+  if (o.role === 'fog') return withBehavior(beh, fogName(o.fog?.kind));
   if (o.saw) return withBehavior(o.motion ? 'moving' : 'static', tr(o.saw.kind === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (o.role === 'laser' || o.role === 'portal') return withBehavior(beh, tr('ed.colorName', { color: switchColor((o.laser ?? o.portal)!.color).name, name: ROLE_NAMES[o.role] }));
   if (o.role !== 'path' && o.role !== 'wall') return withBehavior(beh, ROLE_NAMES[o.role]);
@@ -141,6 +148,7 @@ function objectToolId(o: MapObject): number {
   if (o.saw) return o.saw.kind === 'disc' ? (o.motion ? SPECIAL_IDS.movingDisc : SPECIAL_IDS.disc) : o.motion ? SPECIAL_IDS.movingBlade : SPECIAL_IDS.blade;
   if (o.role === 'text') return SPECIAL_IDS.text;
   if (o.role === 'safe') return SPECIAL_IDS.safe;
+  if (o.role === 'fog') return o.fog?.kind === 'sand' ? SPECIAL_IDS.sand : SPECIAL_IDS.fog;
   if (o.role === 'trigger') return TRIGGER_IDS[o.trigger?.kind ?? 'switch'];
   if (o.shape.type === 'sector') return o.role === 'path' ? SPECIAL_IDS.sectorPath : SPECIAL_IDS.sectorWall;
   const shape = o.shape.type === 'rect' ? 0 : o.shape.type === 'ellipse' ? 1 : isFreeform(o.shape) ? 3 : 2;
@@ -747,6 +755,11 @@ export class Editor {
     const safeTool: ObjectTool = { kind: 'object', role: 'safe', behavior: 'static', shape: 'rect' };
     addButton(row, textTool, `${svg('<path d="M5 6 L19 6 M12 6 L12 19 M9 19 L15 19" stroke-width="2.6" fill="none" stroke-linecap="round"/>')}<span class="pal-num">47</span>`, tr('ed.palTextBox'), 'pal-text');
     addButton(row, safeTool, `${svg('<rect x="3" y="3" width="18" height="18" rx="2" fill-opacity="0.45"/><path d="M12 6.5 L16.5 8.3 L16.2 12.4 C15.8 15 14 16.6 12 17.6 C10 16.6 8.2 15 7.8 12.4 L7.5 8.3 Z" fill="#fff"/>')}<span class="pal-num">48</span>`, tr('ed.palSafeZone'), 'pal-safe');
+    // Fog and sand dust: freeform areas
+    const fogTool = (kind: FogKind): ObjectTool => ({ kind: 'object', role: 'fog', behavior: 'static', shape: 'free', fog: kind });
+    const cloudIcon = '<path d="M6 17 C2.5 17 2.5 12 6 12 C6 8 11 7 12.5 10 C14 7 19.5 8 18.5 12 C22 12 22 17 18 17 Z"/>';
+    addButton(row, fogTool('fog'), `${svg(`${cloudIcon}<path d="M4 20 L20 20" stroke-width="1.6" fill="none" stroke-linecap="round"/>`)}<span class="pal-num">49</span>`, tr('ed.palFog'), 'pal-fog');
+    addButton(row, fogTool('sand'), `${svg(`${cloudIcon}<circle cx="5" cy="20.5" r="1"/><circle cx="10" cy="21" r="1"/><circle cx="15" cy="20.5" r="1"/><circle cx="20" cy="21" r="1"/>`)}<span class="pal-num">50</span>`, tr('ed.palSandDust'), 'pal-sand');
     // #42 is a map setting, not an object: the button toggles it
     const g = document.createElement('button');
     g.type = 'button';
@@ -957,8 +970,8 @@ export class Editor {
     }
     if (pointInRect(p.x, p.y, this.map.goal)) return { kind: 'goal' };
     if (pointInRect(p.x, p.y, this.map.start)) return { kind: 'start' };
-    // Darkness areas last, so whatever lies under one can still be clicked
-    for (const role of ['safe', 'path', 'trigger', 'dark'] as const) {
+    // Darkness and fog areas last, so whatever lies under one can still be clicked
+    for (const role of ['safe', 'path', 'trigger', 'dark', 'fog'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && !zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
@@ -1463,6 +1476,7 @@ export class Editor {
       const reach = Math.round(Math.hypot(tip.x - base.x, tip.y - base.y));
       o.spike = { angle: Math.round((Math.atan2(tip.y - base.y, tip.x - base.x) * 180) / Math.PI), reach, thrustMs: 120, returnMs: 900, waitMs: 900, delay: 0 };
     }
+    if (tool.role === 'fog') o.fog = { kind: tool.fog ?? 'fog', density: 70 };
     if (tool.role === 'laser') o.laser = { color: this.lastColor, angle: 0, on: true };
     if (tool.role === 'portal') {
       const same = this.map.objects.filter((m) => m.portal?.color === this.lastColor).length;
@@ -2186,6 +2200,8 @@ export class Editor {
         : tr('ed.darkNote')));
     } else if (o.role === 'safe') {
       parts.push(this.note(tr('ed.nothingCanHurtTheCursor')));
+    } else if (o.fog) {
+      parts.push(...this.fogProps(o));
     }
 
     // Shape
@@ -2238,7 +2254,7 @@ export class Editor {
         else delete o.pierce;
       }));
     }
-    if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'mirror') parts.push(...this.linkProps(o));
+    if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'fog' || o.role === 'mirror') parts.push(...this.linkProps(o));
 
     // Movement (a spike's thrust is its movement)
     if (!o.spike) {
@@ -2408,6 +2424,31 @@ export class Editor {
         this.numField(tr('ed.startDelayS'), sec(s.delay), (v) => (s.delay = Math.round(Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, v)) * 1000)), 0.1),
       ),
       this.note(tr('ed.restsThrustsOutFastThen')),
+    ];
+  }
+
+  /** Fog / sand dust: which one, and how thick */
+  private fogProps(o: MapObject): HTMLElement[] {
+    const f = o.fog!;
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.min = '0';
+    range.max = '100';
+    range.step = '5';
+    range.value = String(f.density);
+    const out = document.createElement('output');
+    out.textContent = `${f.density}%`;
+    range.addEventListener('input', () => (out.textContent = `${range.value}%`));
+    range.addEventListener('change', () => this.edit(() => (f.density = Math.max(0, Math.min(100, Number(range.value))))));
+    const control = document.createElement('div');
+    control.className = 'range-field';
+    control.append(range, out);
+    return [
+      this.group(
+        this.selectField<FogKind>(tr('ed.type'), f.kind, [['fog', tr('ed.nameFog')], ['sand', tr('ed.nameSand')]], (v) => (f.kind = v), true),
+        this.field(tr('ed.fogDensity'), control, true),
+      ),
+      this.note(tr('ed.fogNote')),
     ];
   }
 
@@ -2891,7 +2932,14 @@ export class Editor {
     }
     ctx.setLineDash([]);
 
-    // Darkness areas see-through, so what's under them stays editable
+    // Fog / sand dust and darkness areas see-through, so what's under them stays editable
+    drawFogAreas(ctx, map, objs, t, performance.now(), 0.6);
+    ctx.setLineDash([5 * u, 4 * u]);
+    ctx.strokeStyle = 'rgba(120,130,145,0.8)';
+    ctx.beginPath();
+    for (const o of objs) if (o.role === 'fog') traceObject(ctx, o, transformAt(o, t, pose));
+    ctx.stroke();
+    ctx.setLineDash([]);
     drawDarkAreas(ctx, objs, t, 0.55);
     ctx.setLineDash([5 * u, 4 * u]);
     ctx.strokeStyle = 'rgba(255,255,255,0.8)';
