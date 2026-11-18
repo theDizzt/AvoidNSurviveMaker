@@ -173,5 +173,15 @@
                                                     }
                                                 ]
                                }
-                }
+                },
+    "i18n":  {
+        "ko":  {
+            "name":  "하늘 - 제목 미정",
+            "description":  "떠다니는 섬과 바람에 휩쓸리는 구름 다리. 챕터 제목은 추후 공개됩니다."
+        },
+        "zh":  {
+            "name":  "Sky - Title TBD",
+            "description":  "Floating islands and wind-swept cloud bridges. Chapter title to be announced."
+        }
+    }
 }

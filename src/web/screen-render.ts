@@ -1,9 +1,10 @@
+import { t as tr } from '../core/i18n';
 import {
   BUILTIN_FONTS, DEFAULT_BUTTON, difficultyLabel, STAGE_H, STAGE_W,
   type BuiltinFont, type LayoutElement, type LevelButtonStyle, type ScreenLayout, type Visibility,
 } from '../core/screen-layout';
 import { isLibraryFont } from '../core/font-catalog';
-import { formatTime } from '../core/simulation';
+import { formatSeconds } from '../core/simulation';
 import { ensureLibraryFont, libraryFontCss } from './library-fonts';
 import { STARS_PER_LEVEL, type ThemeInfo } from '../core/theme-pack';
 import { FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
@@ -96,7 +97,7 @@ export function fillText(text: string, d: ScreenData): string {
     title: lv?.title ?? '',
     difficulty: (lv?.difficulty ?? 1).toFixed(2),
     difficultyLabel: difficultyLabel(lv?.difficulty ?? 1),
-    best: d.best != null ? `${formatTime(d.best)}s` : '--',
+    best: d.best != null ? formatSeconds(d.best) : '--',
   };
   return text.replace(/\{(\w+)\}/g, (m, k: string) => vars[k] ?? m);
 }
@@ -225,7 +226,7 @@ function levelGrid(e: LayoutElement, d: ScreenData, h: ScreenHandlers, editing: 
       label.append(dd);
     }
     btn.append(label);
-    if (lv?.available) btn.title = `Level ${i + 1} · ${lv.title}`;
+    if (lv?.available) btn.title = tr('level.label', { n: i + 1, title: lv.title });
     btn.disabled = !lv?.available && !editing;
     if (!editing && lv?.available) btn.addEventListener('click', () => h.onLevel?.(i));
     return btn;
@@ -237,7 +238,7 @@ function levelGrid(e: LayoutElement, d: ScreenData, h: ScreenHandlers, editing: 
     a.className = `se-page ${cls}`;
     a.textContent = text;
     a.style.color = b.numberColor;
-    a.title = d < 0 ? 'Previous levels' : 'Next levels';
+    a.title = tr(d < 0 ? 'screen.prevLevels' : 'screen.nextLevels');
     a.addEventListener('click', (ev) => {
       ev.stopPropagation();
       fill(Math.min(pages - 1, Math.max(0, (gridPages.get(e.id) ?? 0) + d)));
@@ -297,7 +298,7 @@ function buildElement(e: LayoutElement, d: ScreenData, h: ScreenHandlers, editin
         img.alt = '';
         img.draggable = false;
         node.append(img);
-      } else if (editing) node.textContent = 'Image';
+      } else if (editing) node.textContent = tr('common.image');
       break;
     }
     case 'stars': {

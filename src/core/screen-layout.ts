@@ -1,3 +1,4 @@
+import { t } from './i18n';
 /**
  * Custom screens of a theme (level select), laid out like a slide: a background and
  * freely placed elements on a 1280×720 stage. The game scales the stage to the window.
@@ -123,19 +124,19 @@ export interface ThemeScreens {
 
 /** Placeholders usable in text (shown in the editor's help) */
 export const SCREEN_PLACEHOLDERS: [string, string][] = [
-  ['{theme}', 'Theme name'],
-  ['{description}', 'Theme description'],
-  ['{author}', 'Theme author'],
-  ['{credits}', 'Credits text of the theme'],
-  ['{released}', 'Release date'],
-  ['{cleared}', 'Levels cleared'],
-  ['{total}', 'Number of levels'],
-  ['{stars}', 'Stars collected'],
-  ['{maxStars}', 'Stars available'],
+  ['{theme}', t('placeholder.theme')],
+  ['{description}', t('placeholder.description')],
+  ['{author}', t('placeholder.author')],
+  ['{credits}', t('placeholder.credits')],
+  ['{released}', t('common.releaseDate')],
+  ['{cleared}', t('placeholder.cleared')],
+  ['{total}', t('placeholder.total')],
+  ['{stars}', t('placeholder.stars')],
+  ['{maxStars}', t('placeholder.maxStars')],
 ];
 
 export function difficultyLabel(d: number): string {
-  return d < 3 ? 'EASY' : d < 5 ? 'NORMAL' : d < 7 ? 'HARD' : d < 9 ? 'EXPERT' : 'INSANE';
+  return t(d < 3 ? 'difficulty.easy' : d < 5 ? 'difficulty.normal' : d < 7 ? 'difficulty.hard' : d < 9 ? 'difficulty.expert' : 'difficulty.insane');
 }
 
 export const DEFAULT_BUTTON: Readonly<LevelButtonStyle> = {

@@ -1,20 +1,21 @@
+import { t } from '../core/i18n';
 import { createPatternTile } from './theme-pattern';
 import { BASE_THEME, primaryColor, secondaryColor, shade, THEME_PRESETS } from '../core/theme';
 import type { Fill, PatternKind, SurfaceStyle, Theme } from '../core/types';
 
-const FILL_TYPES: [Fill['type'], string][] = [['solid', 'Solid'], ['gradient', 'Gradient'], ['pattern', 'Pattern']];
+const FILL_TYPES: [Fill['type'], string][] = [['solid', t('fill.solid')], ['gradient', t('fill.gradient')], ['pattern', t('common.pattern')]];
 const PATTERNS: [PatternKind, string][] = [
-  ['stripes', 'Stripes'],
-  ['diagonal', 'Diagonal'],
-  ['dots', 'Dots'],
-  ['grid', 'Grid'],
-  ['checker', 'Checker'],
-  ['wood', 'Wood planks'],
-  ['grass', 'Grass'],
-  ['sand', 'Sand'],
-  ['metal', 'Metal'],
+  ['stripes', t('pattern.stripes')],
+  ['diagonal', t('pattern.diagonal')],
+  ['dots', t('pattern.dots')],
+  ['grid', t('pattern.grid')],
+  ['checker', t('pattern.checker')],
+  ['wood', t('pattern.wood')],
+  ['grass', t('pattern.grass')],
+  ['sand', t('pattern.sand')],
+  ['metal', t('pattern.metal')],
 ];
-const CATEGORIES: [keyof Theme, string][] = [['wall', 'Walls & obstacles'], ['path', 'Paths']];
+const CATEGORIES: [keyof Theme, string][] = [['wall', t('themePanel.walls')], ['path', t('common.paths')]];
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
@@ -93,16 +94,19 @@ export function renderThemePanel(
   theme: Theme | undefined,
   apply: (next: Theme | undefined) => void,
   extraPresets: readonly { id: string; name: string; theme: Theme }[] = [],
+  /** false: only the default look plus `extraPresets` (no built-in color sets) */
+  builtIn = true,
 ): void {
   const json = JSON.stringify(theme ?? null);
-  const presets = [...THEME_PRESETS, ...extraPresets];
+  const listed = builtIn ? THEME_PRESETS : THEME_PRESETS.filter((p) => !p.theme);
+  const presets = [...listed, ...extraPresets];
   // Chapter presets win a tie so their music is recognised
-  const preset = [...extraPresets, ...THEME_PRESETS].find((p) => JSON.stringify(p.theme ?? null) === json);
+  const preset = [...extraPresets, ...listed].find((p) => JSON.stringify(p.theme ?? null) === json);
   const presetOptions: [string, string][] = presets.map((p) => [p.id, p.name]);
-  if (!preset) presetOptions.push(['custom', 'Custom']);
+  if (!preset) presetOptions.push(['custom', t('themePanel.custom')]);
 
   const parts: HTMLElement[] = [
-    label('Preset', select(preset?.id ?? 'custom', presetOptions, (id) => {
+    label(t('themePanel.preset'), select(preset?.id ?? 'custom', presetOptions, (id) => {
       const p = presets.find((x) => x.id === id);
       if (p) apply(p.theme ? clone(p.theme) : undefined);
     }), true),
@@ -127,26 +131,26 @@ export function renderThemePanel(
     parts.push(head);
 
     const fields: HTMLElement[] = [
-      label('Fill', select(f.type, FILL_TYPES, (type) => update(key, (s) => (s.fill = convertFill(s.fill, type))))),
-      label('Outline', colorInput(style.edge, (v) => update(key, (s) => (s.edge = v)))),
+      label(t('common.fill'), select(f.type, FILL_TYPES, (type) => update(key, (s) => (s.fill = convertFill(s.fill, type))))),
+      label(t('common.outline'), colorInput(style.edge, (v) => update(key, (s) => (s.edge = v)))),
     ];
     if (f.type === 'solid') {
-      fields.push(label('Color', colorInput(f.color, (v) => update(key, (s) => (s.fill = { type: 'solid', color: v })))));
+      fields.push(label(t('common.color'), colorInput(f.color, (v) => update(key, (s) => (s.fill = { type: 'solid', color: v })))));
     } else if (f.type === 'gradient') {
       const set = (patch: Partial<typeof f>) => update(key, (s) => (s.fill = { ...f, ...patch }));
       fields.push(
-        label('Style', select(f.style, [['linear', 'Linear'], ['radial', 'Radial']], (style) => set({ style }))),
-        label('From', colorInput(f.from, (from) => set({ from }))),
-        label('To', colorInput(f.to, (to) => set({ to }))),
+        label(t('themePanel.style'), select(f.style, [['linear', t('themePanel.linear')], ['radial', t('themePanel.radial')]], (style) => set({ style }))),
+        label(t('themePanel.from'), colorInput(f.from, (from) => set({ from }))),
+        label(t('themePanel.to'), colorInput(f.to, (to) => set({ to }))),
       );
-      if (f.style === 'linear') fields.push(label('Angle (°)', numberInput(f.angle, -360, 360, 15, (angle) => set({ angle }))));
+      if (f.style === 'linear') fields.push(label(t('common.angle'), numberInput(f.angle, -360, 360, 15, (angle) => set({ angle }))));
     } else {
       const set = (patch: Partial<typeof f>) => update(key, (s) => (s.fill = { ...f, ...patch }));
       fields.push(
-        label('Pattern', select(f.pattern, PATTERNS, (pattern) => set({ pattern }))),
-        label('Size (px)', numberInput(f.size, 4, 64, 2, (size) => set({ size }))),
-        label('Color', colorInput(f.color, (color) => set({ color }))),
-        label('Background', colorInput(f.background, (background) => set({ background }))),
+        label(t('common.pattern'), select(f.pattern, PATTERNS, (pattern) => set({ pattern }))),
+        label(t('themePanel.size'), numberInput(f.size, 4, 64, 2, (size) => set({ size }))),
+        label(t('common.color'), colorInput(f.color, (color) => set({ color }))),
+        label(t('common.background'), colorInput(f.background, (background) => set({ background }))),
       );
     }
     const grid = document.createElement('div');

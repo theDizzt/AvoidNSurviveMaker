@@ -1,3 +1,4 @@
+import { t } from './i18n';
 /**
  * Account field rules, shared by the sign-up form and mirrored by the database
  * (supabase/migrations/*_profiles.sql) so both sides agree.
@@ -22,24 +23,24 @@ export function formatTag(nickname: string, discriminator: number): string {
 
 /** Returns an error message, or null when the nickname is acceptable. Expects a trimmed value. */
 export function nicknameError(nickname: string): string | null {
-  if (nickname.length === 0) return 'Enter a nickname.';
-  if (nickname !== nickname.trim()) return 'Nickname cannot start or end with a space.';
-  if (byteLength(nickname) > NICKNAME_MAX_BYTES) return `Nickname must be at most ${NICKNAME_MAX_BYTES} bytes.`;
-  if (nickname.includes('#')) return 'Nickname cannot contain "#".';
-  if (/[\u0000-\u001f\u007f-\u009f]/.test(nickname)) return 'Nickname contains invalid characters.';
+  if (nickname.length === 0) return t('account.nickEmpty');
+  if (nickname !== nickname.trim()) return t('account.nickSpace');
+  if (byteLength(nickname) > NICKNAME_MAX_BYTES) return t('account.nickLong', { max: NICKNAME_MAX_BYTES });
+  if (nickname.includes('#')) return t('account.nickHash');
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(nickname)) return t('account.nickInvalid');
   return null;
 }
 
 export function emailError(email: string): string | null {
-  if (email.length === 0) return 'Enter your email address.';
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Enter a valid email address.';
+  if (email.length === 0) return t('account.emailEmpty');
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return t('account.emailInvalid');
   return null;
 }
 
 export function passwordError(password: string): string | null {
-  if (password.length < PASSWORD_MIN) return `Password must be at least ${PASSWORD_MIN} characters.`;
-  if (byteLength(password) > PASSWORD_MAX_BYTES) return `Password must be at most ${PASSWORD_MAX_BYTES} bytes.`;
-  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return 'Password must contain both letters and numbers.';
+  if (password.length < PASSWORD_MIN) return t('account.passShort', { min: PASSWORD_MIN });
+  if (byteLength(password) > PASSWORD_MAX_BYTES) return t('account.passLong', { max: PASSWORD_MAX_BYTES });
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return t('account.passMix');
   return null;
 }
 
@@ -50,5 +51,6 @@ export function formatPlayTime(seconds: number): string {
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
   const pad = (n: number) => String(n).padStart(2, '0');
+  // Same notation in every language
   return h > 0 ? `${h}h ${pad(m)}m ${pad(s)}s` : `${m}m ${pad(s)}s`;
 }

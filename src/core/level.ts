@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import type { MapData } from './types';
 
 /** Stars earned for a clear time (ms): 0–3, or null when the map has no star times */
@@ -15,10 +16,15 @@ export function starText(n: number): string {
   return '★'.repeat(n) + '☆'.repeat(3 - n);
 }
 
+/** Chapter level code, the same in every language: chapter 1 level 1 → "1-01", chapter 11 level 16 → "11-16" */
+export function chapterLevelCode(chapter: number, level: number): string {
+  return `${chapter}-${String(level).padStart(2, '0')}`;
+}
+
 /** In-game title: "Level 3 · Title", falling back to the file name */
 export function levelLabel(map: MapData): string {
   const title = map.title || map.name;
-  return map.level !== undefined ? `Level ${map.level} · ${title}` : title;
+  return map.level !== undefined ? t('level.label', { n: map.level, title }) : title;
 }
 
 /** Star goals in seconds, e.g. "★★★ 12.0s · ★★ 20.0s · ★ 30.0s" */

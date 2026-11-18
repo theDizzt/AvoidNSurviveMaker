@@ -171,5 +171,15 @@
                                                     }
                                                 ]
                                }
-                }
+                },
+    "i18n":  {
+        "ko":  {
+            "name":  "동굴 - 제목 미정",
+            "description":  "땅 아래의 각진 수정과 좁은 통로. 챕터 제목은 추후 공개됩니다."
+        },
+        "zh":  {
+            "name":  "Cavern - Title TBD",
+            "description":  "Faceted crystals and narrow passages below the surface. Chapter title to be announced."
+        }
+    }
 }

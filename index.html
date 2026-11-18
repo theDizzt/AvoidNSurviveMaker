@@ -13,7 +13,7 @@
       <div class="preload-inner">
         <div class="logo logo-3d" role="img" aria-label="Avoid N Survive"><span class="logo-layer logo-back" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span><span class="logo-layer logo-mid" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span><span class="logo-layer logo-front" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span></div>
         <div class="progress" aria-hidden="true"><div id="preload-bar" class="progress-bar"></div></div>
-        <p id="preload-text" class="preload-text">Loading…</p>
+        <p id="preload-text" class="preload-text" data-i18n="common.loading"></p>
         <p id="preload-version" class="menu-foot"></p>
       </div>
     </div>
@@ -23,34 +23,34 @@
       <div id="account-bar" class="account-bar"></div>
       <div class="menu-inner menu-diamonds">
         <h1 class="logo logo-3d" aria-label="Avoid N Survive"><span class="logo-layer logo-back" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span><span class="logo-layer logo-mid" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span><span class="logo-layer logo-front" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span></h1>
-        <p class="tagline">Dodge with your mouse. Survive to the goal.</p>
+        <p class="tagline" data-i18n="menu.tagline"></p>
         <!-- A grid turned 45°: every cell is a diamond; Start Game spans 2×2 -->
-        <nav class="dia-wrap" id="menu-dia" aria-label="Main menu">
+        <nav class="dia-wrap" id="menu-dia" data-i18n-aria-label="menu.mainMenu">
           <div class="dgrid" style="--cols: 4">
             <button type="button" id="menu-start" class="dtile dtile-primary" style="grid-column: 1 / span 2; grid-row: 1 / span 2">
-              <span class="dtile-in"><strong>Start Game</strong></span>
+              <span class="dtile-in"><strong data-i18n="menu.start"></strong></span>
             </button>
             <button type="button" id="menu-editor" class="dtile" style="grid-column: 3; grid-row: 1">
-              <span class="dtile-in"><strong>Map Editor</strong></span>
+              <span class="dtile-in"><strong data-i18n="menu.editor"></strong></span>
             </button>
             <button type="button" id="menu-theme-editor" class="dtile" style="grid-column: 3; grid-row: 2">
-              <span class="dtile-in"><strong>Theme Editor</strong></span>
+              <span class="dtile-in"><strong data-i18n="common.themeEditor"></strong></span>
             </button>
             <button type="button" id="menu-achievements" class="dtile" style="grid-column: 4; grid-row: 1">
-              <span class="dtile-in"><strong>Achievements</strong></span>
+              <span class="dtile-in"><strong data-i18n="menu.achievements"></strong></span>
             </button>
             <button type="button" id="menu-stats" class="dtile" style="grid-column: 4; grid-row: 2">
-              <span class="dtile-in"><strong>Stats</strong></span>
+              <span class="dtile-in"><strong data-i18n="menu.stats"></strong></span>
             </button>
             <button type="button" id="menu-options" class="dtile" style="grid-column: 1; grid-row: 3">
-              <span class="dtile-in"><strong>Options</strong></span>
+              <span class="dtile-in"><strong data-i18n="menu.options"></strong></span>
             </button>
             <button type="button" id="menu-customize" class="dtile" style="grid-column: 2; grid-row: 3">
-              <span class="dtile-in"><strong>Customize</strong></span>
+              <span class="dtile-in"><strong data-i18n="menu.customize"></strong></span>
             </button>
             <span class="dtile dtile-deco" style="grid-column: 3; grid-row: 3" aria-hidden="true"></span>
             <span class="dtile dtile-stars" style="grid-column: 4; grid-row: 3">
-              <span class="dtile-in"><strong id="menu-stars">0</strong><small>stars</small></span>
+              <span class="dtile-in"><strong id="menu-stars">0</strong><small data-i18n="menu.stars"></small></span>
             </span>
           </div>
         </nav>
@@ -67,60 +67,55 @@
     <!-- Account: sign in / create account -->
     <div id="auth-screen" class="screen menu" hidden>
       <div class="menu-inner auth-card">
-        <h2 class="logo logo-sm">Account</h2>
-        <div class="auth-tabs" role="tablist" aria-label="Account">
-          <button type="button" role="tab" id="tab-signin" aria-selected="true">Sign In</button>
-          <button type="button" role="tab" id="tab-signup" aria-selected="false">Create Account</button>
+        <h2 class="logo logo-sm" data-i18n="common.account"></h2>
+        <div class="auth-tabs" role="tablist" data-i18n-aria-label="common.account">
+          <button type="button" role="tab" id="tab-signin" aria-selected="true" data-i18n="auth.signIn"></button>
+          <button type="button" role="tab" id="tab-signup" aria-selected="false" data-i18n="auth.createAccount"></button>
         </div>
-        <p id="auth-unconfigured" class="form-note" hidden>
-          Accounts aren't set up on this server yet. You can still play and make maps offline.
-        </p>
+        <p id="auth-unconfigured" class="form-note" hidden data-i18n="auth.unconfiguredNote"></p>
 
         <form id="signin-form" class="auth-form" novalidate>
-          <label class="field wide"><span>Email</span><input type="email" name="email" autocomplete="email" maxlength="254" /></label>
-          <label class="field wide"><span>Password</span><input type="password" name="password" autocomplete="current-password" /></label>
+          <label class="field wide"><span data-i18n="auth.email"></span><input type="email" name="email" autocomplete="email" maxlength="254" /></label>
+          <label class="field wide"><span data-i18n="auth.password"></span><input type="password" name="password" autocomplete="current-password" /></label>
           <div id="signin-captcha" class="captcha"></div>
           <p class="form-error" role="alert"></p>
-          <button type="submit" class="menu-btn primary">Sign In</button>
-          <button type="button" id="signin-resend" class="link-btn" hidden>Resend verification email</button>
+          <button type="submit" class="menu-btn primary" data-i18n="auth.signIn"></button>
+          <button type="button" id="signin-resend" class="link-btn" hidden data-i18n="auth.resendVerification"></button>
         </form>
 
         <form id="signup-form" class="auth-form" novalidate hidden>
-          <label class="field wide"><span>Email</span><input type="email" name="email" autocomplete="email" maxlength="254" /></label>
-          <label class="field wide"><span>Password</span><input type="password" name="password" autocomplete="new-password" /></label>
-          <label class="field wide"><span>Confirm password</span><input type="password" name="confirm" autocomplete="new-password" /></label>
+          <label class="field wide"><span data-i18n="auth.email"></span><input type="email" name="email" autocomplete="email" maxlength="254" /></label>
+          <label class="field wide"><span data-i18n="auth.password"></span><input type="password" name="password" autocomplete="new-password" /></label>
+          <label class="field wide"><span data-i18n="auth.confirmPassword"></span><input type="password" name="confirm" autocomplete="new-password" /></label>
           <label class="field wide">
-            <span>Nickname</span>
+            <span data-i18n="auth.nickname"></span>
             <input type="text" name="nickname" autocomplete="nickname" spellcheck="false" />
           </label>
           <p class="nick-hint">
-            <span>You'll appear as <strong id="nick-preview">Nickname#????</strong></span>
-            <span id="nick-bytes" class="nick-bytes">0/32 bytes</span>
+            <span><span data-i18n="auth.appearAs"></span><strong id="nick-preview">Nickname#????</strong></span>
+            <span id="nick-bytes" class="nick-bytes"></span>
           </p>
-          <p class="form-note">At least 8 characters with letters and numbers. Your 4-digit tag is picked at random.</p>
+          <p class="form-note" data-i18n="auth.passwordRule"></p>
           <div id="signup-captcha" class="captcha"></div>
           <p class="form-error" role="alert"></p>
-          <button type="submit" class="menu-btn primary">Create Account</button>
+          <button type="submit" class="menu-btn primary" data-i18n="auth.createAccount"></button>
         </form>
 
-        <button type="button" id="auth-back" class="menu-btn subtle">Back to menu</button>
+        <button type="button" id="auth-back" class="dback dback-center" data-i18n-title="auth.backToMenu"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
       </div>
     </div>
 
     <!-- After sign-up: verify email -->
     <div id="verify-screen" class="screen menu" hidden>
       <div class="menu-inner auth-card">
-        <h2 class="logo logo-sm">Check your email</h2>
-        <p class="verify-text">
-          We sent a verification link to <strong id="verify-email"></strong>.
-          Open it to activate your account, then sign in.
-        </p>
-        <p class="form-note">Didn't get it? Check your spam folder, or send it again.</p>
+        <h2 class="logo logo-sm" data-i18n="auth.checkEmail"></h2>
+        <p class="verify-text"><span data-i18n="auth.sentLinkTo"></span><strong id="verify-email"></strong><span data-i18n="auth.sentLinkAfter"></span></p>
+        <p class="form-note" data-i18n="auth.didntGetIt"></p>
         <div id="verify-captcha" class="captcha"></div>
         <p class="form-error" role="alert"></p>
         <div class="menu-buttons">
-          <button type="button" id="verify-signin" class="menu-btn primary">Go to Sign In</button>
-          <button type="button" id="verify-resend" class="menu-btn">Resend email</button>
+          <button type="button" id="verify-signin" class="menu-btn primary" data-i18n="auth.goToSignIn"></button>
+          <button type="button" id="verify-resend" class="menu-btn" data-i18n="auth.resend"></button>
         </div>
       </div>
     </div>
@@ -130,68 +125,74 @@
     <!-- Options -->
     <div id="options-screen" class="screen menu" hidden>
       <div class="menu-inner menu-diamonds">
-        <h2 class="logo logo-sm">Options</h2>
+        <h2 class="logo logo-sm" data-i18n="menu.options"></h2>
         <!-- Same 45°-turned grid as the main menu; menu music spans 2×2 -->
         <div class="dia-wrap" id="options-dia">
           <div class="dgrid dgrid-panel" style="--cols: 4">
             <div class="dtile dtile-music" style="grid-column: 1 / span 2; grid-row: 1 / span 2">
               <span class="dtile-in">
                 <span class="dicon" aria-hidden="true">♪</span>
-                <strong>Main menu music</strong>
-                <small id="menu-music-name" class="dmusic-name" role="status">No music selected</small>
+                <strong data-i18n="options.menuMusic"></strong>
+                <small id="menu-music-name" class="dmusic-name" role="status" data-i18n="music.none"></small>
                 <span class="dpill-row">
-                  <label class="dpill dpill-file"><input type="file" id="menu-music-file" class="visually-hidden" accept=".mp3,.ogg,.wav,.m4a,.aac,.flac" />Choose file</label>
-                  <button type="button" id="menu-music-remove" class="dpill">Reset</button>
+                  <label class="dpill dpill-file"><input type="file" id="menu-music-file" class="visually-hidden" accept=".mp3,.ogg,.wav,.m4a,.aac,.flac" /><span data-i18n="options.chooseFile"></span></label>
+                  <button type="button" id="menu-music-remove" class="dpill" data-i18n="options.reset"></button>
                 </span>
               </span>
             </div>
             <label class="dtile dvolume" for="opt-master-volume" style="grid-column: 3; grid-row: 1">
               <span class="dtile-in">
-                <strong>Master</strong>
+                <strong data-i18n="options.master"></strong>
                 <span class="ddial"><input type="range" id="opt-master-volume" class="visually-hidden" min="0" max="100" step="1" /></span>
                 <output id="opt-master-volume-value" for="opt-master-volume">80%</output>
               </span>
             </label>
             <label class="dtile dvolume" for="opt-music-volume" style="grid-column: 4; grid-row: 1">
               <span class="dtile-in">
-                <strong>Music</strong>
+                <strong data-i18n="common.music"></strong>
                 <span class="ddial"><input type="range" id="opt-music-volume" class="visually-hidden" min="0" max="100" step="1" /></span>
                 <output id="opt-music-volume-value" for="opt-music-volume">60%</output>
               </span>
             </label>
             <label class="dtile dvolume" for="opt-effects-volume" style="grid-column: 3; grid-row: 2">
               <span class="dtile-in">
-                <strong>Effects</strong>
+                <strong data-i18n="options.effects"></strong>
                 <span class="ddial"><input type="range" id="opt-effects-volume" class="visually-hidden" min="0" max="100" step="1" /></span>
                 <output id="opt-effects-volume-value" for="opt-effects-volume">80%</output>
               </span>
             </label>
             <div class="dtile drecords" style="grid-column: 4; grid-row: 2">
               <span class="dtile-in">
-                <strong>Records</strong>
-                <small id="records-status">Sign in to save records</small>
-                <button type="button" id="records-sync" class="dpill" disabled>Sync</button>
+                <strong data-i18n="options.records"></strong>
+                <small id="records-status" data-i18n="records.signedOut"></small>
+                <button type="button" id="records-sync" class="dpill" disabled data-i18n="options.sync"></button>
               </span>
             </div>
-            <label class="dtile dtoggle" style="grid-column: 1; grid-row: 3" title="Draw the path your cursor took during a run">
-              <span class="dtile-in"><input type="checkbox" id="opt-trail" /><strong>Cursor trail</strong></span>
+            <label class="dtile dtoggle" style="grid-column: 1; grid-row: 3" data-i18n-title="options.trailHint">
+              <span class="dtile-in"><input type="checkbox" id="opt-trail" /><strong data-i18n="options.trail"></strong></span>
             </label>
-            <label class="dtile dtoggle" style="grid-column: 2; grid-row: 3" title="Show elapsed time in the corner while playing">
-              <span class="dtile-in"><input type="checkbox" id="opt-timer" /><strong>Run timer</strong></span>
+            <label class="dtile dtoggle" style="grid-column: 2; grid-row: 3" data-i18n-title="options.timerHint">
+              <span class="dtile-in"><input type="checkbox" id="opt-timer" /><strong data-i18n="options.timer"></strong></span>
             </label>
-            <label class="dtile dtoggle" style="grid-column: 3; grid-row: 3" title="Show sample interval and polling rate below the game">
-              <span class="dtile-in"><input type="checkbox" id="opt-debug" /><strong>Input panel</strong></span>
+            <label class="dtile dtoggle" style="grid-column: 3; grid-row: 3" data-i18n-title="options.debugHint">
+              <span class="dtile-in"><input type="checkbox" id="opt-debug" /><strong data-i18n="options.debug"></strong></span>
             </label>
-            <span class="dtile dtile-deco" style="grid-column: 4; grid-row: 3" aria-hidden="true"></span>
+            <label class="dtile dlanguage" for="opt-language" style="grid-column: 4; grid-row: 3">
+              <span class="dtile-in">
+                <span class="dicon" aria-hidden="true">文</span>
+                <strong data-i18n="options.language"></strong>
+                <select id="opt-language" class="dpill"></select>
+              </span>
+            </label>
             <span class="dtile dtile-deco" style="grid-column: 1; grid-row: 4" aria-hidden="true"></span>
             <button type="button" id="options-reset" class="dtile" style="grid-column: 2; grid-row: 4">
-              <span class="dtile-in"><strong>Reset</strong><small>to defaults</small></span>
+              <span class="dtile-in"><strong data-i18n="options.reset"></strong><small data-i18n="options.resetSub"></small></span>
             </button>
             <button type="button" id="options-licenses" class="dtile" style="grid-column: 3; grid-row: 4">
-              <span class="dtile-in"><strong>Licenses</strong><small>music &amp; fonts</small></span>
+              <span class="dtile-in"><strong data-i18n="options.licenses"></strong><small data-i18n="options.licensesSub"></small></span>
             </button>
             <button type="button" id="options-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 4">
-              <span class="dtile-in"><strong>Back</strong></span>
+              <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
             </button>
           </div>
         </div>
@@ -201,34 +202,34 @@
     <!-- Stats: account summary on the same diamond grid; Stars spans 2×2 -->
     <div id="stats-screen" class="screen menu" hidden>
       <div class="menu-inner menu-diamonds">
-        <h2 class="logo logo-sm">Stats</h2>
+        <h2 class="logo logo-sm" data-i18n="menu.stats"></h2>
         <p id="stats-message" class="tagline stats-message" role="status"></p>
         <div class="dia-wrap" id="stats-dia">
           <div class="dgrid dgrid-panel" style="--cols: 4">
             <div class="dtile dtile-stars" style="grid-column: 1 / span 2; grid-row: 1 / span 2">
-              <span class="dtile-in"><span class="dtotal-star" aria-hidden="true">★</span><strong data-stat="stars">—</strong><small data-stat="stars-note">stars</small></span>
+              <span class="dtile-in"><span class="dtotal-star" aria-hidden="true">★</span><strong data-stat="stars">—</strong><small data-stat="stars-note" data-i18n="menu.stars"></small></span>
             </div>
             <div class="dtile dstat" style="grid-column: 3; grid-row: 1">
-              <span class="dtile-in"><small class="dstat-label">Player</small><strong data-stat="player">—</strong><small data-stat="player-note"></small></span>
+              <span class="dtile-in"><small class="dstat-label" data-i18n="stats.player"></small><strong data-stat="player">—</strong><small data-stat="player-note"></small></span>
             </div>
             <div class="dtile dstat" style="grid-column: 4; grid-row: 1">
-              <span class="dtile-in"><small class="dstat-label">Play time</small><strong data-stat="time">—</strong><small data-stat="time-note"></small></span>
+              <span class="dtile-in"><small class="dstat-label" data-i18n="stats.playTime"></small><strong data-stat="time">—</strong><small data-stat="time-note"></small></span>
             </div>
             <div class="dtile dstat dstat-mint" style="grid-column: 3; grid-row: 2">
-              <span class="dtile-in"><small class="dstat-label">Cleared</small><strong data-stat="cleared">—</strong><small data-stat="cleared-note"></small></span>
+              <span class="dtile-in"><small class="dstat-label" data-i18n="stats.cleared"></small><strong data-stat="cleared">—</strong><small data-stat="cleared-note"></small></span>
             </div>
             <div class="dtile dstat" style="grid-column: 4; grid-row: 2">
-              <span class="dtile-in"><small class="dstat-label">Last record</small><strong data-stat="last">—</strong></span>
+              <span class="dtile-in"><small class="dstat-label" data-i18n="stats.lastRecord"></small><strong data-stat="last">—</strong></span>
             </div>
             <span class="dtile dtile-deco" style="grid-column: 1; grid-row: 3" aria-hidden="true"></span>
             <div class="dtile dstat dstat-deaths" style="grid-column: 2; grid-row: 3">
-              <span class="dtile-in"><small class="dstat-label">Deaths</small><strong data-stat="deaths">—</strong><small data-stat="deaths-note"></small></span>
+              <span class="dtile-in"><small class="dstat-label" data-i18n="stats.colDeaths"></small><strong data-stat="deaths">—</strong><small data-stat="deaths-note"></small></span>
             </div>
             <button type="button" id="stats-refresh" class="dtile" style="grid-column: 3; grid-row: 3">
-              <span class="dtile-in"><span class="dicon" aria-hidden="true">↻</span><strong>Refresh</strong></span>
+              <span class="dtile-in"><span class="dicon" aria-hidden="true">↻</span><strong data-i18n="stats.refresh"></strong></span>
             </button>
             <button type="button" id="stats-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 3">
-              <span class="dtile-in"><strong>Back</strong></span>
+              <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
             </button>
           </div>
         </div>
@@ -239,31 +240,31 @@
 
     <div id="achievements-screen" class="screen menu" hidden>
       <div class="menu-inner">
-        <h2 class="logo logo-sm">Achievements</h2>
-        <p class="muted">Coming soon.</p>
+        <h2 class="logo logo-sm" data-i18n="menu.achievements"></h2>
+        <p class="muted" data-i18n="common.comingSoon"></p>
         <div class="menu-buttons">
-          <button type="button" id="achievements-back" class="menu-btn primary">Back</button>
+          <button type="button" id="achievements-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
         </div>
       </div>
     </div>
 
     <div id="customize-screen" class="screen menu" hidden>
       <div class="menu-inner">
-        <h2 class="logo logo-sm">Customize</h2>
-        <p class="muted">Coming soon.</p>
+        <h2 class="logo logo-sm" data-i18n="menu.customize"></h2>
+        <p class="muted" data-i18n="common.comingSoon"></p>
         <div class="menu-buttons">
-          <button type="button" id="customize-back" class="menu-btn primary">Back</button>
+          <button type="button" id="customize-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
         </div>
       </div>
     </div>
 
     <div id="licenses-screen" class="screen menu" hidden>
       <div class="menu-inner licenses-inner">
-        <h2 class="logo logo-sm">Licenses</h2>
-        <p class="muted licenses-intro">Music and fonts bundled with the game, with the copyright and license of each.</p>
+        <h2 class="logo logo-sm" data-i18n="options.licenses"></h2>
+        <p class="muted licenses-intro" data-i18n="licenses.intro"></p>
         <div id="licenses-list" class="licenses-list"></div>
         <div class="menu-buttons">
-          <button type="button" id="licenses-back" class="menu-btn primary">Back</button>
+          <button type="button" id="licenses-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
         </div>
       </div>
     </div>
@@ -275,24 +276,20 @@
         <div class="stage play-stage"><canvas id="play-canvas" data-fit="screen"></canvas></div>
         <div class="play-hud" hidden>
           <div class="hud-row">
-            <select id="level-select" aria-label="Select map"></select>
-            <button type="button" id="btn-back-editor" hidden>← Back to editor</button>
-            <button type="button" id="btn-next-level" title="N" hidden>Next level ▶</button>
-            <button type="button" id="btn-play-edit">Open in editor</button>
-            <button type="button" id="btn-fullscreen" class="btn-fullscreen" title="F">Fullscreen</button>
-            <button type="button" id="btn-play-menu" title="Esc">Main Menu</button>
+            <select id="level-select" data-i18n-aria-label="play.selectMap"></select>
+            <button type="button" id="btn-back-editor" hidden data-i18n="play.backToEditor"></button>
+            <button type="button" id="btn-next-level" title="N" hidden data-i18n="play.nextLevel"></button>
+            <button type="button" id="btn-play-edit" data-i18n="play.openInEditor"></button>
+            <button type="button" id="btn-fullscreen" class="btn-fullscreen" title="F" data-i18n="common.fullscreen"></button>
+            <button type="button" id="btn-play-menu" title="Esc" data-i18n="common.mainMenu"></button>
           </div>
-          <p class="hud-keys">R reset · N next level · F fullscreen · Esc main menu</p>
+          <p class="hud-keys" data-i18n="play.keys"></p>
           <p id="play-status" class="status"></p>
         </div>
         <details id="debug-panel" class="debug play-debug" open>
-          <summary>Input precision debug</summary>
+          <summary data-i18n="debug.title"></summary>
           <dl id="debug-stats"></dl>
-          <p class="muted">
-            Keep moving the mouse to measure the real sample interval. A 1000Hz mouse should show about 1.000ms,
-            a typical 125Hz mouse about 8ms. Hit detection splits the path between samples at every 1ms boundary
-            and checks it with continuous collision detection.
-          </p>
+          <p class="muted" data-i18n="debug.help"></p>
         </details>
       </section>
 
@@ -300,32 +297,32 @@
       <section id="editor-view" class="editor-view" hidden>
         <div class="stage editor-stage"><canvas id="editor-canvas" data-fit="screen"></canvas></div>
         <div class="editor-bar">
-          <button type="button" id="btn-test" class="primary" title="T">▶ Test play</button>
-          <button type="button" id="btn-editor-menu" title="Main menu">Main Menu</button>
+          <button type="button" id="btn-test" class="primary" title="T" data-i18n="editor.testPlay"></button>
+          <button type="button" id="btn-editor-menu" data-i18n-title="menu.mainMenu" data-i18n="common.mainMenu"></button>
           <span class="bar-sep" aria-hidden="true"></span>
-          <label class="check" title="N"><input type="checkbox" id="opt-snap" checked /> Snap</label>
-          <label class="check" title="P"><input type="checkbox" id="opt-preview" /> Preview motion</label>
-          <label class="check" title="Draw the grid over walls and obstacles"><input type="checkbox" id="opt-grid-top" /> Grid on top</label>
-          <button type="button" id="btn-undo" title="Ctrl+Z">Undo</button>
-          <button type="button" id="btn-redo" title="Ctrl+Y">Redo</button>
-          <button type="button" id="btn-shortcuts" title="?" aria-pressed="false">Shortcuts</button>
+          <label class="check" title="N"><input type="checkbox" id="opt-snap" checked /> <span data-i18n="editor.snap"></span></label>
+          <label class="check" title="P"><input type="checkbox" id="opt-preview" /> <span data-i18n="editor.previewMotion"></span></label>
+          <label class="check" data-i18n-title="editor.gridTopHint"><input type="checkbox" id="opt-grid-top" /> <span data-i18n="editor.gridTop"></span></label>
+          <button type="button" id="btn-undo" title="Ctrl+Z" data-i18n="common.undo"></button>
+          <button type="button" id="btn-redo" title="Ctrl+Y" data-i18n="common.redo"></button>
+          <button type="button" id="btn-shortcuts" title="?" aria-pressed="false" data-i18n="editor.shortcuts"></button>
           <span class="bar-sep" aria-hidden="true"></span>
-          <button type="button" id="btn-panels" title="H" aria-pressed="false">Hide panels</button>
-          <button type="button" id="btn-editor-fullscreen" class="btn-fullscreen" title="F">Fullscreen</button>
+          <button type="button" id="btn-panels" title="H" aria-pressed="false" data-i18n="editor.hidePanels"></button>
+          <button type="button" id="btn-editor-fullscreen" class="btn-fullscreen" title="F" data-i18n="common.fullscreen"></button>
         </div>
-        <aside id="tools-panel" class="editor-float float-left" aria-label="Tools">
-          <div class="float-head" title="Drag to move · double-click to collapse">
-            <span class="float-title">Tools</span>
-            <button type="button" class="float-toggle" aria-expanded="true" title="Collapse">−</button>
+        <aside id="tools-panel" class="editor-float float-left" data-i18n-aria-label="common.tools">
+          <div class="float-head" data-i18n-title="panel.moveHint">
+            <span class="float-title" data-i18n="common.tools"></span>
+            <button type="button" class="float-toggle" aria-expanded="true" data-i18n-title="panel.collapse">−</button>
           </div>
           <div id="palette" class="palette float-body"></div>
         </aside>
         <p id="editor-hint" class="editor-hint status"></p>
         <!-- Object options: the selected object's properties -->
-        <aside id="object-panel" class="editor-float float-right float-object" aria-label="Object">
-          <div class="float-head" title="Drag to move · double-click to collapse">
-            <span class="float-title">Object</span>
-            <button type="button" class="float-toggle" aria-expanded="true" title="Collapse">−</button>
+        <aside id="object-panel" class="editor-float float-right float-object" data-i18n-aria-label="editor.object">
+          <div class="float-head" data-i18n-title="panel.moveHint">
+            <span class="float-title" data-i18n="editor.object"></span>
+            <button type="button" class="float-toggle" aria-expanded="true" data-i18n-title="panel.collapse">−</button>
           </div>
           <div class="panel float-body">
             <section>
@@ -334,40 +331,40 @@
           </div>
         </aside>
         <!-- Level metadata: map info, level settings, theme, verify & share -->
-        <aside id="level-info-panel" class="editor-float float-right" aria-label="Level">
-          <div class="float-head" title="Drag to move · double-click to collapse">
-            <span class="float-title">Level</span>
-            <button type="button" class="float-toggle" aria-expanded="true" title="Collapse">−</button>
+        <aside id="level-info-panel" class="editor-float float-right" data-i18n-aria-label="common.level">
+          <div class="float-head" data-i18n-title="panel.moveHint">
+            <span class="float-title" data-i18n="common.level"></span>
+            <button type="button" class="float-toggle" aria-expanded="true" data-i18n-title="panel.collapse">−</button>
           </div>
           <div class="panel float-body">
             <section>
-              <h3>Map info</h3>
+              <h3 data-i18n="editor.mapInfo"></h3>
               <div class="fields">
-                <label class="field wide"><span>File name</span><input id="map-name" maxlength="60" /></label>
-                <label class="field wide"><span>Author</span><input id="map-author" maxlength="60" /></label>
-                <label class="field wide"><span>Size (16:9)</span><select id="map-size"></select></label>
+                <label class="field wide"><span data-i18n="editor.fileName"></span><input id="map-name" maxlength="60" /></label>
+                <label class="field wide"><span data-i18n="common.author"></span><input id="map-author" maxlength="60" /></label>
+                <label class="field wide"><span data-i18n="editor.size"></span><select id="map-size"></select></label>
               </div>
             </section>
             <details class="theme-section" open>
-              <summary><h3>Level settings</h3></summary>
+              <summary><h3 data-i18n="editor.levelSettings"></h3></summary>
               <div id="level-panel"></div>
             </details>
             <details class="theme-section">
-              <summary><h3>Theme</h3></summary>
+              <summary><h3 data-i18n="editor.theme"></h3></summary>
               <div id="theme-panel"></div>
             </details>
             <ul id="messages" class="messages"></ul>
             <section>
-              <h3>Verify &amp; share</h3>
+              <h3 data-i18n="editor.verifyShare"></h3>
               <p id="verify-status" class="verify"></p>
-              <button type="button" id="btn-share" disabled>Create share link</button>
-              <input id="share-url" readonly placeholder="Your share link will appear here" />
+              <button type="button" id="btn-share" disabled data-i18n="editor.createShareLink"></button>
+              <input id="share-url" readonly data-i18n-placeholder="editor.shareLinkPlaceholder" />
             </section>
             <section class="actions">
-              <button type="button" id="btn-export">Export JSON</button>
-              <button type="button" id="btn-import">Import JSON</button>
+              <button type="button" id="btn-export" data-i18n="editor.exportJson"></button>
+              <button type="button" id="btn-import" data-i18n="editor.importJson"></button>
               <input type="file" id="import-file" accept=".json,application/json" hidden />
-              <button type="button" id="btn-new" class="danger">New map</button>
+              <button type="button" id="btn-new" class="danger" data-i18n="map.new"></button>
             </section>
           </div>
         </aside>

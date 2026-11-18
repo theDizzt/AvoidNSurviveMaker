@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { todayUtc } from './time';
 import { isLibraryFont } from './font-catalog';
 import { readFonts, readScreens, type ThemeFont, type ThemeScreens } from './screen-layout';
@@ -52,6 +53,19 @@ export interface ThemeStyle {
   badge: BadgeStyle;
 }
 
+/**
+ * Theme text in another language. The plain fields of theme.json are the default (English) text;
+ * "i18n": { "ko": { "name": "…", "description": "…" } } replaces them while the game is in that
+ * language. Missing fields keep the default text.
+ */
+export interface ThemeText {
+  name?: string;
+  description?: string;
+  credits?: string;
+  /** The level badge caption */
+  caption?: string;
+}
+
 export interface ThemeInfo {
   format: typeof THEME_FORMAT;
   /** Unique id, used for saving progress (letters, digits, - and _) */
@@ -78,6 +92,8 @@ export interface ThemeInfo {
   style: ThemeStyle;
   /** Custom level select screen */
   screens?: ThemeScreens;
+  /** Translations of the text above, by language id (see ThemeText) */
+  i18n?: Record<string, ThemeText>;
 }
 
 export const DEFAULT_BADGE: Readonly<BadgeStyle> = {
@@ -95,7 +111,7 @@ export function blankThemeInfo(): ThemeInfo {
   return {
     format: THEME_FORMAT,
     id: 'my-theme',
-    name: 'My Theme',
+    name: t('themePack.defaultName'),
     description: '',
     author: '',
     released: todayUtc(),
@@ -107,7 +123,10 @@ export function blankThemeInfo(): ThemeInfo {
 
 /** A loaded theme: info, levels and its files as URLs */
 export interface ThemeEntry {
+  /** As shown: translated to the game's language (see localizeThemeInfo) */
   info: ThemeInfo;
+  /** As in theme.json, with every language: what the Theme Editor loads and saves */
+  source?: ThemeInfo;
   levels: MapData[];
   coverUrl?: string;
   badgeUrl?: string;
@@ -138,9 +157,9 @@ function hex(v: unknown, fallback: string): string {
  * so a hand-edited file still loads. Throws only when it isn't a theme at all.
  */
 export function validateThemeInfo(input: unknown): ThemeInfo {
-  if (typeof input !== 'object' || input === null) throw new Error('theme.json: not a theme');
+  if (typeof input !== 'object' || input === null) throw new Error(t('themePack.notTheme'));
   const o = input as Record<string, unknown>;
-  if (o.format !== THEME_FORMAT) throw new Error(`theme.json: unsupported format (${String(o.format)})`);
+  if (o.format !== THEME_FORMAT) throw new Error(t('themePack.format', { format: String(o.format) }));
   const base = blankThemeInfo();
   const style = (typeof o.style === 'object' && o.style ? o.style : {}) as Record<string, unknown>;
   const b = (typeof style.badge === 'object' && style.badge ? style.badge : {}) as Record<string, unknown>;
@@ -159,7 +178,7 @@ export function validateThemeInfo(input: unknown): ThemeInfo {
   const info: ThemeInfo = {
     format: THEME_FORMAT,
     id: str(o.id, 60).replace(/[^a-zA-Z0-9_-]/g, '') || base.id,
-    name: str(o.name, 60) || 'Untitled theme',
+    name: str(o.name, 60) || t('themePack.untitled'),
     description: str(o.description, 1000),
     author: str(o.author, 60),
     released: /^\d{4}-\d{2}-\d{2}$/.test(str(o.released)) ? str(o.released) : base.released,
@@ -177,12 +196,44 @@ export function validateThemeInfo(input: unknown): ThemeInfo {
   if (fonts) info.fonts = fonts;
   const screens = readScreens(o.screens);
   if (screens) info.screens = screens;
+  const i18n = readThemeI18n(o.i18n);
+  if (i18n) info.i18n = i18n;
   if (style.maze !== undefined) {
     // Reuse the map validator for the maze colors
     const probe = validateMap({ v: 2, width: 960, height: 540, start: { x: 0, y: 0, w: 10, h: 10 }, goal: { x: 20, y: 0, w: 10, h: 10 }, objects: [], theme: style.maze });
     if (probe.theme) info.style.maze = probe.theme;
   }
   return info;
+}
+
+/** The "i18n" block of theme.json: language id → translated text (same limits as the default text) */
+function readThemeI18n(v: unknown): Record<string, ThemeText> | undefined {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return undefined;
+  const out: Record<string, ThemeText> = {};
+  for (const [lang, raw] of Object.entries(v).slice(0, 20)) {
+    if (!/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(lang) || typeof raw !== 'object' || raw === null) continue;
+    const r = raw as Record<string, unknown>;
+    const text: ThemeText = {};
+    if (str(r.name).trim()) text.name = str(r.name, 60);
+    if (str(r.description).trim()) text.description = str(r.description, 1000);
+    if (str(r.credits).trim()) text.credits = str(r.credits, 2000);
+    if (str(r.caption).trim()) text.caption = str(r.caption, 40);
+    if (Object.keys(text).length) out[lang] = text;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** The theme as shown in `lang`: its translated text where there is one, the default text elsewhere */
+export function localizeThemeInfo(info: ThemeInfo, lang: string): ThemeInfo {
+  const tx = info.i18n?.[lang];
+  if (!tx) return info;
+  return {
+    ...info,
+    name: tx.name ?? info.name,
+    description: tx.description ?? info.description,
+    ...(tx.credits ?? info.credits ? { credits: tx.credits ?? info.credits } : {}),
+    style: tx.caption ? { ...info.style, badge: { ...info.style.badge, caption: tx.caption } } : info.style,
+  };
 }
 
 /** Average difficulty of a theme's levels (levels without one count as 1.00); 1.00 when it has none */

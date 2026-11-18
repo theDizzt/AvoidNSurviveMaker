@@ -2,9 +2,9 @@
   "format": 1,
   "id": "workshop",
   "name": "Tutorial Workshop",
-  "description": "First steps through soft corridors. Learn to stay on the path and dodge moving walls.",
+  "description": "First steps through soft corridors. Learn the basic mouse controls!",
   "author": "Avoid N Survive",
-  "released": "2026-11-17",
+  "released": "2026-11-16",
   "unlockStars": 0,
   "colors": [
     "#9fe2ff",
@@ -23,6 +23,16 @@
       "font": "title",
       "pad": 0,
       "showTitle": true
+    }
+  },
+  "i18n": {
+    "ko": {
+      "name": "튜토리얼 작업장",
+      "description": "부드러운 통로에서 내딛는 첫걸음. 기본적인 마우스 조작을 배워 보아요!"
+    },
+    "zh": {
+      "name": "Tutorial Workshop",
+      "description": "First steps through soft corridors. Learn the basic mouse controls!"
     }
   }
 }

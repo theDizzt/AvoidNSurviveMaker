@@ -171,5 +171,15 @@
                                                     }
                                                 ]
                                }
-                }
+                },
+    "i18n":  {
+        "ko":  {
+            "name":  "영원한 서리",
+            "description":  "창백한 겨울 하늘 아래 얼어붙은 첨탑, 푸른 얼음, 흩날리는 눈."
+        },
+        "zh":  {
+            "name":  "Eternal Frost",
+            "description":  "Frozen spires, blue ice and drifting snow beneath a pale winter sky."
+        }
+    }
 }

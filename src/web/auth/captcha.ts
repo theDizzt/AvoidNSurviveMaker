@@ -1,3 +1,4 @@
+import { t } from '../../core/i18n';
 /**
  * Cloudflare Turnstile CAPTCHA. Supabase Auth verifies the token server-side
  * (Dashboard → Authentication → Attack Protection), so the client only renders the widget
@@ -25,10 +26,10 @@ function loadTurnstile(): Promise<TurnstileApi> {
     const s = document.createElement('script');
     s.src = SCRIPT_URL;
     s.async = true;
-    s.onload = () => (window.turnstile ? resolve(window.turnstile) : reject(new Error('Turnstile failed to start')));
+    s.onload = () => (window.turnstile ? resolve(window.turnstile) : reject(new Error(t('captcha.startFailed'))));
     s.onerror = () => {
       loading = null;
-      reject(new Error("Couldn't load the security check. Check your connection and try again."));
+      reject(new Error(t('captcha.loadFailed')));
     };
     document.head.append(s);
   });

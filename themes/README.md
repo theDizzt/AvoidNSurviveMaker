@@ -40,6 +40,19 @@ themes/07-my-world/
 | `music` | 팩 안의 상대 오디오 경로, 예: `audio/background.mp3` (선택) |
 | `style.maze` | 자체 테마가 없는 레벨의 미로 색상: `{ "wall": …, "path": … }`, 맵의 `theme` 과 같은 형식 (Theme Editor 에서 만드는 것이 가장 쉬움) |
 | `style.badge` | 게임 안 레벨 번호 / 제목 배지 (아래 참고) |
+| `i18n` | 다른 언어의 문구 (선택, 아래 참고) |
+
+### 언어별 문구 (`i18n`)
+
+위의 `name`, `description`, `credits`, `style.badge.caption` 은 기본(영어) 문구입니다. 게임 언어가 바뀌면 `i18n` 에 그 언어의 문구가 있을 때 대신 표시되고, 없는 필드는 기본 문구를 그대로 씁니다.
+
+```json
+"i18n": {
+  "ko": { "name": "영원한 서리", "description": "…", "credits": "…", "caption": "…" }
+}
+```
+
+**Theme Editor** 의 **Translation: 한국어** 섹션에서도 편집할 수 있으며, ZIP 으로 내보내면 함께 저장됩니다.
 
 ### 배경 음악
 

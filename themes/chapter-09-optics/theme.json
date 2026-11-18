@@ -171,5 +171,15 @@
                                                     }
                                                 ]
                                }
-                }
+                },
+    "i18n":  {
+        "ko":  {
+            "name":  "광학 - 제목 미정",
+            "description":  "프리즘, 갈라지는 빛줄기, 빛으로 된 기하학적 방. 챕터 제목은 추후 공개됩니다."
+        },
+        "zh":  {
+            "name":  "Optics - Title TBD",
+            "description":  "Prisms, split beams and geometric chambers of light. Chapter title to be announced."
+        }
+    }
 }

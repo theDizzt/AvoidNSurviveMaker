@@ -1,4 +1,5 @@
-import { assignSlots, LEVELS_PER_THEME, MAX_PACK_LEVELS, validateThemeInfo, type ThemeEntry, type ThemeInfo } from '../core/theme-pack';
+import { language, t as tr } from '../core/i18n';
+import { assignSlots, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo, type ThemeEntry, type ThemeInfo } from '../core/theme-pack';
 import type { MapData, Theme } from '../core/types';
 import { validateMap } from '../core/validate';
 
@@ -45,7 +46,7 @@ function loadBundled(): { folder: string; entry: ThemeEntry }[] {
     const image = (name?: string) => (name ? assets[name] : undefined);
     // Official chapters place each level by its level number (gaps stay empty "Soon" slots)
     const slots = official ? assignSlots(levels) : undefined;
-    out.push({ folder, entry: { info, levels, coverUrl: image(info.cover), badgeUrl: image(info.style.badge.image), assets, official, ...(slots ? { slots } : {}) } });
+    out.push({ folder, entry: { info: localizeThemeInfo(info, language), source: info, levels, coverUrl: image(info.cover), badgeUrl: image(info.style.badge.image), assets, official, ...(slots ? { slots } : {}) } });
   }
   return out.sort((a, b) => a.folder.localeCompare(b.folder));
 }
@@ -86,7 +87,8 @@ let customStored: StoredTheme | null = null;
 
 function entryFromStored(s: StoredTheme): ThemeEntry {
   return {
-    info: s.info,
+    info: localizeThemeInfo(s.info, language),
+    source: s.info,
     levels: s.levels,
     coverUrl: s.info.cover ? s.images[s.info.cover] : undefined,
     badgeUrl: s.info.style.badge.image ? s.images[s.info.style.badge.image] : undefined,
@@ -131,8 +133,19 @@ export function setCustomTheme(s: StoredTheme): boolean {
 /** Official chapters that define maze colors, offered as map editor presets */
 export function chapterMazePresets(): { id: string; name: string; theme: Theme }[] {
   return OFFICIAL_THEMES.flatMap((t, i) => (t.info.style.maze
-    ? [{ id: `chapter:${t.info.id}`, name: `Chapter ${String(i + 1).padStart(2, '0')} · ${t.info.name}`, theme: t.info.style.maze }]
+    ? [{ id: `chapter:${t.info.id}`, name: tr('themeRegistry.chapterPreset', { n: String(i + 1).padStart(2, '0'), name: t.info.name }), theme: t.info.style.maze }]
     : []));
+}
+
+/**
+ * Maze colors as saved in the theme files: every official chapter, then the custom theme presets
+ * (custom-themes/), each read from its theme.json. Used by the Theme Editor.
+ */
+export function themeFileMazePresets(): { id: string; name: string; theme: Theme }[] {
+  return [
+    ...chapterMazePresets(),
+    ...CUSTOM_THEME_PRESETS.flatMap((t) => (t.info.style.maze ? [{ id: `preset:${t.info.id}`, name: t.info.name, theme: t.info.style.maze }] : [])),
+  ];
 }
 
 /** The official chapter whose maze colors exactly match `theme` (a map made with a chapter preset) */

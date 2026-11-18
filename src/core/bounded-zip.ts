@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { Unzip, UnzipInflate } from 'fflate';
 
 export const ZIP_LIMITS = {
@@ -9,18 +10,18 @@ export const ZIP_LIMITS = {
 
 /** Stream small input chunks; never allocate from untrusted ZIP size headers. */
 export function unpackBoundedZip(bytes: Uint8Array, limits = ZIP_LIMITS): Record<string, Uint8Array> {
-  if (bytes.length > limits.compressed) throw new Error('The zip file is too large');
+  if (bytes.length > limits.compressed) throw new Error(t('zip.tooLarge'));
   const files: Record<string, Uint8Array> = Object.create(null);
   const names = new Set<string>();
   let total = 0;
   let pending = 0;
   const unzip = new Unzip((file) => {
-    if (names.size >= limits.files) throw new Error('Too many files in the zip');
+    if (names.size >= limits.files) throw new Error(t('zip.tooMany'));
     if (!file.name || file.name.length > 240 || file.name.startsWith('/') || /[\\:\x00-\x1f]/.test(file.name)
       || file.name.split('/').some((part) => part === '..' || part === '.' || part === '__proto__')
-      || names.has(file.name)) throw new Error('Invalid or duplicate zip path');
+      || names.has(file.name)) throw new Error(t('zip.badPath'));
     names.add(file.name);
-    if (file.originalSize !== undefined && file.originalSize > limits.file) throw new Error('Zip entry is too large');
+    if (file.originalSize !== undefined && file.originalSize > limits.file) throw new Error(t('zip.entryTooLarge'));
     pending++;
     let size = 0;
     const chunks: Uint8Array[] = [];
@@ -28,7 +29,7 @@ export function unpackBoundedZip(bytes: Uint8Array, limits = ZIP_LIMITS): Record
       if (error) throw error;
       size += data.length;
       total += data.length;
-      if (size > limits.file || total > limits.total) throw new Error('Expanded zip is too large');
+      if (size > limits.file || total > limits.total) throw new Error(t('zip.expandedTooLarge'));
       chunks.push(data);
       if (final) {
         const out = new Uint8Array(size);
@@ -45,6 +46,6 @@ export function unpackBoundedZip(bytes: Uint8Array, limits = ZIP_LIMITS): Record
   for (let offset = 0; offset < bytes.length; offset += 1024) {
     unzip.push(bytes.subarray(offset, offset + 1024), offset + 1024 >= bytes.length);
   }
-  if (pending || !names.size) throw new Error('Incomplete or empty zip');
+  if (pending || !names.size) throw new Error(t('zip.incomplete'));
   return files;
 }

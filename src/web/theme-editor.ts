@@ -1,10 +1,11 @@
+import { DEFAULT_LANGUAGE, language, LANGUAGES, t as tr } from '../core/i18n';
 import { fontPicker } from './font-picker';
 import { gameAudio } from './audio';
 import { levelLabel } from '../core/level';
 import { compileMap } from '../core/object';
 import {
-  averageDifficulty, blankThemeInfo, DEFAULT_BADGE, LEVELS_PER_THEME, MAX_PACK_LEVELS, validateThemeInfo,
-  type BadgeFont, type BadgeKind, type BadgeStyle, type ThemeEntry,
+  averageDifficulty, blankThemeInfo, DEFAULT_BADGE, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo,
+  type BadgeFont, type BadgeKind, type BadgeStyle, type ThemeEntry, type ThemeInfo, type ThemeText,
 } from '../core/theme-pack';
 import type { MapData } from '../core/types';
 import { createEmptyMap, validateMap, validatePack } from '../core/validate';
@@ -13,7 +14,7 @@ import { beginFrame, drawMap, fitCanvas } from './render';
 import { renderThemePanel } from './theme-panel';
 import { ScreenDesigner, type ScreenKind } from './screen-designer';
 import { ensureFonts } from './screen-render';
-import { customStoredTheme, OFFICIAL_THEMES, CUSTOM_THEME_PRESETS, setCustomTheme, type StoredTheme } from './theme-registry';
+import { customStoredTheme, OFFICIAL_THEMES, CUSTOM_THEME_PRESETS, setCustomTheme, themeFileMazePresets, type StoredTheme } from './theme-registry';
 import { download, fileToDataUrl, readThemeZip, urlToDataUrl, writeThemeZip } from './theme-zip';
 
 /**
@@ -25,10 +26,10 @@ import { download, fileToDataUrl, readThemeZip, urlToDataUrl, writeThemeZip } fr
 const DRAFT_KEY = 'avoid-n-survive:theme-draft';
 
 const BADGE_KINDS: [BadgeKind, string][] = [
-  ['pill', 'Rounded plate'], ['disc', 'Vinyl record'], ['emblem', 'Snowflake emblem'], ['plate', 'Gear plate'],
-  ['slant', 'Slanted band'], ['ring', 'Wood slice'], ['image', 'Custom image'],
+  ['pill', tr('te.roundedPlate')], ['disc', tr('te.vinylRecord')], ['emblem', tr('te.snowflakeEmblem')], ['plate', tr('te.gearPlate')],
+  ['slant', tr('te.slantedBand')], ['ring', tr('te.woodSlice')], ['image', tr('te.customImage')],
 ];
-const BADGE_FONTS: [BadgeFont, string][] = [['title', 'Title'], ['main', 'Rounded'], ['serif', 'Serif'], ['heavy', 'Heavy'], ['timer', 'Digital']];
+const BADGE_FONTS: [BadgeFont, string][] = [['title', tr('te.title')], ['main', tr('te.rounded')], ['serif', tr('te.serif')], ['heavy', tr('te.heavy')], ['timer', tr('te.digital')]];
 
 /** A small sample maze for themes without levels yet */
 function demoMap(): MapData {
@@ -46,7 +47,7 @@ function demoMap(): MapData {
       { role: 'wall', shape: { type: 'rect', x: 610, y: 250, w: 24, h: 90 } },
       { role: 'wall', shape: { type: 'rect', x: 470, y: 180, w: 20, h: 70 }, rotation: { pivot: { x: 480, y: 270 }, speed: 60, angle: 360, clockwise: true, repeat: 'loop', easing: 'none', delay: 0 } },
     ],
-    title: 'Sample Level',
+    title: tr('te.sampleLevel'),
     level: 1,
   };
 }
@@ -103,12 +104,14 @@ export class ThemeEditor {
     const head = el('header', 'dhead');
     const back = el('button', 'dback');
     back.type = 'button';
-    back.title = 'Back (Esc)';
-    back.setAttribute('aria-label', 'Back');
-    back.append(Object.assign(el('span', 'dtile-in'), { textContent: '←' }));
+    back.title = tr('common.backEsc');
+    back.setAttribute('aria-label', tr('common.back'));
+    const label = el('span', 'dtile-in');
+    label.append(el('strong', '', tr('common.back')));
+    back.append(label);
     back.addEventListener('click', () => this.onBack());
     const titles = el('div', 'dhead-titles');
-    titles.append(el('h2', 'dhead-title', 'Theme Editor'), el('p', 'dhead-sub', 'Maze colors, level badge, cover and levels of a world · saved as a theme pack (.zip)'));
+    titles.append(el('h2', 'dhead-title', tr('common.themeEditor')), el('p', 'dhead-sub', tr('te.mazeColorsLevelBadgeCover')));
     const actions = el('div', 'dhead-right te-actions');
     const btn = (text: string, fn: () => void, cls = '') => {
       const b = el('button', cls, text);
@@ -117,16 +120,16 @@ export class ThemeEditor {
       return b;
     };
     actions.append(
-      btn('Import .zip', () => this.zipInput.click()),
-      btn('Export .zip', () => this.exportZip()),
-      btn('▶ Play as custom pack', () => this.playCustom(), 'primary'),
+      btn(tr('te.importZip'), () => this.zipInput.click()),
+      btn(tr('te.exportZip'), () => this.exportZip()),
+      btn(tr('te.playAsCustomPack'), () => this.playCustom(), 'primary'),
     );
     head.append(back, titles, actions);
 
     const side = el('div', 'te-side');
     const tabs = el('div', 'te-tabs');
     tabs.setAttribute('role', 'tablist');
-    for (const [k, label] of [['game', 'In-game'], ['select', 'Level select']] as const) {
+    for (const [k, label] of [['game', tr('te.inGame')], ['select', tr('te.levelSelect')]] as const) {
       const t = el('button', '', label);
       t.type = 'button';
       t.setAttribute('role', 'tab');
@@ -140,12 +143,12 @@ export class ThemeEditor {
     this.designer = new ScreenDesigner(this.stageHost, this.screenPanel, () => this.draft, () => this.save(), (f, folder) => this.storeFile(f, folder));
     const levelsBox = el('section', 'te-levels-box panel');
     const levelHead = el('div', 'te-levels-head');
-    levelHead.append(el('h3', '', 'Levels'));
+    levelHead.append(el('h3', '', tr('te.levels')));
     const levelBtns = el('div', 'actions');
     levelBtns.append(
-      btn('+ Map files', () => this.mapInput.click()),
-      btn('+ Map editor pack', () => this.addFromEditorPack()),
-      btn('+ Open map', () => this.addEditorMap()),
+      btn(tr('te.mapFiles'), () => this.mapInput.click()),
+      btn(tr('te.mapEditorPack'), () => this.addFromEditorPack()),
+      btn(tr('te.openMap'), () => this.addEditorMap()),
     );
     levelsBox.append(levelHead, this.levelList, levelBtns);
     const previewRow = el('div', 'te-preview-row');
@@ -191,7 +194,7 @@ export class ThemeEditor {
   /** Put an uploaded file into the pack under folder/, returning its path */
   private async storeFile(f: File, folder: string): Promise<string> {
     if (f.size > 6 * 1024 * 1024) {
-      alert('Please use files under 6 MB.');
+      alert(tr('te.pleaseUseFilesUnder6'));
       throw new Error('too large');
     }
     const clean = f.name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-');
@@ -228,7 +231,7 @@ export class ThemeEditor {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(this.draft));
     } catch {
-      this.status.textContent = 'The draft is too large to keep in this browser — export it as a .zip to keep it.';
+      this.status.textContent = tr('te.theDraftIsTooLarge');
     }
     this.renderTile();
   }
@@ -253,7 +256,7 @@ export class ThemeEditor {
         }
       }
     }
-    this.draft = { info: structuredClone(entry.info), levels: structuredClone(entry.levels), images };
+    this.draft = { info: structuredClone(('source' in entry ? entry.source : undefined) ?? entry.info), levels: structuredClone(entry.levels), images };
     this.previewIndex = 0;
     this.save();
     this.renderForm();
@@ -268,26 +271,26 @@ export class ThemeEditor {
     if (!f) return;
     try {
       await this.load(await readThemeZip(f));
-      this.flash(`Loaded "${this.draft.info.name}" (${this.draft.levels.length} levels).`);
+      this.flash(tr('te.loaded', { name: this.draft.info.name, n: this.draft.levels.length }));
     } catch (err) {
-      alert(`Couldn't load the pack: ${(err as Error).message}`);
+      alert(tr('campaign.packLoadFailed', { message: (err as Error).message }));
     }
   }
 
   private exportZip(): void {
     download(writeThemeZip(this.draft), `${this.draft.info.id || 'theme'}.zip`);
-    this.flash('Exported. Load this zip as a custom pack to play it, or import it into Theme Editor.');
+    this.flash(tr('te.exported'));
   }
 
   private playCustom(): void {
-    if (!this.draft.levels.length) return alert('Add at least one level first.');
-    if (!setCustomTheme(structuredClone(this.draft))) alert('This pack is too large to keep after a reload, but you can play it now.');
+    if (!this.draft.levels.length) return alert(tr('te.addAtLeastOneLevel'));
+    if (!setCustomTheme(structuredClone(this.draft))) alert(tr('campaign.packTooLarge'));
     this.onPlayCustom();
   }
 
   private addLevels(maps: MapData[]): void {
     const room = MAX_PACK_LEVELS - this.draft.levels.length;
-    if (room <= 0) return alert(`A pack holds at most ${MAX_PACK_LEVELS} levels.`);
+    if (room <= 0) return alert(tr('te.packFull', { max: MAX_PACK_LEVELS }));
     this.draft.levels.push(...maps.slice(0, room));
     this.save();
     this.renderLevels();
@@ -315,10 +318,10 @@ export class ThemeEditor {
       const raw = localStorage.getItem('avoid-n-survive:pack');
       const pack = raw ? (JSON.parse(raw) as { pack?: unknown }).pack : null;
       const levels = pack ? validatePack(pack).levels : [];
-      if (!levels.length) return alert('The map editor\'s map pack is empty. Build one under "Map pack" in the editor.');
+      if (!levels.length) return alert(tr('te.theMapEditorSMap'));
       this.addLevels(levels);
     } catch (err) {
-      alert(`Couldn't read the map editor's pack: ${(err as Error).message}`);
+      alert(tr('te.readPackFailed', { message: (err as Error).message }));
     }
   }
 
@@ -374,14 +377,14 @@ export class ThemeEditor {
     const thumb = el('div', 'te-thumb');
     const url = current ? this.draft.images[current] : undefined;
     if (url) thumb.style.backgroundImage = `url("${url}")`;
-    else thumb.textContent = 'None';
+    else thumb.textContent = tr('common.none');
     const input = el('input');
     input.type = 'file';
     input.accept = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml';
     input.addEventListener('change', async () => {
       const f = input.files?.[0];
       if (!f) return;
-      if (f.size > 4 * 1024 * 1024) return alert('Please use an image under 4 MB.');
+      if (f.size > 4 * 1024 * 1024) return alert(tr('te.pleaseUseAnImageUnder'));
       const ext = f.name.split('.').pop()?.toLowerCase() || 'png';
       const name = `${fallbackName}.${ext}`;
       if (current && current !== name) delete this.draft.images[current];
@@ -390,7 +393,7 @@ export class ThemeEditor {
       this.save();
       this.renderForm();
     });
-    const remove = el('button', 'danger', 'Remove');
+    const remove = el('button', 'danger', tr('te.remove'));
     remove.type = 'button';
     remove.disabled = !current;
     remove.addEventListener('click', () => {
@@ -406,16 +409,16 @@ export class ThemeEditor {
   private musicControl(): HTMLElement {
     const row = el('div', 'actions');
     const info = this.draft.info;
-    row.append(el('span', 'muted', info.music ?? 'No background music'));
+    row.append(el('span', 'muted', info.music ?? tr('te.noMusic')));
     const input = el('input');
     input.type = 'file';
     input.accept = '.mp3,.ogg,.wav,.m4a,.aac,.flac';
-    input.setAttribute('aria-label', 'Theme background music');
+    input.setAttribute('aria-label', tr('te.themeBackgroundMusic'));
     input.addEventListener('change', async () => {
       const file = input.files?.[0];
       if (!file) return;
       if (!/\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(file.name) || file.size > 20 * 1024 * 1024) {
-        this.flash('Choose an audio file up to 20 MB.');
+        this.flash(tr('music.tooLarge'));
         input.value = '';
         return;
       }
@@ -431,17 +434,17 @@ export class ThemeEditor {
         gameAudio.setMusic(null);
         this.save();
         this.renderForm();
-      } catch { this.flash('Could not read the music file.'); }
+      } catch { this.flash(tr('te.musicReadFailed')); }
       finally { input.disabled = false; }
     });
-    const preview = el('button', '', 'Preview music');
+    const preview = el('button', '', tr('te.previewMusic'));
     preview.type = 'button';
     preview.disabled = !info.music || !this.draft.images[info.music];
     preview.addEventListener('click', () => gameAudio.setMusic(info.music ? this.draft.images[info.music] ?? null : null));
-    const stop = el('button', '', 'Stop');
+    const stop = el('button', '', tr('te.stop'));
     stop.type = 'button';
     stop.addEventListener('click', () => gameAudio.setMusic(null));
-    const remove = el('button', '', 'Remove music');
+    const remove = el('button', '', tr('te.removeMusic'));
     remove.type = 'button';
     remove.disabled = !info.music;
     remove.addEventListener('click', () => {
@@ -455,6 +458,39 @@ export class ThemeEditor {
     return row;
   }
 
+  /**
+   * One section per non-default language: the theme's name, description, credits and badge caption
+   * in that language (theme.json "i18n"). Empty fields fall back to the default text above.
+   */
+  private translationSections(
+    info: ThemeInfo,
+    section: (title: string, ...children: HTMLElement[]) => HTMLElement,
+    group: (...children: HTMLElement[]) => HTMLElement,
+  ): HTMLElement[] {
+    return LANGUAGES.filter((l) => l.id !== DEFAULT_LANGUAGE).map((l) => {
+      const get = (k: keyof ThemeText) => info.i18n?.[l.id]?.[k] ?? '';
+      const set = (k: keyof ThemeText, max: number) => (v: string) => {
+        const text = { ...info.i18n?.[l.id] };
+        if (v.trim()) text[k] = v.slice(0, max);
+        else delete text[k];
+        const all = { ...info.i18n };
+        if (Object.keys(text).length) all[l.id] = text;
+        else delete all[l.id];
+        if (Object.keys(all).length) info.i18n = all;
+        else delete info.i18n;
+        this.renderTile();
+      };
+      return section(tr('te.translation', { language: l.label }),
+        el('p', 'muted', tr('te.translationHint')),
+        group(
+          this.field(tr('te.name'), this.text(get('name'), set('name', 60), { max: 60 }), true),
+          this.field(tr('te.description'), this.text(get('description'), set('description', 1000), { multiline: true }), true),
+          this.field(tr('te.creditsShownWithCredits'), this.text(get('credits'), set('credits', 2000), { multiline: true }), true),
+          this.field(tr('te.caption'), this.text(get('caption'), set('caption', 40), { max: 40 })),
+        ));
+    });
+  }
+
   private renderForm(): void {
     const info = this.draft.info;
     const badge = info.style.badge;
@@ -462,19 +498,19 @@ export class ThemeEditor {
 
     // Start from an existing theme
     const source = el('select');
-    source.append(new Option('Start from…', ''), new Option('Blank theme', 'blank'));
+    source.append(new Option(tr('te.startFrom'), ''), new Option(tr('te.blankTheme'), 'blank'));
     const chapters = el('optgroup');
-    chapters.label = 'Official chapters';
-    OFFICIAL_THEMES.forEach((t, i) => chapters.append(new Option(`Chapter ${i + 1}: ${t.info.name}`, `o${i}`)));
+    chapters.label = tr('te.officialChapters');
+    OFFICIAL_THEMES.forEach((t, i) => chapters.append(new Option(tr('te.chapterOption', { n: i + 1, name: t.info.name }), `o${i}`)));
     const unused = el('optgroup');
-    unused.label = 'Custom theme presets';
+    unused.label = tr('te.customThemePresets');
     CUSTOM_THEME_PRESETS.forEach((t, i) => unused.append(new Option(t.info.name, `u${i}`)));
     source.append(chapters, unused);
-    if (customStoredTheme()) source.append(new Option(`Custom pack: ${customStoredTheme()!.info.name}`, 'custom'));
+    if (customStoredTheme()) source.append(new Option(tr('te.customPackOption', { name: customStoredTheme()!.info.name }), 'custom'));
     source.addEventListener('change', () => {
       const v = source.value;
       source.value = '';
-      if (!v || !confirm('Replace the theme being edited?')) return;
+      if (!v || !confirm(tr('te.replaceTheThemeBeingEdited'))) return;
       if (v === 'blank') void this.load({ info: blankThemeInfo(), levels: [], images: {} });
       else if (v === 'custom') void this.load(customStoredTheme()!);
       else if (v.startsWith('u')) void this.load(CUSTOM_THEME_PRESETS[Number(v.slice(1))]);
@@ -487,7 +523,7 @@ export class ThemeEditor {
       else delete info.style.maze;
       this.save();
       renderMaze();
-    });
+    }, themeFileMazePresets(), false);
     renderMaze();
 
     const showTitle = el('input');
@@ -498,7 +534,7 @@ export class ThemeEditor {
       this.save();
     });
     const toggle = el('label', 'toggle');
-    toggle.append(showTitle, el('span', '', 'Show the level title'));
+    toggle.append(showTitle, el('span', '', tr('te.showTheLevelTitle')));
 
     const group = (...children: HTMLElement[]) => {
       const g = el('div', 'fields');
@@ -512,54 +548,55 @@ export class ThemeEditor {
     };
 
     this.form.replaceChildren(
-      group(this.field('Load', source, true)),
-      section('Theme info', group(
-        this.field('Name', this.text(info.name, (v) => (info.name = v.trim() || 'Untitled theme'), { max: 60 }), true),
-        this.field('ID (for saves)', this.text(info.id, (v) => (info.id = v.replace(/[^a-zA-Z0-9_-]/g, '') || 'my-theme'), { max: 60 })),
-        this.field('Release date', this.text(info.released, (v) => (info.released = v), { type: 'date' })),
-        this.field('Description', this.text(info.description, (v) => (info.description = v.slice(0, 1000)), { multiline: true }), true),
-        this.field('Author', this.text(info.author, (v) => (info.author = v.trim()), { max: 60 })),
-        this.field('Author link', this.text(info.authorUrl ?? '', (v) => {
+      group(this.field(tr('te.load'), source, true)),
+      section(tr('te.themeInfo'), group(
+        this.field(tr('te.name'), this.text(info.name, (v) => (info.name = v.trim() || tr('themePack.untitled')), { max: 60 }), true),
+        this.field(tr('te.idForSaves'), this.text(info.id, (v) => (info.id = v.replace(/[^a-zA-Z0-9_-]/g, '') || 'my-theme'), { max: 60 })),
+        this.field(tr('common.releaseDate'), this.text(info.released, (v) => (info.released = v), { type: 'date' })),
+        this.field(tr('te.description'), this.text(info.description, (v) => (info.description = v.slice(0, 1000)), { multiline: true }), true),
+        this.field(tr('common.author'), this.text(info.author, (v) => (info.author = v.trim()), { max: 60 })),
+        this.field(tr('te.authorLink'), this.text(info.authorUrl ?? '', (v) => {
           if (v.trim()) info.authorUrl = v.trim();
           else delete info.authorUrl;
         }, { type: 'url' })),
-        this.field('Stars to unlock (official)', this.text(String(info.unlockStars), (v) => (info.unlockStars = Math.max(0, Math.round(Number(v) || 0))), { type: 'number' })),
-        this.field('Tile colors', (() => {
+        this.field(tr('te.starsToUnlockOfficial'), this.text(String(info.unlockStars), (v) => (info.unlockStars = Math.max(0, Math.round(Number(v) || 0))), { type: 'number' })),
+        this.field(tr('te.tileColors'), (() => {
           const row = el('div', 'color-row');
           row.append(this.color(info.colors[0], (v) => (info.colors[0] = v)), this.color(info.colors[1], (v) => (info.colors[1] = v)));
           return row;
         })()),
-        this.field('Cover image (world tile)', this.image(info.cover, 'cover', (n) => {
+        this.field(tr('te.coverImageWorldTile'), this.image(info.cover, 'cover', (n) => {
           if (n) info.cover = n;
           else delete info.cover;
         }), true),
-        this.field('Credits (shown with {credits})', this.text(info.credits ?? '', (v) => {
+        this.field(tr('te.creditsShownWithCredits'), this.text(info.credits ?? '', (v) => {
           if (v.trim()) info.credits = v.slice(0, 2000);
           else delete info.credits;
         }, { multiline: true }), true),
       )),
-      section('Fonts', this.fontsBox()),
-      section('Background music', this.musicControl()),
-      section('Maze colors', maze),
-      section('Level badge', group(
-        this.field('Design', this.select(badge.kind, BADGE_KINDS, (v) => b({ kind: v }))),
-        this.field('Font', fontPicker(this.select(badge.font, BADGE_FONTS, (v) => b({ font: v })), badge.font)),
-        this.field('Number digits', this.select(String(badge.pad) as '0' | '2' | '3', [['0', '7'], ['2', '07'], ['3', '007']], (v) => b({ pad: Number(v) }))),
-        this.field('Caption', this.text(badge.caption ?? '', (v) => {
+      ...this.translationSections(info, section, group),
+      section(tr('te.fonts'), this.fontsBox()),
+      section(tr('te.backgroundMusic'), this.musicControl()),
+      section(tr('te.mazeColors'), maze),
+      section(tr('te.levelBadge'), group(
+        this.field(tr('te.design'), this.select(badge.kind, BADGE_KINDS, (v) => b({ kind: v }))),
+        this.field(tr('common.font'), fontPicker(this.select(badge.font, BADGE_FONTS, (v) => b({ font: v })), badge.font)),
+        this.field(tr('te.numberDigits'), this.select(String(badge.pad) as '0' | '2' | '3', [['0', '7'], ['2', '07'], ['3', '007']], (v) => b({ pad: Number(v) }))),
+        this.field(tr('te.caption'), this.text(badge.caption ?? '', (v) => {
           if (v.trim()) badge.caption = v.slice(0, 40);
           else delete badge.caption;
         }, { max: 40 })),
-        this.field('Main color', this.color(badge.primary, (v) => b({ primary: v }))),
-        this.field('Second color', this.color(badge.secondary, (v) => b({ secondary: v }))),
-        this.field('Number color', this.color(badge.numberColor, (v) => b({ numberColor: v }))),
-        this.field('Title color', this.color(badge.titleColor, (v) => b({ titleColor: v }))),
+        this.field(tr('te.mainColor'), this.color(badge.primary, (v) => b({ primary: v }))),
+        this.field(tr('te.secondColor'), this.color(badge.secondary, (v) => b({ secondary: v }))),
+        this.field(tr('common.numberColor'), this.color(badge.numberColor, (v) => b({ numberColor: v }))),
+        this.field(tr('te.titleColor'), this.color(badge.titleColor, (v) => b({ titleColor: v }))),
         toggle,
-        this.field('Badge image (Custom image design)', this.image(badge.image, 'badge', (n) => {
+        this.field(tr('te.badgeImageCustomImageDesign'), this.image(badge.image, 'badge', (n) => {
           if (n) badge.image = n;
           else delete badge.image;
         }), true),
       ), (() => {
-        const reset = el('button', 'subtle', 'Reset badge');
+        const reset = el('button', 'subtle', tr('te.resetBadge'));
         reset.type = 'button';
         reset.addEventListener('click', () => {
           info.style.badge = { ...DEFAULT_BADGE };
@@ -580,17 +617,17 @@ export class ThemeEditor {
       const row = el('div', 'te-font-row');
       const name = el('input');
       name.value = f.family;
-      name.title = 'Name used in font pickers';
+      name.title = tr('te.nameUsedInFontPickers');
       name.addEventListener('change', () => {
         f.family = name.value.replace(/[^\w -]/g, '').slice(0, 40) || f.family;
         this.save();
         this.renderForm();
       });
-      const sample = el('span', 'te-font-sample', 'Aa 01');
+      const sample = el('span', 'te-font-sample', tr('te.aa01'));
       sample.style.fontFamily = `'th-draft-${f.family}'`;
       const remove = el('button', 'danger', '✕');
       remove.type = 'button';
-      remove.title = 'Remove font';
+      remove.title = tr('te.removeFont');
       remove.addEventListener('click', () => {
         delete this.draft.images[f.file];
         info.fonts!.splice(i, 1);
@@ -608,13 +645,13 @@ export class ThemeEditor {
       const f = add.files?.[0];
       if (!f) return;
       const file = await this.storeFile(f, 'fonts');
-      const family = f.name.replace(/\.[^.]+$/, '').replace(/[^\w -]/g, '').slice(0, 40) || 'Font';
+      const family = f.name.replace(/\.[^.]+$/, '').replace(/[^\w -]/g, '').slice(0, 40) || tr('common.font');
       (info.fonts ??= []).push({ family, file });
       this.save();
       this.renderForm();
     });
     const label = el('label', 'field wide');
-    label.append(el('span', '', 'Add a font file (.ttf, .otf, .woff, .woff2) — then pick it for texts and level buttons'), add);
+    label.append(el('span', '', tr('te.addAFontFileTtf')), add);
     box.append(label);
     ensureFonts(info, this.draft.images, 'th-draft');
     return box;
@@ -626,7 +663,7 @@ export class ThemeEditor {
       const li = el('li', i === this.previewIndex ? 'on' : '');
       const label = el('button', 'te-level-name', `${i + 1}. ${levelLabel({ ...m, level: undefined })}`);
       label.type = 'button';
-      label.title = 'Preview this level';
+      label.title = tr('te.previewThisLevel');
       label.addEventListener('click', () => {
         this.previewIndex = i;
         this.compiledFor = null;
@@ -638,7 +675,7 @@ export class ThemeEditor {
       diffInput.max = '10';
       diffInput.step = '0.25';
       diffInput.value = (m.difficulty ?? 1).toFixed(2);
-      diffInput.title = 'Difficulty (1.00–10.00)';
+      diffInput.title = tr('te.difficulty1001000');
       diffInput.addEventListener('change', () => {
         const v = Number(diffInput.value);
         m.difficulty = Math.round(Math.min(10, Math.max(1, Number.isFinite(v) ? v : 1)) * 100) / 100;
@@ -660,9 +697,9 @@ export class ThemeEditor {
         this.renderLevels();
       };
       li.append(label, diffInput,
-        tool('↑', 'Move up', move(-1), i === 0),
-        tool('↓', 'Move down', move(1), i === levels.length - 1),
-        tool('✕', 'Remove', () => {
+        tool('↑', tr('pack.moveUp'), move(-1), i === 0),
+        tool('↓', tr('pack.moveDown'), move(1), i === levels.length - 1),
+        tool('✕', tr('te.remove'), () => {
           levels.splice(i, 1);
           this.previewIndex = Math.min(this.previewIndex, Math.max(0, levels.length - 1));
           this.save();
@@ -671,30 +708,32 @@ export class ThemeEditor {
         }));
       return li;
     });
-    if (!rows.length) rows.push(el('li', 'te-empty', 'No levels yet. Add map files, or the map pack you built in the Map Editor.'));
+    if (!rows.length) rows.push(el('li', 'te-empty', tr('te.noLevelsYetAddMap')));
     this.levelList.replaceChildren(...rows);
     const head = this.levelList.previousElementSibling;
     if (head) {
-      head.textContent = `Levels ${levels.length} · avg ◆ ${averageDifficulty(levels).toFixed(2)}${levels.length > LEVELS_PER_THEME ? ` · as an official theme only the first ${LEVELS_PER_THEME} are used` : ''}`;
+      head.textContent = tr('te.levelsHead', { n: levels.length, avg: averageDifficulty(levels).toFixed(2) })
+        + (levels.length > LEVELS_PER_THEME ? tr('te.levelsHeadOver', { max: LEVELS_PER_THEME }) : '');
     }
     this.renderTile();
   }
 
   /** The world tile as it will look on the world select screen */
   private renderTile(): void {
-    const info = this.draft.info;
+    // Shown as the game shows it: in the current language
+    const info = localizeThemeInfo(this.draft.info, language);
     const cover = info.cover ? this.draft.images[info.cover] : undefined;
     const grad = `linear-gradient(135deg, ${info.colors[0]}, ${info.colors[1]})`;
     const tile = el('div', 'dtile dworld te-world');
     tile.style.background = cover ? `linear-gradient(180deg, rgba(20,24,40,0.05), rgba(20,24,40,0.55)), url("${cover}") center / cover, ${grad}` : grad;
     const inner = el('span', 'dtile-in');
-    inner.append(el('span', 'dworld-no', 'Preview'), el('strong', 'dworld-name', info.name), el('span', 'dworld-diff', `◆ ${averageDifficulty(this.draft.levels).toFixed(2)}`));
+    inner.append(el('span', 'dworld-no', tr('te.preview')), el('strong', 'dworld-name', info.name), el('span', 'dworld-diff', `◆ ${averageDifficulty(this.draft.levels).toFixed(2)}`));
     tile.append(inner);
     const meta = el('div', 'te-meta');
     meta.append(
       el('strong', '', info.name),
-      el('span', '', info.description || 'No description yet.'),
-      el('small', 'muted', [info.author && `by ${info.author}`, info.released && `released ${info.released}`].filter(Boolean).join(' · ')),
+      el('span', '', info.description || tr('te.noDescription')),
+      el('small', 'muted', [info.author && tr('campaign.by', { author: info.author }), info.released && tr('campaign.released', { date: info.released })].filter(Boolean).join(' · ')),
     );
     this.tilePreview.replaceChildren(tile, meta);
   }

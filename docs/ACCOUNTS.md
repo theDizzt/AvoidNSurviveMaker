@@ -38,6 +38,11 @@ Supabase Dashboard → **SQL Editor** → 아래 파일을 순서대로 붙여 �
 6. [`supabase/migrations/20261118010000_deaths.sql`](../supabase/migrations/20261118010000_deaths.sql) — 사망 횟수 (전체, 레벨별)
 7. [`supabase/migrations/20261118020000_leaderboard.sql`](../supabase/migrations/20261118020000_leaderboard.sql) — 레벨별 순위표 (검증된 기록만)
 8. [`supabase/migrations/20261118030000_records_always_verified.sql`](../supabase/migrations/20261118030000_records_always_verified.sql) — 임시: 모든 기록을 검증된 것으로 처리
+9. [`supabase/migrations/20261118040000_public_profiles_invoker.sql`](../supabase/migrations/20261118040000_public_profiles_invoker.sql) — 공개 프로필 전용 테이블 및 invoker 뷰로 Security Definer View 경고 해결 (PostgreSQL 15 이상)
+
+1–8을 이미 적용한 DB는 9번만 실행합니다. SQL은 트랜잭션으로 적용되며 기존 계정·기록은 유지합니다.
+Git push나 Vercel 재배포만으로 DB 마이그레이션이 실행되지는 않습니다.
+적용 후 Security Advisor를 다시 검사하고 비로그인 공개 프로필 조회 및 로그인 상태의 본인 프로필 조회를 확인합니다.
 
 (Supabase CLI 를 프로젝트에 연결해 두었다면 `supabase db push` 로 같은 작업을 할 수 있습니다.)
 

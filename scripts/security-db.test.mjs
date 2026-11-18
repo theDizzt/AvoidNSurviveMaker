@@ -164,6 +164,31 @@ try {
   assert.deepEqual(rows.map((r) => [Number(r.place), r.best_ms, r.is_me]), [[1, 400, true]]);
   await assert.rejects(db.query('update public.level_records set verified = false'), /permission denied/);
   console.log('PASS: records-always-verified: existing and new records are ranked; clients still cannot write directly');
+  await db.exec('reset role');
+  await db.exec(await readFile(new URL('../supabase/migrations/20261118040000_public_profiles_invoker.sql', import.meta.url), 'utf8'));
+  assert.equal(await scalar("select 'security_invoker=true' = any(reloptions) from pg_class where oid = 'public.public_profiles'::regclass"), true);
+  const c = '00000000-0000-0000-0000-000000000003';
+  await db.query('insert into auth.users (id, raw_user_meta_data) values ($1, $2)', [c, { nickname: 'Security C' }]);
+  await db.query('update public.profiles set nickname = $1 where id = $2', ['Renamed C', c]);
+  for (const role of ['anon', 'authenticated']) {
+    await db.exec(`reset role; set role ${role}`);
+    assert.equal(Number(await scalar('select count(*) from public.public_profiles')), 3);
+    assert.equal(await scalar('select nickname from public.public_profiles where id = $1', [c]), 'Renamed C');
+    await assert.rejects(db.query('select total_play_seconds from public.profile_directory'), /does not exist/);
+    await assert.rejects(db.query("update public.public_profiles set nickname = 'Forged'"), /permission denied/);
+    await assert.rejects(db.query('delete from public.profile_directory'), /permission denied/);
+    await assert.rejects(db.query('insert into public.profile_directory (id, nickname, discriminator) values ($1, $2, 1)', [c, 'Forged']), /permission denied/);
+    assert.equal(await scalar("select has_function_privilege(current_user, 'public.sync_profile_directory()', 'EXECUTE')"), false);
+  }
+  await db.exec('reset role; set role anon');
+  await assert.rejects(db.query('select * from public.profiles'), /permission denied/);
+  await asUser(a);
+  assert.equal(Number(await scalar('select count(*) from public.profiles')), 1);
+  await db.exec('reset role');
+  await db.query('delete from auth.users where id = $1', [c]);
+  await db.exec('set role anon');
+  assert.equal(Number(await scalar('select count(*) from public.public_profiles')), 2);
+  console.log('PASS: invoker public profiles preserve privacy, reject writes, and sync identity lifecycle');
 } finally {
   await db.close();
 }

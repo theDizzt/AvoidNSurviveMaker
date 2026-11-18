@@ -1,3 +1,4 @@
+import { t } from '../core/i18n';
 /**
  * Floating editor panel: drag it by its title bar, collapse/expand it with the toggle button
  * (or a double-click on the title bar). With `resizable`, its left, right and bottom edges and
@@ -83,7 +84,7 @@ export function floatingPanel(el: HTMLElement, id: string, opts: { resizable?: b
     el.classList.toggle('collapsed', collapsed);
     toggle!.setAttribute('aria-expanded', String(!collapsed));
     toggle!.textContent = collapsed ? '+' : '−';
-    toggle!.title = collapsed ? 'Expand' : 'Collapse';
+    toggle!.title = t(collapsed ? 'panel.expand' : 'panel.collapse');
     save();
   }
 
@@ -119,7 +120,7 @@ export function floatingPanel(el: HTMLElement, id: string, opts: { resizable?: b
       const grip = document.createElement('div');
       grip.className = `float-resize rz-${edge}`;
       grip.setAttribute('aria-hidden', 'true');
-      grip.title = 'Drag to resize · double-click to reset';
+      grip.title = t('panel.resizeHint');
       grip.addEventListener('pointerdown', (e) => startResize(e, edge, grip));
       grip.addEventListener('dblclick', () => {
         state.w = state.h = undefined;

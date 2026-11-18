@@ -38,6 +38,25 @@
   font-display: swap;
 }
 
+/* Chinese fallbacks: only in the font stacks while the game is in Chinese (:root:lang(zh) below).
+   The UI fonts have no Chinese characters, so these draw only the Chinese text. */
+@font-face {
+  font-family: 'ZhMain';
+  src: url('../assets/fonts/main/AaShiGeMingXinPian-2.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+2E80-2FDF, U+3000-303F, U+3100-312F, U+31A0-31BF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF, U+20000-2FA1F;
+}
+@font-face {
+  font-family: 'ZhTitle';
+  src: url('../assets/fonts/title/AaYuanHeiTi-2.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+2E80-2FDF, U+3000-303F, U+3100-312F, U+31A0-31BF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF, U+20000-2FA1F;
+}
+
 /* ───────────────────────── Tokens: light, cool, pastel ───────────────────────── */
 
 :root {
@@ -72,6 +91,12 @@
   --glass: blur(14px) saturate(1.2);
   color-scheme: light;
 }
+/* Chinese: its fallback fonts after the UI fonts (main text → ZhMain, titles → ZhTitle) */
+:root:lang(zh) {
+  --font-main: 'MangoDdobak', 'ZhMain', system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-title: 'GSHyejaroun', 'MangoDdobak', 'ZhTitle', 'ZhMain', system-ui, sans-serif;
+}
+
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -863,7 +888,9 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 .dtile-in small { font-size: 12px; opacity: 0.8; }
 .dicon { font-size: 26px; line-height: 1; opacity: 0.75; }
 /* Start Game: green into blue, matching the logo's green N */
-.dtile-primary { background: linear-gradient(135deg, #3ddc84 0%, #1fb37a 38%, #2a9fe0 72%, #3a7ff0 100%); color: #fff; border-color: transparent; box-shadow: 0 16px 40px rgba(34, 170, 140, 0.4); }
+/* Start Game and every Back button share this gradient */
+:root { --go-gradient: linear-gradient(135deg, #3ddc84 0%, #1fb37a 38%, #2a9fe0 72%, #3a7ff0 100%); }
+.dtile-primary { background: var(--go-gradient); color: #fff; border-color: transparent; box-shadow: 0 16px 40px rgba(34, 170, 140, 0.4); }
 .dtile-primary .dtile-in strong { font-size: 40px; text-shadow: 0 3px 12px rgba(10, 70, 80, 0.35); }
 .dtile-primary .dtile-in small { font-size: 15px; opacity: 0.95; }
 .dtile-deco { background: rgba(255, 255, 255, 0.35); box-shadow: none; }
@@ -874,22 +901,32 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 /* Header of the world / level screens */
 .dscreen { align-content: start; justify-items: center; gap: 12px; padding-top: 18px; }
 .dhead { width: min(1100px, 100%); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; }
+/* Back: the same green-to-blue diamond on every screen (the grid ones are .dtile-primary.dtile-back) */
 .dback {
-  width: 58px;
-  height: 58px;
-  margin: 10px;
-  padding: 0;
-  transform: rotate(45deg);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.85);
-  box-shadow: var(--shadow-sm);
-  font-size: 22px;
-  font-weight: 700;
   position: relative;
+  flex: none;
+  width: 84px;
+  height: 84px;
+  margin: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 16px;
   overflow: hidden;
+  transform: rotate(45deg);
+  background: var(--go-gradient);
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(34, 170, 140, 0.4);
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .dback .dtile-in { padding: 0; }
-.dback:hover, .dback:focus-visible { transform: rotate(45deg) scale(1.08); border-color: var(--accent); }
+.dback .dtile-in strong { font-family: var(--font-title); font-size: 20px; text-shadow: 0 2px 8px rgba(10, 70, 80, 0.35); }
+.dback:hover, .dback:focus-visible {
+  transform: rotate(45deg) scale(1.08);
+  box-shadow: 0 16px 36px rgba(34, 170, 140, 0.5), 0 0 0 3px rgba(255, 255, 255, 0.9);
+  outline: none;
+}
+.menu-buttons .dback, .dback-center { align-self: center; }
 .dhead-title { margin: 0; font-family: var(--font-title); font-size: clamp(26px, 4vw, 40px); }
 .dhead-sub { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
 .dtotal {
@@ -926,20 +963,21 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 }
 .dlevels-body.stacked { flex-direction: column; }
 .dlevels-body .lattice-wrap { flex: none; }
-.dside { flex: none; width: 300px; display: flex; flex-direction: column; gap: 12px; }
+/* Fixed height (about the 21-level lattice's), whatever the description or leaderboard length; the board takes the rest */
+.dside { flex: none; width: 300px; height: 680px; display: flex; flex-direction: column; gap: 12px; }
 .dside-card {
   padding: 16px 18px; border-radius: 18px;
   background: rgba(255, 255, 255, 0.82); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
   border: 1px solid var(--border); box-shadow: var(--shadow-sm);
 }
-.dside-theme { display: flex; flex-direction: column; gap: 6px; }
+.dside-theme { flex: none; display: flex; flex-direction: column; gap: 6px; }
 .dside-chapter { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
 .dside-name { margin: 0; font-family: var(--level-font, var(--font-title)); font-size: 24px; line-height: 1.15; }
 .dside-score { font-weight: 700; font-size: 14px; }
 .dside-star { color: #e0a100; font-family: 'Segoe UI Symbol', 'Apple Symbols', 'Noto Sans Symbols 2', sans-serif; }
 .dside-desc { margin: 2px 0 0; font-size: 13px; line-height: 1.5; color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
 .dside-meta { font-size: 12px; color: var(--muted); }
-.dside-board { display: flex; flex-direction: column; gap: 10px; height: 300px; }
+.dside-board { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
 .dside-board-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .dside-board-head { display: flex; flex-direction: column; gap: 2px; }
 .dside-board-title { margin: 0; font-size: 15px; }
@@ -995,8 +1033,8 @@ button.dlevel:hover:not(:disabled), button.dlevel:focus-visible { transform: rot
 /* Level select extras under the levels: total stars and Back */
 .dlevel-stars { background: linear-gradient(135deg, #fff4c4, #ffd25e); }
 .dlevel-stars .dtotal-star { font-size: 18px; }
-.dlevel-back { background: rgba(255, 255, 255, 0.9); }
-.dlevel-back strong { font-size: 18px !important; }
+.dlevel-back { background: var(--go-gradient); color: #fff; border-color: transparent; box-shadow: 0 12px 30px rgba(34, 170, 140, 0.4); }
+.dlevel-back strong { font-size: 18px !important; text-shadow: 0 2px 8px rgba(10, 70, 80, 0.35); }
 /* Themes with a designed level select (info.screens.select): its button and Back colors */
 .lattice.lv-designed .dlevel:not(.dlevel-stars):not(.dlevel-back) {
   background: var(--lv-fill); color: var(--lv-number);
@@ -1008,7 +1046,7 @@ button.dlevel:hover:not(:disabled), button.dlevel:focus-visible { transform: rot
 .lattice.lv-designed .dlevel-no { text-shadow: 0 0 10px var(--lv-glow, transparent); }
 .lattice.lv-designed .dlevel.soon { opacity: 0.45; }
 .lattice.bk-designed .dlevel-back {
-  background: var(--bk-fill, rgba(255, 255, 255, 0.9)); color: var(--bk-color, var(--text));
+  background: var(--bk-fill, var(--go-gradient)); color: var(--bk-color, #fff);
   border: var(--bk-border-w) solid var(--bk-border, transparent);
 }
 .dlevel-best { font-size: 10px !important; }
@@ -1022,24 +1060,6 @@ button.dlevel:hover:not(:disabled), button.dlevel:focus-visible { transform: rot
 
 /* World select: 16 official slots + the custom pack, in zig-zag rows */
 .dhead-right { display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
-.dload { padding: 8px 14px; border-radius: 999px; font-weight: 700; background: rgba(255, 255, 255, 0.85); }
-.dinfo {
-  width: min(900px, 100%);
-  min-height: 62px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 8px 16px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: var(--glass);
-  -webkit-backdrop-filter: var(--glass);
-  text-align: center;
-  font-size: 13px;
-}
-.dinfo strong { font-family: var(--font-title); font-size: 17px; }
-.dinfo-meta, .dinfo-muted { color: var(--muted); font-size: 12px; }
 .dworld { position: absolute; transform: rotate(45deg); border-radius: 14px; color: #fff; border: 2px solid rgba(255, 255, 255, 0.85); }
 button.dworld:hover:not(:disabled), button.dworld:focus-visible { transform: rotate(45deg) scale(1.07); }
 .dworld .dtile-in { gap: 2px; text-shadow: 0 2px 8px rgba(20, 30, 60, 0.55); }
@@ -1318,6 +1338,10 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 /* Records sync */
 .drecords .dtile-in { gap: 4px; }
 .drecords small { max-width: 130px; }
+
+/* Language picker */
+.dlanguage .dtile-in { gap: 4px; }
+.dlanguage select { max-width: 110px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
 
 /* Toggles: the whole tile is the label; a checked tile lights up */
 .dtoggle .dtile-in { gap: 8px; }

@@ -171,5 +171,15 @@
                                                     }
                                                 ]
                                }
-                }
+                },
+    "i18n":  {
+        "ko":  {
+            "name":  "은하 - 제목 미정",
+            "description":  "궤도, 먼 별들, 보랏빛 성운. 챕터 제목은 추후 공개됩니다."
+        },
+        "zh":  {
+            "name":  "Galaxy - Title TBD",
+            "description":  "Orbital paths, distant stars and violet nebulae. Chapter title to be announced."
+        }
+    }
 }

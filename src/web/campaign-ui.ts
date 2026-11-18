@@ -1,11 +1,13 @@
-import { formatTime } from '../core/simulation';
-import { averageDifficulty, LEVELS_PER_THEME, levelSlots, maxStars, STARS_PER_THEME, themedLevel, type ThemeEntry } from '../core/theme-pack';
+import { t as tr } from '../core/i18n';
+import { formatSeconds } from '../core/simulation';
+import { averageDifficulty, levelSlots, maxStars, themedLevel, type ThemeEntry } from '../core/theme-pack';
 import { formatTag } from '../core/account';
 import { fetchLeaderboard, type LeaderboardRow } from './auth/leaderboard';
 import { badgeFontCss } from './badge';
 import { renderTag } from './player-tag';
 import { levelKey, levelRecord, themeStars, themeUnlocked, totalStars } from './progress';
 import { customTheme, OFFICIAL_SLOTS, OFFICIAL_THEMES, setCustomTheme } from './theme-registry';
+import { chapterLevelCode } from '../core/level';
 import { readThemeZip } from './theme-zip';
 import type { LayoutElement, LevelButtonStyle } from '../core/screen-layout';
 import type { ScreenData } from './screen-render';
@@ -166,7 +168,7 @@ export class CampaignUI {
     if (!wrap || !lat || root.hidden) return;
     const w = lat.offsetWidth;
     const h = lat.offsetHeight;
-    const fit = Math.min(1.2, (window.innerWidth * 0.94) / w, (window.innerHeight - 250) / h);
+    const fit = Math.min(1.2, (window.innerWidth * 0.94) / w, (window.innerHeight - 160) / h);
     wrap.style.width = `${w * fit}px`;
     wrap.style.height = `${h * fit}px`;
     lat.style.transform = `scale(${fit})`;
@@ -214,55 +216,34 @@ export class CampaignUI {
     if (!f) return;
     try {
       const pack = await readThemeZip(f);
-      if (!setCustomTheme(pack)) alert('This pack is too large to keep after a reload, but you can play it now.');
+      if (!setCustomTheme(pack)) alert(tr('campaign.packTooLarge'));
       this.renderThemes();
     } catch (err) {
-      alert(`Couldn't load the pack: ${(err as Error).message}`);
+      alert(tr('campaign.packLoadFailed', { message: (err as Error).message }));
     }
   }
 
-  private header(title: string, sub: string, back: () => void, extra?: HTMLElement): HTMLElement {
+  private header(title: string, back: () => void): HTMLElement {
     const head = el('header', 'dhead');
     const backBtn = el('button', 'dback');
     backBtn.type = 'button';
-    backBtn.title = 'Back (Esc)';
-    backBtn.setAttribute('aria-label', 'Back');
-    backBtn.append(inner('←'));
+    backBtn.title = tr('common.backEsc');
+    backBtn.setAttribute('aria-label', tr('common.back'));
+    backBtn.append(inner(el('strong', '', tr('common.back'))));
     backBtn.addEventListener('click', back);
     const titles = el('div', 'dhead-titles');
     titles.append(el('h2', 'dhead-title', title));
-    if (sub) titles.append(el('p', 'dhead-sub', sub));
     const right = el('div', 'dhead-right');
-    if (extra) right.append(extra);
     const total = el('div', 'dtotal');
     total.append(el('span', 'dtotal-star', '★'), el('strong', '', String(totalStars())));
-    total.title = 'Stars collected in the official worlds';
+    total.title = tr('campaign.totalStars');
     right.append(total);
     head.append(backBtn, titles, right);
     return head;
   }
 
-  /** The info strip under the header: description, author, release date of the hovered world */
-  private infoFor(t: ThemeEntry | null, box: HTMLElement): void {
-    if (!t) {
-      box.replaceChildren(el('span', 'dinfo-muted', 'Load a custom theme pack (.zip) made with the Theme Editor.'));
-      return;
-    }
-    const i = t.info;
-    const meta = el('span', 'dinfo-meta');
-    meta.textContent = [
-      t.official ? `${t.levels.length} / ${LEVELS_PER_THEME} levels` : `${t.levels.length} level${t.levels.length === 1 ? '' : 's'}`,
-      diff(averageDifficulty(t.levels)),
-      i.author ? `by ${i.author}` : '',
-      i.released ? `released ${i.released}` : '',
-    ].filter(Boolean).join(' · ');
-    box.replaceChildren(el('strong', '', i.name), el('span', '', i.description || ' '), meta);
-  }
-
   renderThemes(): void {
     const tiles: HTMLElement[] = [];
-    const info = el('div', 'dinfo');
-    const hover = (t: ThemeEntry | null) => () => this.infoFor(t, info);
     for (let i = 0; i < OFFICIAL_SLOTS; i++) {
       const t = OFFICIAL_THEMES[i];
       if (!t) {
@@ -271,18 +252,16 @@ export class CampaignUI {
         tiles.push(empty);
         continue;
       }
-      tiles.push(this.worldTile(t, String(i + 1), hover(t)));
+      tiles.push(this.worldTile(t, String(i + 1)));
     }
     // Slot 17: the custom pack
     const c = customTheme();
-    if (c) tiles.push(this.worldTile(c, 'Custom', hover(c)));
+    if (c) tiles.push(this.worldTile(c, tr('campaign.customSlot')));
     else {
       const b = el('button', 'dtile dworld dworld-load');
       b.type = 'button';
-      b.append(inner(el('span', 'dicon', '＋'), el('strong', 'dworld-name', 'Custom Pack'), el('small', 'dworld-tag', 'Load a .zip')));
+      b.append(inner(el('span', 'dicon', '＋'), el('strong', 'dworld-name', tr('campaign.customPack')), el('small', 'dworld-tag', tr('campaign.loadZip'))));
       b.addEventListener('click', () => this.file.click());
-      b.addEventListener('pointerenter', hover(null));
-      b.addEventListener('focus', hover(null));
       tiles.push(b);
     }
     const lattice = el('div', 'lattice');
@@ -293,23 +272,14 @@ export class CampaignUI {
     const wrap = el('div', 'lattice-wrap');
     wrap.append(lattice);
 
-    const load = el('button', 'dload', 'Load pack (.zip)');
-    load.type = 'button';
-    load.title = 'Load a custom theme pack made with the Theme Editor';
-    load.addEventListener('click', () => this.file.click());
-    this.themesRoot.replaceChildren(
-      this.header('Select a Chapter', `${OFFICIAL_THEMES.length} chapters · ${LEVELS_PER_THEME} levels and ${STARS_PER_THEME} stars each`, () => this.onBack('themes'), load),
-      info,
-      wrap,
-    );
-    this.infoFor(OFFICIAL_THEMES[0] ?? null, info);
+    this.themesRoot.replaceChildren(this.header(tr('campaign.selectChapter'), () => this.onBack('themes')), wrap);
     requestAnimationFrame(() => {
       this.fit();
       (lattice.querySelector('button:not(:disabled)') as HTMLElement | null)?.focus({ preventScroll: true });
     });
   }
 
-  private worldTile(t: ThemeEntry, label: string, onHover: () => void): HTMLElement {
+  private worldTile(t: ThemeEntry, label: string): HTMLElement {
     const unlocked = themeUnlocked(t);
     const planned = t.official && t.levels.length === 0;
     const b = el('button', `dtile dworld${planned ? ' planned' : unlocked ? '' : ' locked'}${t.official ? '' : ' custom'}`);
@@ -322,23 +292,23 @@ export class CampaignUI {
     const stars = themeStars(t);
     const parts: (HTMLElement | string)[] = [el('span', 'dworld-no', label), el('strong', 'dworld-name', t.info.name)];
     if (planned) {
-      parts.push(el('small', 'dworld-tag', 'COMING SOON'));
+      parts.push(el('small', 'dworld-tag', tr('campaign.comingSoonTag')));
     } else if (unlocked) {
       const p = el('span', 'dworld-stars');
       p.append(el('span', 'on', '★'), ` ${stars}/${maxStars(t)}`);
       parts.push(p, el('span', 'dworld-diff', diff(averageDifficulty(t.levels))));
     } else {
-      parts.push(el('span', 'dlock', `Locked · ★ ${t.info.unlockStars}`));
+      parts.push(el('span', 'dlock', tr('campaign.locked', { stars: t.info.unlockStars })));
     }
     b.append(inner(...parts));
-    b.title = unlocked ? `${t.info.name} — ${t.levels.length} level${t.levels.length === 1 ? '' : 's'}` : `Collect ${t.info.unlockStars} stars to unlock (${t.info.unlockStars - totalStars()} more)`;
+    b.title = unlocked
+      ? tr(t.levels.length === 1 ? 'campaign.worldTitleOne' : 'campaign.worldTitleMany', { name: t.info.name, n: t.levels.length })
+      : tr('campaign.unlockHint', { stars: t.info.unlockStars, more: t.info.unlockStars - totalStars() });
     if (planned) {
-      b.title = `${t.info.name} — Coming soon. Preview the theme in Theme Editor.`;
+      b.title = tr('campaign.comingSoonTitle', { name: t.info.name });
       b.setAttribute('aria-disabled', 'true');
     }
     b.disabled = !unlocked && !planned;
-    b.addEventListener('pointerenter', onHover);
-    b.addEventListener('focus', onHover);
     b.addEventListener('click', () => {
       if (planned) return;
       this.theme = t;
@@ -387,14 +357,15 @@ export class CampaignUI {
       const parts: (HTMLElement | string)[] = [el('strong', 'dlevel-no', String(i + 1))];
       if (map) {
         parts.push(starRow(rec?.stars ?? 0), el('small', 'dlevel-diff', diff(map.difficulty ?? 1)));
-        if (rec) parts.push(el('small', 'dlevel-best', `${formatTime(rec.best)}s`));
-        b.title = `Level ${i + 1} · ${map.title}\nDifficulty ${(map.difficulty ?? 1).toFixed(2)}`;
+        if (rec) parts.push(el('small', 'dlevel-best', formatSeconds(rec.best)));
+        const chapterNo = OFFICIAL_THEMES.indexOf(t);
+        b.title = tr('campaign.levelTitle', { n: chapterNo >= 0 ? chapterLevelCode(chapterNo + 1, i + 1) : i + 1, title: map.title ?? '', difficulty: (map.difficulty ?? 1).toFixed(2) });
         b.addEventListener('click', () => this.onPlay(t, i));
         b.addEventListener('pointerenter', () => side.show(i));
         b.addEventListener('focus', () => side.show(i));
         first ??= b;
       } else {
-        parts.push(el('small', 'dlevel-best', 'Soon'));
+        parts.push(el('small', 'dlevel-best', tr('campaign.soon')));
         b.disabled = true;
       }
       b.append(inner(...parts));
@@ -437,7 +408,7 @@ export class CampaignUI {
   /** Level select: total stars collected in the official worlds, as a lattice diamond */
   private starsTile(): HTMLElement {
     const d = el('div', 'dtile dlevel dlevel-stars');
-    d.title = 'Stars collected in the official worlds';
+    d.title = tr('campaign.totalStars');
     d.append(inner(el('span', 'dtotal-star', '★'), el('strong', 'dlevel-total', String(totalStars()))));
     return d;
   }
@@ -446,8 +417,8 @@ export class CampaignUI {
   private backTile(): HTMLElement {
     const b = el('button', 'dtile dlevel dlevel-back');
     b.type = 'button';
-    b.title = 'Back (Esc)';
-    b.append(inner(el('strong', '', 'Back')));
+    b.title = tr('common.backEsc');
+    b.append(inner(el('strong', '', tr('common.back'))));
     b.addEventListener('click', () => this.onBack('levels'));
     return b;
   }
@@ -459,17 +430,17 @@ export class CampaignUI {
    */
   private sidePanel(t: ThemeEntry): { panel: HTMLElement; show: (index: number) => void } {
     const panel = el('aside', 'dside');
-    panel.setAttribute('aria-label', 'Chapter and leaderboard');
+    panel.setAttribute('aria-label', tr('campaign.sideLabel'));
 
     const about = el('section', 'dside-card dside-theme');
     const chapter = OFFICIAL_THEMES.indexOf(t);
-    about.append(el('span', 'dside-chapter', chapter >= 0 ? `Chapter ${String(chapter + 1).padStart(2, '0')}` : 'Custom pack'));
+    about.append(el('span', 'dside-chapter', chapter >= 0 ? tr('common.chapterN', { n: String(chapter + 1).padStart(2, '0') }) : tr('campaign.customPackLower')));
     about.append(el('h3', 'dside-name', t.info.name));
     const score = el('span', 'dside-score');
     score.append(el('span', 'dside-star', '★'), ` ${themeStars(t)} / ${maxStars(t)} · ${diff(averageDifficulty(t.levels))}`);
     about.append(score);
     if (t.info.description) about.append(el('p', 'dside-desc', t.info.description));
-    const meta = [t.info.author ? `by ${t.info.author}` : '', t.info.released ? `released ${t.info.released}` : ''].filter(Boolean).join(' · ');
+    const meta = [t.info.author ? tr('campaign.by', { author: t.info.author }) : '', t.info.released ? tr('campaign.released', { date: t.info.released }) : ''].filter(Boolean).join(' · ');
     if (meta) about.append(el('span', 'dside-meta', meta));
 
     const board = el('section', 'dside-card dside-board');
@@ -492,23 +463,23 @@ export class CampaignUI {
       const map = themedLevel(t, i);
       // 'Level 1-01' (chapter-level); custom packs have no chapter number
       const no = String(i + 1).padStart(2, '0');
-      title.textContent = chapter >= 0 ? `Level ${chapter + 1}-${no}` : `Level ${no}`;
+      title.textContent = tr('common.levelN', { n: chapter >= 0 ? chapterLevelCode(chapter + 1, i + 1) : no });
       sub.textContent = map?.title ?? '';
       window.clearTimeout(timer);
       const run = ++token;
-      if (!t.official) return note('Leaderboards are kept for the official chapters only.');
-      note('Loading…');
+      if (!t.official) return note(tr('board.officialOnly'));
+      note(tr('common.loading'));
       timer = window.setTimeout(() => {
         void fetchLeaderboard(levelKey(t, i)).then((r) => {
           if (run !== token) return; // another level was hovered meanwhile
           if (!r.ok) {
             return note(r.reason === 'unconfigured'
-              ? 'Leaderboards need accounts, which are not set up on this server.'
+              ? tr('board.unconfigured')
               : r.reason === 'missing'
-                ? 'Leaderboards are not set up on the server yet.'
-                : "Couldn't load the leaderboard. Check your connection.");
+                ? tr('board.missing')
+                : tr('board.failed'));
           }
-          if (!r.rows.length) return note('No records yet. Be the first to clear it!');
+          if (!r.rows.length) return note(tr('board.empty'));
           content.replaceChildren(this.boardList(r.rows));
         });
       }, BOARD_DELAY_MS);
@@ -526,8 +497,8 @@ export class CampaignUI {
       const li = el('li', `dboard-row${r.is_me ? ' me' : ''}${r.place <= 3 ? ` top${r.place}` : ''}`);
       const name = el('span', 'dboard-name');
       renderTag(name, formatTag(r.nickname, r.discriminator));
-      li.append(el('span', 'dboard-place', String(r.place)), name, el('span', 'dboard-time', `${formatTime(r.best_ms)}s`), starRow(r.stars));
-      if (r.is_me) li.title = 'Your record';
+      li.append(el('span', 'dboard-place', String(r.place)), name, el('span', 'dboard-time', formatSeconds(r.best_ms)), starRow(r.stars));
+      if (r.is_me) li.title = tr('board.yourRecord');
       list.append(li);
     }
     return list;

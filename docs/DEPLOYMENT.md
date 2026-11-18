@@ -18,6 +18,13 @@ Supabase 및 Turnstile 공개 설정은 Actions의 Repository variables에 등�
 
 토큰은 소스 코드에 넣지 않습니다. `.vercel/project.json`도 커밋하지 않습니다.
 Vercel 프로젝트의 Node.js 버전은 24.x로 맞추고, Production 환경에 필요한 `VITE_*` 환경 변수를 등록합니다.
+`VITE_SUPABASE_URL`에는 Supabase 프로젝트 URL(`https://<project-ref>.supabase.co`),
+`VITE_SUPABASE_PUBLISHABLE_KEY`에는 해당 프로젝트의 공개 키를 입력합니다.
+`vercel env add ...` 같은 명령문을 변수 값에 입력하지 않습니다.
+GitHub Actions Variables와 Vercel의 Environment Variables는 별도 설정입니다.
+이 워크플로는 `vercel pull`로 Vercel의 Production 값을 받아 빌드합니다.
+`VITE_*` 값은 빌드 시 포함되므로 값을 수정한 후 반드시 새로 빌드하고 배포해야 합니다.
+잘못된 계정 설정은 오프라인 플레이로 대체되지만 로그인 및 온라인 기록 기능에는 올바른 설정이 필요합니다.
 워크플로는 Vercel CLI 66.0.0을 사용하며, 버전 변경은 명시적으로 진행합니다.
 
 필수 secret이 빠진 push에서는 설정 확인 작업에 경고와 요약을 남기고 실제 배포 작업은 건너뜁니다.

@@ -171,5 +171,15 @@
                                                     }
                                                 ]
                                }
-                }
+                },
+    "i18n":  {
+        "ko":  {
+            "name":  "불량 가공 공장",
+            "description":  "고장 난 생산 라인, 경고 줄무늬, 산업용 강철."
+        },
+        "zh":  {
+            "name":  "Defective Processing Plant",
+            "description":  "Faulty production lines, hazard stripes and industrial steel."
+        }
+    }
 }

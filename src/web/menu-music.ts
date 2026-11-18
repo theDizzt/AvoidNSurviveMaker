@@ -1,7 +1,8 @@
+import { t } from '../core/i18n';
 /** Menu music override stored as a Blob, outside localStorage's small quota. */
 const bundled = import.meta.glob<string>('../assets/music/main-menu.{mp3,ogg,wav,m4a,aac,flac}', { eager: true, query: '?url', import: 'default' });
 const defaultUrl = Object.values(bundled)[0] ?? null;
-const defaultName = defaultUrl ? '- Platform / Or4nges' : 'No music selected';
+const defaultName = defaultUrl ? '- Platform / Or4nges' : t('music.none');
 let objectUrl: string | null = null;
 export let menuMusicUrl: string | null = defaultUrl;
 
@@ -42,20 +43,20 @@ export function installMenuMusicControls(onChange: () => void): void {
     input.value = '';
     if (!file) return;
     if (!/\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(file.name) || file.size > 20 * 1024 * 1024) {
-      label.textContent = 'Choose an audio file up to 20 MB.';
+      label.textContent = t('music.tooLarge');
       return;
     }
     revision++;
     input.disabled = remove.disabled = true;
     try { await store(file); apply(file); }
-    catch { label.textContent = 'Could not save music. Check available browser storage.'; }
+    catch { label.textContent = t('music.saveFailed'); }
     finally { input.disabled = remove.disabled = false; }
   });
   remove.addEventListener('click', async () => {
     revision++;
     input.disabled = remove.disabled = true;
     try { await store(null); apply(); }
-    catch { label.textContent = 'Could not reset the saved music.'; }
+    catch { label.textContent = t('music.resetFailed'); }
     finally { input.disabled = remove.disabled = false; }
   });
 }

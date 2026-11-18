@@ -171,5 +171,15 @@
                                                     }
                                                 ]
                                }
-                }
+                },
+    "i18n":  {
+        "ko":  {
+            "name":  "바다 - 제목 미정",
+            "description":  "짙푸른 물, 산호의 실루엣, 빛나는 해류. 챕터 제목은 추후 공개됩니다."
+        },
+        "zh":  {
+            "name":  "Ocean - Title TBD",
+            "description":  "Deep blue water, coral silhouettes and luminous currents. Chapter title to be announced."
+        }
+    }
 }

@@ -1,4 +1,5 @@
 import { starsFor } from '../core/level';
+import { recordTime } from '../core/time';
 import { filledSlots, STARS_PER_LEVEL, type ThemeEntry } from '../core/theme-pack';
 import type { MapData } from '../core/types';
 import { OFFICIAL_THEMES } from './theme-registry';
@@ -22,8 +23,8 @@ function load(): Record<string, LevelRecord> {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, Partial<LevelRecord>>;
     const out: Record<string, LevelRecord> = {};
     for (const [k, v] of Object.entries(raw)) {
-      if (typeof v?.stars === 'number' && typeof v.best === 'number') {
-        out[k] = { stars: Math.max(0, Math.min(STARS_PER_LEVEL, Math.round(v.stars))), best: v.best };
+      if (typeof v?.stars === 'number' && typeof v.best === 'number' && Number.isFinite(v.best) && v.best > 0) {
+        out[k] = { stars: Math.max(0, Math.min(STARS_PER_LEVEL, Math.round(v.stars))), best: recordTime(v.best) };
       }
     }
     // Chapter 1 reuses the old Pastel maps; carry existing records forward once.
@@ -54,6 +55,7 @@ export function levelRecord(theme: ThemeEntry, index: number): LevelRecord | nul
 
 /** Record a clear; keeps the best stars and best time. Returns the stars this clear earned */
 export function recordClear(theme: ThemeEntry, index: number, map: MapData, time: number): number {
+  time = recordTime(time);
   const stars = starsFor(map, time) ?? STARS_PER_LEVEL;
   const k = key(theme, index);
   const prev = records[k];
@@ -77,16 +79,19 @@ export function allRecords(): Readonly<Record<string, LevelRecord>> {
 
 /**
  * Merge records from elsewhere (the player's account): keeps the best time and most stars per level.
+ * With authoritative=true, replace returned levels with the server's accepted values.
  * Returns how many levels changed here.
  */
-export function mergeRecords(incoming: Record<string, LevelRecord>): number {
+export function mergeRecords(incoming: Record<string, LevelRecord>, authoritative = false): number {
   let changed = 0;
   const next = { ...records };
   for (const [k, r] of Object.entries(incoming)) {
     if (!Number.isFinite(r.best) || r.best <= 0) continue;
     const stars = Math.max(0, Math.min(STARS_PER_LEVEL, Math.round(r.stars)));
     const prev = next[k];
-    const merged = { stars: Math.max(prev?.stars ?? 0, stars), best: Math.min(prev?.best ?? Infinity, r.best) };
+    const best = recordTime(r.best);
+    const merged = authoritative ? { stars, best }
+      : { stars: Math.max(prev?.stars ?? 0, stars), best: Math.min(prev?.best ?? Infinity, best) };
     if (!prev || merged.stars !== prev.stars || merged.best !== prev.best) {
       next[k] = merged;
       changed++;

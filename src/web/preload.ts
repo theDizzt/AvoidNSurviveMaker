@@ -1,3 +1,4 @@
+import { language, t } from '../core/i18n';
 import { FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
 
 export interface PreloadTask {
@@ -7,11 +8,16 @@ export interface PreloadTask {
 
 /** Every font face the game uses. Canvas text never triggers a download by itself, so load them all here. */
 export const FONT_TASKS: PreloadTask[] = [
-  { label: 'Title font', run: () => document.fonts.load(`700 16px ${FONT_TITLE}`) },
-  { label: 'Main font (Regular)', run: () => document.fonts.load(`400 16px ${FONT_MAIN}`) },
-  { label: 'Main font (Bold)', run: () => document.fonts.load(`700 16px ${FONT_MAIN}`) },
-  { label: 'Main font (Light)', run: () => document.fonts.load(`300 16px ${FONT_MAIN}`) },
-  { label: 'Timer font', run: () => document.fonts.load(`400 16px ${FONT_TIMER}`) },
+  { label: t('preload.titleFont'), run: () => document.fonts.load(`700 16px ${FONT_TITLE}`) },
+  { label: t('preload.mainRegular'), run: () => document.fonts.load(`400 16px ${FONT_MAIN}`) },
+  { label: t('preload.mainBold'), run: () => document.fonts.load(`700 16px ${FONT_MAIN}`) },
+  { label: t('preload.mainLight'), run: () => document.fonts.load(`300 16px ${FONT_MAIN}`) },
+  { label: t('preload.timerFont'), run: () => document.fonts.load(`400 16px ${FONT_TIMER}`) },
+  // Chinese fallbacks load only for Chinese text (unicode-range), so ask for some
+  ...(language === 'zh' ? [
+    { label: t('preload.zhMainFont'), run: () => document.fonts.load("400 16px 'ZhMain'", '中文') },
+    { label: t('preload.zhTitleFont'), run: () => document.fonts.load("400 16px 'ZhTitle'", '中文') },
+  ] : []),
 ];
 
 const MIN_DURATION_MS = 800;

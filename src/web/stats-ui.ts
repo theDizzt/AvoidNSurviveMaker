@@ -1,3 +1,4 @@
+import { t as tr } from '../core/i18n';
 import { formatPlayTime } from '../core/account';
 import { formatTime } from '../core/simulation';
 import { formatUtc } from '../core/time';
@@ -8,6 +9,7 @@ import type { AccountRecord, RecordSync } from './auth/records';
 import { levelKey } from './progress';
 import { renderTag } from './player-tag';
 import { customTheme, OFFICIAL_THEMES } from './theme-registry';
+import { chapterLevelCode } from '../core/level';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -19,14 +21,14 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
 const date = formatUtc;
 const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(Math.max(0, STARS_PER_LEVEL - n));
 
-/** Short name of a level key: 'Ch.01-4' for chapters, 'Custom 4' for custom packs */
+/** Short name of a level key: '1-04' for chapters, 'Custom 4' for custom packs */
 function levelName(key: string): string {
   const m = /^(custom:)?(.+)\/(\d+)$/.exec(key);
   if (!m) return key;
   const n = Number(m[3]) + 1;
-  if (m[1]) return `Custom ${n}`;
+  if (m[1]) return tr('stats.customLevel', { n });
   const ch = OFFICIAL_THEMES.findIndex((t) => t.info.id === m[2]);
-  return ch >= 0 ? `Ch.${String(ch + 1).padStart(2, '0')}-${n}` : `${m[2]} ${n}`;
+  return ch >= 0 ? chapterLevelCode(ch + 1, n) : `${m[2]} ${n}`;
 }
 
 /** The per-level record tables are built but kept hidden for now; flip to show them again. */
@@ -66,13 +68,13 @@ export class StatsUI {
   async render(): Promise<void> {
     const run = ++this.loading;
     this.clear();
-    if (!this.account.configured) return this.message('Accounts are not set up, so there is nothing stored in the database.');
+    if (!this.account.configured) return this.message(tr('stats.notConfigured'));
     const profile = this.account.profile;
-    if (!profile) return this.message('Sign in to see the stats saved to your account.');
-    this.message('Loading records…');
+    if (!profile) return this.message(tr('stats.signIn'));
+    this.message(tr('stats.loading'));
     const [rows, serverDeaths] = await Promise.all([this.records.fetchAccountRecords(), this.deaths.fetchAccountDeaths()]);
     if (run !== this.loading) return; // a newer render started
-    if (!rows) return this.message("Couldn't load records from the database. Check your connection and try again.");
+    if (!rows) return this.message(tr('stats.loadFailed'));
 
     const byKey = new Map(rows.map((r) => [r.level_key, r]));
     const totalStars = rows.reduce((s, r) => s + r.stars, 0);
@@ -80,22 +82,22 @@ export class StatsUI {
     const lastUpdate = rows.reduce<string | undefined>((a, r) => (!a || r.updated_at > a ? r.updated_at : a), undefined);
     const officialMax = OFFICIAL_THEMES.reduce((s, t) => s + levelSlots(t) * STARS_PER_LEVEL, 0);
 
-    this.message('Everything saved to your account.');
+    this.message(tr('stats.saved'));
     this.set('stars', String(totalStars));
-    this.set('stars-note', `of ${officialMax} in chapters`);
+    this.set('stars-note', tr('stats.starsNote', { max: officialMax }));
     const player = this.grid.querySelector<HTMLElement>('[data-stat="player"]');
     if (player) renderTag(player, this.account.tag ?? '—');
-    this.set('player-note', `Joined ${date(profile.created_at)}`);
+    this.set('player-note', tr('stats.joined', { date: date(profile.created_at) }));
     this.set('time', formatPlayTime(profile.total_play_seconds));
-    this.set('time-note', `${profile.total_play_seconds.toLocaleString()} s`);
+    this.set('time-note', `${profile.total_play_seconds.toLocaleString()}s`);
     this.set('cleared', String(rows.length));
-    this.set('cleared-note', `${perfect} with all stars`);
+    this.set('cleared-note', tr('stats.perfect', { n: perfect }));
     this.set('last', date(lastUpdate));
     const deaths = serverDeaths && this.withUnsent(serverDeaths);
     if (deaths) {
       this.set('deaths', deaths.total.toLocaleString());
       const worst = Object.entries(deaths.levels).sort((a, b) => b[1] - a[1])[0];
-      this.set('deaths-note', worst ? `Most: ${levelName(worst[0])} (${worst[1].toLocaleString()})` : 'in runs');
+      this.set('deaths-note', worst ? tr('stats.deathsMost', { level: levelName(worst[0]), n: worst[1].toLocaleString() }) : tr('stats.deathsNote'));
     }
     if (!SHOW_LEVEL_RECORDS) return;
     const levelDeaths = deaths?.levels ?? {};
@@ -108,12 +110,12 @@ export class StatsUI {
       if (!recs.some(Boolean) && slots === 0) continue;
       for (let i = 0; i < slots; i++) byKey.delete(levelKey(t, i));
       const cleared = recs.filter(Boolean) as AccountRecord[];
-      const title = t.official ? `Chapter ${String(ti + 1).padStart(2, '0')} · ${t.info.name}` : `Custom · ${t.info.name}`;
-      sections.push(this.section(title, `${cleared.length} / ${slots} cleared · ★ ${cleared.reduce((s, r) => s + r.stars, 0)} / ${slots * STARS_PER_LEVEL}`,
+      const title = t.official ? tr('themeRegistry.chapterPreset', { n: String(ti + 1).padStart(2, '0'), name: t.info.name }) : tr('stats.customPack', { name: t.info.name });
+      sections.push(this.section(title, tr('stats.sectionSummary', { cleared: cleared.length, slots, stars: cleared.reduce((s, r) => s + r.stars, 0), max: slots * STARS_PER_LEVEL }),
         recs.map((r, i) => [`${i + 1}. ${levelAt(t, i)?.title ?? levelAt(t, i)?.name.replace(/^\d+\.\s*/, '') ?? ''}`, r, levelDeaths[levelKey(t, i)] ?? 0])));
     }
     // Records for levels this build doesn't know (older or other custom packs)
-    if (byKey.size) sections.push(this.section('Other levels', `${byKey.size} record${byKey.size === 1 ? '' : 's'}`, [...byKey].map(([k, r]) => [k, r, levelDeaths[k] ?? 0])));
+    if (byKey.size) sections.push(this.section(tr('stats.otherLevels'), tr(byKey.size === 1 ? 'stats.recordOne' : 'stats.recordMany', { n: byKey.size }), [...byKey].map(([k, r]) => [k, r, levelDeaths[k] ?? 0])));
 
     this.list.replaceChildren(...sections);
     this.list.hidden = false;
@@ -134,7 +136,7 @@ export class StatsUI {
     head.append(el('strong', '', title), el('small', 'muted', meta));
     const table = el('table', 'stats-table');
     const thead = table.createTHead().insertRow();
-    for (const h of ['Level', 'Best', 'Best (ms)', 'Stars', 'Deaths', 'Updated']) thead.append(el('th', '', h));
+    for (const h of [tr('common.level'), tr('stats.colBest'), tr('stats.colBestMs'), tr('common.stars'), tr('stats.colDeaths'), tr('stats.colUpdated')]) thead.append(el('th', '', h));
     const body = table.createTBody();
     for (const [name, r, deaths] of rows) {
       const tr = body.insertRow();

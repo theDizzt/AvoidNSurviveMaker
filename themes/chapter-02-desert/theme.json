@@ -2,7 +2,7 @@
   "format": 1,
   "id": "desert",
   "name": "Hot Hot Ruin",
-  "description": "Sun-baked sandstone, buried gates and heat shimmering over ancient ruins.",
+  "description": "Sun-baked sand, buried paths and heat shimmering over ancient ruins. Hunt for treasure in the abandoned ruins of the desert!",
   "author": "Avoid N Survive",
   "released": "2026-11-17",
   "unlockStars": 30,
@@ -171,6 +171,16 @@
           "color": "#f5bb58"
         }
       ]
+    }
+  },
+  "i18n": {
+    "ko": {
+      "name": "뜨끈뜨끈 폐허",
+      "description": "햇볕에 달궈진 모래, 파묻힌 길, 고대 유적 위로 아른거리는 열기. 사막의 버려진 유적에서 보물을 찾아 보아요!"
+    },
+    "zh": {
+      "name": "Hot Hot Ruin",
+      "description": "Sun-baked sand, buried paths and heat shimmering over ancient ruins. Hunt for treasure in the abandoned ruins of the desert!"
     }
   }
 }

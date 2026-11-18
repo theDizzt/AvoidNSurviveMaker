@@ -1,8 +1,10 @@
+import { t as tr } from '../core/i18n';
 import { levelLabel, starGoals, starsFor, starText } from '../core/level';
+import { recordTime } from '../core/time';
 import { DEFAULT_BADGE, type BadgeStyle } from '../core/theme-pack';
 import { badgeImage, drawLevelBadge } from './badge';
 import { badgeTitle } from './theme-registry';
-import { formatTime, Simulation, type EndReason, type Replay } from '../core/simulation';
+import { formatSeconds, Simulation, type Replay } from '../core/simulation';
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
 import { options } from './options';
@@ -21,17 +23,6 @@ const IDLE_MARGIN_MS = 40;
 const TRAIL_POINTS = 800;
 /** On-screen size (CSS px) of the virtual cursor that replaces the system cursor during a run */
 const CURSOR_PX = 8;
-
-const REASON_TEXT: Record<EndReason, string> = {
-  wall: 'Touched a wall',
-  mover: 'Hit a moving obstacle',
-  void: 'Touched a wall',
-  bounds: 'Left the map',
-  laser: 'Hit a laser',
-  left: 'Cursor left the window',
-  blur: 'Window lost focus',
-  pointer: 'Pointer input was interrupted',
-};
 
 export interface PlayElements {
   /** The play screen; gets the `running` class while a run is in progress */
@@ -211,8 +202,9 @@ export class PlayController {
       this.notified = true;
       const key = JSON.stringify(this.map);
       const prev = this.best.get(key);
-      if (prev === undefined || sim.endTime < prev) this.best.set(key, sim.endTime);
-      this.onClear?.(this.map, sim.getReplay(), sim.endTime);
+      const time = recordTime(sim.endTime);
+      if (prev === undefined || time < prev) this.best.set(key, time);
+      this.onClear?.(this.map, sim.getReplay(), time);
     }
 
     this.draw(now);
@@ -271,17 +263,23 @@ export class PlayController {
     // Maps without a number or title (e.g. editor test play) still show their name in the badge
     const top = drawLevelBadge(ctx, map.level === undefined && !map.title ? { ...map, title: badgeTitle(map) } : map, style, badgeImage(this.badge?.imageUrl), now);
 
+    if (options.showTimer) {
+      const elapsed = sim.status === 'ready' ? 0
+        : sim.status === 'playing' ? now - this.t0
+          : sim.status === 'cleared' ? recordTime(sim.endTime) : sim.endTime;
+      drawStopwatch(ctx, map, elapsed, now);
+    }
+
     if (sim.status === 'playing') {
-      if (options.showTimer) drawStopwatch(ctx, map, now - this.t0, now);
       if (sim.coinTotal) this.drawCoinCount(top);
     } else if (sim.status === 'ready') {
       // The level number / title sit at the top-left; the banner says how to start
       const goals = starGoals(map);
-      const coins = sim.coinTotal ? `Collect all ${sim.coinTotal} coin${sim.coinTotal === 1 ? '' : 's'}, then reach GOAL` : '';
+      const coins = sim.coinTotal ? tr(sim.coinTotal === 1 ? 'play.coinsOne' : 'play.coinsMany', { n: sim.coinTotal }) : '';
       const rule = sim.objects.some((o) => o.role === 'path')
-        ? 'Stay on the paths and reach GOAL without touching walls'
-        : 'Reach GOAL without touching walls, obstacles, or the map edge';
-      drawBanner(ctx, map, 'Click the START area to begin', [coins || (goals ? '' : rule), goals].filter(Boolean).join(' · '));
+        ? tr('play.rulePaths')
+        : tr('play.ruleWalls');
+      drawBanner(ctx, map, tr('play.clickStart'), [coins || (goals ? '' : rule), goals].filter(Boolean).join(' · '));
     } else if (sim.status === 'dead') {
       ctx.strokeStyle = COLORS.hit;
       ctx.lineWidth = 3;
@@ -291,16 +289,18 @@ export class PlayController {
       ctx.moveTo(sim.x + 8, sim.y - 8);
       ctx.lineTo(sim.x - 8, sim.y + 8);
       ctx.stroke();
-      drawBanner(ctx, map, `Failed · ${formatTime(sim.endTime)}s`, `${REASON_TEXT[sim.endReason!]} — click START to retry`, '#e2486c');
+      drawBanner(ctx, map, tr('play.failedBanner', { time: formatSeconds(sim.endTime) }), tr('play.failedSub'), '#e2486c');
     } else {
       const best = this.best.get(JSON.stringify(map));
-      const stars = starsFor(map, sim.endTime);
+      const stars = starsFor(map, recordTime(sim.endTime));
       const bestStars = best !== undefined ? starsFor(map, best) : null;
       const sub = [
-        best !== undefined ? `Best ${formatTime(best)}s${bestStars !== null ? ` (${bestStars} star${bestStars === 1 ? '' : 's'})` : ''}` : '',
-        this.nextHint ?? 'click START to try again',
+        best !== undefined
+          ? tr('play.best', { time: formatSeconds(best) }) + (bestStars !== null ? tr(bestStars === 1 ? 'play.bestStarsOne' : 'play.bestStarsMany', { n: bestStars }) : '')
+          : '',
+        this.nextHint ?? tr('play.tryAgain'),
       ].filter(Boolean).join(' — ');
-      drawBanner(ctx, map, `${stars !== null ? `${starText(stars)}  ` : ''}Cleared! ${formatTime(sim.endTime)}s`, sub, '#d48f00');
+      drawBanner(ctx, map, `${stars !== null ? `${starText(stars)}  ` : ''}${tr('play.cleared', { time: formatSeconds(recordTime(sim.endTime)) })}`, sub, '#d48f00');
     }
   }
 
@@ -332,22 +332,22 @@ export class PlayController {
   private updateText(now: number): void {
     const sim = this.sim;
     const state =
-      sim.status === 'playing' ? `Playing · ${formatTime(now - this.t0)}s`
-        : sim.status === 'ready' ? 'Ready'
-          : sim.status === 'cleared' ? `Cleared · ${formatTime(sim.endTime)}s`
-            : `Failed · ${REASON_TEXT[sim.endReason!]}`;
-    this.el.status.textContent = `${levelLabel(this.map)}${this.map.author ? ` (by ${this.map.author})` : ''} — ${state}`;
+      sim.status === 'playing' ? tr('play.statusPlaying', { time: formatSeconds(now - this.t0) })
+        : sim.status === 'ready' ? tr('play.statusReady')
+          : sim.status === 'cleared' ? tr('play.statusCleared', { time: formatSeconds(recordTime(sim.endTime)) })
+            : tr('play.statusFailed');
+    this.el.status.textContent = `${levelLabel(this.map)}${this.map.author ? tr('play.byAuthor', { author: this.map.author }) : ''} — ${state}`;
 
     const s = this.stats.summary();
     const rows: [string, string][] = [
-      ['Input event', `${this.input.source}${this.input.coalesced ? ' + getCoalescedEvents' : ' (no coalesced events)'}`],
-      ['Sample interval (median)', s.medianMs !== null ? `${s.medianMs.toFixed(3)} ms` : 'Keep moving the mouse'],
-      ['Estimated polling rate', s.hz !== null ? `${Math.round(s.hz)} Hz` : '-'],
-      ['Min interval', s.minMs !== null ? `${s.minMs.toFixed(3)} ms` : '-'],
-      ['Samples per event (avg/max)', `${s.avgPerEvent.toFixed(1)} / ${s.maxPerEvent}`],
-      ['Total samples', String(s.total)],
-      ['Simulation ticks (1ms)', String(sim.ticks)],
-      ['Render FPS', this.fps.toFixed(0)],
+      [tr('debug.inputEvent'), `${this.input.source}${this.input.coalesced ? ' + getCoalescedEvents' : tr('debug.noCoalesced')}`],
+      [tr('debug.sampleInterval'), s.medianMs !== null ? `${s.medianMs.toFixed(3)} ms` : tr('debug.keepMoving')],
+      [tr('debug.pollingRate'), s.hz !== null ? `${Math.round(s.hz)} Hz` : '-'],
+      [tr('debug.minInterval'), s.minMs !== null ? `${s.minMs.toFixed(3)} ms` : '-'],
+      [tr('debug.samplesPerEvent'), `${s.avgPerEvent.toFixed(1)} / ${s.maxPerEvent}`],
+      [tr('debug.totalSamples'), String(s.total)],
+      [tr('debug.ticks'), String(sim.ticks)],
+      [tr('debug.fps'), this.fps.toFixed(0)],
     ];
     this.el.debug.replaceChildren(
       ...rows.flatMap(([k, v]) => {

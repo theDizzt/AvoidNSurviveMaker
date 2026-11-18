@@ -1,0 +1,411 @@
+{
+  "v": 2,
+  "name": "desert05",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 180,
+    "w": 60,
+    "h": 180
+  },
+  "goal": {
+    "x": 120,
+    "y": 720,
+    "w": 60,
+    "h": 180
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 120,
+        "w": 180,
+        "h": 840
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 480,
+        "y": 120,
+        "w": 180,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 480,
+        "y": 420,
+        "w": 420,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 780,
+        "y": 120,
+        "w": 360,
+        "h": 240
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1560,
+        "y": 120,
+        "w": 240,
+        "h": 480
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1020,
+        "y": 420,
+        "w": 300,
+        "h": 360
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1200,
+        "y": 150,
+        "w": 300,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1380,
+        "y": 480,
+        "w": 120,
+        "h": 240
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1560,
+        "y": 660,
+        "w": 240,
+        "h": 300
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 720,
+        "y": 840,
+        "w": 780,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 420,
+        "y": 660,
+        "w": 480,
+        "h": 140
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 420,
+        "y": 840,
+        "w": 180,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 550,
+        "y": 770,
+        "w": 40,
+        "h": 100
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 660,
+        "y": 580,
+        "w": 40,
+        "h": 100
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 790,
+        "y": 770,
+        "w": 40,
+        "h": 100
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 550,
+        "y": 270,
+        "w": 40,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1150,
+        "y": 750,
+        "w": 40,
+        "h": 110
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1260,
+        "y": 320,
+        "w": 40,
+        "h": 110
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1050,
+        "y": 330,
+        "w": 40,
+        "h": 110
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1480,
+        "y": 520,
+        "w": 110,
+        "h": 40
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1480,
+        "y": 220,
+        "w": 110,
+        "h": 40
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1480,
+        "y": 670,
+        "w": 110,
+        "h": 40
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1480,
+        "y": 880,
+        "w": 110,
+        "h": 40
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 860,
+        "y": 510,
+        "w": 180,
+        "h": 40
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 330,
+        "y": 190,
+        "w": 480,
+        "h": 40
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 310,
+        "y": 880,
+        "w": 180,
+        "h": 40
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 570,
+        "cy": 210,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 960,
+        "cy": 240,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1350,
+        "cy": 240,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1680,
+        "cy": 360,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1680,
+        "cy": 810,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1170,
+        "cy": 600,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 690,
+        "cy": 510,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 660,
+        "cy": 730,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 510,
+        "cy": 900,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1110,
+        "cy": 900,
+        "rx": 12,
+        "ry": 12
+      }
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "sand",
+        "color": "#574a24",
+        "background": "#cabd93",
+        "size": 40
+      },
+      "edge": "#000000"
+    },
+    "path": {
+      "fill": {
+        "type": "gradient",
+        "style": "linear",
+        "from": "#fae8b4",
+        "to": "#ffe180",
+        "angle": 90
+      },
+      "edge": "#000000"
+    }
+  },
+  "title": "Scatter",
+  "level": 5,
+  "difficulty": 1.75,
+  "stars": {
+    "three": 9600,
+    "two": 12000,
+    "one": 18000
+  }
+}

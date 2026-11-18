@@ -171,5 +171,15 @@
                                                     }
                                                 ]
                                }
-                }
+                },
+    "i18n":  {
+        "ko":  {
+            "name":  "챕터 13 - 미정",
+            "description":  "테마와 챕터 제목은 추후 공개됩니다."
+        },
+        "zh":  {
+            "name":  "Chapter 13 - TBD",
+            "description":  "Theme and chapter title to be announced."
+        }
+    }
 }

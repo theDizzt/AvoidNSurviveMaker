@@ -1,3 +1,4 @@
+import { t } from '../core/i18n';
 import { strFromU8, strToU8, zipSync } from 'fflate';
 import { unpackBoundedZip, ZIP_LIMITS } from '../core/bounded-zip';
 import { MAX_PACK_LEVELS, validateThemeInfo } from '../core/theme-pack';
@@ -21,13 +22,13 @@ async function unpack(bytes: ArrayBuffer): Promise<Record<string, Uint8Array>> {
   const worker = new Worker(new URL('./theme-zip.worker.ts', import.meta.url), { type: 'module' });
   try {
     return await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Zip extraction timed out')), 15_000);
+      const timer = setTimeout(() => reject(new Error(t('zip.timeout'))), 15_000);
       worker.onmessage = (event: MessageEvent<{ files: Record<string, Uint8Array>; error?: string }>) => {
         clearTimeout(timer);
         if (event.data.error) reject(new Error(event.data.error));
         else resolve(event.data.files);
       };
-      worker.onerror = () => { clearTimeout(timer); reject(new Error('Could not extract zip')); };
+      worker.onerror = () => { clearTimeout(timer); reject(new Error(t('zip.extractFailed'))); };
       worker.postMessage(bytes, [bytes]);
     });
   } finally {
@@ -51,10 +52,10 @@ export function dataUrlBytes(url: string): Uint8Array {
 
 /** Read a theme pack zip (theme.json may sit at the root or inside one top folder) */
 export async function readThemeZip(file: File): Promise<StoredTheme> {
-  if (file.size > ZIP_LIMITS.compressed) throw new Error('The zip file is too large (30 MB max)');
+  if (file.size > ZIP_LIMITS.compressed) throw new Error(t('zip.tooLarge30'));
   const files = await unpack(await file.arrayBuffer());
   const infoPath = Object.keys(files).filter((p) => /(^|\/)theme\.json$/.test(p)).sort((a, b) => a.length - b.length)[0];
-  if (!infoPath) throw new Error('No theme.json in the zip');
+  if (!infoPath) throw new Error(t('zip.noThemeJson'));
   const root = infoPath.slice(0, -'theme.json'.length);
   const info = validateThemeInfo(JSON.parse(strFromU8(files[infoPath])));
 

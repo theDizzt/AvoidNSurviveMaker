@@ -1,3 +1,4 @@
+import { t } from '../../core/i18n';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
 import { formatTag } from '../../core/account';
 import { supabase } from './supabase';
@@ -19,36 +20,36 @@ function redirectUrl(): string {
 }
 
 /** Turn Supabase errors into messages a player can act on */
-function explain(e: AuthError | Error | null | undefined, fallback = 'Something went wrong. Please try again.'): AuthResult {
+function explain(e: AuthError | Error | null | undefined, fallback = t('auth.genericError')): AuthResult {
   if (!e) return { ok: false, code: 'unknown', message: fallback };
   const code = ('code' in e && typeof e.code === 'string' ? e.code : '') || 'unknown';
   const text = e.message ?? '';
   const messages: Record<string, string> = {
-    invalid_credentials: 'Wrong email or password.',
-    email_not_confirmed: 'Please verify your email first. Check your inbox for the link.',
-    user_already_exists: 'An account with this email already exists.',
-    email_exists: 'An account with this email already exists.',
-    weak_password: 'That password is too weak. Use at least 8 characters with letters and numbers.',
-    captcha_failed: 'The security check failed. Please complete it again.',
-    over_email_send_rate_limit: 'Too many emails sent. Please wait a few minutes and try again.',
-    over_request_rate_limit: 'Too many attempts. Please wait a moment and try again.',
-    signup_disabled: 'Sign-ups are currently disabled.',
-    email_address_invalid: 'Enter a valid email address.',
+    invalid_credentials: t('auth.invalidCredentials'),
+    email_not_confirmed: t('auth.emailNotConfirmed'),
+    user_already_exists: t('auth.emailExists'),
+    email_exists: t('auth.emailExists'),
+    weak_password: t('auth.weakPassword'),
+    captcha_failed: t('auth.captchaFailed'),
+    over_email_send_rate_limit: t('auth.emailRateLimit'),
+    over_request_rate_limit: t('auth.requestRateLimit'),
+    signup_disabled: t('auth.signupDisabled'),
+    email_address_invalid: t('account.emailInvalid'),
   };
   // Per-address cooldown ("…only request this after 42 seconds") vs. the project-wide hourly cap
   const wait = /after (\d+) seconds?/i.exec(text);
   if (code.startsWith('over_') && wait) {
-    return { ok: false, code, message: `Please wait ${wait[1]} seconds before requesting another email for this address.` };
+    return { ok: false, code, message: t('auth.emailCooldown', { s: wait[1] }) };
   }
   if (code === 'over_email_send_rate_limit') {
-    return { ok: false, code, message: 'The server has hit its hourly email limit. Please try again later.' };
+    return { ok: false, code, message: t('auth.emailHourly') };
   }
   if (messages[code]) return { ok: false, code, message: messages[code] };
   // Errors raised by the sign-up trigger surface as a generic database error
-  if (/NICKNAME_FULL/.test(text)) return { ok: false, code: 'nickname_full', message: 'All 9999 tags for this nickname are taken. Try another nickname.' };
-  if (/INVALID_NICKNAME/.test(text)) return { ok: false, code: 'invalid_nickname', message: 'That nickname is not allowed.' };
-  if (/Database error saving new user/i.test(text)) return { ok: false, code: 'db', message: "Couldn't create the account. Try a different nickname." };
-  if (/failed to fetch|network/i.test(text)) return { ok: false, code: 'network', message: "Can't reach the server. Check your connection." };
+  if (/NICKNAME_FULL/.test(text)) return { ok: false, code: 'nickname_full', message: t('auth.nicknameFull') };
+  if (/INVALID_NICKNAME/.test(text)) return { ok: false, code: 'invalid_nickname', message: t('auth.nicknameInvalid') };
+  if (/Database error saving new user/i.test(text)) return { ok: false, code: 'db', message: t('auth.createFailed') };
+  if (/failed to fetch|network/i.test(text)) return { ok: false, code: 'network', message: t('net.unreachable') };
   return { ok: false, code, message: text || fallback };
 }
 
@@ -103,12 +104,12 @@ export class Account {
     await this.applySession(data.session);
 
     if (linkError) {
-      this.notice = { kind: 'error', text: `Verification link problem: ${linkError}. Request a new email from the sign-in screen.` };
+      this.notice = { kind: 'error', text: t('auth.linkProblem', { error: linkError }) };
     } else if (cameFromEmail) {
       this.notice = data.session && !error
-        ? { kind: 'ok', text: `Email verified. Welcome, ${this.tag ?? 'player'}!` }
+        ? { kind: 'ok', text: t('auth.verifiedWelcome', { tag: this.tag ?? t('auth.player') }) }
         // The link was opened in another browser: the email is confirmed, but the session can't be restored here
-        : { kind: 'ok', text: 'Email verified. Please sign in.' };
+        : { kind: 'ok', text: t('auth.verifiedSignIn') };
     }
     if (cameFromEmail || linkError) {
       // Drop the one-time code from the address bar, keep any share link hash
@@ -142,7 +143,7 @@ export class Account {
   }
 
   async signUp(email: string, password: string, nickname: string, captchaToken?: string): Promise<AuthResult> {
-    if (!supabase) return { ok: false, code: 'not_configured', message: 'Accounts are not set up yet.' };
+    if (!supabase) return { ok: false, code: 'not_configured', message: t('auth.notConfigured') };
     const left = await this.slotsLeft(nickname);
     if (left === 0) return explain(new Error('NICKNAME_FULL'));
 
@@ -158,13 +159,13 @@ export class Account {
   }
 
   async signIn(email: string, password: string, captchaToken?: string): Promise<AuthResult> {
-    if (!supabase) return { ok: false, code: 'not_configured', message: 'Accounts are not set up yet.' };
+    if (!supabase) return { ok: false, code: 'not_configured', message: t('auth.notConfigured') };
     const { error } = await supabase.auth.signInWithPassword({ email, password, options: { captchaToken } });
     return error ? explain(error) : { ok: true };
   }
 
   async resendVerification(email: string, captchaToken?: string): Promise<AuthResult> {
-    if (!supabase) return { ok: false, code: 'not_configured', message: 'Accounts are not set up yet.' };
+    if (!supabase) return { ok: false, code: 'not_configured', message: t('auth.notConfigured') };
     const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: redirectUrl(), captchaToken } });
     return error ? explain(error) : { ok: true };
   }

@@ -1,3 +1,4 @@
+import { t } from '../core/i18n';
 import { onOptionsChange, options } from './options';
 
 /** Music crossfade: the old track fades out while the new one fades in (seconds) */
@@ -98,7 +99,7 @@ class GameAudio {
       let buffer = this.buffers.get(url);
       if (!buffer) {
         const response = await fetch(url, { signal: request.signal });
-        if (!response.ok) throw new Error(`Music download failed: ${response.status}`);
+        if (!response.ok) throw new Error(t('audio.downloadFailed', { status: response.status }));
         buffer = await ctx.decodeAudioData(await response.arrayBuffer());
         this.buffers.set(url, buffer);
         // Decoded audio is large (~40 MB for two minutes): keep only the latest two tracks

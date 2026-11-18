@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { averageDifficulty, themedLevel, validateThemeInfo } from '../core/theme-pack';
+import { averageDifficulty, localizeThemeInfo, themedLevel, validateThemeInfo } from '../core/theme-pack';
 import { OFFICIAL_THEMES, CUSTOM_THEME_PRESETS } from './theme-registry';
 import { readThemeZip, writeThemeZip } from './theme-zip';
 
@@ -64,6 +64,18 @@ describe('theme packs', () => {
     expect(info.style.badge.kind).toBe('pill');
     expect(info.style.badge.pad).toBe(4);
     expect(() => validateThemeInfo({ format: 2 })).toThrow();
+  });
+
+  it('shows translated theme text in its language and keeps the default elsewhere', () => {
+    const info = validateThemeInfo({
+      format: 1, id: 't', name: 'Frost', description: 'Cold', style: { badge: { caption: 'ICE' } },
+      i18n: { ko: { name: '서리', caption: '얼음', bogus: 1 }, 'not a lang': { name: 'x' }, fr: {} },
+    });
+    expect(Object.keys(info.i18n ?? {})).toEqual(['ko']);
+    const ko = localizeThemeInfo(info, 'ko');
+    expect([ko.name, ko.description, ko.style.badge.caption]).toEqual(['서리', 'Cold', '얼음']);
+    expect(localizeThemeInfo(info, 'en')).toBe(info);
+    expect(info.name).toBe('Frost'); // the source text is never overwritten
   });
 
   it('round-trips a pack through a zip', async () => {

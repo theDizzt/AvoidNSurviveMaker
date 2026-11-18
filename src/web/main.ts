@@ -1,9 +1,10 @@
+import { language, LANGUAGES, saveLanguage, t, type Language } from '../core/i18n';
 import { renderFontLicenses } from './font-licenses';
 import './style.css';
 // Game version, e.g. "Update 20" — edit the VERSION file at the repo root
 import versionFile from '../../VERSION?raw';
 import { BUILTIN_LEVELS } from '../core/levels';
-import { levelLabel } from '../core/level';
+import { chapterLevelCode, levelLabel } from '../core/level';
 import { decodeMap, decodePack } from '../core/share';
 import type { MapData, MapPack } from '../core/types';
 import { Editor } from './editor';
@@ -31,6 +32,7 @@ import { clearLeaderboardCache } from './auth/leaderboard';
 import { IrisTransition } from './iris-transition';
 import { gameAudio } from './audio';
 import { installMenuMusicControls, menuMusicUrl } from './menu-music';
+import { applyI18n } from './i18n-dom';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -38,9 +40,12 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   return el as T;
 };
 
+// Static page text comes from the locale file (src/locale/<lang>.json)
+applyI18n();
 installTooltips();
 const iris = new IrisTransition();
 
+const REOPEN_OPTIONS_KEY = 'avoid-n-survive:reopen-options';
 const VERSION = versionFile.trim();
 for (const id of ['menu-version', 'preload-version']) $(id).textContent = VERSION;
 
@@ -305,7 +310,7 @@ function nextKey(): string | null {
 function updateNext(): void {
   const next = nextKey();
   nextLevelBtn.hidden = !next;
-  play.nextHint = next ? 'press N for the next level' : null;
+  play.nextHint = next ? t('play.nextHint') : null;
 }
 
 function playNext(): void {
@@ -328,16 +333,22 @@ function renderLevelOptions(): void {
   const groups: HTMLElement[] = [];
   if (playPack) {
     const g = document.createElement('optgroup');
-    g.label = `Pack: ${playPack.name}${playPack.author ? ` by ${playPack.author}` : ''}`;
+    g.label = playPack.author ? t('main.packByOption', { name: playPack.name, author: playPack.author }) : t('main.packOption', { name: playPack.name });
     g.append(...playPack.levels.map((m, i) => new Option(levelLabel(m), `p:${i}`)));
     groups.push(g);
   }
-  if (sharedMap) groups.push(new Option(`Shared map: ${levelLabel(sharedMap)}`, 'shared'));
-  allThemes().forEach((t) => {
-    if (!t.levels.length || !themeUnlocked(t)) return;
+  if (sharedMap) groups.push(new Option(t('main.sharedOption', { label: levelLabel(sharedMap) }), 'shared'));
+  allThemes().forEach((th) => {
+    if (!th.levels.length || !themeUnlocked(th)) return;
     const g = document.createElement('optgroup');
-    g.label = t.official ? t.info.name : `Custom: ${t.info.name}`;
-    g.append(...filledSlots(t).map((i) => new Option(levelLabel(themedLevel(t, i)!), `c:${themeKey(t)}:${i}`)));
+    g.label = th.official ? th.info.name : t('main.customOption', { name: th.info.name });
+    const chapter = OFFICIAL_THEMES.indexOf(th);
+    g.append(...filledSlots(th).map((i) => {
+      const map = themedLevel(th, i)!;
+      // Chapter levels go by their code ("1-03 · Title"), whatever the map's own level number says
+      const label = chapter >= 0 ? `${chapterLevelCode(chapter + 1, i + 1)} · ${map.title || map.name}` : levelLabel(map);
+      return new Option(label, `c:${themeKey(th)}:${i}`);
+    }));
     groups.push(g);
   });
   levelSelect.replaceChildren(...groups);
@@ -409,6 +420,21 @@ syncOptions();
 $('options-back').addEventListener('click', () => show('menu'));
 $('options-reset').addEventListener('click', resetOptions);
 $('options-licenses').addEventListener('click', () => show('licenses'));
+
+// Language: saved, then the page reloads so every string (many are built at startup) switches
+const languageSelect = $<HTMLSelectElement>('opt-language');
+languageSelect.append(...LANGUAGES.map((l) => new Option(l.label, l.id, false, l.id === language)));
+languageSelect.title = t('options.languageReload');
+languageSelect.addEventListener('change', () => {
+  const next = languageSelect.value as Language;
+  if (next === language) return;
+  if (!saveLanguage(next)) {
+    languageSelect.value = language;
+    return;
+  }
+  try { sessionStorage.setItem(REOPEN_OPTIONS_KEY, '1'); } catch { /* land on the menu instead */ }
+  location.reload();
+});
 $('licenses-back').addEventListener('click', () => show('options'));
 screens.licenses.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') show('options');
@@ -450,7 +476,7 @@ const toggleFullscreen = () => {
 };
 for (const b of fullscreenButtons) b.addEventListener('click', toggleFullscreen);
 document.addEventListener('fullscreenchange', () => {
-  for (const b of fullscreenButtons) b.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
+  for (const b of fullscreenButtons) b.textContent = t(document.fullscreenElement ? 'common.exitFullscreen' : 'common.fullscreen');
 });
 
 // Editor panels float over the canvas; H (or the button) hides them to see the whole map
@@ -461,7 +487,7 @@ const panelsBtn = $<HTMLButtonElement>('btn-panels');
 const togglePanels = () => {
   const hidden = screens.editor.classList.toggle('panels-hidden');
   panelsBtn.setAttribute('aria-pressed', String(hidden));
-  panelsBtn.textContent = hidden ? 'Show panels' : 'Hide panels';
+  panelsBtn.textContent = t(hidden ? 'editor.showPanels' : 'editor.hidePanels');
 };
 panelsBtn.addEventListener('click', togglePanels);
 
@@ -519,20 +545,25 @@ play.onDeath = () => {
 };
 // Best time (ms) and stars per level, saved to the player's account
 const recordSync = new RecordSync(account);
+recordSync.onSaved = () => {
+  if (current === 'levels' && campaign.currentTheme) campaign.renderLevels(campaign.currentTheme);
+  if (current === 'themes') campaign.renderThemes();
+  $('menu-stars').textContent = String(totalStars());
+};
 const recordsButton = $<HTMLButtonElement>('records-sync');
 const recordsStatus = $('records-status');
-const signedOutRecords = 'Sign in to save records';
+const signedOutRecords = t('records.signedOut');
 function renderRecordsOption(): void {
   if (recordsButton.dataset.busy) return;
   recordsButton.disabled = !recordSync.available;
   if (recordSync.available) {
     const to = document.createElement('span');
-    renderTag(to, account.tag ?? 'your account');
-    recordsStatus.replaceChildren('Saved to ', to);
-  } else recordsStatus.textContent = account.configured ? signedOutRecords : 'Kept in this browser';
+    renderTag(to, account.tag ?? t('records.yourAccount'));
+    recordsStatus.replaceChildren(t('records.savedTo'), to);
+  } else recordsStatus.textContent = account.configured ? signedOutRecords : t('records.local');
   recordsButton.title = recordSync.available
-    ? "Upload records already in this browser and download the account's records"
-    : account.configured ? 'Sign in to save your best times and stars to your account' : 'Accounts are not set up, so records stay in this browser';
+    ? t('records.syncHint')
+    : account.configured ? t('records.signInHint') : t('records.unconfiguredHint');
 }
 const stats = new StatsUI($('stats-dia'), $('stats-message'), $('stats-records'), account, recordSync, deaths);
 account.onChange(() => current === 'stats' && void stats.render());
@@ -542,16 +573,16 @@ renderRecordsOption();
 recordsButton.addEventListener('click', async () => {
   recordsButton.dataset.busy = '1';
   recordsButton.disabled = true;
-  recordsStatus.textContent = 'Syncing…';
+  recordsStatus.textContent = t('records.syncing');
   const result = await recordSync.syncAll();
   delete recordsButton.dataset.busy;
   renderRecordsOption();
   if (result.ok) {
-    recordsStatus.textContent = `↑ ${result.uploaded} sent · ↓ ${result.downloaded} updated`;
+    recordsStatus.textContent = t('records.synced', { up: result.uploaded, down: result.downloaded });
     $('menu-stars').textContent = String(totalStars());
     renderLevelOptions();
   } else recordsStatus.textContent = result.message;
-  showToast(result.ok ? 'Records synced.' : result.message, result.ok ? 'ok' : 'error');
+  showToast(result.ok ? t('records.syncedToast') : result.message, result.ok ? 'ok' : 'error');
 });
 new AuthUI(account, (screen) => show(screen));
 for (const s of [screens.auth, screens.verify]) {
@@ -562,16 +593,27 @@ for (const s of [screens.auth, screens.verify]) {
 
 // ───────────────────────── Boot ─────────────────────────
 
+/** After a language change the page reloads; land back on Options instead of the main menu */
+function reopenOptions(): boolean {
+  try {
+    const yes = sessionStorage.getItem(REOPEN_OPTIONS_KEY) === '1';
+    sessionStorage.removeItem(REOPEN_OPTIONS_KEY);
+    return yes;
+  } catch {
+    return false;
+  }
+}
+
 function sharedPackTask(): PreloadTask | null {
   const m = /^#p=(.+)$/.exec(location.hash);
   if (!m) return null;
   return {
-    label: 'Shared map pack',
+    label: t('preload.sharedPack'),
     run: async () => {
       try {
         playPack = await decodePack(m[1]);
       } catch (err) {
-        alert(`Couldn't open the map pack link: ${(err as Error).message}`);
+        alert(t('main.packLinkFailed', { message: (err as Error).message }));
       }
     },
   };
@@ -581,12 +623,12 @@ function sharedMapTask(): PreloadTask | null {
   const m = /^#m=(.+)$/.exec(location.hash);
   if (!m) return null;
   return {
-    label: 'Shared map',
+    label: t('preload.sharedMap'),
     run: async () => {
       try {
         sharedMap = await decodeMap(m[1]);
       } catch (err) {
-        alert(`Couldn't open the share link: ${(err as Error).message}`);
+        alert(t('main.mapLinkFailed', { message: (err as Error).message }));
       }
     },
   };
@@ -596,12 +638,12 @@ async function boot(): Promise<void> {
   const bar = $('preload-bar');
   const text = $('preload-text');
   const shared = sharedMapTask() ?? sharedPackTask();
-  const accountTask: PreloadTask = { label: 'Account', run: () => account.init() };
+  const accountTask: PreloadTask = { label: t('common.account'), run: () => account.init() };
   const tasks = [...FONT_TASKS, accountTask, ...(shared ? [shared] : [])];
 
   await runPreload(tasks, (done, total, label) => {
     bar.style.width = `${Math.round((done / total) * 100)}%`;
-    text.textContent = done === total ? 'Ready' : label;
+    text.textContent = done === total ? t('preload.ready') : label;
   });
 
   renderLevelOptions();
@@ -609,7 +651,7 @@ async function boot(): Promise<void> {
   // A share link goes straight to that map; otherwise land on the main menu
   if (sharedMap) showPlay(sharedMap, { key: 'shared' });
   else if (playPack) showPlay(playPack.levels[0], { key: 'p:0' });
-  else show('menu');
+  else show(reopenOptions() ? 'options' : 'menu');
 
   // Result of an email verification link, if the player just came back from one
   if (account.notice) showToast(account.notice.text, account.notice.kind);

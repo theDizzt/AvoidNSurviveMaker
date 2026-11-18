@@ -171,5 +171,15 @@
                                                     }
                                                 ]
                                }
-                }
+                },
+    "i18n":  {
+        "ko":  {
+            "name":  "사악한 구근의 왕국",
+            "description":  "빛나는 구근과 휘감긴 뿌리, 독을 품은 꽃이 가득한 달빛 온실."
+        },
+        "zh":  {
+            "name":  "Realm of the Wicked Bulbs",
+            "description":  "A moonlit greenhouse of luminous bulbs, curling roots and poisonous blooms."
+        }
+    }
 }

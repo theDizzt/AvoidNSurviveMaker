@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import type { Fill, Theme } from './types';
 
 /** Starting point when a map with the default look is customized */
@@ -7,10 +8,10 @@ export const BASE_THEME: Theme = {
 };
 
 export const THEME_PRESETS: { id: string; name: string; theme: Theme | undefined }[] = [
-  { id: 'default', name: 'Default', theme: undefined },
+  { id: 'default', name: t('themePreset.default'), theme: undefined },
   {
     id: 'neon',
-    name: 'Neon',
+    name: t('themePreset.neon'),
     theme: {
       wall: { fill: { type: 'gradient', style: 'linear', from: '#ff2bd6', to: '#7a2bff', angle: 45 }, edge: '#ffc2f3' },
       path: { fill: { type: 'pattern', pattern: 'grid', color: '#1f4a6e', background: '#0b1a2a', size: 16 }, edge: '#3ad7ff' },
@@ -18,7 +19,7 @@ export const THEME_PRESETS: { id: string; name: string; theme: Theme | undefined
   },
   {
     id: 'lava',
-    name: 'Lava',
+    name: t('themePreset.lava'),
     theme: {
       wall: { fill: { type: 'gradient', style: 'radial', from: '#ffb000', to: '#e0002b', angle: 0 }, edge: '#ffd29a' },
       path: { fill: { type: 'pattern', pattern: 'diagonal', color: '#3d2a20', background: '#2e1f18', size: 14 }, edge: '#9a6440' },
@@ -26,7 +27,7 @@ export const THEME_PRESETS: { id: string; name: string; theme: Theme | undefined
   },
   {
     id: 'forest',
-    name: 'Forest',
+    name: t('themePreset.forest'),
     theme: {
       wall: { fill: { type: 'pattern', pattern: 'diagonal', color: '#3f7a4b', background: '#244a2d', size: 12 }, edge: '#8fd694' },
       path: { fill: { type: 'gradient', style: 'linear', from: '#4a3b28', to: '#2f2619', angle: 90 }, edge: '#9b8460' },
@@ -34,7 +35,7 @@ export const THEME_PRESETS: { id: string; name: string; theme: Theme | undefined
   },
   {
     id: 'candy',
-    name: 'Candy',
+    name: t('themePreset.candy'),
     theme: {
       wall: { fill: { type: 'pattern', pattern: 'stripes', color: '#ff6fae', background: '#ffd1e6', size: 14 }, edge: '#ffffff' },
       path: { fill: { type: 'pattern', pattern: 'dots', color: '#bfe2ff', background: '#7fb6e6', size: 14 }, edge: '#ffffff' },
@@ -42,7 +43,7 @@ export const THEME_PRESETS: { id: string; name: string; theme: Theme | undefined
   },
   {
     id: 'mono',
-    name: 'Mono',
+    name: t('themePreset.mono'),
     theme: {
       wall: { fill: { type: 'solid', color: '#e8e8e8' }, edge: '#ffffff' },
       path: { fill: { type: 'pattern', pattern: 'checker', color: '#2b2b2b', background: '#1e1e1e', size: 20 }, edge: '#6a6a6a' },

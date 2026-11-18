@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import type { MapData, MapPack } from './types';
 import { validateMap, validatePack } from './validate';
 
@@ -16,7 +17,7 @@ export async function readBoundedStream(stream: ReadableStream<Uint8Array>, maxB
       size += value.byteLength;
       if (size > maxBytes) {
         await reader.cancel().catch(() => {});
-        throw new Error('Data is too large');
+        throw new Error(t('share.tooLarge'));
       }
       chunks.push(value);
     }
@@ -69,13 +70,13 @@ async function encodeJson(value: unknown): Promise<string> {
 }
 
 async function decodeJson(code: string): Promise<unknown> {
-  if (code.length > MAX_SHARE_CODE) throw new Error('Data is too large');
+  if (code.length > MAX_SHARE_CODE) throw new Error(t('share.tooLarge'));
   const kind = code[0];
-  if (kind !== 'z' && kind !== 'j') throw new Error('Unknown share code format');
+  if (kind !== 'z' && kind !== 'j') throw new Error(t('share.unknownFormat'));
   let bytes = fromBase64Url(code.slice(1));
-  if (bytes.length > MAX_SHARE_BYTES) throw new Error('Data is too large');
+  if (bytes.length > MAX_SHARE_BYTES) throw new Error(t('share.tooLarge'));
   if (kind === 'z') {
-    if (typeof DecompressionStream === 'undefined') throw new Error('This browser does not support decompression');
+    if (typeof DecompressionStream === 'undefined') throw new Error(t('share.noDecompression'));
     const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
     bytes = await readBoundedStream(stream, MAX_SHARE_BYTES);
   }

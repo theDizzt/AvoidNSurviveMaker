@@ -1,3 +1,4 @@
+import { t as tr } from '../core/i18n';
 import { gameplayKey, levelLabel } from '../core/level';
 import { encodePack } from '../core/share';
 import { PACK_VERSION, type MapData, type MapPack } from '../core/types';
@@ -26,7 +27,7 @@ interface Stored {
 }
 
 function emptyPack(): MapPack {
-  return { pack: PACK_VERSION, name: 'My map pack', author: '', levels: [] };
+  return { pack: PACK_VERSION, name: tr('pack.myMapPack'), author: '', levels: [] };
 }
 
 export class PackPanel {
@@ -58,7 +59,7 @@ export class PackPanel {
     this.name = document.createElement('input');
     this.name.maxLength = LIMITS.maxText;
     this.name.addEventListener('change', () => {
-      this.pack.name = this.name.value.trim().slice(0, LIMITS.maxText) || 'Untitled pack';
+      this.pack.name = this.name.value.trim().slice(0, LIMITS.maxText) || tr('map.untitledPack');
       this.commit();
     });
     this.author = document.createElement('input');
@@ -69,7 +70,7 @@ export class PackPanel {
     });
     const fields = document.createElement('div');
     fields.className = 'fields';
-    fields.append(field('Pack name', this.name), field('Pack author', this.author));
+    fields.append(field(tr('pack.packName'), this.name), field(tr('pack.packAuthor'), this.author));
 
     this.list = document.createElement('ol');
     this.list.className = 'pack-list';
@@ -79,7 +80,7 @@ export class PackPanel {
     this.actions.className = 'actions';
     this.shareUrl = document.createElement('input');
     this.shareUrl.readOnly = true;
-    this.shareUrl.placeholder = 'Pack share link appears here';
+    this.shareUrl.placeholder = tr('pack.packShareLinkAppearsHere');
     this.file = document.createElement('input');
     this.file.type = 'file';
     this.file.accept = '.json,application/json';
@@ -114,7 +115,7 @@ export class PackPanel {
       const data = JSON.parse(raw) as Partial<Stored>;
       // An empty pack can't pass validation, so keep its name / author separately
       const levels = Array.isArray(data.pack?.levels) ? data.pack.levels : [];
-      this.pack = levels.length ? validatePack(data.pack) : { ...emptyPack(), name: data.pack?.name || 'My map pack', author: data.pack?.author ?? '' };
+      this.pack = levels.length ? validatePack(data.pack) : { ...emptyPack(), name: data.pack?.name || tr('pack.myMapPack'), author: data.pack?.author ?? '' };
       this.verified = this.pack.levels.map((_, i) => data.verified?.[i] === true);
       this.opened = typeof data.opened === 'number' && data.opened < this.pack.levels.length ? data.opened : null;
     } catch {
@@ -148,7 +149,7 @@ export class PackPanel {
   // ───────────────────────── Actions ─────────────────────────
 
   private add(): void {
-    if (this.pack.levels.length >= LIMITS.maxPackLevels) return alert(`A pack can hold at most ${LIMITS.maxPackLevels} levels`);
+    if (this.pack.levels.length >= LIMITS.maxPackLevels) return alert(tr('pack.full', { max: LIMITS.maxPackLevels }));
     const map = this.host.getMap();
     this.pack.levels.push(map);
     this.verified.push(this.host.isVerified(map));
@@ -182,7 +183,7 @@ export class PackPanel {
   }
 
   private remove(i: number): void {
-    if (!confirm(`Remove "${levelLabel(this.pack.levels[i])}" from the pack?`)) return;
+    if (!confirm(tr('pack.confirmRemove', { label: levelLabel(this.pack.levels[i]) }))) return;
     this.pack.levels.splice(i, 1);
     this.verified.splice(i, 1);
     if (this.opened === i) this.opened = null;
@@ -199,7 +200,7 @@ export class PackPanel {
   }
 
   private newPack(): void {
-    if (this.pack.levels.length && !confirm('Start a new, empty map pack? The current pack is removed from this browser (export it first to keep it).')) return;
+    if (this.pack.levels.length && !confirm(tr('pack.startANewEmptyMap'))) return;
     this.pack = emptyPack();
     this.verified = [];
     this.opened = null;
@@ -221,14 +222,14 @@ export class PackPanel {
     if (!f) return;
     try {
       const pack = validatePack(JSON.parse(await f.text()));
-      if (this.pack.levels.length && !confirm(`Replace the current pack with "${pack.name}" (${pack.levels.length} levels)?`)) return;
+      if (this.pack.levels.length && !confirm(tr('pack.confirmReplace', { name: pack.name, n: pack.levels.length }))) return;
       this.pack = pack;
       // Imported levels have to be cleared again before the pack can be shared
       this.verified = pack.levels.map(() => false);
       this.opened = null;
       this.commit();
     } catch (err) {
-      alert(`Couldn't load the map pack: ${(err as Error).message}`);
+      alert(tr('pack.loadFailed', { message: (err as Error).message }));
     }
   }
 
@@ -239,9 +240,9 @@ export class PackPanel {
     this.shareUrl.select();
     try {
       await navigator.clipboard.writeText(url);
-      this.status.textContent = `Pack link copied to clipboard (${url.length} chars)`;
+      this.status.textContent = tr('pack.linkCopied', { n: url.length });
     } catch {
-      this.status.textContent = `Pack link created — please copy it manually (${url.length} chars)`;
+      this.status.textContent = tr('pack.linkManual', { n: url.length });
     }
   }
 
@@ -273,19 +274,19 @@ export class PackPanel {
       const label = document.createElement('span');
       label.className = 'pack-label';
       label.textContent = levelLabel(l);
-      label.title = `File: ${l.name}`;
+      label.title = tr('pack.file', { name: l.name });
       const badge = document.createElement('span');
       const ok = this.isVerified(i);
       badge.className = ok ? 'pack-badge ok' : 'pack-badge';
       badge.textContent = ok ? '✓' : '!';
-      badge.title = ok ? 'Cleared in test play' : 'Not cleared yet: open it and test play, or play the pack';
+      badge.title = tr(ok ? 'pack.verified' : 'pack.unverified');
       const tools = document.createElement('span');
       tools.className = 'pack-tools';
       tools.append(
-        this.button(i === this.opened ? 'Editing' : 'Open', () => this.open(i), { title: 'Open in the editor', disabled: i === this.opened }),
-        this.button('↑', () => this.move(i, -1), { title: 'Move up', disabled: i === 0 }),
-        this.button('↓', () => this.move(i, 1), { title: 'Move down', disabled: i === n - 1 }),
-        this.button('✕', () => this.remove(i), { title: 'Remove from pack', cls: 'danger' }),
+        this.button(tr(i === this.opened ? 'pack.editing' : 'pack.open'), () => this.open(i), { title: tr('pack.openInTheEditor'), disabled: i === this.opened }),
+        this.button('↑', () => this.move(i, -1), { title: tr('pack.moveUp'), disabled: i === 0 }),
+        this.button('↓', () => this.move(i, 1), { title: tr('pack.moveDown'), disabled: i === n - 1 }),
+        this.button('✕', () => this.remove(i), { title: tr('pack.removeFromPack'), cls: 'danger' }),
       );
       li.append(badge, label, tools);
       return li;
@@ -293,22 +294,22 @@ export class PackPanel {
 
     const unverified = this.pack.levels.filter((_, i) => !this.isVerified(i)).length;
     this.status.textContent = !n
-      ? 'Empty pack. Build a level, then "Add current map". Levels are played in this order.'
+      ? tr('pack.statusEmpty')
       : dirty
-        ? `Level ${this.opened! + 1} has unsaved edits — "Save to pack" to keep them.`
+        ? tr('pack.statusDirty', { n: this.opened! + 1 })
         : unverified
-          ? `${n} level${n === 1 ? '' : 's'} · ${unverified} not cleared yet (sharing needs every level cleared).`
-          : `${n} level${n === 1 ? '' : 's'} · all cleared, ready to share.`;
+          ? tr(n === 1 ? 'pack.statusUnverifiedOne' : 'pack.statusUnverifiedMany', { n, unverified })
+          : tr(n === 1 ? 'pack.statusReadyOne' : 'pack.statusReadyMany', { n });
 
     this.actions.replaceChildren(
-      this.button('+ Add current map', () => this.add(), { cls: 'primary' }),
-      this.button('Save to pack', () => this.saveOpened(), { disabled: !dirty, title: 'Replace the open level with the map in the editor' }),
-      this.button('▶ Play pack', () => this.onPlay(validatePack(this.pack), this.opened ?? 0), { disabled: !n }),
-      this.button('Number 1…N', () => this.renumber(), { disabled: !n, title: 'Set each level number to its position in the pack' }),
-      this.button('Share pack', () => void this.share(), { disabled: !n || unverified > 0, title: unverified ? 'Every level must be cleared first' : 'Create a share link' }),
-      this.button('Export', () => this.exportFile(), { disabled: !n, title: 'Download the pack as a .pack.json file' }),
-      this.button('Import', () => this.file.click(), { title: 'Load a .pack.json file' }),
-      this.button('New pack', () => this.newPack(), { cls: 'danger' }),
+      this.button(tr('pack.addCurrentMap'), () => this.add(), { cls: 'primary' }),
+      this.button(tr('pack.saveToPack'), () => this.saveOpened(), { disabled: !dirty, title: tr('pack.replaceTheOpenLevelWith') }),
+      this.button(tr('pack.playPack'), () => this.onPlay(validatePack(this.pack), this.opened ?? 0), { disabled: !n }),
+      this.button(tr('pack.number1N'), () => this.renumber(), { disabled: !n, title: tr('pack.setEachLevelNumberTo') }),
+      this.button(tr('pack.sharePack'), () => void this.share(), { disabled: !n || unverified > 0, title: unverified ? 'Every level must be cleared first' : 'Create a share link' }),
+      this.button(tr('pack.export'), () => this.exportFile(), { disabled: !n, title: tr('pack.downloadThePackAsA') }),
+      this.button(tr('pack.import'), () => this.file.click(), { title: tr('pack.loadAPackJsonFile') }),
+      this.button(tr('pack.newPack'), () => this.newPack(), { cls: 'danger' }),
     );
   }
 }

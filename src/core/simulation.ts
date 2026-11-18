@@ -790,7 +790,12 @@ export function runReplay(map: MapData, replay: Replay): Simulation {
   return sim;
 }
 
-/** ms → "12.345" (1 ms resolution, truncated) */
+/** ms → "12.345" (1 ms resolution, rounded like server records) */
 export function formatTime(ms: number): string {
-  return (Math.floor(Math.max(0, ms)) / 1000).toFixed(3);
+  return (Math.round(Math.max(0, ms)) / 1000).toFixed(3);
+}
+
+/** ms → "12.345s": the one way a run time is shown, in every language */
+export function formatSeconds(ms: number): string {
+  return `${formatTime(ms)}s`;
 }

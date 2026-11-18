@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { pointInPoly, pointInRect } from './geometry';
 import { compileObject, toWorld, transformAt, type Transform } from './object';
 import { switchColor } from './colors';
@@ -37,35 +38,35 @@ function fail(msg: string): never {
 }
 
 function obj(v: unknown, name: string): Record<string, unknown> {
-  if (typeof v !== 'object' || v === null || Array.isArray(v)) fail(`${name}: must be an object`);
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) fail(t('validate.object', { name }));
   return v as Record<string, unknown>;
 }
 
 function num(v: unknown, name: string, min: number, max: number): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) fail(`${name}: must be a number`);
-  if (v < min || v > max) fail(`${name}: must be between ${min} and ${max} (got ${v})`);
+  if (typeof v !== 'number' || !Number.isFinite(v)) fail(t('validate.number', { name }));
+  if (v < min || v > max) fail(t('validate.range', { name, min, max, value: v }));
   return v;
 }
 
 function text(v: unknown, name: string): string {
   if (v === undefined) return '';
-  if (typeof v !== 'string') fail(`${name}: must be a string`);
+  if (typeof v !== 'string') fail(t('validate.string', { name }));
   return v.slice(0, LIMITS.maxText);
 }
 
 function arr(v: unknown, name: string, max: number): unknown[] {
-  if (!Array.isArray(v)) fail(`${name}: must be an array`);
-  if (v.length > max) fail(`${name}: at most ${max} items allowed`);
+  if (!Array.isArray(v)) fail(t('validate.array', { name }));
+  if (v.length > max) fail(t('validate.arrayMax', { name, max }));
   return v;
 }
 
 function oneOf<T extends string>(v: unknown, name: string, options: readonly T[]): T {
   if (typeof v === 'string' && (options as readonly string[]).includes(v)) return v as T;
-  return fail(`${name}: must be one of ${options.join(', ')}`);
+  return fail(t('validate.oneOf', { name, options: options.join(', ') }));
 }
 
 function bool(v: unknown, name: string): boolean {
-  if (typeof v !== 'boolean') fail(`${name}: must be true or false`);
+  if (typeof v !== 'boolean') fail(t('validate.bool', { name }));
   return v;
 }
 
@@ -114,7 +115,7 @@ function shape(v: unknown, name: string, W: number, H: number): Shape {
     const pt = point(p, `${name}.points[${i}]`, W, H);
     return obj(p, name).smooth === true ? { ...pt, smooth: true } : pt;
   });
-  if (points.length < 3) fail(`${name}.points: a polygon needs at least 3 vertices`);
+  if (points.length < 3) fail(t('validate.polyPoints', { name }));
   return o.free === true ? { type, points, free: true } : { type, points };
 }
 
@@ -147,7 +148,7 @@ function rotation(v: unknown, name: string, W: number, H: number): Rotation {
 
 function colorIndex(v: unknown, name: string): number {
   const c = num(v, name, 0, 15);
-  if (!Number.isInteger(c)) fail(`${name}: must be a color number 0–15`);
+  if (!Number.isInteger(c)) fail(t('validate.colorIndex', { name }));
   return c;
 }
 
@@ -193,7 +194,7 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
   }
   if (out.role === 'trigger') out.trigger = trigger(o.trigger, `${name}.trigger`);
   if (out.role === 'door') {
-    if (out.shape.type !== 'rect') fail(`${name}: a door must be a rectangle`);
+    if (out.shape.type !== 'rect') fail(t('validate.doorRect', { name }));
     out.door = door(o.door, `${name}.door`);
   }
   if (out.role === 'wall' && o.spike !== undefined) {
@@ -270,7 +271,7 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
 }
 
 function color(v: unknown, name: string): string {
-  if (typeof v !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(v)) fail(`${name}: must be a color like #12ab9f`);
+  if (typeof v !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(v)) fail(t('validate.color', { name }));
   return v.toLowerCase();
 }
 
@@ -341,12 +342,12 @@ function migrateV1(o: Record<string, unknown>): Record<string, unknown> {
 export function validateMap(input: unknown): MapData {
   let o = obj(input, 'map');
   if (o.v === 1) o = migrateV1(o);
-  if (o.v !== MAP_VERSION) fail(`Unsupported map version (${String(o.v)})`);
+  if (o.v !== MAP_VERSION) fail(t('validate.mapVersion', { version: String(o.v) }));
   const W = num(o.width, 'width', LIMITS.minSize, LIMITS.maxSize);
   const H = num(o.height, 'height', LIMITS.minSize, LIMITS.maxSize);
   const map: MapData = {
     v: MAP_VERSION,
-    name: text(o.name, 'name') || 'Untitled map',
+    name: text(o.name, 'name') || t('map.untitled'),
     author: text(o.author, 'author'),
     width: W,
     height: H,
@@ -359,7 +360,7 @@ export function validateMap(input: unknown): MapData {
   if (title) map.title = title;
   if (o.level !== undefined) {
     const level = num(o.level, 'level', 1, LIMITS.maxLevel);
-    if (!Number.isInteger(level)) fail('level: must be a whole number');
+    if (!Number.isInteger(level)) fail(t('validate.levelInteger'));
     map.level = level;
   }
   if (o.difficulty !== undefined) map.difficulty = Math.round(num(o.difficulty, 'difficulty', 1, 10) * 100) / 100;
@@ -380,16 +381,16 @@ export function validateMap(input: unknown): MapData {
 /** Validate a map pack (file or share link); every level is validated like a single map */
 export function validatePack(input: unknown): MapPack {
   const o = obj(input, 'pack');
-  if (o.pack !== PACK_VERSION) fail(`Unsupported map pack version (${String(o.pack)})`);
+  if (o.pack !== PACK_VERSION) fail(t('validate.packVersion', { version: String(o.pack) }));
   const levels = arr(o.levels, 'levels', LIMITS.maxPackLevels).map((m, i) => {
     try {
       return validateMap(m);
     } catch (err) {
-      return fail(`Level ${i + 1}: ${(err as Error).message}`);
+      return fail(t('validate.packLevel', { n: i + 1, message: (err as Error).message }));
     }
   });
-  if (levels.length === 0) fail('A map pack needs at least one level');
-  return { pack: PACK_VERSION, name: text(o.name, 'name') || 'Untitled pack', author: text(o.author, 'author'), levels };
+  if (levels.length === 0) fail(t('validate.packEmpty'));
+  return { pack: PACK_VERSION, name: text(o.name, 'name') || t('map.untitledPack'), author: text(o.author, 'author'), levels };
 }
 
 /** Does the object (posed at time t) overlap the rect? Checks vertices both ways, good enough for warnings. */
@@ -418,14 +419,14 @@ export function mapErrors(map: MapData): string[] {
   map.objects.forEach((o, i) => {
     const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : o.laser?.switchColor);
     if (c !== undefined && !colors.has(c)) {
-      out.push(`Object #${i + 1} is linked to the ${switchColor(c).name} switch, but the map has no ${switchColor(c).name} switch or event zone.`);
+      out.push(t('mapError.noSwitch', { n: i + 1, color: switchColor(c).name }));
     }
     if (o.portal) {
       const p = o.portal;
       const others = map.objects.filter((q, j) => j !== i && q.portal?.color === p.color);
       const name = switchColor(p.color).name;
-      if (!others.length) out.push(`Portal #${i + 1} has no other ${name} portal to lead to.`);
-      else if (p.mode !== 'out' && !others.some((q) => q.portal!.mode !== 'in')) out.push(`Portal #${i + 1} has no ${name} portal it can exit from (the others are entrance-only).`);
+      if (!others.length) out.push(t('mapError.portalAlone', { n: i + 1, color: name }));
+      else if (p.mode !== 'out' && !others.some((q) => q.portal!.mode !== 'in')) out.push(t('mapError.portalNoExit', { n: i + 1, color: name }));
     }
   });
   return out;
@@ -435,25 +436,25 @@ export function mapErrors(map: MapData): string[] {
 export function mapWarnings(map: MapData): string[] {
   const out: string[] = [];
   const inside = (r: Rect) => r.x >= 0 && r.y >= 0 && r.x + r.w <= map.width && r.y + r.h <= map.height;
-  if (Math.abs(map.width / map.height - 16 / 9) > 0.01) out.push('This map is not 16:9, so it is shown with bars around it.');
-  if (!inside(map.start)) out.push('The START area extends outside the map.');
-  if (!inside(map.goal)) out.push('The GOAL area extends outside the map.');
-  if (overlapsRect({ role: 'wall', shape: { type: 'rect', ...map.start } }, map.goal, 0)) out.push('START and GOAL overlap.');
+  if (Math.abs(map.width / map.height - 16 / 9) > 0.01) out.push(t('mapWarn.aspect'));
+  if (!inside(map.start)) out.push(t('mapWarn.startOutside'));
+  if (!inside(map.goal)) out.push(t('mapWarn.goalOutside'));
+  if (overlapsRect({ role: 'wall', shape: { type: 'rect', ...map.start } }, map.goal, 0)) out.push(t('mapWarn.startGoalOverlap'));
   map.objects.forEach((o, i) => {
     if (o.role !== 'wall') return;
-    if (overlapsRect(o, map.start, 0)) out.push(`Wall #${i + 1} overlaps START when the run begins.`);
-    if (!o.motion && !o.rotation && overlapsRect(o, map.goal, 0)) out.push(`Wall #${i + 1} covers part of GOAL.`);
+    if (overlapsRect(o, map.start, 0)) out.push(t('mapWarn.wallOnStart', { n: i + 1 }));
+    if (!o.motion && !o.rotation && overlapsRect(o, map.goal, 0)) out.push(t('mapWarn.wallOnGoal', { n: i + 1 }));
   });
   map.objects.forEach((o, i) => {
-    if (o.motion && o.motion.points.length === 0) out.push(`Object #${i + 1} is set to move but has no markers.`);
+    if (o.motion && o.motion.points.length === 0) out.push(t('mapWarn.noMarkers', { n: i + 1 }));
   });
   const s = map.stars;
-  if (s && !(s.three <= s.two && s.two <= s.one)) out.push('Star times should get longer from 3 stars to 1 star.');
+  if (s && !(s.three <= s.two && s.two <= s.one)) out.push(t('mapWarn.starOrder'));
   map.objects.forEach((o, i) => {
-    if (o.role === 'coin' && overlapsRect(o, map.goal, 0)) out.push(`Coin #${i + 1} is inside GOAL; it is collected on the way in.`);
-    if (o.boulder && !o.motion) out.push(`Boulder #${i + 1} has no route, so it won't roll.`);
+    if (o.role === 'coin' && overlapsRect(o, map.goal, 0)) out.push(t('mapWarn.coinInGoal', { n: i + 1 }));
+    if (o.boulder && !o.motion) out.push(t('mapWarn.boulderNoRoute', { n: i + 1 }));
     if (o.link && o.link.action !== 'remove' && !o.motion && !o.rotation && !o.spike) {
-      out.push(`Object #${i + 1} is set to ${o.link.action === 'start' ? 'start' : 'stop'} moving on a switch, but it doesn't move or rotate.`);
+      out.push(t(o.link.action === 'start' ? 'mapWarn.linkStartStill' : 'mapWarn.linkStopStill', { n: i + 1 }));
     }
   });
   return out;
@@ -462,7 +463,7 @@ export function mapWarnings(map: MapData): string[] {
 export function createEmptyMap(): MapData {
   return {
     v: MAP_VERSION,
-    name: 'New map',
+    name: t('map.new'),
     author: '',
     width: 1920,
     height: 1080,

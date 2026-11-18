@@ -44,5 +44,7 @@
 | `stellar-serif` | Stellar Serif Bold Condensed | `Stellar_Serif_Bold_Condensed.ttf` | © 2026 DONGSEO UNIVERSITY | Check |
 | `napjak-block` | Gabia Napjak Block | `gabia_napjakBlock.ttf` | © 2015 Gabia | Check |
 | `gunhami` | GFC Gunhami Talks | `gunham.ttf` | © Gyeongnam Football Club (YoonDesign Inc.) | Check |
+| `aa-mingxinpian` | Aa ShiGe MingXinPian (중국어 본문 fallback 겸용) | `main/AaShiGeMingXinPian-2.ttf` | © 2023 HanMeiHutong (XiaMen) Technology Co. Ltd. | Check |
+| `aa-yuanheiti` | Aa YuanHeiTi (중국어 제목 fallback 겸용) | `title/AaYuanHeiTi-2.ttf` | © 2022 HanMeiHutong (XiaMen) Technology Co. Ltd. | Check |
 
 RFN = Reserved Font Name (예약 폰트 이름).

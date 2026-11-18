@@ -1,3 +1,4 @@
+import { t as tr } from '../../core/i18n';
 import { byteLength, emailError, formatPlayTime, NICKNAME_MAX_BYTES, nicknameError, passwordError } from '../../core/account';
 import type { Account, AuthResult } from './account';
 import { Captcha } from './captcha';
@@ -70,9 +71,9 @@ export class AuthUI {
     const updateNick = () => {
       const v = nick.value.trim();
       const bytes = byteLength(v);
-      renderTag($('nick-preview'), `${v || 'Nickname'}#????`);
+      renderTag($('nick-preview'), `${v || tr('auth.nickname')}#????`);
       const counter = $('nick-bytes');
-      counter.textContent = `${bytes}/${NICKNAME_MAX_BYTES} bytes`;
+      counter.textContent = tr('auth.nickBytes', { n: bytes, max: NICKNAME_MAX_BYTES });
       counter.classList.toggle('over', bytes > NICKNAME_MAX_BYTES);
     };
     nick.addEventListener('input', updateNick);
@@ -95,7 +96,7 @@ export class AuthUI {
   }
 
   private openVerify(): void {
-    $('verify-email').textContent = this.pendingEmail || 'your email';
+    $('verify-email').textContent = this.pendingEmail || tr('auth.yourEmail');
     this.setError($('verify-screen'), '');
     this.navigate('verify');
     void this.mountCaptcha('verify');
@@ -130,7 +131,7 @@ export class AuthUI {
     const f = this.signinForm;
     const email = this.value(f, 'email');
     const password = this.input(f, 'password').value;
-    const problem = emailError(email) ?? (password ? null : 'Enter your password.');
+    const problem = emailError(email) ?? (password ? null : tr('auth.enterPassword'));
     $('signin-resend').hidden = true;
     if (problem) return this.setError(f, problem);
 
@@ -142,7 +143,7 @@ export class AuthUI {
       return;
     }
     f.reset();
-    showToast(`Signed in as ${this.account.tag ?? email}`);
+    showToast(tr('auth.signedInAs', { tag: this.account.tag ?? email }));
     this.navigate('menu');
   }
 
@@ -155,7 +156,7 @@ export class AuthUI {
     const problem =
       emailError(email) ??
       passwordError(password) ??
-      (password !== confirm ? 'Passwords do not match.' : null) ??
+      (password !== confirm ? tr('auth.passwordMismatch') : null) ??
       nicknameError(nickname);
     if (problem) return this.setError(f, problem);
 
@@ -171,7 +172,7 @@ export class AuthUI {
   private async resend(): Promise<void> {
     const host = $('verify-screen');
     if (emailError(this.pendingEmail)) {
-      this.setError(host, 'Go back and enter the email address you signed up with.');
+      this.setError(host, tr('auth.goBackEmail'));
       return;
     }
     const btn = $<HTMLButtonElement>('verify-resend');
@@ -182,7 +183,7 @@ export class AuthUI {
       this.setError(host, res.message);
     } else {
       this.setError(host, '');
-      showToast(`Verification email sent to ${this.pendingEmail}`);
+      showToast(tr('auth.verificationSent', { email: this.pendingEmail }));
       this.cooldownUntil = Date.now() + RESEND_COOLDOWN_S * 1000;
     }
     this.updateResend(this.captchas.verify.ready);
@@ -193,7 +194,7 @@ export class AuthUI {
     const btn = $<HTMLButtonElement>('verify-resend');
     const left = Math.ceil((this.cooldownUntil - Date.now()) / 1000);
     btn.disabled = left > 0 || !captchaReady;
-    btn.textContent = left > 0 ? `Resend email (${left}s)` : 'Resend email';
+    btn.textContent = left > 0 ? tr('auth.resendIn', { time: `${left}s` }) : tr('auth.resend');
     if (left > 0) setTimeout(() => this.updateResend(this.captchas.verify.ready), 1000);
   }
 
@@ -203,7 +204,7 @@ export class AuthUI {
     const tag = this.account.tag;
     const bar = $('account-bar');
     if (tag) {
-      const playTime = `Play time ${formatPlayTime(this.account.profile?.total_play_seconds ?? 0)}`;
+      const playTime = tr('auth.playTime', { time: formatPlayTime(this.account.profile?.total_play_seconds ?? 0) });
       const name = document.createElement('span');
       name.className = 'account-tag';
       const tagText = document.createElement('strong');
@@ -215,22 +216,22 @@ export class AuthUI {
       const out = document.createElement('button');
       out.type = 'button';
       out.className = 'link-btn';
-      out.textContent = 'Sign Out';
+      out.textContent = tr('auth.signOut');
       out.addEventListener('click', async () => {
         await this.account.signOut();
-        showToast('Signed out');
+        showToast(tr('auth.signedOut'));
       });
       bar.replaceChildren(name, out);
     } else {
       const signIn = document.createElement('button');
       signIn.type = 'button';
       signIn.className = 'pill-btn';
-      signIn.textContent = 'Sign In';
+      signIn.textContent = tr('auth.signIn');
       signIn.addEventListener('click', () => this.open('signin'));
       const join = document.createElement('button');
       join.type = 'button';
       join.className = 'pill-btn ghost';
-      join.textContent = 'Create Account';
+      join.textContent = tr('auth.createAccount');
       join.addEventListener('click', () => this.open('signup'));
       bar.replaceChildren(signIn, join);
     }
@@ -259,7 +260,7 @@ export class AuthUI {
     const btn = this.submitButton(form);
     const label = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Please wait…';
+    btn.textContent = tr('auth.pleaseWait');
     form.setAttribute('aria-busy', 'true');
     try {
       return await fn();

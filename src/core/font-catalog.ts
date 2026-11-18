@@ -1,3 +1,4 @@
+import { t } from './i18n';
 /**
  * Fonts that ship with the game (src/assets/fonts), with their copyright and license.
  *
@@ -19,7 +20,7 @@ export interface CatalogFont {
   folder: 'etc' | 'main' | 'title' | 'timer';
   group: 'library' | 'ui';
   /** Script coverage, for the picker */
-  script: 'latin' | 'korean' | 'japanese';
+  script: 'latin' | 'korean' | 'japanese' | 'chinese';
   copyright: string;
   designer?: string;
   license: FontLicense;
@@ -29,10 +30,10 @@ export interface CatalogFont {
 }
 
 export const LICENSE_LABELS: Record<FontLicense, string> = {
-  ofl: 'SIL Open Font License 1.1',
-  personal: 'Free for personal use only',
-  commercial: 'Commercial font (paid license)',
-  check: 'License not stated in the font file',
+  ofl: t('fontLicense.ofl'),
+  personal: t('fontLicense.personal'),
+  commercial: t('fontLicense.commercial'),
+  check: t('fontLicense.check'),
 };
 
 const OFL_URL = 'https://openfontlicense.org';
@@ -70,10 +71,10 @@ export const FONT_CATALOG: CatalogFont[] = [
   other('paradox-210', '210 Paradox', '4ff025ed0f2f7ff08551ac3a0368c3b3.otf', 'korean', 'check', 'Copyright (c) 2017 Design210. All rights reserved.', 'Design210', { url: 'http://www.design210.com' }),
   other('sogeumjaengi-210', '210 Sogeumjaengi Bold', 'ef5c24bc9a642d8e0431abf54af3ff9b.otf', 'korean', 'check', 'Copyright (c) 2018 Design210. All rights reserved.', 'Design210', { url: 'http://www.design210.com' }),
   other('ggoltong-robot', 'Korean KTLBR (꼴통로봇)', 'a꼴통로봇.otf', 'korean', 'check', 'Copyright © 1992-2014 AsiaSoft Inc. Seoul Korea All Rights Reserved.', 'AsiaSoft Inc.', {
-    licenseNote: 'The font file says to consult the vendor for license information.', url: 'http://www.asiasoft.co.kr',
+    licenseNote: t('fontLicense.noteVendor'), url: 'http://www.asiasoft.co.kr',
   }),
   other('sounso-quality', 'Sounso Quality', 'No.019-Sounso Quality.ttf', 'latin', 'check', '(c) Copyright Sichuan SounSo Brand Planning Co.,Ltd', 'Sounso Fonts', {
-    licenseNote: 'The font file points to ssfonts.com for license information.', url: 'https://www.ssfonts.com',
+    licenseNote: t('fontLicense.noteSsfonts'), url: 'https://www.ssfonts.com',
   }),
   other('hakgyoansim-namu', 'Hakgyoansim Namu L', 'HakgyoansimNamuL.ttf', 'korean', 'check', 'Copyright © KERIS. All rights reserved.', 'Design210'),
   other('hakgyoansim-tuho', 'Hakgyoansim Tuho R', 'HakgyoansimTuhoR.ttf', 'korean', 'check', 'Copyright © KERIS. All rights reserved.', 'Design210'),
@@ -86,6 +87,8 @@ export const FONT_CATALOG: CatalogFont[] = [
   // ── The app's own fonts ──
   { id: 'ui-mango', name: 'Mango Ddobak (L / R / B)', file: 'MangoDdobak-R(ttf).ttf', folder: 'main', group: 'ui', script: 'korean', copyright: 'Copyright (c) MANGOBOARD. All rights reserved. Font designed by Earlyfont.', designer: 'Earlyfont', license: 'check' },
   { id: 'ui-hyejaroun', name: 'GS Hyejaroun Bold', file: 'GSHYEJAROUNTTF-Bold.ttf', folder: 'title', group: 'ui', script: 'korean', copyright: 'Copyright © 2026 GS Retail Co., Ltd. All Rights Reserved.', designer: 'Tlab Inc.', license: 'check', url: 'http://hyejaroun.com' },
+  { id: 'aa-mingxinpian', name: 'Aa ShiGe MingXinPian', file: 'AaShiGeMingXinPian-2.ttf', folder: 'main', group: 'library', script: 'chinese', copyright: 'Copyright (c) 2023 HanMeiHutong (XiaMen) Technology Co. Ltd. All rights reserved.', designer: 'HanMeiHutong (XiaMen) Technology Co. Ltd.', license: 'check' },
+  { id: 'aa-yuanheiti', name: 'Aa YuanHeiTi', file: 'AaYuanHeiTi-2.ttf', folder: 'title', group: 'library', script: 'chinese', copyright: 'Copyright (c) 2022 HanMeiHutong (XiaMen) Technology Co. Ltd. All rights reserved.', designer: 'HanMeiHutong (XiaMen) Technology Co. Ltd.', license: 'check' },
   { id: 'ui-duggobi', name: 'HS Duggobi (HS두꺼비체)', file: 'HS두꺼비체.ttf', folder: 'timer', group: 'ui', script: 'korean', copyright: 'Copyright (c) 2017 by Hyun S. Choi. All rights reserved.', designer: 'Hyun S. Choi', license: 'check', url: 'http://hp0.blog.me' },
 ];
 

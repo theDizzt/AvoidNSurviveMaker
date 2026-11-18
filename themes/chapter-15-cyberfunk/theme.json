@@ -171,5 +171,15 @@
                                                     }
                                                 ]
                                }
-                }
+                },
+    "i18n":  {
+        "ko":  {
+            "name":  "사이버펑크 - 제목 미정",
+            "description":  "네온 이퀄라이저, 크롬 회로, 늦은 밤의 댄스 플로어. 챕터 제목은 추후 공개됩니다."
+        },
+        "zh":  {
+            "name":  "Cyberfunk - Title TBD",
+            "description":  "Neon equalizers, chrome circuits and a late-night dance floor. Chapter title to be announced."
+        }
+    }
 }

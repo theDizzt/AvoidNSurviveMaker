@@ -1,6 +1,9 @@
+import { t } from '../../core/i18n';
 import { allRecords, mergeRecords, setOnRecord, type LevelRecord } from '../progress';
 import type { Account } from './account';
 import { supabase } from './supabase';
+import { recordTime } from '../../core/time';
+import { clearLeaderboardCache } from './leaderboard';
 
 const PENDING_PREFIX = 'avoid-n-survive:pending-records:';
 /** The server accepts at most this many records per call */
@@ -26,7 +29,7 @@ export type SyncResult = { ok: true; uploaded: number; downloaded: number } | { 
 const toPayload = (records: Record<string, LevelRecord>) =>
   Object.entries(records)
     .filter(([, r]) => Number.isFinite(r.best) && r.best > 0)
-    .map(([key, r]) => ({ key, best_ms: Math.max(1, Math.round(r.best)), stars: r.stars }));
+    .map(([key, r]) => ({ key, best_ms: recordTime(r.best), stars: r.stars }));
 
 /**
  * Best time (ms) and stars per level, saved to the signed-in player's account.
@@ -36,6 +39,7 @@ const toPayload = (records: Record<string, LevelRecord>) =>
  * records come down. Both sides keep the best time and the most stars.
  */
 export class RecordSync {
+  onSaved: () => void = () => {};
   private userId: string | null = null;
   private pending: Record<string, LevelRecord> = {};
   private sending = false;
@@ -68,23 +72,24 @@ export class RecordSync {
 
   /** Upload every local record, then bring the account's records into this browser */
   async syncAll(): Promise<SyncResult> {
-    if (!supabase || !this.userId) return { ok: false, message: 'Sign in to sync your records.' };
+    if (!supabase || !this.userId) return { ok: false, message: t('records.signIn') };
     const userId = this.userId;
-    const payload = toPayload({ ...allRecords(), ...this.pending });
+    const snapshot = { ...allRecords(), ...this.pending };
+    const payload = toPayload(snapshot);
     let rows: ServerRecord[] = [];
     try {
       for (let i = 0; i === 0 || i < payload.length; i += BATCH) {
         const { data, error } = await supabase.rpc('submit_level_records', { p_records: payload.slice(i, i + BATCH) });
-        if (error) return { ok: false, message: /failed to fetch|network/i.test(error.message) ? "Can't reach the server. Check your connection." : "Couldn't sync records. Please try again." };
+        if (error) return { ok: false, message: /failed to fetch|network/i.test(error.message) ? t('net.unreachable') : t('records.syncFailed') };
         rows = (data as ServerRecord[] | null) ?? [];
       }
     } catch {
-      return { ok: false, message: "Can't reach the server. Check your connection." };
+      return { ok: false, message: t('net.unreachable') };
     }
-    if (this.userId !== userId) return { ok: false, message: 'The signed-in account changed. Please try again.' };
-    this.pending = {};
+    if (this.userId !== userId) return { ok: false, message: t('records.accountChanged') };
+    for (const [k, r] of Object.entries(snapshot)) if (this.pending[k] === r) delete this.pending[k];
     this.persist();
-    const downloaded = mergeRecords(Object.fromEntries(rows.map((r) => [r.level_key, { best: r.best_ms, stars: r.stars }])));
+    const downloaded = this.acceptServerRecords(rows);
     return { ok: true, uploaded: payload.length, downloaded };
   }
 
@@ -97,10 +102,11 @@ export class RecordSync {
     const sent = Object.fromEntries(batch.map((r) => [r.key, this.pending[r.key]]));
     this.sending = true;
     try {
-      const { error } = await supabase.rpc('submit_level_records', { p_records: batch });
+      const { data, error } = await supabase.rpc('submit_level_records', { p_records: batch });
       if (error || this.userId !== userId) return; // keep them, retry on the next clear or sign-in
       for (const [k, r] of Object.entries(sent)) if (this.pending[k] === r) delete this.pending[k];
       this.persist();
+      this.acceptServerRecords((data as ServerRecord[] | null) ?? []);
       // Clears that arrived while this request was out
       if (Object.keys(this.pending).length) queueMicrotask(() => void this.flush());
     } catch {
@@ -108,6 +114,16 @@ export class RecordSync {
     } finally {
       this.sending = false;
     }
+  }
+
+  private acceptServerRecords(rows: ServerRecord[]): number {
+    clearLeaderboardCache();
+    // Do not overwrite a newer clear that has not reached the server yet.
+    const changed = mergeRecords(Object.fromEntries(rows
+      .filter((r) => !this.pending[r.level_key])
+      .map((r) => [r.level_key, { best: r.best_ms, stars: r.stars }])), true);
+    this.onSaved();
+    return changed;
   }
 
   private syncUser(): void {

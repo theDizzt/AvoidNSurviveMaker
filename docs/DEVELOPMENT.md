@@ -24,6 +24,15 @@ npm run build     # dist/ 에 정적 사이트 생성 — GitHub Pages, Vercel �
 - 문서(README, `docs/`, 각 폴더의 README)는 **한국어**로 작성합니다.
 - 게임 안의 모든 것은 **영어**로 작성합니다: 코드, 주석, 테스트 이름, 오류 메시지, UI 문구, 레벨 이름, 커밋 메시지.
 
+### 게임 문구 (locale)
+
+- 플레이어에게 보이는 문구(게임 제목 제외)는 코드에 직접 쓰지 않고 `src/locale/<언어>.json`에 둡니다. 키는 `"영역.이름"` 형태의 평평한 키입니다.
+- `en.json`이 기준 파일입니다. 코드에서는 `t('key', { 변수 })`(`src/core/i18n.ts`)로 가져오고, 문구 안의 `{변수}`가 채워집니다. 키 타입은 `en.json`에서 만들어지므로 없는 키를 쓰면 타입 오류가 납니다.
+- `index.html`의 고정 문구는 `data-i18n="key"`(텍스트), `data-i18n-title` / `-aria-label` / `-placeholder`(속성)로 지정하고, 시작할 때 `applyI18n()`이 채웁니다.
+- 다른 언어 파일(`ko.json`, `zh.json` 등)에 없는 키는 영어로 표시됩니다. `zh.json`(중국어 간체)은 아직 영어 문구로 채워져 있어, 값만 번역하면 됩니다. 새 언어는 json 파일을 추가하고 `LANGUAGES`(`src/core/i18n.ts`)에 등록합니다.
+- 테마 팩의 문구(이름, 설명, 크레딧, 배지 캡션)는 `theme.json` 의 `i18n` 블록으로 언어별로 둡니다(`themes/README.md` 참고). 게임에는 `localizeThemeInfo()` 로 바뀐 `ThemeEntry.info` 가 쓰이고, Theme Editor 는 모든 언어가 담긴 `ThemeEntry.source` 를 편집합니다.
+- 언어는 옵션 화면에서 바꿉니다(기본 영어). 선택은 localStorage에 저장되고, 시작할 때 만들어지는 문구가 많아 페이지를 새로고침해 적용합니다.
+
 ## 프로젝트 구조
 
 전체 구조는 [ARCHITECTURE.md](ARCHITECTURE.md) 를 참고하세요.

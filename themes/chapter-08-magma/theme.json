@@ -171,5 +171,15 @@
                                                     }
                                                 ]
                                }
-                }
+                },
+    "i18n":  {
+        "ko":  {
+            "name":  "마그마 - 제목 미정",
+            "description":  "화산의 불빛 아래 갈라진 현무암과 녹아내린 강. 챕터 제목은 추후 공개됩니다."
+        },
+        "zh":  {
+            "name":  "Magma - Title TBD",
+            "description":  "Cracked basalt and molten rivers beneath a volcanic glow. Chapter title to be announced."
+        }
+    }
 }

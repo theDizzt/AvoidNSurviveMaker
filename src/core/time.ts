@@ -13,3 +13,9 @@ export function formatUtc(value: string | number | Date | null | undefined): str
 export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+/** Millisecond precision shared by the leaderboard, saved records and result UI. */
+export const recordTime = (ms: number): number => Math.max(1, Math.round(ms));
+
+/** Ready/running timers may display zero; completed clears use recordTime. */
+export const displayTime = (ms: number): number => Math.max(0, Math.round(ms));

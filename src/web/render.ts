@@ -1,4 +1,6 @@
+import { language, t as tr } from '../core/i18n';
 import { createPatternTile, PATTERN_RES } from './theme-pattern';
+import { displayTime } from '../core/time';
 import { toWorld, transformAt, type CompiledObject, type Transform } from '../core/object';
 import { primaryColor, secondaryColor, shade } from '../core/theme';
 import { switchColor } from '../core/colors';
@@ -46,10 +48,12 @@ export const COLORS = {
   dark: '#000000',
 };
 
+/** Chinese text falls back to its own fonts (see ZhMain / ZhTitle in style.css) */
+const zh = language === 'zh';
 /** Same families as --font-main / --font-title in style.css */
-export const FONT_MAIN = "'MangoDdobak', system-ui, sans-serif";
-export const FONT_TITLE = "'GSHyejaroun', 'MangoDdobak', system-ui, sans-serif";
-export const FONT_TIMER = "'GameTimer', 'MangoDdobak', system-ui, sans-serif";
+export const FONT_MAIN = `'MangoDdobak', ${zh ? "'ZhMain', " : ''}system-ui, sans-serif`;
+export const FONT_TITLE = `'GSHyejaroun', 'MangoDdobak', ${zh ? "'ZhTitle', 'ZhMain', " : ''}system-ui, sans-serif`;
+export const FONT_TIMER = `'GameTimer', 'MangoDdobak', ${zh ? "'ZhMain', " : ''}system-ui, sans-serif`;
 
 const tmp: Point = { x: 0, y: 0 };
 const tf: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
@@ -572,13 +576,13 @@ export function drawMap(
     ctx.restore();
   }
 
-  zone(ctx, map.start, COLORS.start, COLORS.startEdge, 'START');
+  zone(ctx, map.start, COLORS.start, COLORS.startEdge, tr('zone.start'));
   // Locked GOAL (coins still to collect): dark gray, with the coins collected so far, e.g. "3/10"
   const left = opts.coinsLeft ?? 0;
   if (left > 0) {
     const total = map.objects.reduce((n, o) => n + (o.role === 'coin' ? 1 : 0), 0);
     zone(ctx, map.goal, COLORS.goalLocked, COLORS.goalLockedEdge, `${Math.max(0, total - left)}/${total}`, false);
-  } else zone(ctx, map.goal, COLORS.goal, COLORS.goalEdge, 'GOAL');
+  } else zone(ctx, map.goal, COLORS.goal, COLORS.goalEdge, tr('zone.goal'));
 
   // Event zones lie on the floor
   objects.forEach((o, i) => {
@@ -1308,7 +1312,7 @@ function stripes(ctx: CanvasRenderingContext2D, a: string, b: string): CanvasPat
  * digit: the readout never shifts as the numbers change. Drawn at the top-right corner.
  */
 export function drawStopwatch(ctx: CanvasRenderingContext2D, map: MapData, ms: number, now: number): void {
-  const total = Math.floor(Math.max(0, ms));
+  const total = displayTime(ms);
   const whole = String(Math.floor(total / 1000));
   const frac = `.${String(total % 1000).padStart(3, '0')}`;
   const base = timerColor(map);

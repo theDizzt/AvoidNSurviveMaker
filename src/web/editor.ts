@@ -1,3 +1,4 @@
+import { t as tr } from '../core/i18n';
 import { pointInPoly, pointInRect } from '../core/geometry';
 import { CompiledMotion } from '../core/motion';
 import { compileObject, transformAt, type CompiledObject, type Transform } from '../core/object';
@@ -6,6 +7,7 @@ import {
   type AlignMode, type Turn, type ZOrder,
 } from '../core/arrange';
 import { gameplayKey } from '../core/level';
+import { formatSeconds } from '../core/simulation';
 import { initialChannels } from '../core/switches';
 import { mergeShapes, type MergeOp } from '../core/merge';
 import { flattenShape, polyOutline, shapeBounds, shapeCenter } from '../core/shape';
@@ -45,21 +47,21 @@ interface ObjectTool {
 type Tool = { kind: 'select' } | { kind: 'zone'; zone: 'start' | 'goal' } | ObjectTool;
 
 const SHAPES: [ShapeKind, string][] = [
-  ['rect', 'Rectangle'],
-  ['ellipse', 'Circle'],
-  ['poly', 'Polygon'],
-  ['free', 'Freeform'],
+  ['rect', tr('ed.rectangle')],
+  ['ellipse', tr('common.circle')],
+  ['poly', tr('ed.polygon')],
+  ['free', tr('ed.freeform')],
 ];
 
 /** Palette layout; numbers match the editor feature list */
 const GROUPS: ({ title: string; role: Role; behavior: Behavior; first: number } | { title: string; zones: true })[] = [
-  { title: 'Paths', role: 'path', behavior: 'static', first: 1 },
-  { title: 'Walls', role: 'wall', behavior: 'static', first: 5 },
-  { title: 'Zones', zones: true },
-  { title: 'Moving paths', role: 'path', behavior: 'moving', first: 11 },
-  { title: 'Rotating paths', role: 'path', behavior: 'rotating', first: 15 },
-  { title: 'Moving walls', role: 'wall', behavior: 'moving', first: 19 },
-  { title: 'Rotating walls', role: 'wall', behavior: 'rotating', first: 23 },
+  { title: tr('common.paths'), role: 'path', behavior: 'static', first: 1 },
+  { title: tr('ed.walls'), role: 'wall', behavior: 'static', first: 5 },
+  { title: tr('ed.zones'), zones: true },
+  { title: tr('ed.movingPaths'), role: 'path', behavior: 'moving', first: 11 },
+  { title: tr('ed.rotatingPaths'), role: 'path', behavior: 'rotating', first: 15 },
+  { title: tr('ed.movingWalls'), role: 'wall', behavior: 'moving', first: 19 },
+  { title: tr('ed.rotatingWalls'), role: 'wall', behavior: 'rotating', first: 23 },
 ];
 
 const ICONS: Record<ShapeKind, string> = {
@@ -77,27 +79,31 @@ const SPECIAL_IDS = {
 } as const;
 const TRIGGER_IDS: Record<TriggerKind, number> = { switch: 32, timer: 33, hold: 34, startZone: 35, stopZone: 36 };
 const TRIGGER_NAMES: Record<TriggerKind, string> = {
-  switch: 'Switch', timer: 'Timer Switch', hold: 'Hold Switch', startZone: 'Event Start Zone', stopZone: 'Event Stop Zone',
+  switch: tr('ed.nameSwitch'), timer: tr('ed.nameTimer'), hold: tr('ed.nameHold'), startZone: tr('ed.nameStartZone'), stopZone: tr('ed.nameStopZone'),
 };
 /** Switch buttons are always square */
 const isButton = (k: TriggerKind | undefined) => k === 'switch' || k === 'timer' || k === 'hold';
 
 const ROLE_NAMES: Record<Role, string> = {
-  path: 'Path', wall: 'Wall', coin: 'Coin', dark: 'Darkness Area', trigger: 'Switch', door: 'Auto Door', laser: 'Laser', mirror: 'Mirror', portal: 'Portal',
-  text: 'Text Box', safe: 'Safe Zone',
+  path: tr('ed.namePath'), wall: tr('ed.nameWall'), coin: tr('ed.nameCoin'), dark: tr('ed.nameDark'), trigger: tr('ed.nameSwitch'), door: tr('ed.nameDoor'), laser: tr('ed.laser'), mirror: tr('ed.mirror'), portal: tr('ed.namePortal'),
+  text: tr('ed.textBox2'), safe: tr('ed.nameSafe'),
 };
 /** Objects that always stay square */
 const isSquare = (o: { role: Role; trigger?: { kind: TriggerKind }; saw?: { kind: string } }) => o.role === 'portal' || o.role === 'laser' || isButton(o.trigger?.kind) || o.saw?.kind === 'disc';
 
+/** "Moving …" / "Rotating …" */
+function withBehavior(beh: Behavior, name: string): string {
+  return beh === 'moving' ? tr('ed.nameMoving', { name }) : beh === 'rotating' ? tr('ed.nameRotating', { name }) : name;
+}
+
 function toolLabel(t: ObjectTool): string {
   if (t.role === 'trigger') return TRIGGER_NAMES[t.trigger ?? 'switch'];
-  if (t.special === 'spike') return 'Spike Stake';
-  if (t.special === 'boulder') return 'Rolling Boulder';
-  if (t.special === 'disc' || t.special === 'blade') return `${t.behavior === 'moving' ? 'Moving ' : ''}${t.special === 'disc' ? 'Circular Grinder' : 'Saw Blade'}`;
+  if (t.special === 'spike') return tr('ed.nameSpike');
+  if (t.special === 'boulder') return tr('ed.nameBoulder');
+  if (t.special === 'disc' || t.special === 'blade') return withBehavior(t.behavior === 'moving' ? 'moving' : 'static', tr(t.special === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (t.role !== 'path' && t.role !== 'wall') return ROLE_NAMES[t.role];
-  const shape = t.shape === 'sector' ? 'Sector' : SHAPES.find(([k]) => k === t.shape)![1];
-  const beh = t.behavior === 'moving' ? 'Moving ' : t.behavior === 'rotating' ? 'Rotating ' : '';
-  return `${beh}${shape} ${ROLE_NAMES[t.role]}`;
+  const shape = t.shape === 'sector' ? tr('ed.shapeSector') : SHAPES.find(([k]) => k === t.shape)![1];
+  return withBehavior(t.behavior, tr('ed.shapeRole', { shape, role: ROLE_NAMES[t.role] }));
 }
 
 /** Freeform: drawn with the freeform tool, made by merging, or any polygon with curved vertices */
@@ -106,19 +112,19 @@ function isFreeform(s: Shape): boolean {
 }
 
 function describeObject(o: MapObject): string {
-  const shape =
-    o.shape.type === 'rect' ? 'Rectangle'
-      : o.shape.type === 'ellipse' ? 'Circle'
-        : o.shape.type === 'sector' ? 'Sector'
-          : isFreeform(o.shape) ? 'Freeform' : 'Polygon';
-  const beh = o.rotation ? 'Rotating ' : o.motion ? 'Moving ' : '';
-  if (o.role === 'trigger') return `${beh}${switchColor(o.trigger?.color ?? 0).name} ${TRIGGER_NAMES[o.trigger?.kind ?? 'switch']}`;
-  if (o.spike) return 'Spike Stake';
-  if (o.boulder) return 'Rolling Boulder';
-  if (o.saw) return `${o.motion ? 'Moving ' : ''}${o.saw.kind === 'disc' ? 'Circular Grinder' : 'Saw Blade'}`;
-  if (o.role === 'laser' || o.role === 'portal') return `${beh}${switchColor((o.laser ?? o.portal)!.color).name} ${ROLE_NAMES[o.role]}`;
-  if (o.role !== 'path' && o.role !== 'wall') return `${beh}${ROLE_NAMES[o.role]}`;
-  return `${beh}${shape} ${ROLE_NAMES[o.role]}`;
+  const shape = tr(
+    o.shape.type === 'rect' ? 'ed.rectangle'
+      : o.shape.type === 'ellipse' ? 'common.circle'
+        : o.shape.type === 'sector' ? 'ed.shapeSector'
+          : isFreeform(o.shape) ? 'ed.freeform' : 'ed.polygon');
+  const beh: Behavior = o.rotation ? 'rotating' : o.motion ? 'moving' : 'static';
+  if (o.role === 'trigger') return withBehavior(beh, tr('ed.colorName', { color: switchColor(o.trigger?.color ?? 0).name, name: TRIGGER_NAMES[o.trigger?.kind ?? 'switch'] }));
+  if (o.spike) return tr('ed.nameSpike');
+  if (o.boulder) return tr('ed.nameBoulder');
+  if (o.saw) return withBehavior(o.motion ? 'moving' : 'static', tr(o.saw.kind === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
+  if (o.role === 'laser' || o.role === 'portal') return withBehavior(beh, tr('ed.colorName', { color: switchColor((o.laser ?? o.portal)!.color).name, name: ROLE_NAMES[o.role] }));
+  if (o.role !== 'path' && o.role !== 'wall') return withBehavior(beh, ROLE_NAMES[o.role]);
+  return withBehavior(beh, tr('ed.shapeRole', { shape, role: ROLE_NAMES[o.role] }));
 }
 
 /** The palette number of the tool that makes this kind of object */
@@ -187,10 +193,10 @@ const HANDLE_PX = 7;
 const PIVOT_SNAP_PX = 10;
 const IDENTITY: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
 
-const REPEAT_OPTIONS: [Repeat, string][] = [['loop', 'Loop'], ['pingpong', 'Ping-pong'], ['once', 'Once']];
-const EASING_OPTIONS: [Easing, string][] = [['none', 'None'], ['in', 'Ease in'], ['out', 'Ease out'], ['inOut', 'Ease in & out']];
-const ROUTE_OPTIONS: [MotionType, string][] = [['linear', 'Straight'], ['curve', 'Curve'], ['circle', 'Circle (orbit)']];
-const DIRECTION_OPTIONS: [string, string][] = [['cw', 'Clockwise'], ['ccw', 'Counter-clockwise']];
+const REPEAT_OPTIONS: [Repeat, string][] = [['loop', tr('ed.loop')], ['pingpong', tr('ed.pingPong')], ['once', tr('ed.once')]];
+const EASING_OPTIONS: [Easing, string][] = [['none', tr('common.none')], ['in', tr('ed.easeIn')], ['out', tr('ed.easeOut')], ['inOut', tr('ed.easeInOut')]];
+const ROUTE_OPTIONS: [MotionType, string][] = [['linear', tr('ed.straight')], ['curve', tr('ed.curve')], ['circle', tr('ed.circleOrbit')]];
+const DIRECTION_OPTIONS: [string, string][] = [['cw', tr('ed.clockwise')], ['ccw', tr('ed.counterClockwise')]];
 
 export interface EditorElements {
   canvas: HTMLCanvasElement;
@@ -251,42 +257,42 @@ const ARROWS: Record<string, [number, number]> = {
 
 /** Shown in the "?" overlay; keep in sync with Editor.onKey and the F/H keys in main.ts */
 const SHORTCUTS: [string, [string, string][]][] = [
-  ['Tools', [
-    ['V', 'Select / edit'],
-    ['1 / 2 / 3 / 4', 'Rectangle / Circle / Polygon / Freeform'],
-    ['W', 'Switch between path and wall'],
-    ['M', 'Moving object (press again for static)'],
-    ['R', 'Rotating object (press again for static)'],
-    ['S / G', 'Start area / Goal area'],
+  [tr('common.tools'), [
+    ['V', tr('ed.selectEdit')],
+    ['1 / 2 / 3 / 4', tr('ed.scRectangleCirclePolygonFreeform')],
+    ['W', tr('ed.switchBetweenPathAndWall')],
+    ['M', tr('ed.movingObjectPressAgainFor')],
+    ['R', tr('ed.rotatingObjectPressAgainFor')],
+    ['S / G', tr('ed.scStartAreaGoalArea')],
   ]],
-  ['Edit', [
-    ['Ctrl+Z', 'Undo'],
-    ['Ctrl+Y / Ctrl+Shift+Z', 'Redo'],
-    ['Ctrl+C / Ctrl+X / Ctrl+V', 'Copy / cut / paste'],
-    ['Ctrl+D', 'Duplicate'],
-    ['Delete', 'Delete'],
-    ['Ctrl+A', 'Select all'],
-    ['Shift+Click / Ctrl+Click', 'Add to / remove from selection'],
-    ['Drag', 'On empty space: select everything inside the box'],
-    ['Ctrl+G / Ctrl+Shift+G', 'Group / ungroup'],
-    ['Ctrl+] / Ctrl+[', 'Bring forward / send backward'],
-    ['Ctrl+Shift+] / Ctrl+Shift+[', 'Bring to front / send to back'],
-    ['Alt', 'While dragging a pivot: place freely (no snapping)'],
-    ['Arrows', 'Move selection (grid step when Snap is on)'],
-    ['Shift+Arrows', 'Move selection ×10'],
-    ['Tab / Shift+Tab', 'Select next / previous'],
-    ['Esc', 'Cancel drawing / deselect'],
-    ['Enter', 'Close polygon / finish markers'],
-    ['Backspace', 'Remove last point while drawing'],
+  [tr('ed.scGroupEdit'), [
+    ['Ctrl+Z', tr('common.undo')],
+    ['Ctrl+Y / Ctrl+Shift+Z', tr('common.redo')],
+    ['Ctrl+C / Ctrl+X / Ctrl+V', tr('ed.scCopyCutPaste')],
+    ['Ctrl+D', tr('common.duplicate')],
+    ['Delete', tr('common.delete')],
+    ['Ctrl+A', tr('common.selectAll')],
+    ['Shift+Click / Ctrl+Click', tr('ed.scAddToRemoveFromSelection')],
+    ['Drag', tr('ed.onEmptySpaceSelectEverything')],
+    ['Ctrl+G / Ctrl+Shift+G', tr('ed.scGroupUngroup')],
+    ['Ctrl+] / Ctrl+[', tr('ed.scBringForwardSendBackward')],
+    ['Ctrl+Shift+] / Ctrl+Shift+[', tr('ed.scBringToFrontSendToBack')],
+    ['Alt', tr('ed.whileDraggingAPivotPlace')],
+    ['Arrows', tr('ed.moveSelectionGridStepWhen')],
+    ['Shift+Arrows', tr('ed.scMoveSelection10')],
+    ['Tab / Shift+Tab', tr('ed.scSelectNextPrevious')],
+    ['Esc', tr('ed.cancelDrawingDeselect')],
+    ['Enter', tr('ed.closePolygonFinishMarkers')],
+    ['Backspace', tr('ed.removeLastPointWhileDrawing')],
   ]],
-  ['View', [
-    ['N', 'Toggle snap to grid'],
-    ['P', 'Toggle motion preview'],
-    ['T', 'Test play'],
-    ['H', 'Hide / show panels'],
-    ['F', 'Fullscreen'],
-    ['Right-click', 'Arrange, align, rotate, group and merge menu'],
-    ['?', 'Show this list'],
+  [tr('ed.scGroupView'), [
+    ['N', tr('ed.toggleSnapToGrid')],
+    ['P', tr('ed.toggleMotionPreview')],
+    ['T', tr('ed.testPlay')],
+    ['H', tr('ed.hideShowPanels')],
+    ['F', tr('common.fullscreen')],
+    ['Right-click', tr('ed.arrangeAlignRotateGroupAnd')],
+    ['?', tr('ed.scShowThisList')],
   ]],
 ];
 
@@ -413,7 +419,7 @@ export class Editor {
     el.importBtn.addEventListener('click', () => el.importFile.click());
     el.importFile.addEventListener('change', () => void this.importJson());
     el.newBtn.addEventListener('click', () => {
-      if (!confirm('Clear the current map and start a new one? (You can restore it with Undo)')) return;
+      if (!confirm(tr('ed.clearTheCurrentMapAnd'))) return;
       this.edit(() => (this.map = createEmptyMap()));
       this.clearSelection();
       fitCanvas(el.canvas, this.map);
@@ -516,8 +522,8 @@ export class Editor {
     addButton(
       selectRow,
       { kind: 'select' },
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3 L19 12 L12 13.5 L9 20 Z"/></svg><span class="pal-text">Select</span>',
-      'Select / edit (V)',
+      `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3 L19 12 L12 13.5 L9 20 Z"/></svg><span class="pal-text">${tr('ed.select')}</span>`,
+      tr('ed.palSelect'),
       'pal-select',
     );
     box.append(selectRow);
@@ -529,8 +535,8 @@ export class Editor {
       const row = document.createElement('div');
       row.className = 'pal-row';
       if ('zones' in g) {
-        addButton(row, { kind: 'zone', zone: 'start' }, '<span class="pal-zone">S</span><span class="pal-num">9</span>', '#9 Start area (S)', 'pal-start');
-        addButton(row, { kind: 'zone', zone: 'goal' }, '<span class="pal-zone">G</span><span class="pal-num">10</span>', '#10 Goal area (G)', 'pal-goal');
+        addButton(row, { kind: 'zone', zone: 'start' }, '<span class="pal-zone">S</span><span class="pal-num">9</span>', tr('ed.palStartAreaS'), 'pal-start');
+        addButton(row, { kind: 'zone', zone: 'goal' }, '<span class="pal-zone">G</span><span class="pal-num">10</span>', tr('ed.palGoalAreaG'), 'pal-goal');
       } else {
         SHAPES.forEach(([shape], k) => {
           const tool: ObjectTool = { kind: 'object', role: g.role, behavior: g.behavior, shape };
@@ -551,7 +557,7 @@ export class Editor {
     // Special objects
     const h = document.createElement('h4');
     h.className = 'pal-title';
-    h.textContent = 'Special';
+    h.textContent = tr('ed.special');
     const row = document.createElement('div');
     row.className = 'pal-row';
     const sectorPath: ObjectTool = { kind: 'object', role: 'path', behavior: 'static', shape: 'sector' };
@@ -559,46 +565,46 @@ export class Editor {
     const coin: ObjectTool = { kind: 'object', role: 'coin', behavior: 'static', shape: 'ellipse' };
     const dark: ObjectTool = { kind: 'object', role: 'dark', behavior: 'static', shape: 'rect' };
     const svg = (inner: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${inner}</svg>`;
-    addButton(row, sectorPath, `${svg(ICONS.sector)}<span class="pal-num">27</span>`, '#27 Sector Path', 'pal-path pal-static');
-    addButton(row, sectorWall, `${svg(ICONS.sector)}<span class="pal-num">28</span>`, '#28 Sector Wall', 'pal-wall pal-static');
-    addButton(row, coin, `${svg('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="4" fill="none"/>')}<span class="pal-num">31</span>`, '#31 Coin', 'pal-coin');
+    addButton(row, sectorPath, `${svg(ICONS.sector)}<span class="pal-num">27</span>`, tr('ed.palSectorPath'), 'pal-path pal-static');
+    addButton(row, sectorWall, `${svg(ICONS.sector)}<span class="pal-num">28</span>`, tr('ed.palSectorWall'), 'pal-wall pal-static');
+    addButton(row, coin, `${svg('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="4" fill="none"/>')}<span class="pal-num">31</span>`, tr('ed.palCoin'), 'pal-coin');
     const trig = (kind: TriggerKind): ObjectTool => ({ kind: 'object', role: 'trigger', behavior: 'static', shape: 'rect', trigger: kind });
     const btn = '<rect x="4" y="4" width="16" height="16" rx="3"/><rect x="7.5" y="7.5" width="9" height="9" rx="2" fill="#fff" fill-opacity="0.55"/>';
-    addButton(row, trig('switch'), `${svg(btn)}<span class="pal-num">32</span>`, '#32 Switch', 'pal-switch');
-    addButton(row, trig('timer'), `${svg(`${btn}<path d="M12 12 L12 8 A4 4 0 0 1 16 12 Z" fill="#243450" fill-opacity="0.5"/>`)}<span class="pal-num">33</span>`, '#33 Timer Switch', 'pal-switch');
-    addButton(row, trig('hold'), `${svg(`${btn}<circle cx="12" cy="12" r="2" fill="#243450"/>`)}<span class="pal-num">34</span>`, '#34 Hold Switch', 'pal-switch');
-    addButton(row, trig('startZone'), `${svg('<rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="3 2"/><path d="M10 9 L15 12 L10 15 Z" fill="#c2577b"/>')}<span class="pal-num">35</span>`, '#35 Event Start Zone', 'pal-zone-ev');
-    addButton(row, trig('stopZone'), `${svg('<rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="3 2"/><rect x="9.5" y="9.5" width="5" height="5" fill="#c2577b"/>')}<span class="pal-num">36</span>`, '#36 Event Stop Zone', 'pal-zone-ev');
+    addButton(row, trig('switch'), `${svg(btn)}<span class="pal-num">32</span>`, tr('ed.palSwitch'), 'pal-switch');
+    addButton(row, trig('timer'), `${svg(`${btn}<path d="M12 12 L12 8 A4 4 0 0 1 16 12 Z" fill="#243450" fill-opacity="0.5"/>`)}<span class="pal-num">33</span>`, tr('ed.palTimerSwitch'), 'pal-switch');
+    addButton(row, trig('hold'), `${svg(`${btn}<circle cx="12" cy="12" r="2" fill="#243450"/>`)}<span class="pal-num">34</span>`, tr('ed.palHoldSwitch'), 'pal-switch');
+    addButton(row, trig('startZone'), `${svg('<rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="3 2"/><path d="M10 9 L15 12 L10 15 Z" fill="#c2577b"/>')}<span class="pal-num">35</span>`, tr('ed.palEventStartZone'), 'pal-zone-ev');
+    addButton(row, trig('stopZone'), `${svg('<rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="3 2"/><rect x="9.5" y="9.5" width="5" height="5" fill="#c2577b"/>')}<span class="pal-num">36</span>`, tr('ed.palEventStopZone'), 'pal-zone-ev');
     const door: ObjectTool = { kind: 'object', role: 'door', behavior: 'static', shape: 'rect' };
-    addButton(row, door, `${svg('<rect x="2" y="9" width="9" height="6"/><rect x="13" y="9" width="9" height="6"/><path d="M8 6 L5 6 M16 6 L19 6" />')}<span class="pal-num">40</span>`, '#40 Auto Door', 'pal-door');
-    addButton(row, dark, `${svg('<rect x="4" y="4" width="16" height="16" rx="2"/>')}<span class="pal-num">41</span>`, '#41 Darkness Area', 'pal-dark');
+    addButton(row, door, `${svg('<rect x="2" y="9" width="9" height="6"/><rect x="13" y="9" width="9" height="6"/><path d="M8 6 L5 6 M16 6 L19 6" />')}<span class="pal-num">40</span>`, tr('ed.palAutoDoor'), 'pal-door');
+    addButton(row, dark, `${svg('<rect x="4" y="4" width="16" height="16" rx="2"/>')}<span class="pal-num">41</span>`, tr('ed.palDarknessArea'), 'pal-dark');
     const spike: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'poly', special: 'spike' };
     const boulder: ObjectTool = { kind: 'object', role: 'wall', behavior: 'moving', shape: 'poly', special: 'boulder' };
     const laser: ObjectTool = { kind: 'object', role: 'laser', behavior: 'static', shape: 'rect' };
     const mirror: ObjectTool = { kind: 'object', role: 'mirror', behavior: 'static', shape: 'poly' };
     const portal: ObjectTool = { kind: 'object', role: 'portal', behavior: 'static', shape: 'rect' };
-    addButton(row, spike, `${svg('<path d="M3 21 L18 6 L21 3 L17 7 Z" stroke-linejoin="round"/><path d="M5 19 L8 22 M2 16 L5 19" />')}<span class="pal-num">29</span>`, '#29 Spike Stake', 'pal-wall pal-moving');
-    addButton(row, boulder, `${svg('<polygon points="12,3 14.6,7.6 19.8,6.2 18.4,11.4 21,14 16.4,16.6 17.8,21.8 12.6,20.4 10,23 7.4,18.4 2.2,19.8 3.6,14.6 1,12 5.6,9.4 4.2,4.2 9.4,5.6" transform="scale(0.9) translate(1.3 0)"/>')}<span class="pal-num">30</span>`, '#30 Rolling Boulder', 'pal-wall pal-moving');
-    addButton(row, laser, `${svg('<rect x="3" y="8" width="8" height="8" rx="1.5"/><path d="M11 12 L22 12" stroke="#e2486c" stroke-width="2.4"/>')}<span class="pal-num">37</span>`, '#37 Laser', 'pal-laser');
-    addButton(row, mirror, `${svg('<path d="M4 20 L20 4" stroke-width="4" stroke="#8fa3bf"/><path d="M4 20 L20 4" stroke-width="1.4" stroke="#fff"/>')}<span class="pal-num">38</span>`, '#38 Mirror', 'pal-mirror');
-    addButton(row, portal, `${svg('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="5" fill="none"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">39</span>`, '#39 Teleport Portal', 'pal-portal');
+    addButton(row, spike, `${svg('<path d="M3 21 L18 6 L21 3 L17 7 Z" stroke-linejoin="round"/><path d="M5 19 L8 22 M2 16 L5 19" />')}<span class="pal-num">29</span>`, tr('ed.palSpikeStake'), 'pal-wall pal-moving');
+    addButton(row, boulder, `${svg('<polygon points="12,3 14.6,7.6 19.8,6.2 18.4,11.4 21,14 16.4,16.6 17.8,21.8 12.6,20.4 10,23 7.4,18.4 2.2,19.8 3.6,14.6 1,12 5.6,9.4 4.2,4.2 9.4,5.6" transform="scale(0.9) translate(1.3 0)"/>')}<span class="pal-num">30</span>`, tr('ed.palRollingBoulder'), 'pal-wall pal-moving');
+    addButton(row, laser, `${svg('<rect x="3" y="8" width="8" height="8" rx="1.5"/><path d="M11 12 L22 12" stroke="#e2486c" stroke-width="2.4"/>')}<span class="pal-num">37</span>`, tr('ed.palLaser'), 'pal-laser');
+    addButton(row, mirror, `${svg('<path d="M4 20 L20 4" stroke-width="4" stroke="#8fa3bf"/><path d="M4 20 L20 4" stroke-width="1.4" stroke="#fff"/>')}<span class="pal-num">38</span>`, tr('ed.palMirror'), 'pal-mirror');
+    addButton(row, portal, `${svg('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="5" fill="none"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">39</span>`, tr('ed.palTeleportPortal'), 'pal-portal');
     const sawTool = (special: 'disc' | 'blade', behavior: Behavior): ObjectTool => ({ kind: 'object', role: 'wall', behavior, shape: special === 'disc' ? 'ellipse' : 'rect', special });
     const discIcon = '<path d="M12 2 L14 5 L17.6 4.2 L18 7.9 L21.4 9.5 L19.6 12.7 L21.4 15.9 L18 17.4 L17.6 21.1 L14 20.3 L12 23 L10 20.3 L6.4 21.1 L6 17.4 L2.6 15.9 L4.4 12.7 L2.6 9.5 L6 7.9 L6.4 4.2 L10 5 Z" transform="scale(0.92) translate(1 0)"/><circle cx="12" cy="12.5" r="2.6" fill="#fff"/>';
     const bladeIcon = '<path d="M2 9 L4 7 L6 9 L8 7 L10 9 L12 7 L14 9 L16 7 L18 9 L20 7 L22 9 L22 15 L20 17 L18 15 L16 17 L14 15 L12 17 L10 15 L8 17 L6 15 L4 17 L2 15 Z"/>';
     const route = '<path d="M15 21 L22 21 M19.5 18.5 L22 21 L19.5 23.5" stroke-width="1.6" fill="none"/>';
-    addButton(row, sawTool('disc', 'static'), `${svg(discIcon)}<span class="pal-num">43</span>`, '#43 Circular Grinder', 'pal-saw');
-    addButton(row, sawTool('blade', 'static'), `${svg(bladeIcon)}<span class="pal-num">44</span>`, '#44 Saw Blade', 'pal-saw');
-    addButton(row, sawTool('disc', 'moving'), `${svg(discIcon + route)}<span class="pal-num">45</span>`, '#45 Moving Circular Grinder', 'pal-saw');
-    addButton(row, sawTool('blade', 'moving'), `${svg(bladeIcon + route)}<span class="pal-num">46</span>`, '#46 Moving Saw Blade', 'pal-saw');
+    addButton(row, sawTool('disc', 'static'), `${svg(discIcon)}<span class="pal-num">43</span>`, tr('ed.palCircularGrinder'), 'pal-saw');
+    addButton(row, sawTool('blade', 'static'), `${svg(bladeIcon)}<span class="pal-num">44</span>`, tr('ed.palSawBlade'), 'pal-saw');
+    addButton(row, sawTool('disc', 'moving'), `${svg(discIcon + route)}<span class="pal-num">45</span>`, tr('ed.palMovingCircularGrinder'), 'pal-saw');
+    addButton(row, sawTool('blade', 'moving'), `${svg(bladeIcon + route)}<span class="pal-num">46</span>`, tr('ed.palMovingSawBlade'), 'pal-saw');
     const textTool: ObjectTool = { kind: 'object', role: 'text', behavior: 'static', shape: 'rect' };
     const safeTool: ObjectTool = { kind: 'object', role: 'safe', behavior: 'static', shape: 'rect' };
-    addButton(row, textTool, `${svg('<path d="M5 6 L19 6 M12 6 L12 19 M9 19 L15 19" stroke-width="2.6" fill="none" stroke-linecap="round"/>')}<span class="pal-num">47</span>`, '#47 Text Box', 'pal-text');
-    addButton(row, safeTool, `${svg('<rect x="3" y="3" width="18" height="18" rx="2" fill-opacity="0.45"/><path d="M12 6.5 L16.5 8.3 L16.2 12.4 C15.8 15 14 16.6 12 17.6 C10 16.6 8.2 15 7.8 12.4 L7.5 8.3 Z" fill="#fff"/>')}<span class="pal-num">48</span>`, '#48 Safe Zone', 'pal-safe');
+    addButton(row, textTool, `${svg('<path d="M5 6 L19 6 M12 6 L12 19 M9 19 L15 19" stroke-width="2.6" fill="none" stroke-linecap="round"/>')}<span class="pal-num">47</span>`, tr('ed.palTextBox'), 'pal-text');
+    addButton(row, safeTool, `${svg('<rect x="3" y="3" width="18" height="18" rx="2" fill-opacity="0.45"/><path d="M12 6.5 L16.5 8.3 L16.2 12.4 C15.8 15 14 16.6 12 17.6 C10 16.6 8.2 15 7.8 12.4 L7.5 8.3 Z" fill="#fff"/>')}<span class="pal-num">48</span>`, tr('ed.palSafeZone'), 'pal-safe');
     // #42 is a map setting, not an object: the button toggles it
     const g = document.createElement('button');
     g.type = 'button';
     g.className = 'pal-btn pal-global-dark';
-    g.title = '#42 Global darkness (toggle)';
+    g.title = tr('ed.42GlobalDarknessToggle');
     g.setAttribute('aria-label', g.title);
     g.innerHTML = `${svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="#fff"/>')}<span class="pal-num">42</span>`;
     g.addEventListener('click', () => this.edit(() => {
@@ -703,7 +709,7 @@ export class Editor {
 
     const verified = this.isVerified();
     this.el.share.disabled = !verified || !this.valid;
-    this.el.verify.textContent = verified ? 'Clear verified — ready to share' : 'To share, first clear the map yourself in test play';
+    this.el.verify.textContent = verified ? tr('ed.verified') : tr('ed.unverified');
     this.el.verify.className = verified ? 'verify ok' : 'verify';
     if (!verified) this.el.shareUrl.value = '';
     this.el.undo.disabled = this.history.length === 0;
@@ -741,7 +747,7 @@ export class Editor {
     // 16:9 sizes; a map made in another ratio keeps its size as a "custom" entry
     const current = `${this.map.width}x${this.map.height}`;
     const sizes = MAP_SIZES.map(([w, h]) => [`${w}x${h}`, `${w} × ${h}${w === 1920 ? ' (default)' : ''}`]);
-    if (!sizes.some(([v]) => v === current)) sizes.push([current, `${this.map.width} × ${this.map.height} (not 16:9)`]);
+    if (!sizes.some(([v]) => v === current)) sizes.push([current, tr('ed.sizeNot169', { w: this.map.width, h: this.map.height })]);
     this.el.size.replaceChildren(...sizes.map(([v, t]) => new Option(t, v, false, v === current)));
   }
 
@@ -753,27 +759,27 @@ export class Editor {
     } else if (this.markerMode !== null) {
       const m = this.map.objects[this.markerMode]?.motion;
       text = m?.type === 'circle'
-        ? 'Click to set the orbit center. Enter or Esc when done'
-        : `Click to place route markers (${m?.points.length ?? 0} placed). Enter or Esc when done`;
+        ? tr('ed.hintOrbit')
+        : tr('ed.hintMarkers', { n: m?.points.length ?? 0 });
     } else if (this.draft) {
       text = this.draft.tool.shape === 'free'
-        ? `Click to add curved points, Shift+click for sharp corners (${this.draft.points.length}). Click the first point or press Enter to close · Backspace undoes a point · Esc cancels`
-        : `Click to add vertices (${this.draft.points.length}). Click the first point or press Enter to close · Backspace undoes a point · Esc cancels`;
+        ? tr('ed.hintFree', { n: this.draft.points.length })
+        : tr('ed.hintPoly', { n: this.draft.points.length });
     } else if (this.tool.kind === 'select' && n > 1) {
-      text = `${n} objects selected. Drag to move them together · right-click for arrange, align, group and merge · Shift+click adds or removes`;
+      text = tr('ed.hintMulti', { n });
     } else if (this.tool.kind === 'select') {
-      text = 'Click to select, drag on empty space to select several, Shift+click to add. Drag handles to reshape · double-click a vertex to toggle curve, an edge to add a vertex · Alt+click removes a vertex · right-click for more';
+      text = tr('ed.hintSelect');
     } else if (this.tool.kind === 'zone') {
-      text = `Drag to set the ${this.tool.zone === 'start' ? 'START' : 'GOAL'} area`;
+      text = tr(this.tool.zone === 'start' ? 'ed.hintZoneStart' : 'ed.hintZoneGoal');
     } else {
       const t = this.tool;
-      const how = t.special === 'spike' ? 'Drag from the base to the tip (the tip is where it thrusts)'
-        : t.special === 'boulder' ? 'Click to place it, then click route markers for it to roll along'
-          : t.role === 'mirror' ? 'Drag from one end of the mirror to the other'
-            : t.role === 'laser' ? 'Click to place the emitter, then drag the orange diamond to aim'
-              : t.role === 'portal' ? 'Click to place a portal; same-colored portals connect' : t.shape === 'sector' ? 'Drag outward from the apex (the drag direction is the middle of the slice)' : t.role === 'coin' ? 'Click to place a coin (always 24×24)' : t.shape === 'poly' || t.shape === 'free' ? 'Click to place points' : t.shape === 'ellipse' ? 'Drag to draw (Shift for a perfect circle)' : 'Drag to draw (Shift for a square)';
-      const after = t.behavior === 'moving' ? ', then click to place route markers' : t.behavior === 'rotating' ? '; it spins around its center (drag the purple pivot to move the axis)' : '';
-      text = `${toolLabel(t)}: ${how}${after}`;
+      const how = tr(t.special === 'spike' ? 'ed.howSpike'
+        : t.special === 'boulder' ? 'ed.howBoulder'
+          : t.role === 'mirror' ? 'ed.howMirror'
+            : t.role === 'laser' ? 'ed.howLaser'
+              : t.role === 'portal' ? 'ed.howPortal' : t.shape === 'sector' ? 'ed.howSector' : t.role === 'coin' ? 'ed.howCoin' : t.shape === 'poly' || t.shape === 'free' ? 'ed.howPoints' : t.shape === 'ellipse' ? 'ed.howEllipse' : 'ed.howRect');
+      const after = t.behavior === 'moving' ? tr('ed.afterMoving') : t.behavior === 'rotating' ? tr('ed.afterRotating') : '';
+      text = tr('ed.hintTool', { tool: toolLabel(t), how, after });
     }
     this.el.hint.textContent = text;
   }
@@ -1020,16 +1026,16 @@ export class Editor {
   /** Points a dragged pivot snaps to: center of the bounds, center of mass, and the outline's corners */
   private pivotTargets(o: MapObject): { p: Point; label: string }[] {
     const s = o.shape;
-    const out = [{ p: shapeCenter(s), label: 'Center' }];
+    const out = [{ p: shapeCenter(s), label: tr('common.center') }];
     const c = shapeCentroid(s);
-    if (Math.hypot(c.x - out[0].p.x, c.y - out[0].p.y) > 0.5) out.push({ p: c, label: 'Center of mass' });
-    if (s.type === 'poly') s.points.forEach((v) => out.push({ p: { x: v.x, y: v.y }, label: 'Vertex' }));
-    else if (s.type === 'sector') out.push({ p: { x: s.cx, y: s.cy }, label: 'Apex' });
+    if (Math.hypot(c.x - out[0].p.x, c.y - out[0].p.y) > 0.5) out.push({ p: c, label: tr('ed.centerOfMass') });
+    if (s.type === 'poly') s.points.forEach((v) => out.push({ p: { x: v.x, y: v.y }, label: tr('ed.vertex') }));
+    else if (s.type === 'sector') out.push({ p: { x: s.cx, y: s.cy }, label: tr('ed.apex') });
     else {
       const b = shapeBounds(s);
-      rectCorners(b).forEach((v) => out.push({ p: v, label: 'Corner' }));
+      rectCorners(b).forEach((v) => out.push({ p: v, label: tr('ed.corner') }));
       for (const [fx, fy] of [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]]) {
-        out.push({ p: { x: b.x + b.w * fx, y: b.y + b.h * fy }, label: 'Edge middle' });
+        out.push({ p: { x: b.x + b.w * fx, y: b.y + b.h * fy }, label: tr('ed.edgeMiddle') });
       }
     }
     return out;
@@ -1282,7 +1288,7 @@ export class Editor {
     if (tool.special === 'boulder') o.boulder = true;
     if (tool.special === 'disc') o.saw = { kind: 'disc', clockwise: true, spin: 720, stroke: 0, strokeMs: 0 };
     if (tool.special === 'blade') o.saw = { kind: 'blade', clockwise: true, spin: 0, stroke: 24, strokeMs: 400 };
-    if (tool.role === 'text') o.text = { text: 'Text', color: '#243450', font: 'main', size: 24, bold: true, align: 'center', outlineWidth: 3, background: '#ffffffb3' };
+    if (tool.role === 'text') o.text = { text: tr('common.text'), color: '#243450', font: 'main', size: 24, bold: true, align: 'center', outlineWidth: 3, background: '#ffffffb3' };
     if (tool.special === 'spike' && shape.type === 'poly') {
       const [tip, b1, b2] = shape.points;
       const base = { x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2 };
@@ -1475,7 +1481,7 @@ export class Editor {
   /** Append copies of objects (offset), with fresh group ids, and select them */
   private insertCopies(objs: readonly MapObject[], off: number): void {
     const room = LIMITS.maxObjects - this.map.objects.length;
-    if (room <= 0) return this.flash(`A map can have at most ${LIMITS.maxObjects} objects`);
+    if (room <= 0) return this.flash(tr('ed.tooManyObjects', { max: LIMITS.maxObjects }));
     const fresh = new Map<number, number>();
     let next = this.nextGroupId();
     const copies = objs.slice(0, room).map((o) => {
@@ -1524,55 +1530,55 @@ export class Editor {
     const mergeable = ids.every((i) => (objs[i].role === 'path' || objs[i].role === 'wall' || objs[i].role === 'dark') && !objs[i].spike && !objs[i].boulder && !objs[i].saw);
     const merge = (op: MergeOp, label: string) => cmd(label, n >= 2 && mergeable, () => this.merge(op));
     return {
-      cut: cmd('Cut', n > 0, () => this.copySelected() && this.deleteSelected(), 'Ctrl+X'),
-      copy: cmd('Copy', n > 0, () => this.copySelected(), 'Ctrl+C'),
-      paste: cmd('Paste', !!this.clipboard, () => this.paste(), 'Ctrl+V'),
-      duplicate: cmd('Duplicate', n > 0, () => this.duplicateSelected(), 'Ctrl+D'),
-      delete: { ...cmd('Delete', n > 0, () => this.deleteSelected(), 'Del'), danger: true },
+      cut: cmd(tr('ed.cut'), n > 0, () => this.copySelected() && this.deleteSelected(), 'Ctrl+X'),
+      copy: cmd(tr('ed.copy'), n > 0, () => this.copySelected(), 'Ctrl+C'),
+      paste: cmd(tr('ed.paste'), !!this.clipboard, () => this.paste(), 'Ctrl+V'),
+      duplicate: cmd(tr('common.duplicate'), n > 0, () => this.duplicateSelected(), 'Ctrl+D'),
+      delete: { ...cmd(tr('common.delete'), n > 0, () => this.deleteSelected(), 'Del'), danger: true },
 
-      selectAll: cmd('Select all', objs.length > 0, () => this.selectObjects(objs.map((_, i) => i), true), 'Ctrl+A'),
-      selectPaths: cmd('All paths', objs.some((o) => o.role === 'path'), () => this.selectObjects(this.indicesWhere((o) => o.role === 'path'), true)),
-      selectWalls: cmd('All walls', objs.some((o) => o.role === 'wall'), () => this.selectObjects(this.indicesWhere((o) => o.role === 'wall'), true)),
-      selectSame: cmd('Same kind as this', n > 0, () => {
+      selectAll: cmd(tr('common.selectAll'), objs.length > 0, () => this.selectObjects(objs.map((_, i) => i), true), 'Ctrl+A'),
+      selectPaths: cmd(tr('ed.allPaths'), objs.some((o) => o.role === 'path'), () => this.selectObjects(this.indicesWhere((o) => o.role === 'path'), true)),
+      selectWalls: cmd(tr('ed.allWalls'), objs.some((o) => o.role === 'wall'), () => this.selectObjects(this.indicesWhere((o) => o.role === 'wall'), true)),
+      selectSame: cmd(tr('ed.sameKindAsThis'), n > 0, () => {
         const id = objectToolId(objs[ids[0]]);
         this.selectObjects(this.indicesWhere((o) => objectToolId(o) === id), true);
       }),
 
-      front: cmd('Bring to front', n > 0, () => this.order('front'), 'Ctrl+Shift+]'),
-      forward: cmd('Bring forward', n > 0, () => this.order('forward'), 'Ctrl+]'),
-      backward: cmd('Send backward', n > 0, () => this.order('backward'), 'Ctrl+['),
-      back: cmd('Send to back', n > 0, () => this.order('back'), 'Ctrl+Shift+['),
+      front: cmd(tr('ed.bringToFront'), n > 0, () => this.order('front'), 'Ctrl+Shift+]'),
+      forward: cmd(tr('common.bringForward'), n > 0, () => this.order('forward'), 'Ctrl+]'),
+      backward: cmd(tr('common.sendBackward'), n > 0, () => this.order('backward'), 'Ctrl+['),
+      back: cmd(tr('ed.sendToBack'), n > 0, () => this.order('back'), 'Ctrl+Shift+['),
 
-      alignLeft: align('left', 'Align left'),
-      alignCenter: align('center', 'Align center'),
-      alignRight: align('right', 'Align right'),
-      alignTop: align('top', 'Align top'),
-      alignMiddle: align('middle', 'Align middle'),
-      alignBottom: align('bottom', 'Align bottom'),
-      distH: cmd('Distribute horizontally', toMap ? n > 0 : units.length >= 3, () => this.distribute('x')),
-      distV: cmd('Distribute vertically', toMap ? n > 0 : units.length >= 3, () => this.distribute('y')),
-      alignToMap: { ...cmd('Align to map', true, () => (this.alignToMap = !this.alignToMap)), checked: this.alignToMap },
+      alignLeft: align('left', tr('ed.alignLeft')),
+      alignCenter: align('center', tr('ed.alignCenter')),
+      alignRight: align('right', tr('ed.alignRight')),
+      alignTop: align('top', tr('ed.alignTop')),
+      alignMiddle: align('middle', tr('ed.alignMiddle')),
+      alignBottom: align('bottom', tr('ed.alignBottom')),
+      distH: cmd(tr('ed.distributeHorizontally'), toMap ? n > 0 : units.length >= 3, () => this.distribute('x')),
+      distV: cmd(tr('ed.distributeVertically'), toMap ? n > 0 : units.length >= 3, () => this.distribute('y')),
+      alignToMap: { ...cmd(tr('ed.alignToMap'), true, () => (this.alignToMap = !this.alignToMap)), checked: this.alignToMap },
 
-      rotCW: cmd('Rotate right 90°', n > 0, () => this.turn('cw')),
-      rotCCW: cmd('Rotate left 90°', n > 0, () => this.turn('ccw')),
-      flipV: cmd('Flip vertical', n > 0, () => this.turn('flipV')),
-      flipH: cmd('Flip horizontal', n > 0, () => this.turn('flipH')),
+      rotCW: cmd(tr('ed.rotateRight90'), n > 0, () => this.turn('cw')),
+      rotCCW: cmd(tr('ed.rotateLeft90'), n > 0, () => this.turn('ccw')),
+      flipV: cmd(tr('ed.flipVertical'), n > 0, () => this.turn('flipV')),
+      flipH: cmd(tr('ed.flipHorizontal'), n > 0, () => this.turn('flipH')),
 
-      group: cmd('Group', n >= 2 && !oneGroup, () => this.groupSelected(), 'Ctrl+G'),
-      ungroup: cmd('Ungroup', groupedSel, () => this.ungroupSelected(), 'Ctrl+Shift+G'),
-      regroup: cmd('Regroup', canRegroup, () => this.regroup()),
+      group: cmd(tr('ed.group'), n >= 2 && !oneGroup, () => this.groupSelected(), 'Ctrl+G'),
+      ungroup: cmd(tr('ed.ungroup'), groupedSel, () => this.ungroupSelected(), 'Ctrl+Shift+G'),
+      regroup: cmd(tr('ed.regroup'), canRegroup, () => this.regroup()),
 
-      union: merge('union', 'Union'),
-      combine: merge('combine', 'Combine'),
-      fragment: merge('fragment', 'Fragment'),
-      intersect: merge('intersect', 'Intersect'),
-      subtract: merge('subtract', 'Subtract'),
+      union: merge('union', tr('ed.union')),
+      combine: merge('combine', tr('ed.combine')),
+      fragment: merge('fragment', tr('ed.fragment')),
+      intersect: merge('intersect', tr('ed.intersect')),
+      subtract: merge('subtract', tr('ed.subtract')),
 
-      pivotCenter: cmd('Pivot to center', rotating.length > 0, () => this.setPivots(false)),
-      pivotCentroid: cmd('Pivot to center of mass', rotating.length > 0 && rotating.some((i) => objs[i].shape.type === 'poly'), () => this.setPivots(true)),
+      pivotCenter: cmd(tr('ed.pivotToCenter'), rotating.length > 0, () => this.setPivots(false)),
+      pivotCentroid: cmd(tr('ed.pivotToCenterOfMass'), rotating.length > 0 && rotating.some((i) => objs[i].shape.type === 'poly'), () => this.setPivots(true)),
 
-      makePath: cmd('Make path', ids.some((i) => objs[i].role === 'wall' && !objs[i].saw), () => this.edit(() => ids.forEach((i) => objs[i].role === 'wall' && !objs[i].saw && (objs[i].role = 'path')))),
-      makeWall: cmd('Make wall', ids.some((i) => objs[i].role === 'path'), () => this.edit(() => ids.forEach((i) => objs[i].role === 'path' && (objs[i].role = 'wall')))),
+      makePath: cmd(tr('ed.makePath'), ids.some((i) => objs[i].role === 'wall' && !objs[i].saw), () => this.edit(() => ids.forEach((i) => objs[i].role === 'wall' && !objs[i].saw && (objs[i].role = 'path')))),
+      makeWall: cmd(tr('ed.makeWall'), ids.some((i) => objs[i].role === 'path'), () => this.edit(() => ids.forEach((i) => objs[i].role === 'path' && (objs[i].role = 'wall')))),
     };
   }
 
@@ -1689,9 +1695,9 @@ export class Editor {
     try {
       results = mergeShapes(op, ids.map((i) => objs[i].shape), LIMITS.maxPolyPoints);
     } catch {
-      return this.flash('These shapes could not be merged');
+      return this.flash(tr('ed.theseShapesCouldNotBe'));
     }
-    if (!results.length) return this.flash(op === 'intersect' ? 'The shapes do not overlap, so nothing is left' : 'Nothing is left after merging');
+    if (!results.length) return this.flash(op === 'intersect' ? tr('ed.noOverlap') : tr('ed.nothingLeft'));
     const made: MapObject[] = [];
     let gid = this.nextGroupId();
     const oldCenter = shapeCenter(first.shape);
@@ -1713,14 +1719,14 @@ export class Editor {
     }
     const remove = new Set(ids);
     const kept = objs.filter((_, i) => !remove.has(i));
-    if (kept.length + made.length > LIMITS.maxObjects) return this.flash(`A map can have at most ${LIMITS.maxObjects} objects`);
+    if (kept.length + made.length > LIMITS.maxObjects) return this.flash(tr('ed.tooManyObjects', { max: LIMITS.maxObjects }));
     // Results take the first selected object's place in the drawing order
     const at = objs.slice(0, ids[0]).filter((_, i) => !remove.has(i)).length;
     this.finishModes();
     this.edit(() => (this.map.objects = [...kept.slice(0, at), ...made, ...kept.slice(at)]));
     this.lastUngrouped = null;
     this.selectObjects(made.map((_, k) => at + k), true);
-    if (op === 'fragment') this.flash(`Split into ${made.length} pieces`);
+    if (op === 'fragment') this.flash(tr('ed.splitInto', { n: made.length }));
   }
 
   // ───────────────────────── Context menu ─────────────────────────
@@ -1732,17 +1738,17 @@ export class Editor {
     if (this.draft) {
       const pts = this.draft.points.length;
       return openContextMenu(x, y, [
-        { label: 'Finish shape', keys: 'Enter', disabled: pts < 3, action: () => this.closeDraft() },
-        { label: 'Remove last point', keys: 'Backspace', action: () => {
+        { label: tr('ed.finishShape'), keys: 'Enter', disabled: pts < 3, action: () => this.closeDraft() },
+        { label: tr('ed.removeLastPoint'), keys: 'Backspace', action: () => {
           this.draft?.points.pop();
           if (this.draft && !this.draft.points.length) this.draft = null;
           this.updateHint();
         } },
-        { label: 'Cancel', keys: 'Esc', action: () => this.finishModes() },
+        { label: tr('ed.cancel'), keys: 'Esc', action: () => this.finishModes() },
       ]);
     }
     if (this.markerMode !== null) {
-      return openContextMenu(x, y, [{ label: 'Done placing markers', keys: 'Enter', action: () => this.finishModes() }]);
+      return openContextMenu(x, y, [{ label: tr('ed.donePlacingMarkers'), keys: 'Enter', action: () => this.finishModes() }]);
     }
 
     // Right-clicking something outside the selection selects it first
@@ -1766,13 +1772,13 @@ export class Editor {
     const sub = (label: string, items: MenuItem[]): MenuItem => ({
       label, submenu: items, disabled: items.every((it) => it === 'sep' || it.disabled),
     });
-    const alignMenu = sub('Align', [
+    const alignMenu = sub(tr('common.align'), [
       item('alignLeft'), item('alignCenter'), item('alignRight'), 'sep',
       item('alignTop'), item('alignMiddle'), item('alignBottom'), 'sep',
       item('distH'), item('distV'), 'sep', item('alignToMap'),
     ]);
-    const selectMenu = sub('Select', [item('selectAll'), item('selectPaths'), item('selectWalls'), item('selectSame')]);
-    const help: MenuItem = { label: 'Keyboard shortcuts', keys: '?', action: () => this.toggleHelp(true) };
+    const selectMenu = sub(tr('ed.select'), [item('selectAll'), item('selectPaths'), item('selectWalls'), item('selectSame')]);
+    const help: MenuItem = { label: tr('ed.keyboardShortcuts'), keys: '?', action: () => this.toggleHelp(true) };
 
     if (this.selectedZone()) {
       return openContextMenu(x, y, [alignMenu, 'sep', selectMenu, item('paste'), 'sep', help]);
@@ -1782,15 +1788,15 @@ export class Editor {
     }
     openContextMenu(x, y, [
       item('cut'), item('copy'), item('paste'), item('duplicate'), 'sep',
-      sub('Bring to front', [item('front'), item('forward')]),
-      sub('Send to back', [item('back'), item('backward')]),
+      sub(tr('ed.bringToFront'), [item('front'), item('forward')]),
+      sub(tr('ed.sendToBack'), [item('back'), item('backward')]),
       alignMenu,
-      sub('Rotate', [item('rotCW'), item('rotCCW'), 'sep', item('flipV'), item('flipH')]),
-      sub('Group', [item('group'), item('ungroup'), item('regroup')]),
-      sub('Merge shapes', [item('union'), item('combine'), item('fragment'), item('intersect'), item('subtract')]),
+      sub(tr('ed.rotate'), [item('rotCW'), item('rotCCW'), 'sep', item('flipV'), item('flipH')]),
+      sub(tr('ed.group'), [item('group'), item('ungroup'), item('regroup')]),
+      sub(tr('ed.mergeShapes'), [item('union'), item('combine'), item('fragment'), item('intersect'), item('subtract')]),
       'sep',
-      sub('Rotation pivot', [item('pivotCenter'), item('pivotCentroid')]),
-      sub('Type', [item('makePath'), item('makeWall')]),
+      sub(tr('ed.rotationPivot'), [item('pivotCenter'), item('pivotCentroid')]),
+      sub(tr('ed.type'), [item('makePath'), item('makeWall')]),
       selectMenu,
       'sep',
       item('delete'),
@@ -1805,17 +1811,17 @@ export class Editor {
       box.className = 'shortcut-help';
       box.hidden = true;
       box.setAttribute('role', 'dialog');
-      box.setAttribute('aria-label', 'Keyboard shortcuts');
+      box.setAttribute('aria-label', tr('ed.keyboardShortcuts'));
       const card = document.createElement('div');
       card.className = 'shortcut-card';
       const head = document.createElement('div');
       head.className = 'shortcut-head';
       const h = document.createElement('h3');
-      h.textContent = 'Keyboard shortcuts';
+      h.textContent = tr('ed.keyboardShortcuts');
       const close = document.createElement('button');
       close.type = 'button';
       close.textContent = '×';
-      close.title = 'Close (Esc)';
+      close.title = tr('ed.closeEsc');
       close.addEventListener('click', () => this.toggleHelp(false));
       head.append(h, close);
       card.append(head);
@@ -1956,8 +1962,8 @@ export class Editor {
     return this.group(
       this.numField('X', r.x, (v) => (r.x = Math.round(v))),
       this.numField('Y', r.y, (v) => (r.y = Math.round(v))),
-      this.numField('Width', r.w, (v) => (r.w = Math.max(1, Math.round(v)))),
-      this.numField('Height', r.h, (v) => (r.h = Math.max(1, Math.round(v)))),
+      this.numField(tr('common.width'), r.w, (v) => (r.w = Math.max(1, Math.round(v)))),
+      this.numField(tr('common.height'), r.h, (v) => (r.h = Math.max(1, Math.round(v)))),
     );
   }
 
@@ -1967,7 +1973,7 @@ export class Editor {
     if (zone) {
       const title = document.createElement('h4');
       const z = this.sel?.kind === 'start' ? 'start' : 'goal';
-      title.textContent = `ID ${ZONE_IDS[z]} · ${z === 'start' ? 'START area' : 'GOAL area'}`;
+      title.textContent = `ID ${ZONE_IDS[z]} · ${tr(z === 'start' ? 'ed.startArea' : 'ed.goalArea')}`;
       box.replaceChildren(title, this.rectFields(zone));
       return;
     }
@@ -1978,24 +1984,24 @@ export class Editor {
     }
     const o = this.selectedObject();
     if (!o) {
-      box.replaceChildren(this.note('Pick a tool from the palette, or select an object with the Select tool (V). Drag on empty space to select several.'));
+      box.replaceChildren(this.note(tr('ed.pickAToolFromThe')));
       return;
     }
     const idx = ids[0];
     const title = document.createElement('h4');
-    title.textContent = `#${idx + 1} · ID ${objectToolId(o)} · ${describeObject(o)}${o.group !== undefined ? ` · Group ${o.group}` : ''}`;
+    title.textContent = `#${idx + 1} · ID ${objectToolId(o)} · ${describeObject(o)}${o.group !== undefined ? ` · ${tr('ed.groupN', { n: o.group })}` : ''}`;
     const parts: HTMLElement[] = [title];
 
     if ((o.role === 'path' || o.role === 'wall') && !o.saw) {
       parts.push(this.group(
-        this.selectField<Role>('Type', o.role, [['path', 'Path (safe floor)'], ['wall', 'Wall (deadly)']], (v) => (o.role = v), true),
+        this.selectField<Role>(tr('ed.type'), o.role, [['path', tr('ed.pathSafeFloor')], ['wall', tr('ed.wallDeadly')]], (v) => (o.role = v), true),
       ));
     } else if (o.role === 'coin' || o.role === 'dark') {
       parts.push(this.note(o.role === 'coin'
-        ? 'Touch every coin before GOAL opens. Coins can move and rotate like other objects.'
-        : 'Hides the cursor and its trail while they are inside it. Shown see-through in the editor.'));
+        ? tr('ed.coinNote')
+        : tr('ed.darkNote')));
     } else if (o.role === 'safe') {
-      parts.push(this.note('Nothing can hurt the cursor in here: walls, obstacles, saws and lasers passing through are harmless, and it counts as floor.'));
+      parts.push(this.note(tr('ed.nothingCanHurtTheCursor')));
     }
 
     // Shape
@@ -2004,33 +2010,33 @@ export class Editor {
       parts.push(this.group(
         this.numField('X', s.x, (v) => (s.x = Math.round(v))),
         this.numField('Y', s.y, (v) => (s.y = Math.round(v))),
-        this.numField('Width', s.w, (v) => (s.w = Math.max(1, Math.round(v)))),
-        this.numField('Height', s.h, (v) => (s.h = Math.max(1, Math.round(v)))),
+        this.numField(tr('common.width'), s.w, (v) => (s.w = Math.max(1, Math.round(v)))),
+        this.numField(tr('common.height'), s.h, (v) => (s.h = Math.max(1, Math.round(v)))),
       ));
     } else if (o.role === 'coin' && s.type === 'ellipse') {
       parts.push(this.group(
-        this.numField('Center X', s.cx, (v) => (s.cx = Math.round(v))),
-        this.numField('Center Y', s.cy, (v) => (s.cy = Math.round(v))),
+        this.numField(tr('ed.centerX'), s.cx, (v) => (s.cx = Math.round(v))),
+        this.numField(tr('ed.centerY'), s.cy, (v) => (s.cy = Math.round(v))),
       ));
     } else if (s.type === 'ellipse') {
       parts.push(this.group(
-        this.numField('Center X', s.cx, (v) => (s.cx = Math.round(v))),
-        this.numField('Center Y', s.cy, (v) => (s.cy = Math.round(v))),
-        this.numField('Radius X', s.rx, (v) => (s.rx = Math.max(1, Math.round(v)))),
-        this.numField('Radius Y', s.ry, (v) => (s.ry = Math.max(1, Math.round(v)))),
+        this.numField(tr('ed.centerX'), s.cx, (v) => (s.cx = Math.round(v))),
+        this.numField(tr('ed.centerY'), s.cy, (v) => (s.cy = Math.round(v))),
+        this.numField(tr('ed.radiusX'), s.rx, (v) => (s.rx = Math.max(1, Math.round(v)))),
+        this.numField(tr('ed.radiusY'), s.ry, (v) => (s.ry = Math.max(1, Math.round(v)))),
       ));
     } else if (s.type === 'sector') {
       parts.push(this.group(
-        this.numField('Apex X', s.cx, (v) => (s.cx = Math.round(v))),
-        this.numField('Apex Y', s.cy, (v) => (s.cy = Math.round(v))),
-        this.numField('Radius', s.r, (v) => (s.r = Math.max(1, Math.round(v)))),
-        this.numField('Start angle (°)', s.start, (v) => (s.start = ((Math.round(v) % 360) + 360) % 360), 15),
-        this.numField('Sweep (°)', s.sweep, (v) => (s.sweep = Math.min(360, Math.max(1, Math.round(v)))), 15),
+        this.numField(tr('ed.apexX'), s.cx, (v) => (s.cx = Math.round(v))),
+        this.numField(tr('ed.apexY'), s.cy, (v) => (s.cy = Math.round(v))),
+        this.numField(tr('ed.radius'), s.r, (v) => (s.r = Math.max(1, Math.round(v)))),
+        this.numField(tr('ed.startAngle'), s.start, (v) => (s.start = ((Math.round(v) % 360) + 360) % 360), 15),
+        this.numField(tr('ed.sweep'), s.sweep, (v) => (s.sweep = Math.min(360, Math.max(1, Math.round(v)))), 15),
       ));
-      parts.push(this.note('0° points right, 90° down. Drag the arc ends to change the angles, the arc middle for the radius.'));
+      parts.push(this.note(tr('ed.0PointsRight90Down')));
     } else {
       const curved = s.points.filter((p) => p.smooth).length;
-      parts.push(this.note(`${s.points.length} vertices (${curved} curved). Double-click a vertex to toggle curve.`));
+      parts.push(this.note(tr('ed.vertices', { n: s.points.length, curved })));
     }
 
     if (o.trigger) parts.push(...this.triggerProps(o));
@@ -2038,16 +2044,16 @@ export class Editor {
     if (o.spike) parts.push(...this.spikeProps(o));
     if (o.saw) parts.push(...this.sawProps(o));
     if (o.text) parts.push(...this.textProps(o));
-    if (o.boulder) parts.push(this.heading('Rolling boulder'), this.note(o.motion ? 'Rolls along its route: it spins by the distance it travels.' : 'Give it a route under Movement (Place markers) so it can roll.'));
+    if (o.boulder) parts.push(this.heading(tr('ed.rollingBoulder')), this.note(o.motion ? tr('ed.boulderRolls') : tr('ed.boulderNoRoute')));
     if (o.laser) parts.push(...this.laserProps(o));
     if (o.portal) parts.push(...this.portalProps(o));
-    if (o.role === 'mirror') parts.push(this.heading('Mirror'), this.note('Laser beams bounce off every side. Drag its corners to angle it, or make it move or rotate.'));
+    if (o.role === 'mirror') parts.push(this.heading(tr('ed.mirror')), this.note(tr('ed.laserBeamsBounceOffEvery')));
     if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'mirror') parts.push(...this.linkProps(o));
 
     // Movement (a spike's thrust is its movement)
     if (!o.spike) {
     // Movement
-    parts.push(this.heading('Movement'), this.toggle('Moves along a route', !!o.motion, (on) => {
+    parts.push(this.heading(tr('ed.movement')), this.toggle(tr('ed.movesAlongARoute'), !!o.motion, (on) => {
       if (on) {
         o.motion = { ...DEFAULT_MOTION, points: [] };
         queueMicrotask(() => this.startMarkers(idx));
@@ -2058,7 +2064,7 @@ export class Editor {
     if (o.motion) {
       const m: Motion = o.motion;
       const fields = [
-        this.selectField<MotionType>('Route', m.type, ROUTE_OPTIONS, (v) => {
+        this.selectField<MotionType>(tr('ed.route'), m.type, ROUTE_OPTIONS, (v) => {
           if (v === 'circle' && m.type !== 'circle') {
             const c = shapeCenter(o.shape);
             m.points = [m.points[0] ?? { x: c.x, y: c.y - 80 }];
@@ -2067,24 +2073,24 @@ export class Editor {
           }
           m.type = v;
         }),
-        this.selectField<Repeat>('Repeat', m.repeat, REPEAT_OPTIONS, (v) => (m.repeat = v)),
-        this.numField('Speed (px/s)', m.speed, (v) => (m.speed = Math.min(LIMITS.maxSpeed, Math.max(0, v))), 10),
-        this.selectField<Easing>('Smooth start/end', m.easing, EASING_OPTIONS, (v) => (m.easing = v)),
-        this.numField('Start delay (ms)', m.delay, (v) => (m.delay = Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, Math.round(v)))), 100),
+        this.selectField<Repeat>(tr('ed.repeat'), m.repeat, REPEAT_OPTIONS, (v) => (m.repeat = v)),
+        this.numField(tr('ed.speedPxS'), m.speed, (v) => (m.speed = Math.min(LIMITS.maxSpeed, Math.max(0, v))), 10),
+        this.selectField<Easing>(tr('ed.smooth'), m.easing, EASING_OPTIONS, (v) => (m.easing = v)),
+        this.numField(tr('ed.startDelayMs'), m.delay, (v) => (m.delay = Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, Math.round(v)))), 100),
       ];
       if (m.type === 'circle') {
-        fields.push(this.selectField('Direction', m.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (m.clockwise = v === 'cw')));
+        fields.push(this.selectField(tr('ed.direction'), m.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (m.clockwise = v === 'cw')));
       }
       parts.push(this.group(...fields));
       parts.push(this.note(
         m.type === 'circle'
-          ? m.points.length ? 'Orbit center: the orange "C" marker. Drag it to change the radius.' : 'Click "Set orbit center", then click on the map.'
-          : `${m.points.length} route marker${m.points.length === 1 ? '' : 's'}. Negative delay = start partway through the route.`,
+          ? m.points.length ? tr('ed.orbitSet') : tr('ed.orbitUnset')
+          : tr(m.points.length === 1 ? 'ed.markersOne' : 'ed.markersMany', { n: m.points.length }),
       ));
       parts.push(this.actions(
-        this.button(m.type === 'circle' ? 'Set orbit center' : 'Place markers', () => this.startMarkers(idx)),
-        this.button('Remove last', () => m.points.length && this.edit(() => m.points.pop())),
-        this.button('Clear', () => m.points.length && this.edit(() => (m.points = []))),
+        this.button(m.type === 'circle' ? tr('ed.setOrbit') : tr('ed.placeMarkers'), () => this.startMarkers(idx)),
+        this.button(tr('ed.removeLast'), () => m.points.length && this.edit(() => m.points.pop())),
+        this.button(tr('ed.clear'), () => m.points.length && this.edit(() => (m.points = []))),
       ));
     }
 
@@ -2093,32 +2099,32 @@ export class Editor {
     // Rotation (a boulder spins by rolling, a saw by itself)
     if (!o.boulder && !o.saw) {
     // Rotation
-    parts.push(this.heading('Rotation'), this.toggle('Rotates around a pivot', !!o.rotation, (on) => {
+    parts.push(this.heading(tr('ed.rotation')), this.toggle(tr('ed.rotatesAroundAPivot'), !!o.rotation, (on) => {
       if (on) o.rotation = defaultRotation(o);
       else delete o.rotation;
     }));
     if (o.rotation) {
       const r: Rotation = o.rotation;
       parts.push(this.group(
-        this.numField('Speed (°/s)', r.speed, (v) => (r.speed = Math.min(LIMITS.maxRotSpeed, Math.max(0, v))), 5),
-        this.numField('Angle (°)', r.angle, (v) => (r.angle = Math.min(LIMITS.maxAngle, Math.max(0, v))), 15),
-        this.selectField('Direction', r.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (r.clockwise = v === 'cw')),
-        this.selectField<Repeat>('Repeat', r.repeat, REPEAT_OPTIONS, (v) => (r.repeat = v)),
-        this.selectField<Easing>('Smooth start/end', r.easing, EASING_OPTIONS, (v) => (r.easing = v)),
-        this.numField('Start delay (ms)', r.delay, (v) => (r.delay = Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, Math.round(v)))), 100),
-        this.numField('Pivot X', r.pivot.x, (v) => (r.pivot = { ...r.pivot, x: Math.round(v) })),
-        this.numField('Pivot Y', r.pivot.y, (v) => (r.pivot = { ...r.pivot, y: Math.round(v) })),
+        this.numField(tr('ed.speedS'), r.speed, (v) => (r.speed = Math.min(LIMITS.maxRotSpeed, Math.max(0, v))), 5),
+        this.numField(tr('common.angle'), r.angle, (v) => (r.angle = Math.min(LIMITS.maxAngle, Math.max(0, v))), 15),
+        this.selectField(tr('ed.direction'), r.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (r.clockwise = v === 'cw')),
+        this.selectField<Repeat>(tr('ed.repeat'), r.repeat, REPEAT_OPTIONS, (v) => (r.repeat = v)),
+        this.selectField<Easing>(tr('ed.smooth'), r.easing, EASING_OPTIONS, (v) => (r.easing = v)),
+        this.numField(tr('ed.startDelayMs'), r.delay, (v) => (r.delay = Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, Math.round(v)))), 100),
+        this.numField(tr('ed.pivotX'), r.pivot.x, (v) => (r.pivot = { ...r.pivot, x: Math.round(v) })),
+        this.numField(tr('ed.pivotY'), r.pivot.y, (v) => (r.pivot = { ...r.pivot, y: Math.round(v) })),
       ));
-      parts.push(this.note('Angle 360 + Loop = continuous spin. Ping-pong swings back and forth.'));
-      parts.push(this.actions(this.button('Center pivot', () => this.edit(() => (r.pivot = shapeCenter(o.shape))))));
+      parts.push(this.note(tr('ed.angle360LoopContinuousSpin')));
+      parts.push(this.actions(this.button(tr('ed.centerPivot'), () => this.edit(() => (r.pivot = shapeCenter(o.shape))))));
     }
 
     }
 
     parts.push(...this.arrangeProps(false));
     parts.push(this.actions(
-      this.button('Duplicate', () => this.duplicateSelected()),
-      this.button('Delete', () => this.deleteSelected(), 'danger'),
+      this.button(tr('common.duplicate'), () => this.duplicateSelected()),
+      this.button(tr('common.delete'), () => this.deleteSelected(), 'danger'),
     ));
     box.replaceChildren(...parts);
   }
@@ -2151,37 +2157,37 @@ export class Editor {
     const out: HTMLElement[] = [this.heading(TRIGGER_NAMES[t.kind]), this.colorPicker(t.color, (c) => (t.color = c))];
     const fields: HTMLElement[] = [];
     if (t.kind === 'switch' || t.kind === 'timer') {
-      fields.push(this.selectField('Pressed by', t.click ? 'click' : 'touch', [['touch', 'Touching it'], ['click', 'Clicking on it']], (v) => {
+      fields.push(this.selectField(tr('ed.pressedBy'), t.click ? 'click' : 'touch', [['touch', tr('ed.touchingIt')], ['click', tr('ed.clickingOnIt')]], (v) => {
         if (v === 'click') t.click = true;
         else delete t.click;
       }));
     }
     if (t.kind === 'timer' || t.kind === 'hold') {
-      fields.push(this.numField(t.kind === 'timer' ? 'ON for (s)' : 'Hold for (s)', (t.duration ?? 1000) / 1000,
+      fields.push(this.numField(t.kind === 'timer' ? tr('ed.onFor') : tr('ed.holdFor'), (t.duration ?? 1000) / 1000,
         (v) => (t.duration = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1));
     }
     if (fields.length) out.push(this.group(...fields));
     if (t.kind === 'switch' || t.kind === 'hold') {
-      out.push(this.toggle('Starts ON', !!t.initial, (on) => {
+      out.push(this.toggle(tr('ed.startsOn'), !!t.initial, (on) => {
         if (on) t.initial = true;
         else delete t.initial;
       }));
     }
     if (isButton(t.kind)) {
-      out.push(this.toggle('Can be switched back', !t.once, (on) => {
+      out.push(this.toggle(tr('ed.canBeSwitchedBack'), !t.once, (on) => {
         if (on) delete t.once;
         else t.once = true;
       }));
     }
     const linked = this.map.objects.filter((m) => m.link?.color === t.color || (m.door?.mode === 'switch' && m.door.color === t.color)).length;
     const what = {
-      switch: 'Each press turns the color ON or OFF.',
-      timer: 'Turns the color ON; it goes OFF again when the time runs out.',
-      hold: 'Stay on it to switch the color ON or OFF; the wipe shows your progress.',
-      startZone: 'Entering it turns the color ON.',
-      stopZone: 'Entering it turns the color OFF.',
+      switch: tr('ed.whatSwitch'),
+      timer: tr('ed.whatTimer'),
+      hold: tr('ed.whatHold'),
+      startZone: tr('ed.whatStartZone'),
+      stopZone: tr('ed.whatStopZone'),
     }[t.kind];
-    out.push(this.note(`${what} ${linked} object${linked === 1 ? ' is' : 's are'} linked to ${switchColor(t.color).name}.`));
+    out.push(this.note(`${what} ${tr(linked === 1 ? 'ed.linkedOne' : 'ed.linkedMany', { n: linked, color: switchColor(t.color).name })}`));
     return out;
   }
 
@@ -2190,16 +2196,16 @@ export class Editor {
     const sec = (v: number) => v / 1000;
     const ms = (v: number) => Math.round(Math.min(LIMITS.maxDelay, Math.max(0.01, v)) * 1000);
     return [
-      this.heading('Spike stake'),
+      this.heading(tr('ed.spikeStake')),
       this.group(
-        this.numField('Direction (°)', s.angle, (v) => (s.angle = ((Math.round(v) % 360) + 360) % 360), 15),
-        this.numField('Reach', s.reach, (v) => (s.reach = Math.max(1, Math.round(v))), 5),
-        this.numField('Thrust (s)', sec(s.thrustMs), (v) => (s.thrustMs = ms(v)), 0.05),
-        this.numField('Return (s)', sec(s.returnMs), (v) => (s.returnMs = ms(v)), 0.1),
-        this.numField('Rest (s)', sec(s.waitMs), (v) => (s.waitMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0, v)) * 1000)), 0.1),
-        this.numField('Start delay (s)', sec(s.delay), (v) => (s.delay = Math.round(Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, v)) * 1000)), 0.1),
+        this.numField(tr('ed.direction2'), s.angle, (v) => (s.angle = ((Math.round(v) % 360) + 360) % 360), 15),
+        this.numField(tr('ed.reach'), s.reach, (v) => (s.reach = Math.max(1, Math.round(v))), 5),
+        this.numField(tr('ed.thrustS'), sec(s.thrustMs), (v) => (s.thrustMs = ms(v)), 0.05),
+        this.numField(tr('ed.returnS'), sec(s.returnMs), (v) => (s.returnMs = ms(v)), 0.1),
+        this.numField(tr('ed.restS'), sec(s.waitMs), (v) => (s.waitMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0, v)) * 1000)), 0.1),
+        this.numField(tr('ed.startDelayS'), sec(s.delay), (v) => (s.delay = Math.round(Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, v)) * 1000)), 0.1),
       ),
-      this.note('Rests, thrusts out fast, then slides back slowly. The dashed line shows how far it reaches.'),
+      this.note(tr('ed.restsThrustsOutFastThen')),
     ];
   }
 
@@ -2207,22 +2213,22 @@ export class Editor {
     const s = o.saw!;
     if (s.kind === 'disc') {
       return [
-        this.heading('Circular grinder'),
+        this.heading(tr('ed.circularGrinder')),
         this.group(
-          this.selectField('Spin', s.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (s.clockwise = v === 'cw')),
-          this.numField('Speed (°/s)', s.spin, (v) => (s.spin = Math.min(LIMITS.maxRotSpeed, Math.max(0, Math.round(v)))), 90),
+          this.selectField(tr('ed.spin'), s.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (s.clockwise = v === 'cw')),
+          this.numField(tr('ed.speedS'), s.spin, (v) => (s.spin = Math.min(LIMITS.maxRotSpeed, Math.max(0, Math.round(v)))), 90),
         ),
-        this.note('Deadly. Throws dust where it cuts into a wall. Give it a route under Movement to make it travel (#45).'),
+        this.note(tr('ed.deadlyThrowsDustWhereIt')),
       ];
     }
     const sec = (v: number) => v / 1000;
     return [
-      this.heading('Saw blade'),
+      this.heading(tr('ed.sawBlade')),
       this.group(
-        this.numField('Stroke (px)', s.stroke, (v) => (s.stroke = Math.max(0, Math.round(v))), 4),
-        this.numField('Stroke time (s)', sec(s.strokeMs), (v) => (s.strokeMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.05),
+        this.numField(tr('ed.strokePx'), s.stroke, (v) => (s.stroke = Math.max(0, Math.round(v))), 4),
+        this.numField(tr('ed.strokeTimeS'), sec(s.strokeMs), (v) => (s.strokeMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.05),
       ),
-      this.note('Deadly. Saws back and forth along its long side and throws dust where it cuts into a wall. Give it a route under Movement to make it travel (#46).'),
+      this.note(tr('ed.deadlySawsBackAndForth')),
     ];
   }
 
@@ -2245,27 +2251,27 @@ export class Editor {
     fontPicker(font, t.font);
     font.addEventListener('change', () => this.edit(() => (t.font = font.value)));
     const out: HTMLElement[] = [
-      this.heading('Text box'),
-      this.field('Text', area, true),
+      this.heading(tr('ed.textBox')),
+      this.field(tr('common.text'), area, true),
       this.group(
-        this.field('Font', font, true),
-        this.numField('Size', t.size, (v) => (t.size = Math.min(200, Math.max(6, Math.round(v)))), 2),
-        this.field('Color', colorInput(t.color, (v) => (t.color = v))),
-        this.selectField('Align', t.align, [['left', 'Left'], ['center', 'Center'], ['right', 'Right']], (v) => (t.align = v)),
+        this.field(tr('common.font'), font, true),
+        this.numField(tr('common.size'), t.size, (v) => (t.size = Math.min(200, Math.max(6, Math.round(v)))), 2),
+        this.field(tr('common.color'), colorInput(t.color, (v) => (t.color = v))),
+        this.selectField(tr('common.align'), t.align, [['left', tr('common.left')], ['center', tr('common.center')], ['right', tr('common.right')]], (v) => (t.align = v)),
       ),
-      this.toggle('Bold', t.bold, (on) => (t.bold = on)),
-      this.toggle('Outline', !!t.outline, (on) => {
+      this.toggle(tr('common.bold'), t.bold, (on) => (t.bold = on)),
+      this.toggle(tr('common.outline'), !!t.outline, (on) => {
         if (on) t.outline = '#ffffff';
         else delete t.outline;
       }),
     ];
     if (t.outline) {
       out.push(this.group(
-        this.field('Outline color', colorInput(t.outline, (v) => (t.outline = v))),
-        this.numField('Outline width', t.outlineWidth, (v) => (t.outlineWidth = Math.min(20, Math.max(0, v))), 0.5),
+        this.field(tr('ed.outlineColor'), colorInput(t.outline, (v) => (t.outline = v))),
+        this.numField(tr('ed.outlineWidth'), t.outlineWidth, (v) => (t.outlineWidth = Math.min(20, Math.max(0, v))), 0.5),
       ));
     }
-    out.push(this.toggle('Background', !!t.background, (on) => {
+    out.push(this.toggle(tr('common.background'), !!t.background, (on) => {
       if (on) t.background = '#ffffffb3';
       else delete t.background;
     }));
@@ -2274,31 +2280,31 @@ export class Editor {
       const alpha = parseInt(bg.slice(7, 9), 16) / 255;
       const hex2 = (a: number) => Math.round(Math.min(1, Math.max(0, a)) * 255).toString(16).padStart(2, '0');
       out.push(this.group(
-        this.field('Background', colorInput(bg.slice(0, 7), (v) => (t.background = v + bg.slice(7, 9)))),
-        this.numField('Opacity (%)', Math.round(alpha * 100), (v) => (t.background = bg.slice(0, 7) + hex2(v / 100)), 5),
+        this.field(tr('common.background'), colorInput(bg.slice(0, 7), (v) => (t.background = v + bg.slice(7, 9)))),
+        this.numField(tr('ed.opacity'), Math.round(alpha * 100), (v) => (t.background = bg.slice(0, 7) + hex2(v / 100)), 5),
       ));
     }
-    out.push(this.note('Only decoration: the cursor can pass over text freely. Long lines wrap to the box width.'));
+    out.push(this.note(tr('ed.onlyDecorationTheCursorCan')));
     return out;
   }
 
   private laserProps(o: MapObject): HTMLElement[] {
     const l = o.laser!;
     const out: HTMLElement[] = [
-      this.heading('Laser'),
+      this.heading(tr('ed.laser')),
       this.colorPicker(l.color, (c) => (l.color = c)),
-      this.group(this.numField('Direction (°)', l.angle, (v) => (l.angle = ((Math.round(v) % 360) + 360) % 360), 15)),
-      this.toggle('Beam on at the start', l.on, (on) => (l.on = on)),
-      this.toggle('A switch flips it on / off', l.switchColor !== undefined, (on) => {
+      this.group(this.numField(tr('ed.direction2'), l.angle, (v) => (l.angle = ((Math.round(v) % 360) + 360) % 360), 15)),
+      this.toggle(tr('ed.beamOnAtTheStart'), l.on, (on) => (l.on = on)),
+      this.toggle(tr('ed.aSwitchFlipsItOn'), l.switchColor !== undefined, (on) => {
         if (on) l.switchColor = this.lastColor;
         else delete l.switchColor;
       }),
     ];
     if (l.switchColor !== undefined) {
       const sc = l.switchColor;
-      out.push(this.colorPicker(sc, (c) => (l.switchColor = c)), this.note(`While the ${switchColor(sc).name} switch is ON, the beam is ${l.on ? 'off' : 'on'}.`));
+      out.push(this.colorPicker(sc, (c) => (l.switchColor = c)), this.note(tr(l.on ? 'ed.laserSwitchOff' : 'ed.laserSwitchOn', { color: switchColor(sc).name })));
     }
-    out.push(this.note('Drag the orange diamond to aim. The beam bounces off mirrors and stops at walls and doors.'));
+    out.push(this.note(tr('ed.dragTheOrangeDiamondTo')));
     return out;
   }
 
@@ -2306,33 +2312,33 @@ export class Editor {
     const p = o.portal!;
     const same = this.map.objects.filter((m) => m.portal?.color === p.color).length;
     return [
-      this.heading('Teleport portal'),
+      this.heading(tr('ed.teleportPortal')),
       this.colorPicker(p.color, (c) => (p.color = c)),
       this.group(
-        this.selectField('Direction', p.mode, [['both', 'Both ways'], ['in', 'Entrance only'], ['out', 'Exit only']], (v) => (p.mode = v), true),
-        this.numField('Order', p.order + 1, (v) => (p.order = Math.max(0, Math.min(9999, Math.round(v) - 1)))),
+        this.selectField(tr('ed.direction'), p.mode, [['both', tr('ed.bothWays')], ['in', tr('ed.entranceOnly')], ['out', tr('ed.exitOnly')]], (v) => (p.mode = v), true),
+        this.numField(tr('ed.order'), p.order + 1, (v) => (p.order = Math.max(0, Math.min(9999, Math.round(v) - 1)))),
       ),
-      this.note(`Touching it pulls the cursor to its center, then sends it to the next ${switchColor(p.color).name} portal by order (${same} on this map).`),
+      this.note(tr('ed.portalNote', { color: switchColor(p.color).name, n: same })),
     ];
   }
 
   private doorProps(o: MapObject): HTMLElement[] {
     const d = o.door!;
     const out: HTMLElement[] = [
-      this.heading('Auto door'),
+      this.heading(tr('ed.autoDoor')),
       this.group(
-        this.selectField('Opens', d.mode, [['auto', 'By itself (cycle)'], ['switch', 'While a switch is ON']], (v) => (d.mode = v), true),
-        this.numField('Open / close time (s)', d.moveMs / 1000, (v) => (d.moveMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1),
-        ...(d.mode === 'auto' ? [this.numField('Stays open / shut (s)', d.waitMs / 1000, (v) => (d.waitMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0, v)) * 1000)), 0.1)] : []),
+        this.selectField(tr('ed.opens'), d.mode, [['auto', tr('ed.byItselfCycle')], ['switch', tr('ed.whileASwitchIsOn')]], (v) => (d.mode = v), true),
+        this.numField(tr('ed.openCloseTimeS'), d.moveMs / 1000, (v) => (d.moveMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1),
+        ...(d.mode === 'auto' ? [this.numField(tr('ed.staysOpenShutS'), d.waitMs / 1000, (v) => (d.waitMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0, v)) * 1000)), 0.1)] : []),
       ),
     ];
     if (d.mode === 'switch') out.push(this.colorPicker(d.color, (c) => (d.color = c)));
-    out.push(this.note('The door splits across its long side and both halves slide apart. Touching it is deadly, like a wall.'));
+    out.push(this.note(tr('ed.theDoorSplitsAcrossIts')));
     return out;
   }
 
   private linkProps(o: MapObject): HTMLElement[] {
-    const out: HTMLElement[] = [this.heading('Switch link'), this.toggle('Reacts to a switch', !!o.link, (on) => {
+    const out: HTMLElement[] = [this.heading(tr('ed.switchLink')), this.toggle(tr('ed.reactsToASwitch'), !!o.link, (on) => {
       if (on) o.link = { color: this.lastColor, action: o.motion || o.rotation ? 'start' : 'remove' };
       else delete o.link;
     })];
@@ -2340,12 +2346,12 @@ export class Editor {
     if (l) {
       out.push(
         this.colorPicker(l.color, (c) => (l.color = c)),
-        this.group(this.selectField<LinkAction>('While ON', l.action, [
-          ['start', 'Moves (starts moving)'],
-          ['stop', 'Stops moving'],
-          ['remove', 'Is removed'],
+        this.group(this.selectField<LinkAction>(tr('ed.whileOn'), l.action, [
+          ['start', tr('ed.movesStartsMoving')],
+          ['stop', tr('ed.stopsMoving')],
+          ['remove', tr('ed.isRemoved')],
         ], (v) => (l.action = v), true)),
-        this.note('"Moves" objects stay still until the color turns ON; "Stops" objects move until then.'),
+        this.note(tr('ed.movesObjectsStayStillUntil')),
       );
     }
     return out;
@@ -2368,15 +2374,15 @@ export class Editor {
       return d;
     };
     const out: HTMLElement[] = [
-      this.heading('Arrange'),
-      row(this.cmdButton(c.front, '⤒ Front'), this.cmdButton(c.forward, '↑ Fwd'), this.cmdButton(c.backward, '↓ Back'), this.cmdButton(c.back, '⤓ Rear')),
+      this.heading(tr('ed.arrange')),
+      row(this.cmdButton(c.front, tr('ed.btnFront')), this.cmdButton(c.forward, tr('ed.btnFwd')), this.cmdButton(c.backward, tr('ed.btnBack')), this.cmdButton(c.back, tr('ed.btnRear'))),
       row(
         this.cmdButton(c.alignLeft, '⇤'), this.cmdButton(c.alignCenter, '⇹'), this.cmdButton(c.alignRight, '⇥'),
         this.cmdButton(c.alignTop, '⤒'), this.cmdButton(c.alignMiddle, '⇳'), this.cmdButton(c.alignBottom, '⤓'),
       ),
     ];
     if (multi) {
-      out.push(row(this.cmdButton(c.distH, '↔ Distribute'), this.cmdButton(c.distV, '↕ Distribute')));
+      out.push(row(this.cmdButton(c.distH, tr('ed.btnDistH')), this.cmdButton(c.distV, tr('ed.btnDistV'))));
       // A view preference, not a map edit: no undo step
       const wrap = document.createElement('label');
       wrap.className = 'toggle';
@@ -2388,14 +2394,14 @@ export class Editor {
         this.renderProps();
       });
       const span = document.createElement('span');
-      span.textContent = 'Align to the map instead of the selection';
+      span.textContent = tr('ed.alignToTheMapInstead');
       wrap.append(input, span);
       out.push(wrap);
     } else {
-      out.push(this.note('A single object aligns to the map.'));
+      out.push(this.note(tr('ed.aSingleObjectAlignsTo')));
     }
     out.push(
-      row(this.cmdButton(c.rotCW, '↻ 90°'), this.cmdButton(c.rotCCW, '↺ 90°'), this.cmdButton(c.flipH, '⇋ Flip'), this.cmdButton(c.flipV, '⇵ Flip')),
+      row(this.cmdButton(c.rotCW, '↻ 90°'), this.cmdButton(c.rotCCW, '↺ 90°'), this.cmdButton(c.flipH, tr('ed.btnFlipH')), this.cmdButton(c.flipV, tr('ed.btnFlipV'))),
     );
     return out;
   }
@@ -2405,7 +2411,7 @@ export class Editor {
     const objs = ids.map((i) => this.map.objects[i]);
     const title = document.createElement('h4');
     const g = objs[0].group;
-    title.textContent = g !== undefined && objs.every((o) => o.group === g) ? `Group ${g} · ${ids.length} objects` : `${ids.length} objects selected`;
+    title.textContent = g !== undefined && objs.every((o) => o.group === g) ? tr('ed.groupTitle', { g, n: ids.length }) : tr('ed.selectedTitle', { n: ids.length });
     const b = objectsBounds(objs);
     const row = (...bs: HTMLButtonElement[]) => {
       const d = this.actions(...bs);
@@ -2414,21 +2420,21 @@ export class Editor {
     };
     return [
       title,
-      this.note(`${objs.filter((o) => o.role === 'path').length} paths, ${objs.filter((o) => o.role === 'wall').length} walls · ${sizeText(b.w, b.h)} · first picked: #${ids[0] + 1}`),
+      this.note(tr('ed.multiNote', { paths: objs.filter((o) => o.role === 'path').length, walls: objs.filter((o) => o.role === 'wall').length, size: sizeText(b.w, b.h), first: ids[0] + 1 })),
       ...this.arrangeProps(true),
-      this.heading('Group'),
-      row(this.cmdButton(c.group, 'Group'), this.cmdButton(c.ungroup, 'Ungroup'), this.cmdButton(c.regroup, 'Regroup')),
-      this.heading('Merge shapes'),
+      this.heading(tr('ed.group')),
+      row(this.cmdButton(c.group, tr('ed.group')), this.cmdButton(c.ungroup, tr('ed.ungroup')), this.cmdButton(c.regroup, tr('ed.regroup'))),
+      this.heading(tr('ed.mergeShapes')),
       row(
-        this.cmdButton(c.union, 'Union'), this.cmdButton(c.combine, 'Combine'), this.cmdButton(c.fragment, 'Fragment'),
-        this.cmdButton(c.intersect, 'Intersect'), this.cmdButton(c.subtract, 'Subtract'),
+        this.cmdButton(c.union, tr('ed.union')), this.cmdButton(c.combine, tr('ed.combine')), this.cmdButton(c.fragment, tr('ed.fragment')),
+        this.cmdButton(c.intersect, tr('ed.intersect')), this.cmdButton(c.subtract, tr('ed.subtract')),
       ),
-      this.note('The result is a freeform shape that keeps the type, movement and rotation of the first picked object. Subtract removes the others from the first.'),
-      this.heading('Type'),
-      row(this.cmdButton(c.makePath, 'All paths'), this.cmdButton(c.makeWall, 'All walls')),
+      this.note(tr('ed.theResultIsAFreeform')),
+      this.heading(tr('ed.type')),
+      row(this.cmdButton(c.makePath, tr('ed.allPaths')), this.cmdButton(c.makeWall, tr('ed.allWalls'))),
       this.actions(
-        this.button('Duplicate', () => this.duplicateSelected()),
-        this.button('Delete', () => this.deleteSelected(), 'danger'),
+        this.button(tr('common.duplicate'), () => this.duplicateSelected()),
+        this.button(tr('common.delete'), () => this.deleteSelected(), 'danger'),
       ),
     ];
   }
@@ -2471,7 +2477,7 @@ export class Editor {
     level.min = '1';
     level.max = String(LIMITS.maxLevel);
     level.step = '1';
-    level.placeholder = 'None';
+    level.placeholder = tr('common.none');
     level.value = m.level !== undefined ? String(m.level) : '';
     level.addEventListener('change', () => this.edit(() => {
       const v = Math.round(Number(level.value));
@@ -2494,14 +2500,14 @@ export class Editor {
 
     const parts: HTMLElement[] = [
       this.group(
-        this.field('Level title', title, true),
-        this.field('Level number', level),
-        this.field('Difficulty (1–10)', difficulty),
+        this.field(tr('ed.levelTitle'), title, true),
+        this.field(tr('ed.levelNumber'), level),
+        this.field(tr('ed.difficulty110'), difficulty),
       ),
-      this.note('The title and number are shown in game; the file name above is used for exports.'),
+      this.note(tr('ed.theTitleAndNumberAre')),
     ];
 
-    parts.push(this.toggle('Star ratings', !!m.stars, (on) => {
+    parts.push(this.toggle(tr('ed.starRatings'), !!m.stars, (on) => {
       if (!on) return void delete m.stars;
       // Suggest times from the last test clear, else 10 / 20 / 30 s
       const t = this.lastClearMs;
@@ -2515,21 +2521,21 @@ export class Editor {
       const sec = (key: 'three' | 'two' | 'one', label: string) =>
         this.numField(label, s[key] / 1000, (v) => (s[key] = Math.round(Math.min(LIMITS.maxStarTime, Math.max(0.1, v) * 1000))), 0.1);
       parts.push(
-        this.group(sec('three', '★★★ within (s)'), sec('two', '★★ within (s)'), sec('one', '★ within (s)')),
+        this.group(sec('three', tr('ed.star3')), sec('two', tr('ed.star2')), sec('one', tr('ed.star1'))),
         this.note(this.lastClearMs !== null
-          ? `Your last test clear: ${(this.lastClearMs / 1000).toFixed(3)}s. Slower than the ★ time earns no star.`
-          : 'Clear times at or under each value earn that many stars. Slower than the ★ time earns no star.'),
+          ? tr('ed.lastClear', { time: formatSeconds(this.lastClearMs) })
+          : tr('ed.starHelp')),
       );
     }
-    parts.push(this.toggle('Global darkness (#42)', !!m.darkness, (on) => {
+    parts.push(this.toggle(tr('ed.globalDarkness42'), !!m.darkness, (on) => {
       if (on) m.darkness = { light: 60 };
       else delete m.darkness;
     }));
     const dk = m.darkness;
     if (dk) {
       parts.push(
-        this.group(this.numField('Light radius', dk.light, (v) => (dk.light = Math.round(Math.min(LIMITS.maxLight, Math.max(LIMITS.minLight, v)))), 4)),
-        this.note(`The map is dark during a run; only a light of this radius (at least ${LIMITS.minLight}) around the cursor shows it. The editor previews it around your mouse.`),
+        this.group(this.numField(tr('ed.lightRadius'), dk.light, (v) => (dk.light = Math.round(Math.min(LIMITS.maxLight, Math.max(LIMITS.minLight, v)))), 4)),
+        this.note(tr('ed.darknessNote', { min: LIMITS.minLight })),
       );
     }
     this.el.level.replaceChildren(...parts);
@@ -2551,9 +2557,9 @@ export class Editor {
     this.el.shareUrl.select();
     try {
       await navigator.clipboard.writeText(url);
-      this.el.verify.textContent = `Link copied to clipboard (${url.length} chars)`;
+      this.el.verify.textContent = tr('ed.linkCopied', { n: url.length });
     } catch {
-      this.el.verify.textContent = `Link created — please copy it manually (${url.length} chars)`;
+      this.el.verify.textContent = tr('ed.linkManual', { n: url.length });
     }
   }
 
@@ -2573,7 +2579,7 @@ export class Editor {
     try {
       this.loadMap(validateMap(JSON.parse(await file.text())));
     } catch (err) {
-      alert(`Couldn't load the map: ${(err as Error).message}`);
+      alert(tr('ed.loadFailed', { message: (err as Error).message }));
     }
   }
 
@@ -2737,7 +2743,7 @@ export class Editor {
         const kind = this.sel?.kind;
         const label = o
           ? `#${selIndex + 1} · ID ${objectToolId(o)} · ${sizeText(b.w, b.h)}`
-          : `${kind === 'start' ? 'START' : 'GOAL'} · ID ${ZONE_IDS[kind === 'start' ? 'start' : 'goal']} · ${sizeText(b.w, b.h)}`;
+          : `${tr(kind === 'start' ? 'zone.start' : 'zone.goal')} · ID ${ZONE_IDS[kind === 'start' ? 'start' : 'goal']} · ${sizeText(b.w, b.h)}`;
         this.drawInfoLabel(label, b.x + b.w, b.y, u);
       }
     }
@@ -2765,7 +2771,7 @@ export class Editor {
       }
       const g = members[0].group;
       const grouped = g !== undefined && members.every((o) => o.group === g);
-      this.drawInfoLabel(`${grouped ? `Group ${g} · ` : ''}${members.length} objects · ${sizeText(b.w, b.h)}`, b.x + b.w + pad, b.y - pad, u);
+      this.drawInfoLabel(`${grouped ? `${tr('ed.groupN', { n: g! })} · ` : ''}${tr('ed.objectsN', { n: members.length })} · ${sizeText(b.w, b.h)}`, b.x + b.w + pad, b.y - pad, u);
     } else if (selIndex >= 0 && map.objects[selIndex]?.group !== undefined) {
       // A single member picked out of its group: show the group's extent faintly
       const g = map.objects[selIndex].group;
@@ -2784,7 +2790,7 @@ export class Editor {
     const so = this.selectedObject();
     if (dr?.type === 'handle' && dr.h.kind === 'pivot' && so) {
       for (const t of this.pivotTargets(so)) {
-        const center = t.label !== 'Vertex' && t.label !== 'Corner' && t.label !== 'Edge middle';
+        const center = t.label !== tr('ed.vertex') && t.label !== tr('ed.corner') && t.label !== tr('ed.edgeMiddle');
         ctx.strokeStyle = center ? COLORS.pivot : 'rgba(36,52,80,0.55)';
         ctx.lineWidth = 1.2 * u;
         const r = (center ? 6 : 3.5) * u;
