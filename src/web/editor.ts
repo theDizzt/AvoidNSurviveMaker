@@ -200,7 +200,11 @@ const HISTORY_LIMIT = 200;
 const HANDLE_PX = 7;
 /** Screen px within which a dragged pivot snaps to the shape's center points / vertices */
 const PIVOT_SNAP_PX = 10;
-/** Editor zoom: up to this many times the fitted size, by this factor per step (+ / − keys, buttons) */
+/**
+ * Editor zoom: from MIN_ZOOM (zoomed out, the map shrinks inside the canvas with room around it)
+ * up to MAX_ZOOM times the fitted size, by this factor per step (+ / − keys, buttons, wheel)
+ */
+const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 8;
 const ZOOM_STEP = 1.25;
 const IDENTITY: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
@@ -380,6 +384,11 @@ export class Editor {
 
   /** Zoom, and the map point at the middle of the canvas */
   private readonly cam: Camera = { zoom: 1, x: 0, y: 0 };
+  /** Map size the camera was last centered for (a new size recenters it) */
+  private camFor = '';
+  /** Zoom percentage shown over the canvas for a moment after each zoom */
+  private readonly zoomHud = document.createElement('div');
+  private zoomHudTimer = 0;
   /** Dragging the view (Space + drag or the middle button) */
   private pan: { id: number; x: number; y: number; cx: number; cy: number; u: number } | null = null;
   private spaceHeld = false;
@@ -489,6 +498,10 @@ export class Editor {
     this.el.zoomOut.addEventListener('click', () => this.zoomAt({ x: this.cam.x, y: this.cam.y }, 1 / ZOOM_STEP));
     this.el.zoomReset.addEventListener('click', () => this.resetZoom());
 
+    this.zoomHud.className = 'editor-zoom-hud';
+    this.zoomHud.setAttribute('aria-hidden', 'true');
+    (canvas.closest('.editor-view') ?? canvas.parentElement!).append(this.zoomHud);
+
     const mini = this.minimap;
     mini.className = 'editor-minimap';
     mini.hidden = true;
@@ -513,15 +526,23 @@ export class Editor {
     });
   }
 
-  /** Keep the zoom in range and the view on the map, then hand the camera to the renderer */
+  /**
+   * Keep the zoom in range and the middle of the view on the map (it can be panned freely up to
+   * the map's edges at any zoom), then hand the camera to the renderer
+   */
   private applyCamera(): void {
     const c = this.cam;
-    const { cssW, cssH, s } = fittedView(this.el.canvas, this.map);
-    c.zoom = Math.min(MAX_ZOOM, Math.max(1, c.zoom));
-    const axis = (v: number, half: number, size: number) => (half * 2 >= size - 1e-6 ? size / 2 : Math.min(size - half, Math.max(half, v)));
-    c.x = axis(c.x, cssW / 2 / (s * c.zoom), this.map.width);
-    c.y = axis(c.y, cssH / 2 / (s * c.zoom), this.map.height);
-    setCamera(this.el.canvas, c.zoom > 1 ? c : null);
+    const { width: w, height: h } = this.map;
+    if (this.camFor !== `${w}x${h}`) {
+      this.camFor = `${w}x${h}`;
+      c.x = w / 2;
+      c.y = h / 2;
+    }
+    c.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, c.zoom));
+    c.x = Math.min(w, Math.max(0, c.x));
+    c.y = Math.min(h, Math.max(0, c.y));
+    const fitted = c.zoom === 1 && Math.abs(c.x - w / 2) < 1e-6 && Math.abs(c.y - h / 2) < 1e-6;
+    setCamera(this.el.canvas, fitted ? null : c);
     const label = `${Math.round(c.zoom * 100)}%`;
     if (this.el.zoomReset.textContent !== label) this.el.zoomReset.textContent = label;
   }
@@ -529,17 +550,31 @@ export class Editor {
   /** Zoom by `factor`, keeping map point `p` where it is on screen */
   private zoomAt(p: Point, factor: number): void {
     const c = this.cam;
-    const z = Math.min(MAX_ZOOM, Math.max(1, c.zoom * factor));
+    const z = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, c.zoom * factor));
     if (z === c.zoom) return;
     c.x = p.x - ((p.x - c.x) * c.zoom) / z;
     c.y = p.y - ((p.y - c.y) * c.zoom) / z;
     c.zoom = z;
     this.applyCamera();
+    this.flashZoom();
   }
 
+  /** Back to 100%, the whole map centered */
   private resetZoom(): void {
     this.cam.zoom = 1;
+    this.cam.x = this.map.width / 2;
+    this.cam.y = this.map.height / 2;
     this.applyCamera();
+    this.flashZoom();
+  }
+
+  /** Show the zoom percentage over the canvas, fading out shortly after the last change */
+  private flashZoom(): void {
+    const hud = this.zoomHud;
+    hud.textContent = `${Math.round(this.cam.zoom * 100)}%`;
+    hud.classList.add('show');
+    clearTimeout(this.zoomHudTimer);
+    this.zoomHudTimer = window.setTimeout(() => hud.classList.remove('show'), 900);
   }
 
   private updateCursor(): void {

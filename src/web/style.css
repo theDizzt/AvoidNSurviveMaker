@@ -414,6 +414,24 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   touch-action: none;
 }
 .editor-minimap[hidden] { display: none; }
+/* Zoom percentage, shown over the canvas for a moment after zooming */
+.editor-zoom-hud {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  transform: translate(-50%, -50%) scale(0.92);
+  padding: 10px 22px;
+  border-radius: 14px;
+  background: rgba(20, 30, 50, 0.72);
+  color: #fff;
+  font: 700 28px/1 var(--font-main);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.editor-zoom-hud.show { opacity: 1; transform: translate(-50%, -50%) scale(1); transition-duration: 0.08s; }
 /* Floating panels: drag by the title bar, collapse with the toggle */
 .editor-float {
   position: absolute;

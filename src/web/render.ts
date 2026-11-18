@@ -88,9 +88,9 @@ export interface Camera {
 }
 const cameras = new WeakMap<HTMLCanvasElement, Camera>();
 
-/** Zoom a canvas into its map (null or zoom 1 shows the whole map again) */
+/** Zoom / pan a canvas over its map (null shows the whole map, fitted and centered) */
 export function setCamera(canvas: HTMLCanvasElement, cam: Camera | null): void {
-  if (cam && cam.zoom !== 1) cameras.set(canvas, { ...cam });
+  if (cam) cameras.set(canvas, { ...cam });
   else cameras.delete(canvas);
 }
 
