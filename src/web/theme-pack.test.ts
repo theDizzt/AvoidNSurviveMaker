@@ -4,48 +4,58 @@ import { OFFICIAL_THEMES, CUSTOM_THEME_PRESETS } from './theme-registry';
 import { readThemeZip, writeThemeZip } from './theme-zip';
 
 describe('theme packs', () => {
+  // These tests check rules, not content: adding, removing or renaming levels and chapters
+  // must not break them. Use synthetic maps for exact expectations.
   it('loads the official themes from themes/', () => {
-    expect(OFFICIAL_THEMES.map((t) => t.info.id)).toEqual([
-      'workshop', 'desert', 'wood', 'botany', 'frost', 'factory', 'sky', 'magma',
-      'optics', 'ocean', 'cavern', 'galaxy', 'chapter-13', 'chapter-14', 'cyberfunk', 'chapter-16',
-    ]);
-    expect(OFFICIAL_THEMES[0].info.name).toBe('Tutorial Workshop');
-    expect(OFFICIAL_THEMES[0].levels.map((level) => level.name)).toEqual(
-      Array.from({ length: 16 }, (_, i) => `workshop${String(i + 1).padStart(2, '0')}`),
-    );
-    expect(OFFICIAL_THEMES[4].info.style.badge.kind).toBe('emblem');
-    // Chapter 2 (desert) is being built; the chapters after it have no levels yet
-    expect(OFFICIAL_THEMES[1].levels.length).toBeGreaterThan(0);
-    expect(OFFICIAL_THEMES.slice(2).every((t) => t.levels.length === 0)).toBe(true);
-    expect(CUSTOM_THEME_PRESETS.map((t) => t.info.id)).toEqual(['pastel', 'forest', 'candy', 'neon', 'lava', 'mono']);
-    expect(CUSTOM_THEME_PRESETS.every((t) => !t.official)).toBe(true);
-    expect(CUSTOM_THEME_PRESETS[0].info.name).toBe('Pastel Plains');
+    const ids = OFFICIAL_THEMES.map((t) => t.info.id);
+    expect(ids.length).toBe(16);
+    expect(new Set(ids).size).toBe(ids.length);
+    // Saved progress is keyed by theme id; chapter 1 keeps the id it shipped with
+    expect(ids[0]).toBe('workshop');
     for (const t of OFFICIAL_THEMES) {
-      expect(t.assets[t.info.cover!], t.info.id).toBeTruthy();
+      expect(t.official, t.info.id).toBe(true);
+      expect(t.assets[t.info.cover!], `${t.info.id} cover`).toBeTruthy();
+      expect(t.levels.length, t.info.id).toBeLessThanOrEqual(21);
+      for (const m of t.levels) expect(m.name, t.info.id).toBeTruthy();
     }
-    const lvl = themedLevel(OFFICIAL_THEMES[0], 0)!;
-    expect(lvl.level).toBe(1);
-    expect(lvl.title).toBe('Linear');
+    const presets = CUSTOM_THEME_PRESETS.map((t) => t.info.id);
+    expect(presets).toContain('pastel');
+    expect(new Set(presets).size).toBe(presets.length);
+    expect(CUSTOM_THEME_PRESETS.every((t) => !t.official)).toBe(true);
   });
 
-  it('averages difficulty, counting levels without one as 1.00', () => {
-    const lv = OFFICIAL_THEMES[0].levels;
+  it('averages difficulty, counting levels without one as 1.00', async () => {
+    const { createEmptyMap } = await import('../core/validate');
+    const { difficulty: _difficulty, ...withoutDifficulty } = createEmptyMap();
     expect(averageDifficulty([])).toBe(1);
-    const { difficulty: _difficulty, ...withoutDifficulty } = lv[1];
-    expect(averageDifficulty([{ ...lv[0], difficulty: 5 }, withoutDifficulty])).toBe(3);
+    expect(averageDifficulty([{ ...createEmptyMap(), difficulty: 5 }, withoutDifficulty])).toBe(3);
   });
 
   it('places official levels by their level number', async () => {
-    const { assignSlots } = await import('../core/theme-pack');
+    const { assignSlots, levelAt } = await import('../core/theme-pack');
     const { createEmptyMap } = await import('../core/validate');
-    const at = (level?: number) => ({ ...createEmptyMap(), ...(level !== undefined ? { level } : {}) });
-    // desert01, 02, 03, 09: level 9 goes to slot 8, not slot 3
+    const at = (level?: number, name = 'm') => ({ ...createEmptyMap(), name, ...(level !== undefined ? { level } : {}) });
+    // Levels 1, 2, 3, 9: level 9 goes to slot 8, not slot 3
     expect(assignSlots([at(1), at(2), at(3), at(9)])).toEqual([0, 1, 2, 8]);
     // No number, a taken number or one past the chapter: first free slot
     expect(assignSlots([at(2), at(), at(2), at(99)])).toEqual([1, 0, 2, 3]);
-    const desert = OFFICIAL_THEMES.find((t) => t.info.id === 'desert')!;
-    expect(themedLevel(desert, 8)?.name).toBe('desert09');
-    expect(themedLevel(desert, 3)).toBeNull();
+
+    const levels = [at(1, 'a'), at(2, 'b'), at(3, 'c'), at(9, 'i')];
+    const entry = { ...OFFICIAL_THEMES[0], levels, slots: assignSlots(levels) };
+    expect(themedLevel(entry, 8)?.name).toBe('i');
+    expect(themedLevel(entry, 3)).toBeNull();
+    const first = themedLevel(entry, 0)!;
+    expect(first.level).toBe(1);
+    expect(first.title).toBe('a');
+
+    // Real chapters: every numbered level sits in the slot of its number. A failure here means
+    // two level files share a number, or a number is above 21: fix the level file, not this test.
+    for (const t of OFFICIAL_THEMES) {
+      for (let i = 0; i < 21; i++) {
+        const m = levelAt(t, i);
+        if (m?.level !== undefined) expect(m.level, `${t.info.id} ${m.name}`).toBe(i + 1);
+      }
+    }
   });
 
   it('reads theme.json leniently', () => {
