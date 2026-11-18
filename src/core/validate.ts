@@ -130,6 +130,7 @@ function motion(v: unknown, name: string, W: number, H: number): Motion {
     easing: oneOf(o.easing, `${name}.easing`, EASINGS),
     delay: num(o.delay, `${name}.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
     clockwise: bool(o.clockwise, `${name}.clockwise`),
+    ...(o.showPath === true ? { showPath: true } : {}),
   };
 }
 
@@ -143,6 +144,7 @@ function rotation(v: unknown, name: string, W: number, H: number): Rotation {
     repeat: oneOf(o.repeat, `${name}.repeat`, REPEATS),
     easing: oneOf(o.easing, `${name}.easing`, EASINGS),
     delay: num(o.delay, `${name}.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
+    ...(o.showPivot === true ? { showPivot: true } : {}),
   };
 }
 
@@ -192,6 +194,7 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
     const c = shapeCenter(out.shape);
     out.shape = { type: 'ellipse', cx: c.x, cy: c.y, rx: LIMITS.coinSize / 2, ry: LIMITS.coinSize / 2 };
   }
+  if (out.role === 'path' && o.pierce === true) out.pierce = true;
   if (out.role === 'trigger') out.trigger = trigger(o.trigger, `${name}.trigger`);
   if (out.role === 'door') {
     if (out.shape.type !== 'rect') fail(t('validate.doorRect', { name }));

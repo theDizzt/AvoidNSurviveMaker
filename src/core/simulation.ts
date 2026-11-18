@@ -6,6 +6,10 @@ import { BeamCaster, beamHit, type Beam } from './laser';
 
 /** How long a portal pulls the cursor to its center before teleporting (ms) */
 export const PORTAL_PULL_MS = 160;
+/** A coin is collected once the cursor comes this close to its center (map units; the coin's radius is 12) */
+export const COIN_MAGNET = 36;
+/** How long a collected coin takes to fly into the cursor (ms, drawing only) */
+export const COIN_PULL_MS = 180;
 import type { MapData, Point } from './types';
 
 export type SimStatus = 'ready' | 'playing' | 'dead' | 'cleared';
@@ -42,7 +46,8 @@ const pB: Point = { x: 0, y: 0 };
  *   piece. That turns moving and rotating objects into static polygons and the cursor's motion
  *   into a relative-motion segment, so nothing can be skipped over no matter how fast either moves.
  * - All boundary crossings along the segment are collected and the segment is checked
- *   interval by interval: safe = (inside some path, or the map has no paths) and inside no wall.
+ *   interval by interval: safe = (inside some path, or the map has no paths) and inside no wall,
+ *   where static walls don't count inside a path that cuts through walls (`pierce`).
  * - The same sample list always produces the same result, so replays can be verified on a server.
  */
 export class Simulation {
@@ -61,6 +66,9 @@ export class Simulation {
 
   /** Per map object: 1 once that coin has been collected (always 0 for other objects) */
   readonly collected: Uint8Array;
+  /** Per map object: when (ms) and where (map units, x/y pairs) that coin was collected, for the pull-in animation */
+  readonly collectedAt: Float64Array;
+  readonly collectedPos: Float64Array;
   /** Number of coins on the map */
   readonly coinTotal: number;
   coinsLeft: number;
@@ -200,6 +208,8 @@ export class Simulation {
     this.coinTotal = this.coins.length;
     this.coinsLeft = this.coinTotal;
     this.collected = new Uint8Array(this.objects.length);
+    this.collectedAt = new Float64Array(this.objects.length);
+    this.collectedPos = new Float64Array(this.objects.length * 2);
     this.portals = this.objects.flatMap((o, i) => (o.role === 'portal' ? [i] : []));
     this.caster = new BeamCaster(map, this.objects);
     this.resetSwitches();
@@ -438,17 +448,28 @@ export class Simulation {
   private hazardAt(u: number): 'wall' | 'mover' | 'void' | null {
     const { solids, local, relevant } = this;
     let onPath = !this.hasPaths;
+    // A static wall only kills outside every wall-piercing path, so remember it until the end
+    let wallHit = false;
+    let pierced = false;
     for (let k = 0; k < this.relevantCount; k++) {
       const i = relevant[k];
       const o = solids[i];
-      if (o.role === 'path' && onPath) continue;
+      if (o.role === 'path' && onPath && (pierced || !o.src?.pierce)) continue;
       const x = local[i * 4] + (local[i * 4 + 2] - local[i * 4]) * u;
       const y = local[i * 4 + 1] + (local[i * 4 + 3] - local[i * 4 + 1]) * u;
       if (!pointInPoly(x, y, o.poly)) continue;
       if (o.role === 'safe') return null;
-      if (o.role === 'wall') return o.dynamic ? 'mover' : 'wall';
+      if (o.role === 'wall') {
+        // Moving / switch-linked walls, doors and laser emitters are never pierced
+        if (o.dynamic) return 'mover';
+        if (o.src?.role !== 'wall') return 'wall';
+        wallHit = true;
+        continue;
+      }
       onPath = true;
+      if (o.src?.pierce) pierced = true;
     }
+    if (wallHit && !pierced) return 'wall';
     return onPath ? null : 'void';
   }
 
@@ -506,7 +527,7 @@ export class Simulation {
     // Coins touched before dying are collected; remember when the last one was picked up
     let lastCoinU = -Infinity;
     if (this.coinsLeft > 0) {
-      const hits = this.coinHits(xa, ya, xb, yb, deathU);
+      const hits = this.coinHits(ta, xa, ya, tb, xb, yb, deathU);
       if (this.coinsLeft === 0) lastCoinU = hits;
     }
 
@@ -723,12 +744,11 @@ export class Simulation {
   }
 
   /**
-   * Collect every coin the segment touches before `limit`. Returns the fraction at which the
-   * latest of them was touched (-Infinity if none).
+   * Collect every coin whose magnet range (COIN_MAGNET around its center) the segment enters
+   * before `limit`. Returns the fraction at which the latest of them was reached (-Infinity if none).
    */
-  private coinHits(xa: number, ya: number, xb: number, yb: number, limit: number): number {
+  private coinHits(ta: number, xa: number, ya: number, tb: number, xb: number, yb: number, limit: number): number {
     let latest = -Infinity;
-    const out: number[] = [];
     for (const i of this.coins) {
       if (this.collected[i]) continue;
       const o = this.objects[i];
@@ -745,17 +765,34 @@ export class Simulation {
         bx = pB.x;
         by = pB.y;
       }
-      if (Math.max(ax, bx) < o.minX || Math.min(ax, bx) > o.maxX || Math.max(ay, by) < o.minY || Math.min(ay, by) > o.maxY) continue;
+      // Earliest point of the segment within the magnet range of the coin's center (local frame)
+      const cx = (o.minX + o.maxX) / 2;
+      const cy = (o.minY + o.maxY) / 2;
+      const fx = ax - cx;
+      const fy = ay - cy;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const c = fx * fx + fy * fy - COIN_MAGNET * COIN_MAGNET;
       let u = -1;
-      if (pointInPoly(ax, ay, o.poly)) u = 0;
-      else if (ax !== bx || ay !== by) {
-        out.length = 0;
-        segmentPolyCrossings(ax, ay, bx, by, o.poly, out);
-        if (out.length) u = Math.min(...out);
+      if (c <= 0) u = 0;
+      else {
+        const a = dx * dx + dy * dy;
+        const b = 2 * (fx * dx + fy * dy);
+        const disc = b * b - 4 * a * c;
+        if (a > 0 && disc >= 0) {
+          const r = (-b - Math.sqrt(disc)) / (2 * a);
+          if (r >= 0 && r <= 1) u = r;
+        }
       }
       if (u < 0 || u > limit) continue;
       this.collected[i] = 1;
       this.coinsLeft--;
+      this.collectedAt[i] = ta + (tb - ta) * u;
+      // Where the coin was at that moment, in map units
+      const tf = transformAt(o, o.dynamic ? this.clock[i] : 0, tfA);
+      toWorld(o, tf, cx, cy, pA);
+      this.collectedPos[i * 2] = pA.x;
+      this.collectedPos[i * 2 + 1] = pA.y;
       latest = Math.max(latest, u);
     }
     return latest;

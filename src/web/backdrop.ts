@@ -1,10 +1,10 @@
 import { compileMap, type CompiledObject } from '../core/object';
-import { Simulation, type ReplaySample } from '../core/simulation';
+import { COIN_PULL_MS, Simulation, type ReplaySample } from '../core/simulation';
 import { levelSlots, themedLevel, type ThemeEntry } from '../core/theme-pack';
 import type { MapData } from '../core/types';
 import { DeathBurst } from './death-burst';
 import { demoPlayable, planDemoRun } from './demo-pilot';
-import { COLORS, drawMap, drawTrail } from './render';
+import { COLORS, drawCoinPulls, drawMap, drawTrail } from './render';
 import { OFFICIAL_THEMES } from './theme-registry';
 
 /**
@@ -187,6 +187,7 @@ export class Backdrop {
     if (!sim) return;
     const unit = (window.devicePixelRatio || 1) / s;
     drawTrail(ctx, run.trail);
+    if (playing) drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
     if (sim.status === 'playing' || sim.status === 'cleared') {
       const r = (CURSOR_PX / 2) * unit;
       ctx.fillStyle = COLORS.cursor;

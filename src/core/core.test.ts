@@ -191,6 +191,45 @@ describe('Simulation', () => {
       sim.feed(5, 150, 10);
       expect(sim.endReason).toBe('wall');
     });
+    it('a wall-piercing path makes static walls harmless inside it, but not moving walls', () => {
+      const big = wall({ x: 100, y: 0, w: 200, h: 300 });
+      const tunnel = path({ x: 80, y: 0, w: 60, h: 20 }, { pierce: true });
+      const ok = new Simulation(baseMap([path({ x: 20, y: 0, w: 80, h: 20 }), tunnel, big]));
+      ok.start(10, 10);
+      ok.feed(5, 130, 10); // into the wall, inside the tunnel
+      expect(ok.status).toBe('playing');
+      ok.feed(10, 160, 10); // past the tunnel's end, still in the wall
+      expect(ok.endReason).toBe('wall');
+      expect(ok.x).toBeCloseTo(140);
+
+      const mover = wall({ x: 120, y: 0, w: 5, h: 20 }, { rotation: rotation({ pivot: { x: 122, y: 10 }, speed: 1, angle: 1 }) });
+      const hit = new Simulation(baseMap([path({ x: 20, y: 0, w: 80, h: 20 }), tunnel, mover]));
+      hit.start(10, 10);
+      hit.feed(5, 130, 10);
+      expect(hit.endReason).toBe('mover');
+    });
+    it('a moving wall-piercing path carves through static walls as it moves', () => {
+      const map = baseMap([
+        wall({ x: 100, y: 0, w: 200, h: 300 }),
+        path({ x: 0, y: 0, w: 140, h: 20 }, { pierce: true, motion: motion({ points: [{ x: 70, y: 200 }], speed: 100, repeat: 'once' }) }),
+      ]);
+      const sim = new Simulation(map);
+      sim.start(10, 10);
+      sim.feed(1, 120, 10); // inside the wall, carried by the piercing path
+      expect(sim.status).toBe('playing');
+    });
+    it('coins are pulled in from within COIN_MAGNET of their center', () => {
+      const coin = (cx: number, cy: number): MapObject => ({ role: 'coin', shape: { type: 'ellipse', cx, cy, rx: 12, ry: 12 } });
+      const sim = new Simulation(baseMap([coin(100, 40), coin(300, 50)]));
+      sim.start(10, 10);
+      sim.feed(5, 400, 10); // passes 30 from the first coin, 40 from the second
+      expect(sim.coinsLeft).toBe(1);
+      expect(sim.collected[0]).toBe(1);
+      // Picked up where the cursor first came within 36 (x = 100 - sqrt(36² - 30²) ≈ 80.1)
+      expect(sim.collectedAt[0]).toBeCloseTo(((100 - Math.sqrt(36 * 36 - 30 * 30) - 10) / 390) * 5, 6);
+      expect(sim.collectedPos[0]).toBeCloseTo(100);
+      expect(sim.collectedPos[1]).toBeCloseTo(40);
+    });
     it('a moving platform leaves a cursor that stays still', () => {
       const map = baseMap(
         [path({ x: 15, y: 0, w: 40, h: 20 }, { motion: motion({ points: [{ x: 335, y: 10 }], speed: 100, repeat: 'once' }) })],

@@ -1,5 +1,12 @@
 import { t } from '../core/i18n';
 import { onOptionsChange, options } from './options';
+import clickUrl from '../sfx/click.mp3';
+import coinUrl from '../sfx/coin.mp3';
+import finishUrl from '../sfx/finish.mp3';
+
+/** Sound effect files (src/sfx) */
+const SFX = { click: clickUrl, coin: coinUrl, finish: finishUrl } as const;
+export type Sfx = keyof typeof SFX;
 
 /** Music crossfade: the old track fades out while the new one fades in (seconds) */
 const FADE_OUT = 0.9;
@@ -22,6 +29,8 @@ class GameAudio {
   private readonly buffers = new Map<string, AudioBuffer>();
   private musicRequest: AbortController | null = null;
   private trackUrl: string | null = null;
+  /** Decoded sound effects, loaded once the audio context exists */
+  private readonly sfx = new Map<Sfx, AudioBuffer>();
 
   constructor() {
     onOptionsChange(() => this.sync());
@@ -49,7 +58,33 @@ class GameAudio {
       this.effects.connect(this.master);
       this.master.connect(this.context.destination);
       this.sync();
+      void this.loadSfx();
     } catch { /* Audio is optional when unsupported or unavailable. */ }
+  }
+
+  private async loadSfx(): Promise<void> {
+    const ctx = this.context!;
+    await Promise.all((Object.keys(SFX) as Sfx[]).map(async (name) => {
+      try {
+        const response = await fetch(SFX[name]);
+        if (!response.ok) throw new Error(t('audio.downloadFailed', { status: response.status }));
+        this.sfx.set(name, await ctx.decodeAudioData(await response.arrayBuffer()));
+      } catch (error) {
+        console.warn(`Could not load sound effect "${name}".`, error);
+      }
+    }));
+  }
+
+  /** Play a sound effect (silently skipped until audio is unlocked and the file is loaded) */
+  play(name: Sfx): void {
+    const ctx = this.context;
+    const buffer = this.sfx.get(name);
+    if (!ctx || !this.effects || !buffer || ctx.state !== 'running') return;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.effects);
+    source.onended = () => source.disconnect();
+    source.start();
   }
 
   private sync(): void {

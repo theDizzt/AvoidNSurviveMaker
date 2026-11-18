@@ -173,6 +173,8 @@ export interface Motion {
   delay: number;
   /** circle only */
   clockwise: boolean;
+  /** Draw the route as a dotted line in game */
+  showPath?: boolean;
 }
 
 /** Rotation around `pivot` (rest position; the pivot travels with the object's motion). */
@@ -187,6 +189,8 @@ export interface Rotation {
   easing: Easing;
   /** ms before rotation starts. Negative = start partway through */
   delay: number;
+  /** Draw a screw on the pivot in game */
+  showPivot?: boolean;
 }
 
 export interface MapObject {
@@ -196,6 +200,8 @@ export interface MapObject {
   rotation?: Rotation;
   /** Editor-only grouping: objects sharing a group id are selected and moved together */
   group?: number;
+  /** role 'path': cuts through static walls, which are harmless (and hidden) inside it */
+  pierce?: boolean;
   /** role 'trigger' */
   trigger?: Trigger;
   /** role 'door' */

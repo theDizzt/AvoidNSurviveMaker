@@ -494,9 +494,12 @@ panelsBtn.addEventListener('click', togglePanels);
 // No browser right-click menu anywhere in the app (the editor canvas opens its own). Text fields
 // keep theirs so copy / paste by mouse still works.
 // Capture phase on window, so it runs first even when something below stops the event.
+// Only fields you type text into count: checkboxes, sliders, color pickers etc. are inputs too
+const TEXT_INPUTS = new Set(['text', 'search', 'url', 'email', 'password', 'tel', 'number']);
 const noBrowserMenu = (e: MouseEvent) => {
   const t = e.target;
-  const editable = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || (t instanceof HTMLElement && t.isContentEditable);
+  const editable = (t instanceof HTMLInputElement && TEXT_INPUTS.has(t.type)) || t instanceof HTMLTextAreaElement
+    || (t instanceof HTMLElement && t.isContentEditable);
   if (!editable) e.preventDefault();
 };
 window.addEventListener('contextmenu', noBrowserMenu, true);
@@ -666,5 +669,13 @@ window.addEventListener('hashchange', async () => {
   if (isPack && playPack) showPlay(playPack.levels[0], { key: 'p:0' });
   else if (!isPack && sharedMap) showPlay(sharedMap, { key: 'shared' });
 });
+
+// Button clicks on menu screens (not the theme editor) make a click sound. Capture phase, so it
+// plays even when the button's own handler switches screens.
+document.addEventListener('click', (e) => {
+  const btn = (e.target as Element | null)?.closest?.('button');
+  if (!btn || btn.disabled || !btn.closest('.screen.menu') || btn.closest('.te-screen')) return;
+  gameAudio.play('click');
+}, true);
 
 void boot();

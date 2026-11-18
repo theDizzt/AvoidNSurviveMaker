@@ -4,14 +4,14 @@ import { recordTime } from '../core/time';
 import { DEFAULT_BADGE, type BadgeStyle } from '../core/theme-pack';
 import { badgeImage, drawLevelBadge } from './badge';
 import { badgeTitle } from './theme-registry';
-import { formatSeconds, Simulation, type Replay } from '../core/simulation';
+import { COIN_PULL_MS, formatSeconds, Simulation, type Replay } from '../core/simulation';
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
 import { options } from './options';
 import { gameAudio } from './audio';
 import { DeathBurst } from './death-burst';
 import {
-  beginFrame, clientToMap, COLORS, drawBanner, drawDarkAreas, drawGlobalDark, drawMap, drawStopwatch, drawTrail, fitCanvas,
+  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawDarkAreas, drawGlobalDark, drawMap, drawStopwatch, drawTrail, fitCanvas,
   FONT_MAIN, mapPointer, unitsPerPx,
 } from './render';
 
@@ -180,6 +180,10 @@ export class PlayController {
     if (this.trail.length > TRAIL_POINTS * 2) this.trail.splice(0, this.trail.length - TRAIL_POINTS * 2);
   }
 
+  /** The run whose coin count `coinsLeft` was last seen in (for the coin sound) */
+  private coinSim: Simulation | null = null;
+  private coinsLeft = 0;
+
   private frame(): void {
     if (!this.visible || !this.map) return;
     const now = performance.now();
@@ -189,6 +193,14 @@ export class PlayController {
       const target = now - this.t0 - IDLE_MARGIN_MS;
       if (target > sim.time) sim.advanceTo(target);
       this.breakTrailOnTeleport();
+    }
+    // Coins are collected both here and in the pointer handler, so compare with the last frame
+    if (this.coinSim !== sim) {
+      this.coinSim = sim;
+      this.coinsLeft = sim.coinsLeft;
+    } else if (sim.coinsLeft < this.coinsLeft) {
+      this.coinsLeft = sim.coinsLeft;
+      gameAudio.play('coin');
     }
     const running = sim.status === 'playing';
     if (sim.status === 'dead' && !this.deathNotified) {
@@ -200,6 +212,7 @@ export class PlayController {
     if (running !== this.el.root.classList.contains('running')) this.el.root.classList.toggle('running', running);
     if (sim.status === 'cleared' && !this.notified) {
       this.notified = true;
+      gameAudio.play('finish');
       const key = JSON.stringify(this.map);
       const prev = this.best.get(key);
       const time = recordTime(sim.endTime);
@@ -228,6 +241,7 @@ export class PlayController {
     const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress };
     drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now });
     if (options.showTrail) drawTrail(ctx, this.trail);
+    if (sim.status !== 'ready') drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
 
     if (sim.status === 'playing') {
       // The system cursor is hidden during a run (CSS .running); this dot is exactly where the

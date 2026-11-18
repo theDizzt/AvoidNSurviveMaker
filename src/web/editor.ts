@@ -428,9 +428,10 @@ export class Editor {
     this.setTool({ kind: 'select' });
     this.changed();
 
+    // Schedule the next frame first: one frame that throws must not freeze the editor canvas
     const loop = () => {
-      this.draw();
       requestAnimationFrame(loop);
+      this.draw();
     };
     requestAnimationFrame(loop);
   }
@@ -2048,6 +2049,12 @@ export class Editor {
     if (o.laser) parts.push(...this.laserProps(o));
     if (o.portal) parts.push(...this.portalProps(o));
     if (o.role === 'mirror') parts.push(this.heading(tr('ed.mirror')), this.note(tr('ed.laserBeamsBounceOffEvery')));
+    if (o.role === 'path') {
+      parts.push(this.toggle(tr('ed.pierceWalls'), !!o.pierce, (on) => {
+        if (on) o.pierce = true;
+        else delete o.pierce;
+      }));
+    }
     if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'mirror') parts.push(...this.linkProps(o));
 
     // Movement (a spike's thrust is its movement)
@@ -2082,6 +2089,10 @@ export class Editor {
         fields.push(this.selectField(tr('ed.direction'), m.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (m.clockwise = v === 'cw')));
       }
       parts.push(this.group(...fields));
+      parts.push(this.toggle(tr('ed.showPath'), !!m.showPath, (on) => {
+        if (on) m.showPath = true;
+        else delete m.showPath;
+      }));
       parts.push(this.note(
         m.type === 'circle'
           ? m.points.length ? tr('ed.orbitSet') : tr('ed.orbitUnset')
@@ -2115,6 +2126,10 @@ export class Editor {
         this.numField(tr('ed.pivotX'), r.pivot.x, (v) => (r.pivot = { ...r.pivot, x: Math.round(v) })),
         this.numField(tr('ed.pivotY'), r.pivot.y, (v) => (r.pivot = { ...r.pivot, y: Math.round(v) })),
       ));
+      parts.push(this.toggle(tr('ed.showPivot'), !!r.showPivot, (on) => {
+        if (on) r.showPivot = true;
+        else delete r.showPivot;
+      }));
       parts.push(this.note(tr('ed.angle360LoopContinuousSpin')));
       parts.push(this.actions(this.button(tr('ed.centerPivot'), () => this.edit(() => (r.pivot = shapeCenter(o.shape))))));
     }
@@ -2454,13 +2469,19 @@ export class Editor {
     );
   }
 
-  /** Rebuild the level settings only when they changed, so a field being typed in keeps focus */
+  /**
+   * Rebuild the level settings only when they changed, so a field being typed in keeps focus.
+   * The fields write into the map object they were built for, so a replaced map (loaded from the
+   * menu, undo / redo, new map) always rebuilds them, even when its settings look the same.
+   */
   private renderedLevel: string | null = null;
+  private renderedLevelMap: MapData | null = null;
   private renderLevel(): void {
     const m = this.map;
-    const json = JSON.stringify([m.title, m.level, m.stars, this.lastClearMs, m.darkness, m.difficulty]);
-    if (json === this.renderedLevel) return;
+    const json = JSON.stringify([m.title, m.name, m.level, m.stars, this.lastClearMs, m.darkness, m.difficulty]);
+    if (json === this.renderedLevel && m === this.renderedLevelMap) return;
     this.renderedLevel = json;
+    this.renderedLevelMap = m;
 
     const title = document.createElement('input');
     title.maxLength = LIMITS.maxText;

@@ -9,6 +9,8 @@ import { autoDoorOpen, doorPanels, initialChannels } from '../core/switches';
 import { isLibraryFont } from '../core/font-catalog';
 import type { Fill, MapData, MapObject, Point, Rect, TextBox } from '../core/types';
 import { libraryFontCss } from './library-fonts';
+import { CompiledMotion } from '../core/motion';
+import { shapeCenter } from '../core/shape';
 
 export const COLORS = {
   bg: '#f6fbff',
@@ -264,8 +266,12 @@ interface StaticLayer {
   layer: HTMLCanvasElement;
   /** Floor alone (path fill and grid) */
   floor: HTMLCanvasElement;
-  /** Static wall mass alone (no shadow / rim) */
+  /** Static wall mass alone (no shadow / rim): `outside` + `wallPieces` */
   walls: HTMLCanvasElement;
+  /** Everything outside the static floor */
+  outside: HTMLCanvasElement;
+  /** Static wall objects, minus static paths that cut through walls */
+  wallPieces: HTMLCanvasElement;
   /** Scratch canvas for the per-frame wall mass */
   frame: HTMLCanvasElement;
   /** Where the static walls are, for grinder dust (built on first use) */
@@ -308,25 +314,38 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   const w = Math.ceil(map.width * scale);
   const h = Math.ceil(map.height * scale);
 
+  // Outside the floor
+  const [outside, v] = offscreen(w, h);
+  v.scale(scale, scale);
+  if (paths) {
+    v.fillStyle = theme ? fillStyle(v, theme.wall.fill, whole) : COLORS.wall;
+    v.fillRect(0, 0, map.width, map.height);
+    v.globalCompositeOperation = 'destination-out';
+    v.beginPath();
+    for (const o of objects) if (o.role === 'path' && !o.dynamic) traceStatic(v, o);
+    for (const r of [map.start, map.goal]) v.rect(r.x, r.y, r.w, r.h);
+    // nonzero: overlapping floor pieces cut out as one union
+    v.fill('nonzero');
+    v.globalCompositeOperation = 'source-over';
+  }
+  // Wall pieces, with wall-piercing paths cut out of them
+  const [wallPieces, p] = offscreen(w, h);
+  p.scale(scale, scale);
+  p.beginPath();
+  for (const o of objects) if (o.role === 'wall' && !o.dynamic) traceStatic(p, o);
+  p.fillStyle = theme ? fillStyle(p, theme.wall.fill, whole) : COLORS.wall;
+  p.fill('nonzero');
+  if (objects.some((o) => o.role === 'path' && !o.dynamic && o.src?.pierce)) {
+    p.globalCompositeOperation = 'destination-out';
+    p.beginPath();
+    for (const o of objects) if (o.role === 'path' && !o.dynamic && o.src?.pierce) traceStatic(p, o);
+    p.fill('nonzero');
+    p.globalCompositeOperation = 'source-over';
+  }
   // Wall mass
   const [wallCanvas, g] = offscreen(w, h);
-  g.scale(scale, scale);
-  const wallFill = theme ? fillStyle(g, theme.wall.fill, whole) : COLORS.wall;
-  if (paths) {
-    g.fillStyle = wallFill;
-    g.fillRect(0, 0, map.width, map.height);
-    g.globalCompositeOperation = 'destination-out';
-    g.beginPath();
-    for (const o of objects) if (o.role === 'path' && !o.dynamic) traceStatic(g, o);
-    for (const r of [map.start, map.goal]) g.rect(r.x, r.y, r.w, r.h);
-    // nonzero: overlapping floor pieces cut out as one union
-    g.fill('nonzero');
-    g.globalCompositeOperation = 'source-over';
-  }
-  g.beginPath();
-  for (const o of objects) if (o.role === 'wall' && !o.dynamic) traceStatic(g, o);
-  g.fillStyle = wallFill;
-  g.fill('nonzero');
+  g.drawImage(outside, 0, 0);
+  g.drawImage(wallPieces, 0, 0);
 
   // Floor, then the wall mass with its shadow and rim on top
   const [floor, f] = offscreen(w, h);
@@ -338,7 +357,7 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   const [layer, s] = offscreen(w, h);
   s.drawImage(floor, 0, 0);
   drawWallMass(s, wallCanvas, theme, scale);
-  return { layer, floor, walls: wallCanvas, frame: offscreen(w, h)[0] };
+  return { layer, floor, walls: wallCanvas, outside, wallPieces, frame: offscreen(w, h)[0] };
 }
 
 /** The wall mass onto the floor: a soft shadow, then the walls with a thin rim in the edge color */
@@ -356,16 +375,24 @@ function drawWallMass(s: CanvasRenderingContext2D, walls: HTMLCanvasElement, the
   s.restore();
 }
 
-/** Add an object's posed outline (world coordinates) to the current path */
-function tracePosed(g: CanvasRenderingContext2D, o: CompiledObject, t: number): void {
+/**
+ * Add an object's posed outline (world coordinates) to the current path. `hole` winds it opposite
+ * to `rect()`, so with a 'nonzero' fill or clip it cuts out of an enclosing rect.
+ */
+function tracePosed(g: CanvasRenderingContext2D, o: CompiledObject, t: number, hole = false): void {
   transformAt(o, t, tf);
   const { poly } = o;
-  for (let i = 0; i < poly.length; i += 2) {
+  const n = poly.length;
+  let area = 0;
+  if (hole) for (let i = 0; i < n; i += 2) area += poly[i] * poly[(i + 3) % n] - poly[(i + 2) % n] * poly[i + 1];
+  const reverse = hole && area > 0;
+  for (let k = 0; k < n; k += 2) {
+    const i = reverse ? n - 2 - k : k;
     const lx = poly[i] - o.px;
     const ly = poly[i + 1] - o.py;
     const x = tf.cos * lx - tf.sin * ly + o.px + tf.dx;
     const y = tf.sin * lx + tf.cos * ly + o.py + tf.dy;
-    if (i === 0) g.moveTo(x, y);
+    if (k === 0) g.moveTo(x, y);
     else g.lineTo(x, y);
   }
   g.closePath();
@@ -463,6 +490,36 @@ function drawCoin(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): 
   ctx.restore();
 }
 
+/**
+ * Coins collected in the last `pullMs`, flying into the cursor at (x, y) like a magnet:
+ * accelerating and shrinking as they close in.
+ */
+export function drawCoinPulls(
+  ctx: CanvasRenderingContext2D,
+  sim: { readonly collected: Uint8Array; readonly collectedAt: Float64Array; readonly collectedPos: Float64Array },
+  t: number, x: number, y: number, pullMs: number,
+): void {
+  for (let i = 0; i < sim.collected.length; i++) {
+    if (!sim.collected[i]) continue;
+    const f = (t - sim.collectedAt[i]) / pullMs;
+    if (f < 0 || f >= 1) continue;
+    const k = f * f;
+    const cx = sim.collectedPos[i * 2] + (x - sim.collectedPos[i * 2]) * k;
+    const cy = sim.collectedPos[i * 2 + 1] + (y - sim.collectedPos[i * 2 + 1]) * k;
+    const r = 12 * (1 - 0.6 * k);
+    ctx.save();
+    ctx.globalAlpha = 1 - 0.5 * k;
+    ctx.fillStyle = COLORS.coin;
+    ctx.strokeStyle = COLORS.coinEdge;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 /** Darkness areas (#41): solid black, covering the cursor and its trail. `alpha` < 1 in the editor */
 export function drawDarkAreas(
   ctx: CanvasRenderingContext2D, objects: readonly CompiledObject[], t: number, alpha = 1,
@@ -547,15 +604,29 @@ export function drawMap(
     const g = st.frame.getContext('2d')!;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, st.frame.width, st.frame.height);
-    g.drawImage(st.walls, 0, 0);
+    // Moving paths open up the area outside the floor; only wall-piercing ones cut the wall pieces
+    const cut = (pierce: boolean) => {
+      g.setTransform(scale, 0, 0, scale, 0, 0);
+      g.beginPath();
+      let any = false;
+      objects.forEach((o, i) => {
+        if (o.dynamic && o.role === 'path' && !!o.src?.pierce === pierce && shown(i)) {
+          tracePosed(g, o, timeOf(i));
+          any = true;
+        }
+      });
+      if (any) {
+        g.globalCompositeOperation = 'destination-out';
+        g.fill('nonzero');
+        g.globalCompositeOperation = 'source-over';
+      }
+      g.setTransform(1, 0, 0, 1, 0, 0);
+    };
+    g.drawImage(st.outside, 0, 0);
+    cut(false);
+    g.drawImage(st.wallPieces, 0, 0);
+    cut(true);
     g.setTransform(scale, 0, 0, scale, 0, 0);
-    g.beginPath();
-    objects.forEach((o, i) => {
-      if (o.dynamic && o.role === 'path' && shown(i)) tracePosed(g, o, timeOf(i));
-    });
-    g.globalCompositeOperation = 'destination-out';
-    g.fill('nonzero');
-    g.globalCompositeOperation = 'source-over';
     g.beginPath();
     objects.forEach((o, i) => {
       if (o.dynamic && o.role === 'wall' && !isSaw(i) && shown(i)) tracePosed(g, o, timeOf(i));
@@ -590,6 +661,22 @@ export function drawMap(
     if (trig && (trig.kind === 'startZone' || trig.kind === 'stopZone') && shown(i)) drawEventZone(ctx, o, timeOf(i), map.objects[i]);
   });
 
+  // Dotted routes of obstacles set to show them (motion.showPath), on the floor and walls but
+  // behind every moving path and wall (later layers like coins and switches cover them anyway)
+  if (objects.some((o, i) => o.src?.motion?.showPath && shown(i))) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, map.width, map.height);
+    objects.forEach((o, i) => {
+      if (o.dynamic && (o.role === 'path' || o.role === 'wall') && shown(i)) tracePosed(ctx, o, timeOf(i), true);
+    });
+    ctx.clip('nonzero');
+    objects.forEach((o, i) => {
+      if (o.src?.motion?.showPath && shown(i)) drawRoute(ctx, o, COLORS.ink);
+    });
+    ctx.restore();
+  }
+
   // Text boxes lie on the floor and walls
   objects.forEach((o, i) => {
     const m = map.objects[i];
@@ -604,6 +691,10 @@ export function drawMap(
       if (m?.saw && o.role === 'wall' && shown(i)) drawSaw(ctx, o, timeOf(i), m, mask, dust, i);
     });
   }
+  // Screws on the pivots of rotating obstacles set to show them
+  objects.forEach((o, i) => {
+    if (o.src?.rotation?.showPivot && !o.src.boulder && !o.src.saw && shown(i)) drawPivotScrew(ctx, o, timeOf(i));
+  });
   // Switch doors: a stripe in the switch color along each panel
   map.objects.forEach((m, i) => {
     if (isDoor(m) && m.door!.mode === 'switch' && shown(i)) drawDoorStripes(ctx, m, doorOpenAt(m, i));
@@ -634,6 +725,64 @@ export function drawMap(
     if (o.role === 'safe' && shown(i)) drawSafeZone(ctx, o, timeOf(i));
   });
   if (opts.gridOnTop) drawGrid(ctx, map, COLORS.gridTop);
+}
+
+const routeCache = new WeakMap<CompiledObject, number[]>();
+
+/** An obstacle's route as a dotted line (map units) */
+function drawRoute(ctx: CanvasRenderingContext2D, o: CompiledObject, color: string): void {
+  const m = o.src!;
+  let route = routeCache.get(o);
+  if (!route) routeCache.set(o, (route = new CompiledMotion(m.motion!, shapeCenter(m.shape)).route()));
+  if (route.length < 4) return;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.setLineDash([0.1, 12]);
+  ctx.beginPath();
+  ctx.moveTo(route[0], route[1]);
+  for (let k = 2; k < route.length; k += 2) ctx.lineTo(route[k], route[k + 1]);
+  // Light halo under dark dots, so the route reads on any floor or wall
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.lineWidth = 7;
+  ctx.stroke();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A screw head on a rotating obstacle's pivot, turning with it */
+function drawPivotScrew(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): void {
+  transformAt(o, t, tf);
+  const r = Math.max(2.5, Math.min(6, Math.min(o.maxX - o.minX, o.maxY - o.minY) * 0.3));
+  ctx.save();
+  ctx.transform(tf.cos, tf.sin, -tf.sin, tf.cos, o.px + tf.dx, o.py + tf.dy);
+  ctx.shadowColor = 'rgba(0,0,0,0.3)';
+  ctx.shadowBlur = 2;
+  ctx.shadowOffsetY = 1;
+  const g = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.1, 0, 0, r);
+  g.addColorStop(0, '#f4f6f9');
+  g.addColorStop(1, '#9aa3b0');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = '#5d6674';
+  ctx.lineWidth = Math.max(0.8, r * 0.18);
+  ctx.stroke();
+  // Cross slot
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1, r * 0.26);
+  ctx.strokeStyle = '#4a525e';
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.55, 0);
+  ctx.lineTo(r * 0.55, 0);
+  ctx.moveTo(0, -r * 0.55);
+  ctx.lineTo(0, r * 0.55);
+  ctx.stroke();
+  ctx.restore();
 }
 
 /** Enter an object's posed frame (rest-pose coordinates draw where the object is at time t) */
