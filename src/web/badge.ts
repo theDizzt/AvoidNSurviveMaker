@@ -41,6 +41,11 @@ export function badgeImage(url: string | undefined): HTMLImageElement | null {
   return img.complete && img.naturalWidth ? img : null;
 }
 
+/** The badge's own title font, or `fallback` (each design's default) when it has none */
+function titleFontCss(b: BadgeStyle, fallback: string): string {
+  return b.titleFont ? FONTS[b.titleFont] : fallback;
+}
+
 function numberText(map: MapData, b: BadgeStyle): string {
   const n = String(map.level ?? '');
   return b.pad > 0 ? n.padStart(b.pad, '0') : n;
@@ -73,7 +78,7 @@ function titleBlock(ctx: CanvasRenderingContext2D, map: MapData, b: BadgeStyle, 
   if (!title && !cap) return x;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.font = `700 22px ${FONTS[b.font === 'timer' ? 'title' : b.font]}`;
+  ctx.font = `700 22px ${titleFontCss(b, FONTS[b.font === 'timer' ? 'title' : b.font])}`;
   const tw = title ? ctx.measureText(title).width : 0;
   ctx.font = `600 12px ${FONT_MAIN}`;
   const cw = cap ? ctx.measureText(cap).width : 0;
@@ -93,7 +98,7 @@ function titleBlock(ctx: CanvasRenderingContext2D, map: MapData, b: BadgeStyle, 
   }
   if (title) {
     ctx.fillStyle = b.titleColor;
-    ctx.font = `700 22px ${FONTS[b.font === 'timer' ? 'title' : b.font]}`;
+    ctx.font = `700 22px ${titleFontCss(b, FONTS[b.font === 'timer' ? 'title' : b.font])}`;
     ctx.fillText(title, x + 2, cy + (cap ? 8 : 0));
   }
   return x + w;
@@ -283,7 +288,7 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
         ctx.translate(110, 76);
         ctx.rotate(-0.24);
         ctx.fillStyle = b.titleColor;
-        ctx.font = `800 17px ${FONTS[b.font]}`;
+        ctx.font = `800 17px ${titleFontCss(b, FONTS[b.font])}`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillText(map.title ?? map.name, 0, 0, 140);
@@ -347,7 +352,7 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
       const title = b.showTitle ? map.title ?? map.name : '';
       ctx.font = `900 40px ${FONTS[b.font]}`;
       const nw = num ? ctx.measureText(num).width : 0;
-      ctx.font = `600 15px ${FONT_MAIN}`;
+      ctx.font = `600 15px ${titleFontCss(b, FONT_MAIN)}`;
       const tw = title ? ctx.measureText(title).width : 0;
       const capW = b.caption ? ctx.measureText(b.caption).width : 0;
       const gap = num && (title || b.caption) ? 10 : 0;
@@ -376,7 +381,7 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
       }
       if (title) {
         ctx.fillStyle = b.titleColor;
-        ctx.font = `600 15px ${FONT_MAIN}`;
+        ctx.font = `600 15px ${titleFontCss(b, FONT_MAIN)}`;
         ctx.fillText(title, 28 + nw + gap, base + (b.caption ? 7 : 2));
       }
       bottom = 12 + h;

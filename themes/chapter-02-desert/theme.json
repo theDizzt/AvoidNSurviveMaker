@@ -45,7 +45,7 @@
       }
     }
   },
-  "cover": "cover.svg",
+  "cover": "cover.png",
   "music": "audio/arabic-desert.mp3",
   "screens": {
     "select": {

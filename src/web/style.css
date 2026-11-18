@@ -981,7 +981,7 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 .dside-board-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .dside-board-head { display: flex; flex-direction: column; gap: 2px; }
 .dside-board-title { margin: 0; font-size: 15px; }
-.dside-board-sub { color: var(--muted); font-size: 12px; min-height: 1.2em; }
+.dside-board-sub { color: var(--muted); font-size: 12px; min-height: 1.2em; font-family: var(--level-title-font, inherit); }
 .dside-note { margin: 8px 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .dboard { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .dboard-row {
@@ -1040,8 +1040,9 @@ button.dlevel:hover:not(:disabled), button.dlevel:focus-visible { transform: rot
   background: var(--lv-fill); color: var(--lv-number);
   border: var(--lv-border-w) solid var(--lv-border); backdrop-filter: none; -webkit-backdrop-filter: none;
 }
-.lattice.lv-designed .dlevel.alt:not(.cleared) { background: var(--lv-fill2); }
-.lattice.lv-designed .dlevel.cleared { background: var(--lv-cleared); }
+/* Every other level uses the second fill, whether it is locked, playable or cleared.
+   :not(.dlevel-stars) keeps this as specific as the base rule above so it wins. */
+.lattice.lv-designed .dlevel.alt:not(.dlevel-stars) { background: var(--lv-fill2); }
 .lattice.lv-designed .dlevel .dtile-in { text-shadow: none; }
 .lattice.lv-designed .dlevel-no { text-shadow: 0 0 10px var(--lv-glow, transparent); }
 .lattice.lv-designed .dlevel.soon { opacity: 0.45; }

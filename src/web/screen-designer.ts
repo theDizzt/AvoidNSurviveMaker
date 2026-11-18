@@ -381,7 +381,12 @@ export class ScreenDesigner {
         this.field(tr('common.color'), this.color(e.color, (v) => (e.color = v), false)),
         this.field(tr('common.align'), this.sel(e.align ?? 'center', [['left', tr('common.left')], ['center', tr('common.center')], ['right', tr('common.right')]], (v) => (e.align = v))),
         this.field(tr('common.outline'), this.color(e.stroke, (v) => (e.stroke = v))),
+        this.field(tr('ed.outlineWidth'), this.num(e.strokeWidth ?? Math.max(1, (e.size ?? 28) / 18), (v) => (e.strokeWidth = Math.min(40, Math.max(0, v))), 0.5)),
         this.field(tr('sd.glow'), this.color(e.glow, (v) => (e.glow = v))),
+        this.field(tr('fx.gradientColor'), this.color(e.gradient, (v) => (e.gradient = v))),
+        this.field(tr('fx.depthSize'), this.num(e.depth ?? 0, (v) => (e.depth = Math.min(30, Math.max(0, Math.round(v))) || undefined))),
+        this.field(tr('fx.depthColor'), this.color(e.depthColor, (v) => (e.depthColor = v))),
+        this.field(tr('fx.shadowColor'), this.color(e.shadowColor, (v) => (e.shadowColor = v))),
       ), this.check(tr('common.bold'), !!e.bold, (v) => (e.bold = v || undefined)), this.check(tr('sd.italic'), !!e.italic, (v) => (e.italic = v || undefined)),
       this.check(tr('sd.dropShadow'), !!e.shadow, (v) => (e.shadow = v || undefined)));
     }

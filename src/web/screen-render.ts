@@ -130,9 +130,38 @@ function applyText(node: HTMLElement, e: LayoutElement, scope: string, defaults:
   node.style.fontStyle = e.italic ? 'italic' : 'normal';
   node.style.textAlign = e.align ?? 'center';
   node.style.justifyContent = e.align === 'left' ? 'flex-start' : e.align === 'right' ? 'flex-end' : 'center';
-  if (e.stroke) node.style.webkitTextStroke = `${Math.max(1, (e.size ?? defaults.size) / 18)}px ${e.stroke}`;
-  const sh = textShadow(e);
-  if (sh) node.style.textShadow = sh;
+  textEffects(node.querySelector<HTMLElement>('.se-label') ?? node, e, e.size ?? defaults.size, e.color ?? defaults.color);
+}
+
+/**
+ * Outline, drop shadow, neon glow, gradient and 3D extrusion on the text span. A gradient fills
+ * the letters through background-clip, which text-shadow would paint over, so with a gradient
+ * the shadows become chained drop-shadow filters instead.
+ */
+function textEffects(span: HTMLElement, e: LayoutElement, size: number, color: string): void {
+  if (e.stroke) span.style.webkitTextStroke = `${e.strokeWidth ?? Math.max(1, size / 18)}px ${e.stroke}`;
+  const depth = Math.min(30, e.depth ?? 0);
+  const side = e.depthColor ?? '#000000';
+  const shadow = e.shadowColor ? `color-mix(in srgb, ${e.shadowColor} 50%, transparent)` : 'rgba(0,0,0,0.45)';
+  const off = Math.max(2, size * 0.08) + depth * 0.8;
+  if (e.gradient) {
+    span.style.backgroundImage = `linear-gradient(${color}, ${e.gradient})`;
+    span.style.backgroundClip = 'text';
+    span.style.webkitBackgroundClip = 'text';
+    span.style.color = 'transparent';
+    // Chained filters: each drop-shadow also shadows the ones before it, so 1px steps build the 3D sides
+    const f: string[] = [];
+    for (let k = 0; k < depth; k++) f.push(`drop-shadow(0.6px 0.8px 0 ${side})`);
+    if (e.shadow) f.push(`drop-shadow(${(off - depth * 0.8) * 0.75}px ${off - depth * 0.8}px 0 ${shadow})`);
+    if (e.glow) f.push(`drop-shadow(0 0 4px ${e.glow})`, `drop-shadow(0 0 12px ${e.glow})`);
+    if (f.length) span.style.filter = f.join(' ');
+    return;
+  }
+  const parts: string[] = [];
+  if (e.glow) parts.push(`0 0 6px ${e.glow}`, `0 0 16px ${e.glow}`, `0 0 28px ${e.glow}`);
+  for (let k = 1; k <= depth; k++) parts.push(`${k * 0.6}px ${k * 0.8}px 0 ${side}`);
+  if (e.shadow) parts.push(`${off * 0.75}px ${off}px 0 ${shadow}`);
+  if (parts.length) span.style.textShadow = parts.join(', ');
 }
 
 /** Shapes of level buttons, in a 100×100 box */
@@ -280,7 +309,10 @@ function buildElement(e: LayoutElement, d: ScreenData, h: ScreenHandlers, editin
     case 'back':
     case 'start': {
       const fallback = e.kind === 'back' ? 'BACK' : e.kind === 'start' ? '√' : '';
-      node.textContent = fillText(e.text ?? fallback, d);
+      const label = document.createElement('span');
+      label.className = 'se-label';
+      label.textContent = fillText(e.text ?? fallback, d);
+      node.append(label);
       applyText(node, e, d.fontScope, { size: e.kind === 'start' ? 40 : 28, color: '#ffffff' });
       if (!editing) {
         if (e.kind === 'back') node.addEventListener('click', () => h.onBack?.());

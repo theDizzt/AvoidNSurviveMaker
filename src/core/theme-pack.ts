@@ -38,6 +38,8 @@ export interface BadgeStyle {
   numberColor: string;
   titleColor: string;
   font: BadgeFont;
+  /** Font of the level title (the number's font when omitted) */
+  titleFont?: BadgeFont;
   /** Zero-pad the number to this many digits (0 = none): 2 → "03" */
   pad: number;
   showTitle: boolean;
@@ -173,6 +175,7 @@ export function validateThemeInfo(input: unknown): ThemeInfo {
     pad: typeof b.pad === 'number' ? Math.max(0, Math.min(4, Math.round(b.pad))) : 0,
     showTitle: b.showTitle !== false,
   };
+  if (FONTS.includes(b.titleFont as BadgeFont) || isLibraryFont(b.titleFont as string)) badge.titleFont = b.titleFont as BadgeFont;
   if (str(b.caption)) badge.caption = str(b.caption, 40);
   if (str(b.image)) badge.image = str(b.image, 120);
   const info: ThemeInfo = {

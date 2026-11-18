@@ -84,10 +84,20 @@ export interface LayoutElement {
   align?: 'left' | 'center' | 'right';
   /** Outline color around letters */
   stroke?: string;
+  /** Outline thickness in px (default: size / 18) */
+  strokeWidth?: number;
   /** Neon-like glow color */
   glow?: string;
   /** Drop shadow */
   shadow?: boolean;
+  /** Drop shadow color (default: translucent black) */
+  shadowColor?: string;
+  /** Gradient: the letters fade from `color` at the top to this color at the bottom */
+  gradient?: string;
+  /** 3D extrusion depth in px toward the bottom right */
+  depth?: number;
+  /** Color of the 3D sides */
+  depthColor?: string;
 
   // Box (also the frame of back / start buttons)
   fill?: string;
@@ -213,6 +223,11 @@ function readElement(v: unknown, i: number): LayoutElement | null {
     stroke: color(v.stroke),
     glow: color(v.glow),
     shadow: v.shadow === true ? true : undefined,
+    strokeWidth: typeof v.strokeWidth === 'number' ? num(v.strokeWidth, 0, 40, 1) : undefined,
+    shadowColor: color(v.shadowColor),
+    gradient: color(v.gradient),
+    depth: typeof v.depth === 'number' && v.depth >= 1 ? Math.round(num(v.depth, 1, 30, 1)) : undefined,
+    depthColor: color(v.depthColor),
     fill: color(v.fill),
     border: color(v.border),
     borderWidth: typeof v.borderWidth === 'number' ? num(v.borderWidth, 0, 40, 0) : undefined,

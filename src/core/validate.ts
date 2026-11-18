@@ -252,6 +252,13 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
     if (t.outline !== undefined) out.text.outline = color(t.outline, `${name}.text.outline`);
     const bg = hex8(t.background);
     if (bg) out.text.background = bg;
+    // Effects are optional: a bad value just drops the effect
+    const hex6 = (v: unknown) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : undefined);
+    for (const k of ['shadow', 'glow', 'gradient', 'depthColor'] as const) {
+      const c = hex6(t[k]);
+      if (c) out.text[k] = c;
+    }
+    if (typeof t.depth === 'number' && t.depth >= 1) out.text.depth = Math.min(30, Math.round(t.depth));
   }
   if (out.role === 'laser') {
     const l = obj(o.laser, `${name}.laser`);
@@ -397,7 +404,10 @@ export function validatePack(input: unknown): MapPack {
 }
 
 /** Does the object (posed at time t) overlap the rect? Checks vertices both ways, good enough for warnings. */
-function overlapsRect(m: MapObject, r: Rect, t: number): boolean {
+/** Whether the object overlaps the rect's interior; merely touching its edge does not count */
+function overlapsRect(m: MapObject, rect: Rect, t: number): boolean {
+  const e = Math.min(0.5, rect.w / 4, rect.h / 4);
+  const r = { x: rect.x + e, y: rect.y + e, w: rect.w - 2 * e, h: rect.h - 2 * e };
   const c = compileObject(m);
   const tf: Transform = transformAt(c, t, { dx: 0, dy: 0, cos: 1, sin: 0 });
   const world = new Float64Array(c.poly.length);

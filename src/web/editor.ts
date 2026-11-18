@@ -2299,6 +2299,37 @@ export class Editor {
         this.numField(tr('ed.opacity'), Math.round(alpha * 100), (v) => (t.background = bg.slice(0, 7) + hex2(v / 100)), 5),
       ));
     }
+    // Effects: each one is a toggle that reveals its settings
+    out.push(this.toggle(tr('fx.shadow'), !!t.shadow, (on) => {
+      if (on) t.shadow = '#000000';
+      else delete t.shadow;
+    }));
+    if (t.shadow) out.push(this.group(this.field(tr('fx.shadowColor'), colorInput(t.shadow, (v) => (t.shadow = v)))));
+    out.push(this.toggle(tr('fx.glow'), !!t.glow, (on) => {
+      if (on) t.glow = '#3ae8ff';
+      else delete t.glow;
+    }));
+    if (t.glow) out.push(this.group(this.field(tr('fx.glowColor'), colorInput(t.glow, (v) => (t.glow = v)))));
+    out.push(this.toggle(tr('fx.gradient'), !!t.gradient, (on) => {
+      if (on) t.gradient = '#ff7a3a';
+      else delete t.gradient;
+    }));
+    if (t.gradient) out.push(this.group(this.field(tr('fx.gradientColor'), colorInput(t.gradient, (v) => (t.gradient = v)))));
+    out.push(this.toggle(tr('fx.depth'), !!t.depth, (on) => {
+      if (on) {
+        t.depth = 4;
+        t.depthColor ??= '#1a2233';
+      } else {
+        delete t.depth;
+        delete t.depthColor;
+      }
+    }));
+    if (t.depth) {
+      out.push(this.group(
+        this.numField(tr('fx.depthSize'), t.depth, (v) => (t.depth = Math.min(30, Math.max(1, Math.round(v)))), 1),
+        this.field(tr('fx.depthColor'), colorInput(t.depthColor ?? '#000000', (v) => (t.depthColor = v))),
+      ));
+    }
     out.push(this.note(tr('ed.onlyDecorationTheCursorCan')));
     return out;
   }

@@ -68,6 +68,16 @@ export interface TextBox {
   outlineWidth: number;
   /** Box color with opacity, '#rrggbbaa' (transparent when omitted) */
   background?: string;
+  /** Drop shadow color '#rrggbb' (none when omitted) */
+  shadow?: string;
+  /** Neon glow color '#rrggbb' (none when omitted) */
+  glow?: string;
+  /** Gradient: the letters fade from `color` at the top to this color at the bottom */
+  gradient?: string;
+  /** 3D extrusion depth in px toward the bottom right (none when omitted) */
+  depth?: number;
+  /** Color of the 3D sides '#rrggbb' */
+  depthColor?: string;
 }
 
 /** Spike stake (a wall): waits, thrusts out fast along `angle`, then slowly slides back */

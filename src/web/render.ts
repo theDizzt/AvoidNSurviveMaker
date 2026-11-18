@@ -878,21 +878,82 @@ function drawTextBox(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number
     const lh = tb.size * 1.2;
     const x = tb.align === 'left' ? s.x + pad : tb.align === 'right' ? s.x + s.w - pad : s.x + s.w / 2;
     let y = s.y + s.h / 2 - ((lines.length - 1) * lh) / 2;
+    // Keep text inside its box, with room for effects that spill past the letters
+    const spill = Math.max(tb.glow ? tb.size * 0.6 : 0, (tb.depth ?? 0) + (tb.shadow ? tb.size * 0.1 : 0) + (tb.outline ? tb.outlineWidth : 0));
     ctx.beginPath();
-    ctx.rect(s.x, s.y, s.w, s.h);
+    ctx.rect(s.x - spill, s.y - spill, s.w + spill * 2, s.h + spill * 2);
     ctx.clip();
     for (const line of lines) {
-      if (tb.outline && tb.outlineWidth > 0) {
-        ctx.lineJoin = 'round';
-        ctx.lineWidth = tb.outlineWidth * 2;
-        ctx.strokeStyle = tb.outline;
-        ctx.strokeText(line, x, y);
-      }
-      ctx.fillStyle = tb.color;
-      ctx.fillText(line, x, y);
+      fillTextFx(ctx, line, x, y, tb.size, tb);
       y += lh;
     }
   }
+  ctx.restore();
+}
+
+/** Text effects shared by text boxes: outline, drop shadow, neon glow, gradient and 3D extrusion */
+export interface TextFx {
+  color: string;
+  outline?: string;
+  outlineWidth?: number;
+  shadow?: string;
+  glow?: string;
+  gradient?: string;
+  depth?: number;
+  depthColor?: string;
+}
+
+/** One line of text with its effects, centered on `y` (needs textBaseline 'middle') */
+export function fillTextFx(ctx: CanvasRenderingContext2D, line: string, x: number, y: number, size: number, fx: TextFx): void {
+  const ow = fx.outline && fx.outlineWidth ? fx.outlineWidth : 0;
+  const depth = Math.min(30, fx.depth ?? 0);
+  // The letter shape (outline included) in one color, for the shadow and the 3D sides
+  const solid = (dx: number, dy: number, color: string) => {
+    if (ow > 0) {
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = ow * 2;
+      ctx.strokeStyle = color;
+      ctx.strokeText(line, x + dx, y + dy);
+    }
+    ctx.fillStyle = color;
+    ctx.fillText(line, x + dx, y + dy);
+  };
+  ctx.save();
+  if (fx.shadow) {
+    const off = Math.max(2, size * 0.08) + depth * 0.8;
+    ctx.save();
+    ctx.globalAlpha *= 0.5;
+    solid(off * 0.75, off, fx.shadow);
+    ctx.restore();
+  }
+  // 3D: stacked copies 1px apart toward the bottom right, the farthest first
+  for (let k = depth; k >= 1; k--) solid(k * 0.6, k * 0.8, fx.depthColor ?? '#000000');
+  if (fx.glow) {
+    // shadowBlur is in screen pixels, so scale it with the current zoom
+    const m = ctx.getTransform();
+    ctx.save();
+    ctx.shadowColor = fx.glow;
+    ctx.shadowBlur = size * 0.45 * Math.hypot(m.a, m.b);
+    ctx.fillStyle = fx.glow;
+    ctx.fillText(line, x, y);
+    ctx.fillText(line, x, y);
+    ctx.restore();
+  }
+  if (ow > 0) {
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = ow * 2;
+    ctx.strokeStyle = fx.outline!;
+    ctx.strokeText(line, x, y);
+  }
+  if (fx.gradient) {
+    const g = ctx.createLinearGradient(0, y - size * 0.5, 0, y + size * 0.5);
+    g.addColorStop(0, fx.color);
+    g.addColorStop(1, fx.gradient);
+    ctx.fillStyle = g;
+  } else {
+    ctx.fillStyle = fx.color;
+  }
+  ctx.fillText(line, x, y);
   ctx.restore();
 }
 

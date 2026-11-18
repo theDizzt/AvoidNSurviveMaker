@@ -580,7 +580,11 @@ export class ThemeEditor {
       section(tr('te.mazeColors'), maze),
       section(tr('te.levelBadge'), group(
         this.field(tr('te.design'), this.select(badge.kind, BADGE_KINDS, (v) => b({ kind: v }))),
-        this.field(tr('common.font'), fontPicker(this.select(badge.font, BADGE_FONTS, (v) => b({ font: v })), badge.font)),
+        this.field(tr('te.numberFont'), fontPicker(this.select(badge.font, BADGE_FONTS, (v) => b({ font: v })), badge.font)),
+        this.field(tr('te.titleFont'), fontPicker(this.select<BadgeFont | ''>(badge.titleFont ?? '', [['', tr('te.sameAsNumber')], ...BADGE_FONTS], (v) => {
+          if (v) badge.titleFont = v;
+          else delete badge.titleFont;
+        }), badge.titleFont ?? '')),
         this.field(tr('te.numberDigits'), this.select(String(badge.pad) as '0' | '2' | '3', [['0', '7'], ['2', '07'], ['3', '007']], (v) => b({ pad: Number(v) }))),
         this.field(tr('te.caption'), this.text(badge.caption ?? '', (v) => {
           if (v.trim()) badge.caption = v.slice(0, 40);

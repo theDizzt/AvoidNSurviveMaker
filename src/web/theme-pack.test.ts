@@ -112,5 +112,9 @@ describe('font catalog', () => {
     const withFont = (font: string) => validateThemeInfo({ ...base, style: { ...base.style, badge: { ...base.style.badge, font } } }).style.badge.font;
     expect(withFont('paperlogy-bold')).toBe('paperlogy-bold');
     expect(withFont('no-such-font')).toBe(base.style.badge.font);
+    const withTitleFont = (titleFont: string) => validateThemeInfo({ ...base, style: { ...base.style, badge: { ...base.style.badge, titleFont } } }).style.badge.titleFont;
+    expect(withTitleFont('serif')).toBe('serif');
+    expect(withTitleFont('paperlogy-bold')).toBe('paperlogy-bold');
+    expect(withTitleFont('no-such-font')).toBeUndefined();
   });
 });

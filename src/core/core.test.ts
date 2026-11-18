@@ -3,7 +3,7 @@ import { pointInPoly, segmentRectEntry } from './geometry';
 import { CompiledMotion, CompiledRotation, ease } from './motion';
 import { flattenShape } from './shape';
 import { runReplay, Simulation, formatTime } from './simulation';
-import { createEmptyMap, mapWarnings, validateMap } from './validate';
+import { createEmptyMap, mapErrors, mapWarnings, validateMap } from './validate';
 import { decodeMap, encodeMap } from './share';
 import { BUILTIN_LEVELS } from './levels';
 import floatingBridge from './fixtures/floating-bridge.json';
@@ -358,14 +358,22 @@ describe('Simulation', () => {
 });
 
 describe('validateMap', () => {
-  it('all built-in levels are valid with only documented warnings', () => {
+  it('all built-in levels are valid and playable', () => {
+    // Warnings are advisory (a level may block GOAL on purpose), so only errors fail here
     for (const m of BUILTIN_LEVELS) {
       expect(validateMap(m), m.name).toEqual(m);
-      // Bounce: wall #6's tip (1680, 300) touches GOAL's top-left corner.
-      // Keep this boundary-contact warning visible without changing the authored map.
-      const expected = m.name === 'workshop13' ? ['Wall #6 covers part of GOAL.'] : [];
-      expect(mapWarnings(m), m.name).toEqual(expected);
+      expect(mapErrors(m), m.name).toEqual([]);
     }
+  });
+  it('walls that only touch START or GOAL are not warned about', () => {
+    const m = validateMap({
+      v: 2, name: 't', width: 1920, height: 1080,
+      start: { x: 240, y: 540, w: 120, h: 120 }, goal: { x: 60, y: 540, w: 120, h: 120 },
+      objects: [{ role: 'wall', shape: { type: 'rect', x: 180, y: 540, w: 60, h: 120 } }],
+    });
+    expect(mapWarnings(m)).toEqual([]);
+    m.objects[0].shape = { type: 'rect', x: 170, y: 540, w: 80, h: 120 };
+    expect(mapWarnings(m).length).toBe(2);
   });
   it('rejects invalid values', () => {
     expect(() => validateMap({ ...createEmptyMap(), width: 'abc' })).toThrow();
@@ -483,12 +491,25 @@ describe('saws, text boxes and safe zones (#43–48)', () => {
     expect(sim.endTime).toBeCloseTo((Math.asin(12 / 20) * 400) / (2 * Math.PI), 0);
   });
 
+  it('text box effects are kept, clamped, or dropped when invalid', () => {
+    const text = { text: 'Hi', color: '#112233', font: 'main', size: 20, bold: false, align: 'center' as const, outlineWidth: 2 };
+    const fx = (extra: Record<string, unknown>) => validateMap(baseMap([{ role: 'text', shape: { type: 'rect', x: 50, y: 30, w: 200, h: 40 }, text: { ...text, ...extra } as never }])).objects[0].text;
+    expect(fx({ shadow: '#000000', glow: '#3AE8FF', gradient: '#ff7a3a', depth: 4, depthColor: '#1a2233' }))
+      .toMatchObject({ shadow: '#000000', glow: '#3ae8ff', gradient: '#ff7a3a', depth: 4, depthColor: '#1a2233' });
+    expect(fx({ depth: 99 })?.depth).toBe(30);
+    const bad = fx({ shadow: 'red', glow: 5, depth: 0 });
+    expect(bad).not.toHaveProperty('shadow');
+    expect(bad).not.toHaveProperty('glow');
+    expect(bad).not.toHaveProperty('depth');
+  });
+
   it('text boxes keep their settings and never block the cursor', () => {
     const map = validateMap(baseMap(
       [{ role: 'text', shape: { type: 'rect', x: 50, y: 30, w: 200, h: 40 }, text: { text: 'Hello', color: '#112233', font: 'paperlogy-bold', size: 20, bold: true, align: 'left', outline: '#ffffff', outlineWidth: 2, background: '#00000080' } }],
       { start: { x: 0, y: 40, w: 20, h: 20 } },
     ));
     expect(map.objects[0].text).toMatchObject({ text: 'Hello', font: 'paperlogy-bold', background: '#00000080', align: 'left' });
+    expect(map.objects[0].text).not.toHaveProperty('glow');
     const sim = new Simulation(map);
     sim.start(10, 50);
     sim.feed(100, 300, 50);

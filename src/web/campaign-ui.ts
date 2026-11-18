@@ -331,7 +331,6 @@ export class CampaignUI {
       lattice.classList.add('lv-designed');
       lattice.style.setProperty('--lv-fill', b.fill);
       lattice.style.setProperty('--lv-fill2', b.fill2 ?? b.fill);
-      lattice.style.setProperty('--lv-cleared', b.clearedFill ?? b.fill);
       lattice.style.setProperty('--lv-border', b.border);
       lattice.style.setProperty('--lv-border-w', `${b.borderWidth}px`);
       lattice.style.setProperty('--lv-number', b.numberColor);
@@ -389,6 +388,8 @@ export class CampaignUI {
     body.append(side.panel, wrap);
     // The theme's level number font (its badge font) for the theme title and the level numbers
     body.style.setProperty('--level-font', badgeFontCss(t.info.style.badge.font));
+    const titleFont = t.info.style.badge.titleFont;
+    if (titleFont) body.style.setProperty('--level-title-font', badgeFontCss(titleFont));
     // The whole screen follows the theme's designed colors (style.css .th-designed)
     const palette = selectPalette(t);
     body.classList.toggle('th-designed', !!palette);
