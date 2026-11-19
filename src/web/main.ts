@@ -16,6 +16,8 @@ import { levelKey, recordClear, themeUnlocked, totalStars } from './progress';
 import { filledSlots, themedLevel, type ThemeEntry } from '../core/theme-pack';
 import { OFFICIAL_THEMES, allThemes, badgeFor, chapterMusicFor } from './theme-registry';
 import { onOptionsChange, options, resetOptions, setOption } from './options';
+import { onSkinChange, setTrailShown, skin } from './skin';
+import { CustomizeUI } from './customize-ui';
 import { PlayController } from './play';
 import { FONT_TASKS, runPreload, type PreloadTask } from './preload';
 import { Backdrop, type BackdropMode } from './backdrop';
@@ -135,6 +137,8 @@ window.addEventListener('resize', () => {
   if (current === 'menu') fitMenu();
   if (current === 'options') fitPanel('options-dia');
   if (current === 'stats') fitPanel('stats-dia');
+  if (current === 'achievements') fitPanel('achievements-dia');
+  if (current === 'customize') fitPanel('customize-dia');
 });
 campaign.onBack = (from) => show(from === 'levels' ? 'themes' : 'menu');
 campaign.onPlay = (theme, level) => {
@@ -256,8 +260,16 @@ function showImmediately(next: Screen): void {
     void stats.render();
     $('stats-back').focus();
   }
-  if (next === 'achievements') { achievementsUI.open(); $('achievements-back').focus(); }
-  if (next === 'customize') $('customize-back').focus();
+  if (next === 'achievements') {
+    achievementsUI.open();
+    requestAnimationFrame(() => fitPanel('achievements-dia'));
+    $('achievements-back').focus();
+  }
+  if (next === 'customize') {
+    customizeUI.show();
+    requestAnimationFrame(() => fitPanel('customize-dia'));
+    $('customize-back').focus();
+  }
   if (next === 'licenses') {
     renderFontLicenses($('licenses-list'));
     $('licenses-back').focus();
@@ -385,10 +397,9 @@ for (const screen of [screens.menu, screens.options, screens.stats]) {
 
 // ───────────────────────── Options ─────────────────────────
 
-type ToggleOption = 'showTrail' | 'showTimer' | 'showDebug';
+type ToggleOption = 'showTimer' | 'showDebug';
 type VolumeOption = 'masterVolume' | 'musicVolume' | 'effectsVolume';
 const optionInputs: Record<ToggleOption, HTMLInputElement> = {
-  showTrail: $<HTMLInputElement>('opt-trail'),
   showTimer: $<HTMLInputElement>('opt-timer'),
   showDebug: $<HTMLInputElement>('opt-debug'),
 };
@@ -417,6 +428,13 @@ function syncOptions(): void {
   debugPanel.hidden = !options.showDebug;
 }
 
+// The trail toggle is trail skin #0 (off) or the last trail skin used (on)
+const trailInput = $<HTMLInputElement>('opt-trail');
+const syncTrailInput = () => (trailInput.checked = skin.trail !== 0);
+trailInput.addEventListener('change', () => setTrailShown(trailInput.checked));
+onSkinChange(syncTrailInput);
+syncTrailInput();
+
 for (const [k, input] of Object.entries(optionInputs) as [ToggleOption, HTMLInputElement][]) {
   input.addEventListener('change', () => setOption(k, input.checked));
 }
@@ -427,7 +445,10 @@ onOptionsChange(syncOptions);
 syncOptions();
 
 $('options-back').addEventListener('click', () => show('menu'));
-$('options-reset').addEventListener('click', resetOptions);
+$('options-reset').addEventListener('click', () => {
+  resetOptions();
+  setTrailShown(true);
+});
 $('options-licenses').addEventListener('click', () => openLicenses('options'));
 
 // Language: saved, then the page reloads so every string (many are built at startup) switches
@@ -458,6 +479,7 @@ screens.licenses.addEventListener('keydown', (e) => {
 });
 $('menu-stats').addEventListener('click', () => show('stats'));
 $('menu-achievements').addEventListener('click', () => show('achievements'));
+const customizeUI = new CustomizeUI($('customize-grid'));
 $('menu-customize').addEventListener('click', () => show('customize'));
 $('stats-refresh').addEventListener('click', () => void stats.render());
 for (const s of ['stats', 'achievements', 'customize'] as const) {
@@ -556,7 +578,7 @@ play.onExit = leavePlay;
 
 const account = new Account();
 const achievements = new Achievements(account);
-const achievementsUI = new AchievementsUI($('achievements-content'), achievements, (def) => {
+const achievementsUI = new AchievementsUI($('achievements-grid'), $('achievements-status'), achievements, (def) => {
   for (const key of def.levels) {
     const record = achievements.records[key];
     if (record && (def.kind === 'clear' || record.stars >= 3)) continue;

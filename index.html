@@ -255,21 +255,30 @@
     </div>
 
     <div id="achievements-screen" class="screen menu" hidden>
-      <div class="menu-inner">
+      <div class="menu-inner menu-diamonds">
         <h2 class="logo logo-sm" data-i18n="menu.achievements"></h2>
-        <div id="achievements-content"></div>
-        <div class="menu-buttons">
-          <button type="button" id="achievements-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
+        <p id="achievements-status" class="tagline stats-message" role="status"></p>
+        <!-- Tiles are filled in by AchievementsUI; Back stays in the bottom corner -->
+        <div class="dia-wrap" id="achievements-dia">
+          <div class="dgrid dgrid-panel" id="achievements-grid" style="--cols: 4">
+            <button type="button" id="achievements-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 5">
+              <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
     <div id="customize-screen" class="screen menu" hidden>
-      <div class="menu-inner">
+      <div class="menu-inner menu-diamonds">
         <h2 class="logo logo-sm" data-i18n="menu.customize"></h2>
-        <p class="muted" data-i18n="common.comingSoon"></p>
-        <div class="menu-buttons">
-          <button type="button" id="customize-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
+        <!-- Tiles are filled in by CustomizeUI; Back stays in the bottom corner -->
+        <div class="dia-wrap" id="customize-dia">
+          <div class="dgrid dgrid-panel" id="customize-grid" style="--cols: 4">
+            <button type="button" id="customize-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 4">
+              <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

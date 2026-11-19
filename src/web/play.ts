@@ -3,6 +3,7 @@ import { levelLabel, starGoals, starsFor, starText } from '../core/level';
 import { recordTime } from '../core/time';
 import { objectLights } from '../core/lighting';
 import { DEFAULT_BADGE, type BadgeStyle } from '../core/theme-pack';
+import { drawPointer, drawSkinTrail, skin } from './skin';
 import { badgeImage, drawLevelBadge } from './badge';
 import { badgeTitle } from './theme-registry';
 import { COIN_PULL_MS, formatSeconds, Simulation, type Replay } from '../core/simulation';
@@ -13,7 +14,7 @@ import { gameAudio } from './audio';
 import { DeathBurst } from './death-burst';
 import { drawFogAreas } from './fog';
 import {
-  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawDarkAreas, drawGlobalDark, drawMap, drawStopwatch, drawTrail, fitCanvas,
+  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawDarkAreas, drawGlobalDark, drawMap, drawStopwatch, fitCanvas,
   FONT_MAIN, mapPointer, unitsPerPx,
 } from './render';
 
@@ -219,11 +220,13 @@ export class PlayController {
     const running = sim.status === 'playing';
     if (sim.status === 'dead' && !this.deathNotified) {
       this.deathNotified = true;
-      this.burst = new DeathBurst(sim.x, sim.y, COLORS.cursor, now);
+      this.burst = new DeathBurst(sim.x, sim.y, skin.primary, now);
       if (sim.endReason !== 'blur' && sim.endReason !== 'left') gameAudio.death();
       if (sim.endReason !== 'blur' && sim.endReason !== 'left' && sim.endReason !== 'pointer') this.onDeath?.(this.map);
     }
     if (running !== this.el.root.classList.contains('running')) this.el.root.classList.toggle('running', running);
+    const native = skin.pointer === 0;
+    if (native !== this.el.root.classList.contains('native-cursor')) this.el.root.classList.toggle('native-cursor', native);
     if (sim.status === 'cleared' && !this.notified) {
       this.notified = true;
       gameAudio.play('finish');
@@ -254,24 +257,14 @@ export class PlayController {
     beginFrame(ctx, map);
     const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress };
     drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now });
-    if (options.showTrail) drawTrail(ctx, this.trail);
+    drawSkinTrail(ctx, skin, this.trail, unitsPerPx(this.el.canvas, map));
     if (sim.status !== 'ready') drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
 
     if (sim.status === 'playing') {
       // The system cursor is hidden during a run (CSS .running); this dot is exactly where the
       // simulation has the cursor, so what you see is what is checked for collisions
-      const u = unitsPerPx(this.el.canvas, map);
-      const r = (CURSOR_PX / 2) * u;
-      ctx.fillStyle = COLORS.cursor;
-      ctx.beginPath();
-      ctx.arc(sim.x, sim.y, r, 0, Math.PI * 2);
-      ctx.fill();
-      // Thin light rim so the dot stays visible on dark walls and floors
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-      ctx.lineWidth = u;
-      ctx.beginPath();
-      ctx.arc(sim.x, sim.y, r - u / 2, 0, Math.PI * 2);
-      ctx.stroke();
+      // (pointer skin #0 draws nothing: the system cursor stays visible instead, see .native-cursor)
+      drawPointer(ctx, skin, sim.x, sim.y, unitsPerPx(this.el.canvas, map), CURSOR_PX);
     }
 
     // Fog, sand dust and darkness go over the cursor and trail; the timer and messages stay readable on top
