@@ -3,6 +3,7 @@ import { fontPicker } from './font-picker';
 import { gameAudio } from './audio';
 import { levelLabel } from './localized/level';
 import { compileMap } from '../core/object';
+import { levelMaze } from '../core/theme-pack';
 import {
   averageDifficulty, blankThemeInfo, DEFAULT_BADGE, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo,
   type BadgeFont, type BadgeKind, type BadgeStyle, type ThemeEntry, type ThemeInfo, type ThemeText,
@@ -581,6 +582,54 @@ export class ThemeEditor {
       renderMaze();
     }, themeFileMazePresets(), false);
     renderMaze();
+    const designs = el('div', 'te-designs');
+    const renderDesigns = () => {
+      designs.replaceChildren();
+      for (const design of info.style.designs ?? []) {
+        const card = el('section');
+        const name = this.text(design.name, value => {
+          design.name = value.trim() || design.id;
+          this.renderLevels();
+        }, { max: 60 });
+        const remove = el('button', '', tr('te.remove'));
+        remove.type = 'button';
+        remove.addEventListener('click', () => {
+          if (!confirm(tr('te.removeDesignConfirm'))) return;
+          info.style.designs = info.style.designs?.filter(d => d !== design);
+          for (const map of this.draft.levels) if (map.themeDesign === design.id) {
+            delete map.themeDesign;
+            delete map.theme;
+          }
+          this.save();
+          renderDesigns();
+          this.renderLevels();
+        });
+        const panel = el('div', 'te-maze');
+        const render = () => renderThemePanel(panel, design.maze, next => {
+          if (next) design.maze = next;
+          else delete design.maze;
+          this.save();
+          render();
+        }, themeFileMazePresets(), false);
+        render();
+        card.append(this.field(tr('te.designName'), name), remove, panel);
+        designs.append(card);
+      }
+      const add = el('button', '', tr('te.addDesign'));
+      add.type = 'button';
+      add.addEventListener('click', () => {
+        const list = info.style.designs ??= [];
+        let n = 1;
+        while (list.some(d => d.id === `design-${n}`)) n++;
+        list.push({ id: `design-${n}`, name: tr('te.designNumber', { n }),
+          ...(info.style.maze ? { maze: structuredClone(info.style.maze) } : {}) });
+        this.save();
+        renderDesigns();
+        this.renderLevels();
+      });
+      designs.append(add);
+    };
+    renderDesigns();
 
     const showTitle = el('input');
     showTitle.type = 'checkbox';
@@ -633,7 +682,7 @@ export class ThemeEditor {
       ...this.translationSections(info, section, group),
       section(tr('te.fonts'), this.fontsBox()),
       section(tr('te.backgroundMusic'), this.musicControl()),
-      section(tr('te.mazeColors'), maze),
+      section(tr('te.mazeColors'), el('h4', '', tr('te.defaultDesign')), maze, designs),
       section(tr('te.levelBadge'), group(
         this.field(tr('te.design'), this.select(badge.kind, BADGE_KINDS, (v) => b({ kind: v }))),
         this.field(tr('te.numberFont'), fontPicker(this.select(badge.font, BADGE_FONTS, (v) => b({ font: v })), badge.font)),
@@ -766,7 +815,23 @@ export class ThemeEditor {
         this.save();
         this.renderLevels();
       };
-      li.append(label, diffInput,
+      const designOptions: [string, string][] = [['', tr('te.defaultDesign')],
+        ...(m.theme ? [['@map', tr('te.levelOwnDesign')] as [string, string]] : []),
+        ...(this.draft.info.style.designs ?? []).map(d => [d.id, d.name] as [string, string])];
+      const designSelect = this.select(m.themeDesign ?? (m.theme ? '@map' : ''), designOptions, value => {
+        if (value === '@map') delete m.themeDesign;
+        else {
+          if (value) m.themeDesign = value;
+          else delete m.themeDesign;
+          // An explicit pack selection replaces the level's embedded override.
+          delete m.theme;
+        }
+        this.previewIndex = i;
+        this.save();
+        this.renderLevels();
+      });
+      designSelect.title = tr('te.design');
+      li.append(label, designSelect, diffInput,
         tool('↑', tr('pack.moveUp'), move(-1), i === 0),
         tool('↓', tr('pack.moveDown'), move(1), i === levels.length - 1),
         tool('✕', tr('te.remove'), () => {
@@ -814,7 +879,7 @@ export class ThemeEditor {
     const style = this.draft.info.style;
     const m = this.draft.levels[this.previewIndex] ?? demoMap();
     const out: MapData = { ...m, level: m.level ?? this.previewIndex + 1, title: m.title ?? m.name.replace(/^\d+\.\s*/, '') };
-    if (!out.theme && style.maze) out.theme = style.maze;
+    out.theme = levelMaze(style, m);
     return out;
   }
 

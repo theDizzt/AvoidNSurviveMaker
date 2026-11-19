@@ -860,6 +860,14 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 /* Arrange buttons in the properties panel */
 .cmd-row { gap: 4px; margin-top: 4px; }
 .cmd-row .cmd-btn { flex: 1 1 auto; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
+/* Icon buttons (editor commands and toolbar): line icons in the text color */
+button.icon-btn { display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
+.cmd-row .cmd-btn.icon-btn { flex: 1 1 0; min-width: 30px; padding: 5px 4px; }
+.editor-bar button.icon-btn { padding: 5px 9px; }
+.ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ico .ico-fill { fill: currentColor; }
+.ico .ico-bg { fill: var(--surface-solid); }
+button[aria-pressed="true"] .ico .ico-bg { fill: var(--accent-soft); }
 
 /* Editor right-click menu */
 .ctx-menu {
@@ -1235,7 +1243,9 @@ button.dworld:hover:not(:disabled), button.dworld:focus-visible { transform: rot
 .te-meta strong { font-family: var(--font-title); font-size: 18px; }
 .te-levels-box { background: rgba(255, 255, 255, 0.85); border-radius: var(--radius); }
 .te-levels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow: auto; }
-.te-levels li { display: grid; grid-template-columns: 1fr 76px auto auto auto; gap: 4px; align-items: center; }
+.te-levels li { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(90px, 140px) 76px auto auto auto; gap: 4px; align-items: center; }
+.te-levels li select { min-width: 0; width: 100%; }
+.te-designs > section { border-top: 1px solid var(--accent-soft); padding-top: 12px; margin-top: 12px; }
 .te-levels li.on .te-level-name { border-color: var(--accent); background: var(--accent-soft); }
 .te-level-name { text-align: left; padding: 4px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .te-levels li button:not(.te-level-name) { padding: 3px 8px; }
@@ -1485,6 +1495,14 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 /* Sync and Import side by side, so both stay inside the diamond */
 .drecords .dpill-row { gap: 4px; margin-top: 4px; }
 .drecords .dpill { --size: 66px; padding: 0 8px; font-size: 10px; line-height: 1.05; word-break: keep-all; }
+
+/* Graphics and Polling rate: the tile itself cycles through the values; the default lights up */
+.dgraphics .dtile-in { gap: 4px; }
+.dgraphics-value { font-family: var(--font-title); font-size: 30px; font-weight: 700; color: #326bc0; line-height: 1.1; }
+.dgraphics-value { white-space: nowrap; }
+.dgraphics:is([data-level="high"], [data-level="max"]) { background: var(--gradient); color: #fff; border-color: transparent; }
+.dgraphics:is([data-level="high"], [data-level="max"]) .dgraphics-value { color: #fff; }
+.dgraphics:is([data-level="high"], [data-level="max"]) .dtile-in { text-shadow: 0 1px 6px rgba(20, 30, 60, 0.3); }
 
 /* Language picker */
 .dlanguage .dtile-in { gap: 4px; }

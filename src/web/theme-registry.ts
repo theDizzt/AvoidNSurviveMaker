@@ -132,9 +132,14 @@ export function setCustomTheme(s: StoredTheme): boolean {
 
 /** Official chapters that define maze colors, offered as map editor presets */
 export function chapterMazePresets(): { id: string; name: string; theme: Theme }[] {
-  return OFFICIAL_THEMES.flatMap((t, i) => (t.info.style.maze
-    ? [{ id: `chapter:${t.info.id}`, name: tr('themeRegistry.chapterPreset', { n: String(i + 1).padStart(2, '0'), name: t.info.name }), theme: t.info.style.maze }]
-    : []));
+  return OFFICIAL_THEMES.flatMap((t, i) => {
+    const name = tr('themeRegistry.chapterPreset', { n: String(i + 1).padStart(2, '0'), name: t.info.name });
+    return [
+      ...(t.info.style.maze ? [{ id: `chapter:${t.info.id}`, name, theme: t.info.style.maze }] : []),
+      ...(t.info.style.designs ?? []).flatMap(d => d.maze
+        ? [{ id: `chapter:${t.info.id}:${d.id}`, name: `${name} · ${d.name}`, theme: d.maze }] : []),
+    ];
+  });
 }
 
 /**
@@ -144,7 +149,11 @@ export function chapterMazePresets(): { id: string; name: string; theme: Theme }
 export function themeFileMazePresets(): { id: string; name: string; theme: Theme }[] {
   return [
     ...chapterMazePresets(),
-    ...CUSTOM_THEME_PRESETS.flatMap((t) => (t.info.style.maze ? [{ id: `preset:${t.info.id}`, name: t.info.name, theme: t.info.style.maze }] : [])),
+    ...CUSTOM_THEME_PRESETS.flatMap(t => [
+      ...(t.info.style.maze ? [{ id: `preset:${t.info.id}`, name: t.info.name, theme: t.info.style.maze }] : []),
+      ...(t.info.style.designs ?? []).flatMap(d => d.maze
+        ? [{ id: `preset:${t.info.id}:${d.id}`, name: `${t.info.name} · ${d.name}`, theme: d.maze }] : []),
+    ]),
   ];
 }
 
@@ -152,7 +161,8 @@ export function themeFileMazePresets(): { id: string; name: string; theme: Theme
 export function chapterForTheme(theme: Theme | undefined): ThemeEntry | null {
   if (!theme) return null;
   const json = JSON.stringify(theme);
-  return OFFICIAL_THEMES.find((x) => x.info.style.maze && JSON.stringify(x.info.style.maze) === json) ?? null;
+  return OFFICIAL_THEMES.find(x => [x.info.style.maze, ...(x.info.style.designs ?? []).map(d => d.maze)]
+    .some(maze => maze && JSON.stringify(maze) === json)) ?? null;
 }
 
 /** Music URL of the chapter matching `theme`, if it has music */

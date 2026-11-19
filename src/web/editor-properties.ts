@@ -7,6 +7,7 @@ import { shapeCenter } from '../core/shape';
 
 import type { Easing, FogKind, LinkAction, MapData, MapObject, Motion, MotionType, Rect, Repeat, Role, Rotation } from '../core/types';
 import { SWITCH_COLORS, switchColor } from './localized/colors';
+import { setIcon, type IconName } from './icons';
 
 import { DEFAULT_BOULDER_WAVE, DEFAULT_SECRET_RADIUS, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS } from './localized/validate';
 import { TEXT_BASE_FONTS } from './render';
@@ -270,7 +271,7 @@ export class EditorPropertiesPanel {
         else delete o.pierce;
       }));
     }
-    if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'fog' || o.role === 'mirror') parts.push(...this.linkProps(o));
+    if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'fog' || o.role === 'mirror' || o.role === 'laser') parts.push(...this.linkProps(o));
 
     // Movement (a spike's thrust is its movement)
     if (!o.spike && !o.fall) {
@@ -374,10 +375,7 @@ export class EditorPropertiesPanel {
     }
 
     parts.push(...this.arrangeProps(false));
-    parts.push(this.actions(
-      this.button(tr('common.duplicate'), () => this.host.duplicateSelected()),
-      this.button(tr('common.delete'), () => this.host.deleteSelected(), 'danger'),
-    ));
+    parts.push(this.editActions());
     box.replaceChildren(...parts);
   }
 
@@ -434,7 +432,7 @@ export class EditorPropertiesPanel {
       if (on) t.revert = true;
       else delete t.revert;
     }));
-    const linked = this.host.map.objects.filter((m) => m.link?.color === t.color || (m.door?.mode === 'switch' && m.door.color === t.color)).length;
+    const linked = this.host.map.objects.filter((m) => m.link?.color === t.color || (m.door?.mode === 'switch' && m.door.color === t.color) || m.laser?.switchColor === t.color).length;
     const what = {
       switch: tr('ed.whatSwitch'),
       timer: tr('ed.whatTimer'),
@@ -701,12 +699,24 @@ export class EditorPropertiesPanel {
     return out;
   }
 
-  cmdButton(c: Command, text: string): HTMLButtonElement {
-    const b = this.button(text, () => c.enabled && c.run(), 'cmd-btn');
-    b.title = c.keys ? `${c.label} (${c.keys})` : c.label;
-    b.setAttribute('aria-label', c.label);
+  cmdButton(c: Command, icon: IconName): HTMLButtonElement {
+    const b = setIcon(this.button('', () => c.enabled && c.run(), 'cmd-btn'), icon, c.label, c.keys);
     b.disabled = !c.enabled;
     return b;
+  }
+
+  iconButton(icon: IconName, label: string, onClick: () => void, cls = ''): HTMLButtonElement {
+    return setIcon(this.button('', onClick, cls), icon, label);
+  }
+
+  /** Duplicate / delete for the current selection */
+  editActions(): HTMLElement {
+    const d = this.actions(
+      this.iconButton('duplicate', tr('common.duplicate'), () => this.host.duplicateSelected(), 'cmd-btn'),
+      this.iconButton('trash', tr('common.delete'), () => this.host.deleteSelected(), 'cmd-btn danger'),
+    );
+    d.classList.add('cmd-row');
+    return d;
   }
 
   arrangeProps(multi: boolean): HTMLElement[] {
@@ -718,14 +728,14 @@ export class EditorPropertiesPanel {
     };
     const out: HTMLElement[] = [
       this.heading(tr('ed.arrange')),
-      row(this.cmdButton(c.front, tr('ed.btnFront')), this.cmdButton(c.forward, tr('ed.btnFwd')), this.cmdButton(c.backward, tr('ed.btnBack')), this.cmdButton(c.back, tr('ed.btnRear'))),
+      row(this.cmdButton(c.front, 'front'), this.cmdButton(c.forward, 'forward'), this.cmdButton(c.backward, 'backward'), this.cmdButton(c.back, 'back')),
       row(
-        this.cmdButton(c.alignLeft, '⇤'), this.cmdButton(c.alignCenter, '⇹'), this.cmdButton(c.alignRight, '⇥'),
-        this.cmdButton(c.alignTop, '⤒'), this.cmdButton(c.alignMiddle, '⇳'), this.cmdButton(c.alignBottom, '⤓'),
+        this.cmdButton(c.alignLeft, 'alignLeft'), this.cmdButton(c.alignCenter, 'alignCenter'), this.cmdButton(c.alignRight, 'alignRight'),
+        this.cmdButton(c.alignTop, 'alignTop'), this.cmdButton(c.alignMiddle, 'alignMiddle'), this.cmdButton(c.alignBottom, 'alignBottom'),
       ),
     ];
     if (multi) {
-      out.push(row(this.cmdButton(c.distH, tr('ed.btnDistH')), this.cmdButton(c.distV, tr('ed.btnDistV'))));
+      out.push(row(this.cmdButton(c.distH, 'distH'), this.cmdButton(c.distV, 'distV')));
       // A view preference, not a map edit: no undo step
       const wrap = document.createElement('label');
       wrap.className = 'toggle';
@@ -744,7 +754,7 @@ export class EditorPropertiesPanel {
       out.push(this.note(tr('ed.aSingleObjectAlignsTo')));
     }
     out.push(
-      row(this.cmdButton(c.rotCW, '↻ 90°'), this.cmdButton(c.rotCCW, '↺ 90°'), this.cmdButton(c.flipH, tr('ed.btnFlipH')), this.cmdButton(c.flipV, tr('ed.btnFlipV'))),
+      row(this.cmdButton(c.rotCW, 'rotCW'), this.cmdButton(c.rotCCW, 'rotCCW'), this.cmdButton(c.flipH, 'flipH'), this.cmdButton(c.flipV, 'flipV')),
     );
     return out;
   }
@@ -766,19 +776,16 @@ export class EditorPropertiesPanel {
       this.note(tr('ed.multiNote', { paths: objs.filter((o) => o.role === 'path').length, walls: objs.filter((o) => o.role === 'wall').length, size: sizeText(b.w, b.h), first: ids[0] + 1 })),
       ...this.arrangeProps(true),
       this.heading(tr('ed.group')),
-      row(this.cmdButton(c.group, tr('ed.group')), this.cmdButton(c.ungroup, tr('ed.ungroup')), this.cmdButton(c.regroup, tr('ed.regroup'))),
+      row(this.cmdButton(c.group, 'group'), this.cmdButton(c.ungroup, 'ungroup'), this.cmdButton(c.regroup, 'regroup')),
       this.heading(tr('ed.mergeShapes')),
       row(
-        this.cmdButton(c.union, tr('ed.union')), this.cmdButton(c.combine, tr('ed.combine')), this.cmdButton(c.fragment, tr('ed.fragment')),
-        this.cmdButton(c.intersect, tr('ed.intersect')), this.cmdButton(c.subtract, tr('ed.subtract')),
+        this.cmdButton(c.union, 'union'), this.cmdButton(c.combine, 'combine'), this.cmdButton(c.fragment, 'fragment'),
+        this.cmdButton(c.intersect, 'intersect'), this.cmdButton(c.subtract, 'subtract'),
       ),
       this.note(tr('ed.theResultIsAFreeform')),
       this.heading(tr('ed.type')),
-      row(this.cmdButton(c.makePath, tr('ed.allPaths')), this.cmdButton(c.makeWall, tr('ed.allWalls'))),
-      this.actions(
-        this.button(tr('common.duplicate'), () => this.host.duplicateSelected()),
-        this.button(tr('common.delete'), () => this.host.deleteSelected(), 'danger'),
-      ),
+      row(this.cmdButton(c.makePath, 'makePath'), this.cmdButton(c.makeWall, 'makeWall')),
+      this.editActions(),
     ];
   }
 }

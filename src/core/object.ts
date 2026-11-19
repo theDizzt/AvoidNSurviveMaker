@@ -30,6 +30,8 @@ export interface CompiledObject {
   readonly px: number;
   readonly py: number;
   readonly dynamic: boolean;
+  /** Conservative full-motion bounds for non-rotating objects. */
+  readonly travelBounds?: { minX: number; minY: number; maxX: number; maxY: number };
 }
 
 const tmp: Point = { x: 0, y: 0 };
@@ -53,6 +55,31 @@ export function compileObject(o: MapObject): CompiledObject {
       : saw ? null
         : o.rotation ? new CompiledRotation(o.rotation) : null;
   const pivot = o.boulder || saw || o.fall ? center : o.rotation?.pivot ?? { x: 0, y: 0 };
+  let travelBounds: CompiledObject['travelBounds'];
+  if (!rotation || rotation.dur <= 0) {
+    let minDX = 0, minDY = 0, maxDX = 0, maxDY = 0;
+    if (o.fall) minDY = -o.fall.height;
+    else if (o.spike) {
+      const a = o.spike.angle * Math.PI / 180;
+      const dx = Math.cos(a) * o.spike.reach;
+      const dy = Math.sin(a) * o.spike.reach;
+      minDX = Math.min(0, dx); maxDX = Math.max(0, dx);
+      minDY = Math.min(0, dy); maxDY = Math.max(0, dy);
+    } else {
+      if (route) for (const leg of route.legs) for (let k = 0; k < leg.pts.length; k += 2) {
+        const dx = leg.pts[k] - center.x, dy = leg.pts[k + 1] - center.y;
+        minDX = Math.min(minDX, dx); maxDX = Math.max(maxDX, dx);
+        minDY = Math.min(minDY, dy); maxDY = Math.max(maxDY, dy);
+      }
+      if (saw?.kind === 'blade') {
+        const x = Math.abs(axis.x * saw.stroke / 2), y = Math.abs(axis.y * saw.stroke / 2);
+        minDX -= x; maxDX += x; minDY -= y; maxDY += y;
+      }
+    }
+    // Padding keeps floating-point boundary contacts in the exact collision path.
+    travelBounds = { minX: flat.minX + minDX - 1e-7, minY: flat.minY + minDY - 1e-7,
+      maxX: flat.maxX + maxDX + 1e-7, maxY: flat.maxY + maxDY + 1e-7 };
+  }
   return {
     src: o,
     role: o.role,
@@ -63,6 +90,7 @@ export function compileObject(o: MapObject): CompiledObject {
     py: pivot.y,
     // Switch-linked objects can move, stop or vanish during a run, so they are drawn on their own
     dynamic: !!motion?.moves || (!!rotation && rotation.dur > 0) || !!o.link || !!saw,
+    travelBounds,
   };
 }
 

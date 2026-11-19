@@ -17,7 +17,7 @@ npm test          # 코어 단위 테스트
 npm run build     # dist/ 에 정적 사이트 생성 — GitHub Pages, Vercel 등에 그대로 배포
 ```
 
-> `pointerrawupdate` 는 보안 컨텍스트(HTTPS 또는 localhost)에서만 동작합니다. 반드시 HTTPS로 배포하세요.
+> 입력은 `pointerrawupdate` 를 쓰지 않습니다. 이 이벤트는 하드웨어 샘플마다(게이밍 마우스에서 초당 1000–8000번) 메인 스레드 작업을 하나씩 만들어, 높은 폴링 레이트에서 렌더링이 밀려 렉이 생겼습니다.
 
 ## 개발 규칙
 
@@ -53,7 +53,7 @@ src/
     share.ts       # 맵 <-> URL 공유 코드 (deflate-raw + base64url)
     levels.ts      # 내장 레벨
   web/
-    input.ts       # 고정밀 입력 (pointerrawupdate + getCoalescedEvents), 폴링 레이트 측정
+    input.ts       # 고정밀 입력 (pointermove + getCoalescedEvents), 폴링 레이트 측정
     play.ts        # 플레이 화면
     editor.ts      # 맵 에디터 입력·캔버스 조정
     editor-properties.ts # 속성 패널 DOM과 편집 콜백
@@ -124,7 +124,7 @@ URL 이 고정되어야 하는 파일(예: `favicon.ico`, `robots.txt`)만 루�
 
 ## 1 ms 충돌 판정 원리
 
-1. **입력**: `pointerrawupdate`(지원되는 경우) 또는 `pointermove` 를 받고, `getCoalescedEvents()` 로 프레임 사이에 묶인 모든 원시 샘플을 복원합니다. 각 샘플의 `timeStamp` 를 그 샘플의 시간으로 씁니다.
+1. **입력**: 프레임마다 한 번 오는 `pointermove` 를 받고, `getCoalescedEvents()` 로 프레임 사이에 묶인 모든 원시 샘플을 복원합니다. 각 샘플의 `timeStamp` 를 그 샘플의 시간으로 씁니다.
 2. **시뮬레이션**: 샘플 사이의 커서 경로를 선분으로 보고, 1 ms 경계마다 나눠 연속적으로 검사합니다.
    - 각 조각을 모든 오브젝트의 로컬 좌표계로 옮깁니다(이동과 회전을 되돌림). 그러면 움직이는 오브젝트는 정지한 다각형이 되고 커서 경로는 상대 운동 선분이 됩니다. 커서나 오브젝트가 아무리 빨라도 건너뛸 수 없습니다.
    - 조각을 따라 생기는 모든 경계 교차를 모으고, 그 사이 구간을 하나씩 검사합니다: 안전 = 길 위(또는 맵에 길이 없음)이고 어떤 벽 안에도 없음.

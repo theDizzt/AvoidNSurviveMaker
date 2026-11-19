@@ -1,6 +1,7 @@
 import { t as tr } from './i18n';
 import { levelLabel, starGoals, starsFor, starText } from './localized/level';
 import { recordTime } from '../core/time';
+import { pointInRect } from '../core/geometry';
 import { objectLights } from '../core/lighting';
 import { toWorld, transformAt, type Transform } from '../core/object';
 import { DEFAULT_BADGE, type BadgeStyle } from './localized/theme-pack';
@@ -54,6 +55,7 @@ export class PlayController {
   nextHint: string | null = null;
 
   private map!: MapData;
+  private mapKey = '';
   private sim!: Simulation;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly input: HighResPointer;
@@ -112,14 +114,15 @@ export class PlayController {
 
   load(map: MapData): void {
     this.map = map;
-    this.reset();
+    this.mapKey = JSON.stringify(map);
+    this.reset(true);
     fitCanvas(this.el.canvas, map);
   }
 
-  reset(): void {
+  reset(recompile = false): void {
     this.burst = null;
     this.deathNotified = false;
-    this.sim = new Simulation(this.map);
+    this.sim = new Simulation(this.map, recompile ? undefined : this.sim.objects);
     this.trail = [];
     this.carried = new Uint8Array(this.map.objects.length);
     this.notified = false;
@@ -159,11 +162,13 @@ export class PlayController {
       return;
     }
     const p = clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
-    const sim = new Simulation(this.map);
+    if (!pointInRect(p.x, p.y, this.map.start)) return;
+    const sim = new Simulation(this.map, this.sim.objects);
     if (!sim.start(p.x, p.y)) return;
     e.preventDefault();
     this.sim = sim;
     this.runPointer = e.pointerId;
+    this.lastSampleAt = e.timeStamp;
     this.burst = null;
     this.deathNotified = false;
     this.t0 = e.timeStamp;
@@ -178,6 +183,8 @@ export class PlayController {
   private trailTeleports = 0;
   /** The pointer that started the current run; samples from any other pointer are ignored */
   private runPointer = -1;
+  /** Timestamp of the last pointer sample used, for the polling rate option */
+  private lastSampleAt = -Infinity;
 
   /** No trail line across a teleport */
   private breakTrailOnTeleport(): void {
@@ -192,9 +199,15 @@ export class PlayController {
     if (!sim || sim.status !== 'playing') return;
     const toMap = mapPointer(this.el.canvas, this.map);
     const p = this.point;
+    // Polling rate option: use at most this many samples per second. The simulation still runs in
+    // 1 ms steps on each sample's own timestamp, so records keep their 1 ms precision.
+    const gap = options.pollingRate > 0 ? 1000 / options.pollingRate : 0;
     for (const ev of list) {
       // Only the pointer (finger) that started the run moves the cursor
       if (ev.pointerId !== this.runPointer) continue;
+      // Small tolerance: hardware timestamps jitter around the nominal interval
+      if (gap && ev.timeStamp - this.lastSampleAt < gap * 0.9) continue;
+      this.lastSampleAt = ev.timeStamp;
       toMap(ev.clientX, ev.clientY, p);
       sim.feed(ev.timeStamp - this.t0, p.x, p.y);
       this.breakTrailOnTeleport();
@@ -248,7 +261,7 @@ export class PlayController {
     if (sim.status === 'cleared' && !this.notified) {
       this.notified = true;
       gameAudio.play('finish');
-      const key = JSON.stringify(this.map);
+      const key = this.mapKey;
       const prev = this.best.get(key);
       const time = recordTime(sim.endTime);
       if (prev === undefined || time < prev) this.best.set(key, time);
@@ -294,7 +307,8 @@ export class PlayController {
     const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle };
     const playing = sim.status === 'playing';
     const carried = playing ? this.carried : undefined;
-    drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried });
+    drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried,
+      secretCursor: playing ? { x: sim.x, y: sim.y } : null });
     drawSkinTrail(ctx, skin, this.trail, unitsPerPx(this.el.canvas, map));
     if (sim.status !== 'ready') drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
     // Secret walls cover the floor, obstacles and trail under them, except right around the cursor
@@ -341,12 +355,10 @@ export class PlayController {
     // Maps without a number or title (e.g. editor test play) still show their name in the badge
     const top = drawLevelBadge(ctx, map.level === undefined && !map.title ? { ...map, title: badgeTitle(map) } : map, style, badgeImage(this.badge?.imageUrl), now);
 
-    if (options.showTimer) {
-      const elapsed = sim.status === 'ready' ? 0
-        : sim.status === 'playing' ? now - this.t0
-          : sim.status === 'cleared' ? recordTime(sim.endTime) : sim.endTime;
-      drawStopwatch(ctx, map, elapsed, now);
-    }
+    const elapsed = sim.status === 'ready' ? 0
+      : sim.status === 'playing' ? now - this.t0
+        : sim.status === 'cleared' ? recordTime(sim.endTime) : sim.endTime;
+    drawStopwatch(ctx, map, elapsed, now);
 
     if (sim.status === 'playing') {
       if (sim.coinTotal) this.drawCoinCount(top);
@@ -369,7 +381,7 @@ export class PlayController {
       ctx.stroke();
       drawBanner(ctx, map, tr('play.failedBanner', { time: formatSeconds(sim.endTime) }), tr('play.failedSub'), '#e2486c');
     } else {
-      const best = this.best.get(JSON.stringify(map));
+      const best = this.best.get(this.mapKey);
       const stars = starsFor(map, recordTime(sim.endTime));
       const bestStars = best !== undefined ? starsFor(map, best) : null;
       const sub = [
@@ -417,6 +429,7 @@ export class PlayController {
             : tr('play.statusFailed');
     this.el.status.textContent = `${levelLabel(this.map)}${this.map.author ? tr('play.byAuthor', { author: this.map.author }) : ''} — ${state}`;
 
+    if (!options.showDebug) return;
     const s = this.stats.summary();
     const rows: [string, string][] = [
       [tr('debug.inputEvent'), `${this.input.source}${this.input.coalesced ? ' + getCoalescedEvents' : tr('debug.noCoalesced')}`],

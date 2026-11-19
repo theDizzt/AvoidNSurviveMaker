@@ -45,6 +45,7 @@ export class Editor {
     return this.map.theme;
   }
   private compiledCache: CompiledObject[] | null = null;
+  private readonly routeCache = new WeakMap<CompiledObject, number[]>();
   /** gameplayKey() of the map as last cleared in test play (sharing needs a verified clear) */
   private get verifiedJson(): string | null { return this.model.verifiedJson; }
   private set verifiedJson(value: string | null) { this.model.verifiedJson = value; }
@@ -2081,7 +2082,7 @@ export class Editor {
     const t = preview ? performance.now() - this.previewStart : 0;
     this.beamCaster ??= new BeamCaster(map, objs);
     const beams = this.beamCaster.any ? this.beamCaster.beams({ timeOf: () => t, channels: initialChannels(map) }) : [];
-    drawMap(ctx, map, objs, t, { gridOnTop: this.el.gridTop.checked, beams, now: performance.now() });
+    drawMap(ctx, map, objs, t, { gridOnTop: this.el.gridTop.checked, beams, now: performance.now(), sawGhost: 0.3 });
     // Spikes: how far they thrust
     ctx.setLineDash([4 * u, 3 * u]);
     ctx.strokeStyle = 'rgba(226,72,108,0.7)';
@@ -2184,7 +2185,12 @@ export class Editor {
     map.objects.forEach((o, i) => {
       const selected = selIds.has(i);
       if (o.motion) {
-        const route = new CompiledMotion(o.motion, shapeCenter(o.shape)).route();
+        const compiled = objs[i];
+        let route = this.routeCache.get(compiled);
+        if (!route) {
+          route = new CompiledMotion(o.motion, shapeCenter(o.shape)).route();
+          this.routeCache.set(compiled, route);
+        }
         if (route.length >= 4) {
           ctx.strokeStyle = selected ? COLORS.routeSelected : COLORS.route;
           ctx.lineWidth = (selected ? 2 : 1.2) * u;
@@ -2206,7 +2212,7 @@ export class Editor {
 
     // Switch links: a colored dot at the top-left of every linked object / switch-operated door
     map.objects.forEach((o) => {
-      const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : undefined);
+      const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : o.laser?.switchColor);
       if (c === undefined) return;
       const b = shapeBounds(o.shape);
       ctx.fillStyle = switchColor(c).hex;

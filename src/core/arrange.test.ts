@@ -4,7 +4,7 @@ import { pointInPoly } from './geometry';
 import { bridgeHoles, mergeShapes } from './merge';
 import { flattenShape, shapeBounds } from './shape';
 import type { MapObject, Shape } from './types';
-import { validateMap, createEmptyMap, LIMITS } from './validate';
+import { validateMap, createEmptyMap, LIMITS, mapErrors } from './validate';
 
 const rect = (x: number, y: number, w: number, h: number): Shape => ({ type: 'rect', x, y, w, h });
 const inside = (s: Shape, x: number, y: number) => pointInPoly(x, y, flattenShape(s).poly);
@@ -368,6 +368,23 @@ describe('phase 4: spikes, boulders, lasers, portals', () => {
     expect(sim.status).toBe('cleared');
   });
 
+  it('a laser can use a regular switch link (removed while ON)', async () => {
+    const { Simulation } = await import('./simulation');
+    const laser = { role: 'laser', shape: rect(490, 10, 20, 20), laser: { color: 4, angle: 90, on: true }, link: { color: 4, action: 'remove' } };
+    const sw = { role: 'trigger', shape: rect(200, 100, 30, 30), trigger: { kind: 'switch', color: 4 } };
+    const map = validateMap({ ...base(), objects: [laser, sw] });
+    expect(map.objects[0].link).toEqual({ color: 4, action: 'remove' });
+    expect(mapErrors(map)).toEqual([]);
+    const sim = new Simulation(map);
+    sim.start(10, 290);
+    expect(sim.beams.length).toBe(1);
+    sim.feed(10, 215, 115);
+    sim.feed(20, 215, 115);
+    expect(sim.beams.length).toBe(0);
+    sim.feed(60, 920, 300);
+    expect(sim.status).toBe('cleared');
+  });
+
   it('portals pull the cursor in and move it to the next portal of the same color', async () => {
     const { Simulation, PORTAL_PULL_MS } = await import('./simulation');
     const portal = (x: number, y: number, extra = {}) => ({ role: 'portal', shape: rect(x, y, 40, 40), portal: { color: 4, order: 0, mode: 'both', ...extra } });
@@ -387,5 +404,22 @@ describe('phase 4: spikes, boulders, lasers, portals', () => {
 
     const { mapErrors } = await import('./validate');
     expect(mapErrors(validateMap({ ...base(), objects: [portal(200, 280)] }))[0]).toMatch(/no other/);
+  });
+});
+
+describe('input polling rate', () => {
+  it('records keep 1 ms precision even with sparse (125 Hz) samples', async () => {
+    const { Simulation } = await import('./simulation');
+    const map = validateMap({ ...createEmptyMap(), width: 960, height: 540, start: { x: 0, y: 280, w: 20, h: 20 }, goal: { x: 500, y: 280, w: 50, h: 50 } });
+    const times = [1000, 125].map((hz) => {
+      const sim = new Simulation(map);
+      sim.start(10, 290);
+      // 0.5 px per ms to the right: GOAL's edge (x = 500) is crossed at t = 980 ms
+      for (let t = 1000 / hz; sim.status === 'playing' && t < 3000; t += 1000 / hz) sim.feed(t, 10 + t * 0.5, 290);
+      expect(sim.status).toBe('cleared');
+      return Math.floor(sim.endTime);
+    });
+    expect(times[0]).toBe(980);
+    expect(times[1]).toBe(980); // not rounded up to the next 8 ms sample (984)
   });
 });

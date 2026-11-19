@@ -105,7 +105,7 @@ stateDiagram-v2
 | auth / verify | `auth/auth-ui.ts` | 가입, 로그인, 이메일 인증 |
 
 ### 플레이 루프 (`play.ts` + `input.ts`)
-1. `input.ts` 가 모든 포인터 샘플을 모읍니다(`pointerrawupdate` + `getCoalescedEvents`, 1000 Hz 에서 약 1 ms).
+1. `input.ts` 가 모든 포인터 샘플을 모읍니다(`pointermove` + `getCoalescedEvents`, 1000 Hz 에서 약 1 ms).
 2. START 안을 클릭하면 `Simulation` 을 만들고 도전을 시작합니다. 각 샘플은 이벤트 타임스탬프와 함께 `feed()` 됩니다.
 3. 애니메이션 프레임마다 `advanceTo(now − margin)` 을 호출하므로, 마우스가 멈춰 있어도 시간이 흐릅니다.
 4. `render.ts` 가 `sim.time` 시점의 맵을 시뮬레이션 상태(숨겨진 오브젝트, 스위치 시계, 문 열림 정도, 빔, 남은 코인)와 함께 그립니다. 잠긴 GOAL 은 짙은 회색이며 `collected/total` 을 표시합니다.

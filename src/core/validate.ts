@@ -333,7 +333,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       const f = obj(o.fog, `${name}.fog`);
       out.fog = { kind: oneOf(f.kind, `${name}.fog.kind`, ['fog', 'sand'] as const), density: num(f.density, `${name}.fog.density`, 0, 100) };
     }
-    if (o.link !== undefined && (out.role === 'path' || out.role === 'wall' || out.role === 'coin' || out.role === 'dark' || out.role === 'fog' || out.role === 'mirror')) {
+    if (o.link !== undefined && (out.role === 'path' || out.role === 'wall' || out.role === 'coin' || out.role === 'dark' || out.role === 'fog' || out.role === 'mirror' || out.role === 'laser')) {
       const l = obj(o.link, `${name}.link`);
       out.link = { color: colorIndex(l.color, `${name}.link.color`), action: oneOf(l.action, `${name}.link.action`, ['start', 'stop', 'remove', 'pulley'] as const) };
     }
@@ -361,7 +361,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     return v.toLowerCase();
   }
 
-  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal'] as const satisfies readonly PatternKind[];
+  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain'] as const satisfies readonly PatternKind[];
 
   function fill(v: unknown, name: string): Fill {
     const o = obj(v, name);
@@ -442,6 +442,10 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       objects: arr(o.objects, 'objects', LIMITS.maxObjects).map((m, i) => mapObject(m, `objects[${i}]`, W, H)),
     };
     if (o.theme !== undefined) map.theme = theme(o.theme, 'theme');
+    if (o.themeDesign !== undefined) {
+      if (typeof o.themeDesign !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(o.themeDesign)) fail('Invalid theme design id');
+      map.themeDesign = o.themeDesign;
+    }
     if (o.id !== undefined) {
       if (typeof o.id !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(o.id)) fail('Invalid level id');
       map.id = o.id;
@@ -521,8 +525,9 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       if (o.link?.action === 'pulley') {
         if (!pulleys.has(o.link.color)) out.push(t('mapError.noPulley', { n: i + 1, color: switchColor(o.link.color).name }));
       } else {
-        const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : o.laser?.switchColor);
-        if (c !== undefined && !colors.has(c)) {
+        // A laser can both flip with one color and be linked to another; check each
+        const used = [o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : undefined), o.laser?.switchColor];
+        for (const c of new Set(used)) if (c !== undefined && !colors.has(c)) {
           out.push(t('mapError.noSwitch', { n: i + 1, color: switchColor(c).name }));
         }
       }

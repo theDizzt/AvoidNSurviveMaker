@@ -305,7 +305,7 @@ export interface MapObject {
   light?: { radius: number; intensity?: number };
 }
 
-export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal';
+export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal' | 'egyptian' | 'sandBrick' | 'bark' | 'woodGrain';
 
 /** Colors are '#rrggbb'. Gradients and patterns are laid out in the object's own frame, so they move and rotate with it. */
 export type Fill =
@@ -348,6 +348,8 @@ export interface MapData {
   objects: MapObject[];
   /** Omitted = the built-in default look */
   theme?: Theme;
+  /** Named maze design from the containing theme pack. */
+  themeDesign?: string;
   /** Level title shown in game (falls back to `name`) */
   title?: string;
   /** Level number shown in game, 1–9999 */

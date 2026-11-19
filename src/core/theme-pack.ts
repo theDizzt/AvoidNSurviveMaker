@@ -38,6 +38,8 @@ export interface BadgeStyle {
 export interface ThemeStyle {
   /** Maze colors: walls and paths (the map editor's Theme) — applied to levels without their own */
   maze?: Theme;
+  /** Additional named designs, selected by a level's themeDesign. */
+  designs?: { id: string; name: string; maze?: Theme }[];
   badge: BadgeStyle;
 }
 
@@ -52,6 +54,12 @@ export interface ThemeText {
   credits?: string;
   /** The level badge caption */
   caption?: string;
+}
+
+/** Explicit design selection wins; otherwise preserve an individual level's colors. */
+export function levelMaze(style: ThemeStyle, map: MapData): Theme | undefined {
+  const design = style.designs?.find(d => d.id === map.themeDesign);
+  return design ? design.maze : map.theme ?? style.maze;
 }
 
 export interface ThemeInfo {
@@ -224,6 +232,20 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
       const probe = validateMap({ v: 2, width: 960, height: 540, start: { x: 0, y: 0, w: 10, h: 10 }, goal: { x: 20, y: 0, w: 10, h: 10 }, objects: [], theme: style.maze });
       if (probe.theme) info.style.maze = probe.theme;
     }
+    if (Array.isArray(style.designs)) {
+      const ids = new Set<string>();
+      info.style.designs = style.designs.map((raw: unknown) => {
+        if (!raw || typeof raw !== 'object') throw new Error('Invalid theme design');
+        const d = raw as Record<string, unknown>;
+        const id = str(d.id, 61);
+        if (!/^[A-Za-z0-9_-]{1,60}$/.test(id) || ids.has(id)) throw new Error('Invalid or duplicate theme design id');
+        ids.add(id);
+        const design: { id: string; name: string; maze?: Theme } = { id, name: str(d.name, 60) || id };
+        if (d.maze !== undefined) design.maze = validateMap({ v: 2, width: 960, height: 540,
+          start: { x: 0, y: 0, w: 10, h: 10 }, goal: { x: 20, y: 0, w: 10, h: 10 }, objects: [], theme: d.maze }).theme;
+        return design;
+      });
+    }
     return info;
   }
 
@@ -325,7 +347,7 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
     const m = levelAt(entry, index);
     if (!m || index >= levelSlots(entry)) return null;
     const out: MapData = { ...m, level: m.level ?? index + 1, title: m.title ?? m.name.replace(/^\d+\.\s*/, '') };
-    if (!out.theme && entry.info.style.maze) out.theme = entry.info.style.maze;
+    out.theme = levelMaze(entry.info.style, m);
     return out;
   }
   return { THEME_FORMAT, LEVELS_PER_THEME, MAX_PACK_LEVELS, STARS_PER_LEVEL, CRYSTALS_PER_THEME, STARS_PER_THEME, MIN_DIFFICULTY, MAX_DIFFICULTY, DEFAULT_BADGE, blankThemeInfo, validateThemeInfo, localizeThemeInfo, averageDifficulty, levelSlots, crystalSlots, maxStars, assignSlots, levelAt, filledSlots, themedLevel };

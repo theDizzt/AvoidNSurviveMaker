@@ -542,11 +542,6 @@ export function resetSkin(): void {
   commitSkin();
 }
 
-/** Options' trail toggle: off = trail skin #0, on = the last trail skin used */
-export function setTrailShown(on: boolean): void {
-  setSkin({ trail: on ? lastTrail : 0 });
-}
-
 export function onSkinChange(fn: (s: Readonly<Skin>) => void): void {
   listeners.add(fn);
 }

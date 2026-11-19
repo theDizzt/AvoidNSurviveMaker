@@ -22,6 +22,7 @@ export interface AccountRecord {
   level_key: string;
   best_ms: number;
   stars: number;
+  crystal?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -93,12 +94,25 @@ export class RecordSync {
   async fetchAccountRecords(): Promise<AccountRecord[] | null> {
     if (!supabase || !this.userId) return null;
     const generation = this.generation;
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('level_records')
-      .select('level_key, best_ms, stars, created_at, updated_at')
+      .select('level_key, best_ms, stars, crystal, created_at, updated_at')
       .eq('user_id', this.userId)
       .order('level_key');
-    return error || generation !== this.generation ? null : ((data as AccountRecord[] | null) ?? []);
+    if (generation !== this.generation) return null;
+    // Older databases may not have the crystal migration yet.
+    if (error?.code === '42703') {
+      const legacy = await supabase.from('level_records')
+        .select('level_key, best_ms, stars, created_at, updated_at')
+        .eq('user_id', this.userId).order('level_key');
+      data = legacy.data as typeof data;
+      error = legacy.error;
+    }
+    if (error || generation !== this.generation) return null;
+    const local = allRecords();
+    return ((data as AccountRecord[] | null) ?? []).map(r => ({
+      ...r, crystal: !!r.crystal || !!local[r.level_key]?.crystal,
+    }));
   }
 
   /** Sync only the active account's records; guest records require explicit import. */
