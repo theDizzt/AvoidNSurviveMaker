@@ -38,6 +38,7 @@ import { applyI18n } from './i18n-dom';
 import { Achievements } from './achievements';
 import { AchievementsUI } from './achievements-ui';
 import { ACHIEVEMENTS, rewardAchievement } from '../core/achievements';
+import { setIcon } from './icons';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -48,6 +49,14 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
 // Static page text comes from the locale file (src/locale/<lang>.json)
 applyI18n();
 installTooltips();
+// Editor toolbar: icon buttons, the label in the tooltip (with the shortcut)
+setIcon($<HTMLButtonElement>('btn-undo'), 'undo', t('common.undo'), 'Ctrl+Z');
+setIcon($<HTMLButtonElement>('btn-redo'), 'redo', t('common.redo'), 'Ctrl+Y');
+setIcon($<HTMLButtonElement>('btn-shortcuts'), 'keyboard', t('editor.shortcuts'), '?');
+setIcon($<HTMLButtonElement>('btn-zoom-out'), 'zoomOut', t('editor.zoomOut'));
+setIcon($<HTMLButtonElement>('btn-zoom-in'), 'zoomIn', t('editor.zoomIn'));
+setIcon($<HTMLButtonElement>('btn-panels'), 'panels', t('editor.hidePanels'), 'H');
+setIcon($<HTMLButtonElement>('btn-editor-fullscreen'), 'fullscreen', t('common.fullscreen'), 'F');
 const iris = new IrisTransition();
 
 const REOPEN_OPTIONS_KEY = 'avoid-n-survive:reopen-options';
@@ -521,7 +530,12 @@ const toggleFullscreen = () => {
 };
 for (const b of fullscreenButtons) b.addEventListener('click', toggleFullscreen);
 document.addEventListener('fullscreenchange', () => {
-  for (const b of fullscreenButtons) b.textContent = t(document.fullscreenElement ? 'common.exitFullscreen' : 'common.fullscreen');
+  const on = !!document.fullscreenElement;
+  const label = t(on ? 'common.exitFullscreen' : 'common.fullscreen');
+  for (const b of fullscreenButtons) {
+    if (b.classList.contains('icon-btn')) setIcon(b, on ? 'exitFullscreen' : 'fullscreen', label, 'F');
+    else b.textContent = label;
+  }
 });
 
 // Editor panels float over the canvas; H (or the button) hides them to see the whole map
@@ -532,7 +546,7 @@ const panelsBtn = $<HTMLButtonElement>('btn-panels');
 const togglePanels = () => {
   const hidden = screens.editor.classList.toggle('panels-hidden');
   panelsBtn.setAttribute('aria-pressed', String(hidden));
-  panelsBtn.textContent = t(hidden ? 'editor.showPanels' : 'editor.hidePanels');
+  setIcon(panelsBtn, hidden ? 'panelsHidden' : 'panels', t(hidden ? 'editor.showPanels' : 'editor.hidePanels'), 'H');
 };
 panelsBtn.addEventListener('click', togglePanels);
 

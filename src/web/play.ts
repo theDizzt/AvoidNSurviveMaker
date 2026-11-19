@@ -298,7 +298,8 @@ export class PlayController {
     const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle };
     const playing = sim.status === 'playing';
     const carried = playing ? this.carried : undefined;
-    drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried });
+    drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried,
+      secretCursor: playing ? { x: sim.x, y: sim.y } : null });
     drawSkinTrail(ctx, skin, this.trail, unitsPerPx(this.el.canvas, map));
     if (sim.status !== 'ready') drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
     // Secret walls cover the floor, obstacles and trail under them, except right around the cursor

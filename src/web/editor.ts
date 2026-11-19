@@ -2082,7 +2082,7 @@ export class Editor {
     const t = preview ? performance.now() - this.previewStart : 0;
     this.beamCaster ??= new BeamCaster(map, objs);
     const beams = this.beamCaster.any ? this.beamCaster.beams({ timeOf: () => t, channels: initialChannels(map) }) : [];
-    drawMap(ctx, map, objs, t, { gridOnTop: this.el.gridTop.checked, beams, now: performance.now() });
+    drawMap(ctx, map, objs, t, { gridOnTop: this.el.gridTop.checked, beams, now: performance.now(), sawGhost: 0.3 });
     // Spikes: how far they thrust
     ctx.setLineDash([4 * u, 3 * u]);
     ctx.strokeStyle = 'rgba(226,72,108,0.7)';
@@ -2212,7 +2212,7 @@ export class Editor {
 
     // Switch links: a colored dot at the top-left of every linked object / switch-operated door
     map.objects.forEach((o) => {
-      const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : undefined);
+      const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : o.laser?.switchColor);
       if (c === undefined) return;
       const b = shapeBounds(o.shape);
       ctx.fillStyle = switchColor(c).hex;

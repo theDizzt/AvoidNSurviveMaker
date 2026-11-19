@@ -17,6 +17,8 @@ import { OFFICIAL_THEMES } from './theme-registry';
 export type BackdropMode = 'demo' | 'grid' | 'theme' | 'none';
 
 const FPS = 30;
+/** Decorative background: bound fill-rate and offscreen shadow memory on HiDPI/4K displays. */
+const MAX_BACKGROUND_PIXELS = 1280 * 720;
 const CURSOR_PX = 9;
 /** Pause on START before the run, and after it ends (ms) */
 const LEAD_MS = 700;
@@ -47,6 +49,7 @@ export class Backdrop {
   private run: Run | null = null;
   private raf = 0;
   private last = 0;
+  private pausedAt: number | null = null;
   private lastMap: MapData | null = null;
   private readonly pool: MapData[];
   private readonly reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -84,6 +87,17 @@ export class Backdrop {
 
   private schedule(): void {
     const active = this.mode === 'demo' && !document.hidden && this.pool.length > 0;
+    if (!active && this.run && this.pausedAt === null) this.pausedAt = performance.now();
+    if (active && this.pausedAt !== null) {
+      const gap = performance.now() - this.pausedAt;
+      if (this.run) {
+        // Resume where the background stopped instead of simulating the entire hidden gap.
+        this.run.t0 += gap;
+        if (this.run.endedAt) this.run.endedAt += gap;
+        if (this.run.showcaseUntil) this.run.showcaseUntil += gap;
+      }
+      this.pausedAt = null;
+    }
     if (active && !this.raf) this.raf = requestAnimationFrame((t) => this.frame(t));
     if (!active && this.raf) {
       cancelAnimationFrame(this.raf);
@@ -92,7 +106,8 @@ export class Backdrop {
   }
 
   private resize(): void {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1,
+      Math.sqrt(MAX_BACKGROUND_PIXELS / Math.max(1, window.innerWidth * window.innerHeight)));
     this.canvas.width = Math.round(window.innerWidth * dpr);
     this.canvas.height = Math.round(window.innerHeight * dpr);
     if (this.run) this.draw(performance.now());
@@ -135,7 +150,7 @@ export class Backdrop {
         run.planner = null;
         run.samples = step.value;
         if (run.samples) {
-          run.sim = new Simulation(run.map);
+          run.sim = new Simulation(run.map, run.objects);
           run.sim.start(run.samples[0].x, run.samples[0].y);
           run.t0 = now + LEAD_MS;
           run.trail = [run.samples[0].x, run.samples[0].y];
@@ -164,6 +179,12 @@ export class Backdrop {
 
     this.draw(now);
 
+    if (this.reduced) {
+      cancelAnimationFrame(this.raf);
+      this.raf = 0;
+      return;
+    }
+
     const over = (run.endedAt && now - run.endedAt > HOLD_MS) || (run.showcaseUntil && now > run.showcaseUntil);
     if (over) this.run = null;
   }
@@ -185,7 +206,7 @@ export class Backdrop {
     const state = sim && playing ? { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress } : {};
     drawMap(ctx, map, run.objects, t, { ...state, coinsLeft: sim?.coinsLeft, beams: sim?.beams, now });
     if (!sim) return;
-    const unit = (window.devicePixelRatio || 1) / s;
+    const unit = (canvas.width / Math.max(1, window.innerWidth)) / s;
     drawTrail(ctx, run.trail);
     if (playing) drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
     if (sim.status === 'playing' || sim.status === 'cleared') {

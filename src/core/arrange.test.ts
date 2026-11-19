@@ -4,7 +4,7 @@ import { pointInPoly } from './geometry';
 import { bridgeHoles, mergeShapes } from './merge';
 import { flattenShape, shapeBounds } from './shape';
 import type { MapObject, Shape } from './types';
-import { validateMap, createEmptyMap, LIMITS } from './validate';
+import { validateMap, createEmptyMap, LIMITS, mapErrors } from './validate';
 
 const rect = (x: number, y: number, w: number, h: number): Shape => ({ type: 'rect', x, y, w, h });
 const inside = (s: Shape, x: number, y: number) => pointInPoly(x, y, flattenShape(s).poly);
@@ -365,6 +365,23 @@ describe('phase 4: spikes, boulders, lasers, portals', () => {
     sim.feed(10, 215, 115);
     expect(sim.channels[2]).toBe(1);
     sim.feed(40, 920, 300);
+    expect(sim.status).toBe('cleared');
+  });
+
+  it('a laser can use a regular switch link (removed while ON)', async () => {
+    const { Simulation } = await import('./simulation');
+    const laser = { role: 'laser', shape: rect(490, 10, 20, 20), laser: { color: 4, angle: 90, on: true }, link: { color: 4, action: 'remove' } };
+    const sw = { role: 'trigger', shape: rect(200, 100, 30, 30), trigger: { kind: 'switch', color: 4 } };
+    const map = validateMap({ ...base(), objects: [laser, sw] });
+    expect(map.objects[0].link).toEqual({ color: 4, action: 'remove' });
+    expect(mapErrors(map)).toEqual([]);
+    const sim = new Simulation(map);
+    sim.start(10, 290);
+    expect(sim.beams.length).toBe(1);
+    sim.feed(10, 215, 115);
+    sim.feed(20, 215, 115);
+    expect(sim.beams.length).toBe(0);
+    sim.feed(60, 920, 300);
     expect(sim.status).toBe('cleared');
   });
 

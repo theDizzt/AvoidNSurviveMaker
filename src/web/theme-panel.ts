@@ -14,6 +14,10 @@ const PATTERNS: [PatternKind, string][] = [
   ['grass', t('pattern.grass')],
   ['sand', t('pattern.sand')],
   ['metal', t('pattern.metal')],
+  ['egyptian', t('pattern.egyptian')],
+  ['sandBrick', t('pattern.sandBrick')],
+  ['bark', t('pattern.bark')],
+  ['woodGrain', t('pattern.woodGrain')],
 ];
 const CATEGORIES: [keyof Theme, string][] = [['wall', t('themePanel.walls')], ['path', t('common.paths')]];
 

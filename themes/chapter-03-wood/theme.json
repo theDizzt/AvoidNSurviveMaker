@@ -1,185 +1,196 @@
 {
-    "format":  1,
-    "id":  "wood",
-    "name":  "Chop Chop Sawmill",
-    "description":  "Cut timber, spinning saws and moss-green machinery deep in the forest.",
-    "author":  "Avoid N Survive",
-    "released":  "2026-11-17",
-    "unlockStars":  0,
-    "colors":  [
-                   "#dbb580",
-                   "#69834c"
-               ],
-    "cover":  "cover.svg",
-    "style":  {
-                  "maze":  {
-                               "wall":  {
-                                            "edge":  "#dbb580",
-                                            "fill":  {
-                                                         "background":  "#241e19",
-                                                         "color":  "#69834c",
-                                                         "pattern":  "stripes",
-                                                         "size":  16,
-                                                         "type":  "pattern"
-                                                     }
-                                        },
-                               "path":  {
-                                            "edge":  "#69834c",
-                                            "fill":  {
-                                                         "angle":  90,
-                                                         "from":  "#241e19",
-                                                         "style":  "linear",
-                                                         "to":  "#69834c",
-                                                         "type":  "gradient"
-                                                     }
-                                        }
-                           },
-                  "badge":  {
-                                "caption":  "CHAPTER 03 / WOOD",
-                                "kind":  "ring",
-                                "pad":  2,
-                                "primary":  "#241e19",
-                                "titleColor":  "#dbb580",
-                                "showTitle":  true,
-                                "secondary":  "#69834c",
-                                "font":  "title",
-                                "numberColor":  "#dbb580"
-                            }
-              },
-    "screens":  {
-                    "select":  {
-                                   "background":  {
-                                                      "color2":  "#241e19",
-                                                      "color":  "#241e19"
-                                                  },
-                                   "elements":  [
-                                                    {
-                                                        "id":  "art",
-                                                        "w":  440,
-                                                        "opacity":  0.5,
-                                                        "y":  0,
-                                                        "x":  0,
-                                                        "kind":  "image",
-                                                        "src":  "cover.svg",
-                                                        "h":  720
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "chapter",
-                                                        "kind":  "text",
-                                                        "size":  19,
-                                                        "y":  54,
-                                                        "w":  330,
-                                                        "h":  32,
-                                                        "color":  "#dbb580",
-                                                        "text":  "CHAPTER 03 / WOOD",
-                                                        "font":  "main"
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "title",
-                                                        "kind":  "text",
-                                                        "size":  42,
-                                                        "y":  105,
-                                                        "w":  340,
-                                                        "h":  160,
-                                                        "color":  "#dbb580",
-                                                        "text":  "{theme}",
-                                                        "font":  "title"
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "description",
-                                                        "kind":  "text",
-                                                        "size":  19,
-                                                        "y":  290,
-                                                        "w":  320,
-                                                        "h":  140,
-                                                        "color":  "#dbb580",
-                                                        "text":  "{description}",
-                                                        "font":  "main"
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "progress",
-                                                        "kind":  "text",
-                                                        "size":  21,
-                                                        "y":  485,
-                                                        "w":  320,
-                                                        "h":  46,
-                                                        "color":  "#dbb580",
-                                                        "text":  "{cleared} / {total} CLEARED",
-                                                        "font":  "main"
-                                                    },
-                                                    {
-                                                        "x":  470,
-                                                        "id":  "grid",
-                                                        "kind":  "levelGrid",
-                                                        "gap":  14,
-                                                        "y":  140,
-                                                        "w":  750,
-                                                        "button":  {
-                                                                       "borderWidth":  2,
-                                                                       "showStars":  true,
-                                                                       "showDifficulty":  true,
-                                                                       "shape":  "circle",
-                                                                       "clearedFill":  "#69834c",
-                                                                       "border":  "#dbb580",
-                                                                       "fill":  "#241e19",
-                                                                       "fill2":  "#69834c",
-                                                                       "pad":  2,
-                                                                       "numberColor":  "#dbb580",
-                                                                       "font":  "title",
-                                                                       "numberSize":  30
-                                                                   },
-                                                        "h":  420,
-                                                        "rows":  3,
-                                                        "cols":  7
-                                                    },
-                                                    {
-                                                        "size":  23,
-                                                        "id":  "back",
-                                                        "y":  610,
-                                                        "color":  "#dbb580",
-                                                        "border":  "#69834c",
-                                                        "fill":  "#241e19",
-                                                        "borderWidth":  2,
-                                                        "kind":  "back",
-                                                        "x":  52,
-                                                        "w":  190,
-                                                        "radius":  10,
-                                                        "text":  "BACK",
-                                                        "font":  "title",
-                                                        "h":  54
-                                                    },
-                                                    {
-                                                        "x":  470,
-                                                        "id":  "footer",
-                                                        "kind":  "text",
-                                                        "size":  18,
-                                                        "y":  600,
-                                                        "w":  750,
-                                                        "h":  38,
-                                                        "color":  "#dbb580",
-                                                        "text":  "SELECT A LEVEL",
-                                                        "font":  "main",
-                                                        "opacity":  0.6
-                                                    }
-                                                ]
-                               }
-                },
-    "i18n":  {
-        "ko":  {
-            "name":  "싹둑싹둑 제재소",
-            "description":  "깊은 숲속의 잘린 목재, 돌아가는 톱날, 이끼 낀 초록 기계들."
+  "format": 1,
+  "id": "wood",
+  "name": "Chop Chop Sawmill",
+  "description": "Cut timber, spinning saws and moss-green machinery deep in the forest.",
+  "author": "Avoid N Survive",
+  "released": "2026-11-17",
+  "unlockStars": 90,
+  "colors": [
+    "#dbb580",
+    "#69834c"
+  ],
+  "style": {
+    "badge": {
+      "kind": "image",
+      "primary": "#5e4229",
+      "secondary": "#2a1b10",
+      "numberColor": "#fff1d6",
+      "titleColor": "#dbb580",
+      "font": "barriecito",
+      "pad": 2,
+      "showTitle": true,
+      "image": "badge.png",
+      "numberFx": {
+        "depthColor": "#1a2233",
+        "depth": 4
+      },
+      "titleFx": {
+        "depthColor": "#1a2233",
+        "depth": 4,
+        "outline": "#1a2233",
+        "outlineWidth": 2
+      }
+    },
+    "maze": {
+      "wall": {
+        "fill": {
+          "type": "pattern",
+          "pattern": "bark",
+          "color": "#24180f",
+          "background": "#5e4229",
+          "size": 64
         },
-        "zh":  {
-            "name":  "Chop Chop Sawmill",
-            "description":  "Cut timber, spinning saws and moss-green machinery deep in the forest."
-        }
+        "edge": "#1a120b"
+      },
+      "path": {
+        "fill": {
+          "type": "pattern",
+          "pattern": "woodGrain",
+          "color": "#a8743f",
+          "background": "#e6c592",
+          "size": 64
+        },
+        "edge": "#7a5230"
+      }
     }
+  },
+  "cover": "cover.svg",
+  "music": "audio/bgm.mp3",
+  "screens": {
+    "select": {
+      "background": {
+        "color": "#241e19",
+        "color2": "#241e19"
+      },
+      "elements": [
+        {
+          "id": "art",
+          "kind": "image",
+          "x": 0,
+          "y": 0,
+          "w": 440,
+          "h": 720,
+          "opacity": 0.5,
+          "src": "cover.svg"
+        },
+        {
+          "id": "chapter",
+          "kind": "text",
+          "x": 52,
+          "y": 54,
+          "w": 330,
+          "h": 32,
+          "text": "CHAPTER 03 / WOOD",
+          "font": "main",
+          "size": 19,
+          "color": "#dbb580",
+          "align": "left"
+        },
+        {
+          "id": "title",
+          "kind": "text",
+          "x": 52,
+          "y": 105,
+          "w": 340,
+          "h": 160,
+          "text": "{theme}",
+          "font": "title",
+          "size": 42,
+          "color": "#dbb580",
+          "align": "left"
+        },
+        {
+          "id": "description",
+          "kind": "text",
+          "x": 52,
+          "y": 290,
+          "w": 320,
+          "h": 140,
+          "text": "{description}",
+          "font": "main",
+          "size": 19,
+          "color": "#dbb580",
+          "align": "left"
+        },
+        {
+          "id": "progress",
+          "kind": "text",
+          "x": 52,
+          "y": 485,
+          "w": 320,
+          "h": 46,
+          "text": "{cleared} / {total} CLEARED",
+          "font": "main",
+          "size": 21,
+          "color": "#dbb580",
+          "align": "left"
+        },
+        {
+          "id": "grid",
+          "kind": "levelGrid",
+          "x": 470,
+          "y": 140,
+          "w": 750,
+          "h": 420,
+          "cols": 7,
+          "rows": 3,
+          "gap": 14,
+          "button": {
+            "shape": "circle",
+            "fill": "#241e19",
+            "fill2": "#69834c",
+            "clearedFill": "#69834c",
+            "border": "#dbb580",
+            "borderWidth": 2,
+            "font": "title",
+            "numberSize": 30,
+            "numberColor": "#dbb580",
+            "pad": 2,
+            "showStars": true,
+            "showDifficulty": true
+          }
+        },
+        {
+          "id": "back",
+          "kind": "back",
+          "x": 52,
+          "y": 610,
+          "w": 190,
+          "h": 54,
+          "text": "BACK",
+          "font": "title",
+          "size": 23,
+          "color": "#dbb580",
+          "fill": "#241e19",
+          "border": "#69834c",
+          "borderWidth": 2,
+          "radius": 10
+        },
+        {
+          "id": "footer",
+          "kind": "text",
+          "x": 470,
+          "y": 600,
+          "w": 750,
+          "h": 38,
+          "opacity": 0.6,
+          "text": "SELECT A LEVEL",
+          "font": "main",
+          "size": 18,
+          "color": "#dbb580"
+        }
+      ]
+    }
+  },
+  "i18n": {
+    "ko": {
+      "name": "싹둑싹둑 제재소",
+      "description": "깊은 숲속의 잘린 목재, 돌아가는 톱날, 이끼 낀 초록 기계들."
+    },
+    "zh": {
+      "name": "Chop Chop Sawmill",
+      "description": "Cut timber, spinning saws and moss-green machinery deep in the forest."
+    }
+  }
 }

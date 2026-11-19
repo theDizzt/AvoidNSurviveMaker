@@ -312,6 +312,10 @@ interface StaticLayer {
   composite: HTMLCanvasElement;
   /** Layer pixels per map unit */
   scale: number;
+  /** Secret-wall overlay at exactly the same resolution as the wall mass. */
+  secret?: HTMLCanvasElement;
+  secretReady?: boolean;
+  compositeState?: number[];
   /** Where the static walls are, for grinder dust (built on first use) */
   mask?: WallMask;
 }
@@ -507,6 +511,8 @@ export interface DrawMapOptions {
   progress?: Float64Array;
   /** Laser beams to draw */
   beams?: readonly Beam[];
+  /** Enable secret-wall union in play; null means fully concealed. */
+  secretCursor?: Point | null;
   /** Animation time for portal swirls (ms); default `t` */
   now?: number;
   /** Coins still needed: GOAL turns dark gray and shows collected / total, e.g. "3/10" */
@@ -515,6 +521,8 @@ export interface DrawMapOptions {
   carried?: ArrayLike<number>;
   /** Per object index (pulleys, #52): how far it has turned (radians) */
   pulleyAngle?: ArrayLike<number>;
+  /** Opacity of the parts of grinders / saw blades hidden inside walls (the editor shows a ghost); default 0 */
+  sawGhost?: number;
 }
 
 /** A coin: gold disc with a rim and a highlight, in the object's own (posed) frame */
@@ -674,10 +682,43 @@ export function drawMap(
   // Moving paths, moving walls and doors join the static scene: paths cut the wall mass, walls
   // and door panels add to it, all in the same world-aligned fill, shadow and rim
   const st = staticLayer(ctx, map, objects);
+  st.secretReady = false;
+  const conceal = opts.secretCursor !== undefined && objects.some((o, i) => o.role === 'secret' && shown(i));
   const isSaw = (i: number) => !!map.objects[i]?.saw;
   const moving = objects.some((o, i) => (o.dynamic && (o.role === 'path' || (o.role === 'wall' && !isSaw(i)))) || isDoor(map.objects[i]));
-  if (!moving) {
+  let reuseComposite = false;
+  if (moving || conceal) {
+    const previous = st.compositeState;
+    const values = previous ?? [];
+    let changed = !previous;
+    let at = 0;
+    const check = (value: number) => {
+      if (values[at] !== value) changed = true;
+      values[at++] = value;
+    };
+    check(conceal ? 1 : 0);
+    check(conceal && opts.secretCursor ? 1 : 0);
+    check(conceal ? opts.secretCursor?.x ?? 0 : 0);
+    check(conceal ? opts.secretCursor?.y ?? 0 : 0);
+    objects.forEach((o, i) => {
+      const door = isDoor(map.objects[i]);
+      if (!(o.dynamic && (o.role === 'path' || (o.role === 'wall' && !isSaw(i))))
+        && !door && !(conceal && o.role === 'secret')) return;
+      check(i);
+      check(shown(i) ? 1 : 0);
+      check(shown(i) && (o.motion || o.rotation) ? timeOf(i) : 0);
+      check(door && shown(i) ? doorOpenAt(map.objects[i], i) : 0);
+    });
+    if (values.length !== at) changed = true;
+    values.length = at;
+    st.compositeState = values;
+    reuseComposite = !changed;
+  }
+  if (!moving && !conceal) {
     ctx.drawImage(st.layer, 0, 0, map.width, map.height);
+  } else if (reuseComposite) {
+    st.secretReady = conceal;
+    ctx.drawImage(st.composite, 0, 0, map.width, map.height);
   } else {
     const scale = st.scale;
     const g = st.frame.getContext('2d')!;
@@ -719,6 +760,19 @@ export function drawMap(
     });
     g.fillStyle = theme ? fillStyle(g, theme.wall.fill, { minX: 0, minY: 0, maxX: map.width, maxY: map.height }) : COLORS.wall;
     g.fill(walls, 'nonzero');
+    if (conceal) {
+      // Build the covering at wall-layer resolution and union it BEFORE shadows.
+      // This removes internal seams and lets both surfaces share pattern sampling.
+      const secret = st.secret ??= offscreen(st.frame.width, st.frame.height)[0];
+      const sg = secret.getContext('2d')!;
+      sg.setTransform(1, 0, 0, 1, 0, 0);
+      sg.clearRect(0, 0, secret.width, secret.height);
+      sg.setTransform(scale, 0, 0, scale, 0, 0);
+      paintSecretWalls(sg, map, objects, t, opts.secretCursor ?? null, 1, opts);
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.drawImage(secret, 0, 0);
+      st.secretReady = true;
+    }
     // Compose at layer resolution, then place it on the map (zoom and letterbox included)
     const c = st.composite.getContext('2d')!;
     c.setTransform(1, 0, 0, 1, 0, 0);
@@ -763,14 +817,37 @@ export function drawMap(
     const m = map.objects[i];
     if (o.role === 'text' && m?.text && shown(i)) drawTextBox(ctx, o, timeOf(i), m.text);
   });
-  // Grinders and saw blades, throwing dust where they cut into a wall
-  if (map.objects.some((m) => m.saw)) {
+  // Grinders and saw blades sit behind the walls they cut into, throwing dust where they touch one
+  if (objects.some((o, i) => map.objects[i]?.saw && o.role === 'wall' && shown(i))) {
     const mask = wallMask(st, map);
     const dust = theme ? theme.wall.edge : COLORS.wallEdge;
+    const [layer, g] = sawLayer(ctx);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, layer.width, layer.height);
+    g.setTransform(ctx.getTransform());
+    const sprays: ((target: CanvasRenderingContext2D) => void)[] = [];
     objects.forEach((o, i) => {
       const m = map.objects[i];
-      if (m?.saw && o.role === 'wall' && shown(i)) drawSaw(ctx, o, timeOf(i), m, mask, dust, i);
+      if (m?.saw && o.role === 'wall' && shown(i)) sprays.push(drawSaw(g, o, timeOf(i), m, mask, dust, i));
     });
+    const ghost = Math.max(0, Math.min(1, opts.sawGhost ?? 0));
+    if (ghost > 0) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = ghost;
+      ctx.drawImage(layer, 0, 0);
+      ctx.restore();
+    }
+    // Erase what lies inside the wall mass this frame (static walls, or the per-frame mass with
+    // moving walls and doors)
+    g.globalCompositeOperation = 'destination-out';
+    g.drawImage(moving || conceal ? st.frame : st.walls, 0, 0, map.width, map.height);
+    g.globalCompositeOperation = 'source-over';
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(layer, 0, 0);
+    ctx.restore();
+    for (const spray of sprays) spray(ctx);
   }
   // Screws on the pivots of rotating obstacles set to show them
   objects.forEach((o, i) => {
@@ -1165,6 +1242,19 @@ export function drawSecretWalls(
   ctx: CanvasRenderingContext2D, map: MapData, objects: readonly CompiledObject[], t: number,
   cursor: Point | null, alpha = 1, state: { hidden?: ArrayLike<number>; clock?: ArrayLike<number> } = {},
 ): void {
+  const st = layerCache.get(objects)?.layer;
+  if (alpha === 1 && st?.secretReady && st.secret) {
+    // Cover objects and the cursor trail with the SAME pixels used in the wall union.
+    ctx.drawImage(st.secret, 0, 0, map.width, map.height);
+    return;
+  }
+  paintSecretWalls(ctx, map, objects, t, cursor, alpha, state);
+}
+
+function paintSecretWalls(
+  ctx: CanvasRenderingContext2D, map: MapData, objects: readonly CompiledObject[], t: number,
+  cursor: Point | null, alpha = 1, state: { hidden?: ArrayLike<number>; clock?: ArrayLike<number> } = {},
+): void {
   const secrets = objects.flatMap((o, i) => (o.role === 'secret' && !state.hidden?.[i] ? [i] : []));
   if (!secrets.length || alpha <= 0) return;
   const m = ctx.getTransform();
@@ -1435,8 +1525,24 @@ function drawDust(ctx: CanvasRenderingContext2D, pts: { x: number; y: number; dx
   ctx.restore();
 }
 
-/** Grinder disc (#43, #45) or saw blade (#44, #46) */
-function drawSaw(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, m: MapObject, mask: WallMask, dust: string, seed: number): void {
+/** Per target canvas: a same-size scratch layer for the saw blades */
+const sawLayers = new WeakMap<CanvasRenderingContext2D, [HTMLCanvasElement, CanvasRenderingContext2D]>();
+function sawLayer(ctx: CanvasRenderingContext2D): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const { width, height } = ctx.canvas;
+  let l = sawLayers.get(ctx);
+  if (!l) sawLayers.set(ctx, l = offscreen(width, height));
+  if (l[0].width !== width || l[0].height !== height) {
+    l[0].width = width;
+    l[0].height = height;
+  }
+  return l;
+}
+
+/**
+ * Grinder disc (#43, #45) or saw blade (#44, #46), drawn into `ctx`. Returns a painter for its
+ * dust, which goes on the map itself (over the walls).
+ */
+function drawSaw(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, m: MapObject, mask: WallMask, dust: string, seed: number): (target: CanvasRenderingContext2D) => void {
   const saw = m.saw!;
   const s = m.shape;
   transformAt(o, t, tf);
@@ -1570,7 +1676,8 @@ function drawSaw(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, m:
   }
   // At most a handful of spray points, spread around the contact
   const step = Math.max(1, Math.ceil(contact.length / 5));
-  drawDust(ctx, contact.filter((_, k) => k % step === 0), t, dust, seed);
+  const points = contact.filter((_, k) => k % step === 0);
+  return (target) => drawDust(target, points, t, dust, seed);
 }
 
 /** Laser beams: a soft colored glow with a bright core */
