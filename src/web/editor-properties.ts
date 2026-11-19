@@ -1,7 +1,7 @@
 import type { CommandId } from './editor-shared';
 import { t as tr } from './i18n';
 
-import { objectsBounds } from '../core/arrange';
+import { objectsBounds, tiltObject } from '../core/arrange';
 
 import { shapeCenter } from '../core/shape';
 
@@ -208,6 +208,16 @@ export class EditorPropertiesPanel {
       const curved = s.points.filter((p) => p.smooth).length;
       parts.push(this.note(tr('ed.vertices', { n: s.points.length, curved })));
     }
+
+    // Tilt: turns about the center (route markers stay; the pivot and beam / thrust turn with it)
+    parts.push(
+      this.group(this.numField(tr('ed.tilt'), o.tilt ?? 0, (v) => {
+        const next = tiltObject(o, v - (o.tilt ?? 0));
+        Object.assign(o, next);
+        if (next.tilt === undefined) delete o.tilt;
+      }, 15)),
+      this.note(tr('ed.tiltNote')),
+    );
 
     if (o.trigger) parts.push(...this.triggerProps(o));
     if (o.door) parts.push(...this.doorProps(o));

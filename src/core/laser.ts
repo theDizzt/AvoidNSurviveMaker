@@ -1,5 +1,6 @@
 import { toWorld, transformAt, type CompiledObject, type Transform } from './object';
 import { doorPanels } from './switches';
+import { rotateRing } from './shape';
 import type { MapData, Point } from './types';
 
 /**
@@ -103,10 +104,12 @@ export class BeamCaster {
       const m = this.map.objects[i];
       if (m.role !== 'door' || m.shape.type !== 'rect') continue;
       const open = st.doorOpen?.[i] ?? 0;
+      const c = { x: m.shape.x + m.shape.w / 2, y: m.shape.y + m.shape.h / 2 };
       for (const h of doorPanels(m.shape)) {
         const x = h.rect.x + h.slide.x * open;
         const y = h.rect.y + h.slide.y * open;
-        blockers.push({ ring: new Float64Array([x, y, x + h.rect.w, y, x + h.rect.w, y + h.rect.h, x, y + h.rect.h]), owner: -1 });
+        const ring = new Float64Array([x, y, x + h.rect.w, y, x + h.rect.w, y + h.rect.h, x, y + h.rect.h]);
+        blockers.push({ ring: m.tilt ? rotateRing(ring, c, m.tilt) : ring, owner: -1 });
       }
     }
 
@@ -119,7 +122,7 @@ export class BeamCaster {
       if (l.on === flipped) continue; // off
       const o = this.objects[i];
       transformAt(o, st.timeOf(i), tf);
-      toWorld(o, tf, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, tmp);
+      toWorld(o, tf, o.cx, o.cy, tmp);
       const a = (l.angle * Math.PI) / 180 + Math.atan2(tf.sin, tf.cos);
       out.push({ color: l.color, pts: this.cast(tmp.x, tmp.y, Math.cos(a), Math.sin(a), blockers, mirrors, i) });
     }

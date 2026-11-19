@@ -322,8 +322,8 @@ export class PlayController {
     map.objects.forEach((m, i) => {
       if (!m.torch?.carry || carried[i] || sim.hidden[i]) return;
       const o = sim.objects[i];
-      const c = toWorld(o, transformAt(o, sim.clock[i], poseTmp), (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, { x: 0, y: 0 });
-      const reach = Math.max(o.maxX - o.minX, o.maxY - o.minY) / 2 + TORCH_PICKUP;
+      const c = toWorld(o, transformAt(o, sim.clock[i], poseTmp), o.cx, o.cy, { x: 0, y: 0 });
+      const reach = Math.max(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2 + TORCH_PICKUP;
       if (Math.hypot(sim.x - c.x, sim.y - c.y) <= reach) carried[i] = 1;
     });
   }
@@ -357,8 +357,8 @@ export class PlayController {
       map.objects.forEach((_, i) => {
         if (!this.carried[i]) return;
         const o = sim.objects[i];
-        const w = o.maxX - o.minX;
-        const h = o.maxY - o.minY;
+        const w = o.box.maxX - o.box.minX;
+        const h = o.box.maxY - o.box.minY;
         drawTorchAt(ctx, sim.x + w * 0.5 + 6 * u, sim.y - h * 0.35, w, h, now, i);
       });
     }

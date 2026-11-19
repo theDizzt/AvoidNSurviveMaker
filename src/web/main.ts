@@ -14,7 +14,7 @@ import { installTooltips } from './tooltip';
 import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-ui';
 import { levelKey, recordClear, themeUnlocked, totalStars } from './progress';
 import { filledSlots, themedLevel, type ThemeEntry } from './localized/theme-pack';
-import { OFFICIAL_THEMES, allThemes, badgeFor, chapterMusicFor } from './theme-registry';
+import { OFFICIAL_THEMES, allThemes, badgeFor, levelThemeIn, musicFor, themeBadge, themeMusic } from './theme-registry';
 import { GRAPHICS_LEVELS, onOptionsChange, options, POLLING_RATES, resetOptions, setOption } from './options';
 import { refreshSkinGate, setSkinGate } from './skin';
 import { CustomizeUI } from './customize-ui';
@@ -212,12 +212,19 @@ let testing = false;
 function syncMusic(): void {
   // Map editor (and its test play): the chosen chapter theme's music, else the menu music
   if (current === 'editor' || (current === 'play' && testing)) {
-    gameAudio.setMusic(chapterMusicFor(current === 'editor' ? editor.mapTheme : currentMap.theme) ?? menuMusicUrl);
+    gameAudio.setMusic(musicFor(current === 'editor' ? editor.mapLook : currentMap) ?? menuMusicUrl);
     return;
   }
-  const theme = current === 'levels' ? campaign.currentTheme : current === 'play' ? campaignOf(currentKey)?.theme : null;
+  // A shared map plays its picked theme's music
+  if (current === 'play' && currentKey === 'shared') {
+    gameAudio.setMusic(musicFor(currentMap));
+    return;
+  }
+  // Campaign levels: their pack's music, or that of the theme linked to their design
+  const c = current === 'play' ? campaignOf(currentKey) : null;
+  const theme = current === 'levels' ? campaign.currentTheme : c ? levelThemeIn(c.theme, currentMap) : null;
   if (current === 'levels' || current === 'play') {
-    gameAudio.setMusic(theme?.info.music ? theme.assets[theme.info.music] ?? null : null);
+    gameAudio.setMusic(themeMusic(theme ?? null));
   } else if (current === 'themeEditor' || current === 'preload') {
     gameAudio.setMusic(null);
   } else gameAudio.setMusic(menuMusicUrl);
@@ -299,7 +306,7 @@ function showPlay(map: MapData, opts: { test?: boolean; key?: string } = {}): vo
     // Campaign levels wear their theme's badge design
     const c = campaignOf(currentKey);
     // Other maps (editor test play, shared links) wear their chapter preset's badge, if any
-    play.badge = c ? { style: c.theme.info.style.badge, imageUrl: c.theme.badgeUrl } : badgeFor(map);
+    play.badge = c ? themeBadge(levelThemeIn(c.theme, map)) : badgeFor(map);
     renderLevelOptions(); // worlds may have unlocked since
     if (currentKey) levelSelect.value = currentKey;
     // From the editor the level list only makes sense while playing a pack

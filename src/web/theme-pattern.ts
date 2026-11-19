@@ -2,6 +2,27 @@ import type { Fill } from '../core/types';
 
 export const PATTERN_RES = 4;
 
+/** Reproducible random numbers: tiles look the same in previews, replays and after reloading */
+function seeded(seed: number): () => number {
+  return () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+}
+
+/** Draw `fn` at the 9 tile offsets, so motifs that cross an edge continue on the other side */
+function wrapped(s: number, fn: (dx: number, dy: number) => void): void {
+  for (const dx of [-s, 0, s]) for (const dy of [-s, 0, s]) fn(dx, dy);
+}
+
+/** Mix of two #rrggbb colors, k = 0 → a, 1 → b */
+function mix(a: string, b: string, k: number): string {
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const ch = (shift: number) => Math.round(((pa >> shift) & 255) * (1 - k) + ((pb >> shift) & 255) * k).toString(16).padStart(2, '0');
+  return `#${ch(16)}${ch(8)}${ch(0)}`;
+}
+
 /** Shared tile renderer for the game and editor swatches. */
 export function createPatternTile(f: Extract<Fill, { type: 'pattern' }>): HTMLCanvasElement {
   const s = f.size;
@@ -167,6 +188,267 @@ export function createPatternTile(f: Extract<Fill, { type: 'pattern' }>): HTMLCa
         g.moveTo(s * x, s * grain(y0, x));
         g.lineTo(s * (x + len), s * grain(y0, x + len));
         g.stroke();
+      }
+      break;
+    }
+    case 'thicket': {
+      // Dense undergrowth (chapter 4 walls): layers of arching blades and small leaves, darker
+      // underneath and lit at the tips. Seeded and wrapped, so the tile repeats seamlessly.
+      const random = seeded(4242);
+      const TAU = Math.PI * 2;
+      const deep = mix(f.background, f.color, 0.35);
+      const lit = mix(f.color, '#ffffff', 0.35);
+      const layers: [string, number, number][] = [[deep, 26, 0.9], [f.color, 22, 0.85], [lit, 12, 0.55]];
+      for (const [col, count, alpha] of layers) {
+        g.fillStyle = col;
+        g.globalAlpha = alpha;
+        for (let i = 0; i < count; i++) {
+          const x = random() * s, y = random() * s;
+          const h = s * (0.16 + random() * 0.22);
+          const lean = (random() - 0.5) * 1.1;
+          const w = s * (0.018 + random() * 0.02);
+          const tipX = Math.sin(lean) * h, tipY = -Math.cos(lean) * h;
+          wrapped(s, (dx, dy) => {
+            const bx = x + dx, by = y + dy;
+            g.beginPath();
+            g.moveTo(bx - w, by);
+            g.quadraticCurveTo(bx - w + tipX * 0.3, by + tipY * 0.6, bx + tipX, by + tipY);
+            g.quadraticCurveTo(bx + w + tipX * 0.35, by + tipY * 0.55, bx + w, by);
+            g.closePath();
+            g.fill();
+          });
+        }
+      }
+      // Small round leaves among the blades
+      g.fillStyle = lit;
+      for (let i = 0; i < 9; i++) {
+        const x = random() * s, y = random() * s, a = random() * TAU;
+        const r = s * (0.025 + random() * 0.025);
+        g.globalAlpha = 0.35 + random() * 0.35;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.ellipse(x + dx, y + dy, r * 1.7, r, a, 0, TAU);
+          g.fill();
+        });
+      }
+      break;
+    }
+    case 'mud': {
+      // Muddy track (chapter 4 paths): mottled earth, two wavy wheel ruts, wet puddles with a sheen
+      // and a scatter of pebbles. `color` is the wet, dark mud; `background` the drier ground.
+      const random = seeded(9091);
+      const TAU = Math.PI * 2;
+      const dry = mix(f.background, '#ffffff', 0.15);
+      for (let i = 0; i < 18; i++) {
+        const x = random() * s, y = random() * s;
+        const rx = s * (0.06 + random() * 0.1), ry = rx * (0.45 + random() * 0.4), a = random() * 0.6 - 0.3;
+        g.fillStyle = random() < 0.6 ? f.color : dry;
+        g.globalAlpha = 0.12 + random() * 0.14;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.ellipse(x + dx, y + dy, rx, ry, a, 0, TAU);
+          g.fill();
+        });
+      }
+      // Ruts: waves whose period fits the tile, dark in the groove with a lighter lip above
+      g.lineCap = 'round';
+      for (const [y0, phase] of [[0.3, 0], [0.72, 2.1]]) {
+        const rut = (k: number) => s * (y0 + 0.035 * Math.sin(TAU * k + phase) + 0.015 * Math.sin(TAU * 2 * k + phase * 1.7));
+        const strokes: [string, number, number, number][] = [[dry, 0.075, 0.3, -0.03], [f.color, 0.06, 0.6, 0]];
+        for (const [col, width, alpha, off] of strokes) {
+          g.strokeStyle = col;
+          g.globalAlpha = alpha;
+          g.lineWidth = s * width;
+          for (const dx of [-s, 0, s]) {
+            g.beginPath();
+            for (let j = 0; j <= 48; j++) g.lineTo(s * (j / 48) + dx, rut(j / 48) + s * off);
+            g.stroke();
+          }
+        }
+      }
+      // Puddles with a soft reflection
+      for (const [x, y, rx, ry] of [[0.22, 0.52, 0.12, 0.05], [0.78, 0.12, 0.09, 0.04], [0.6, 0.9, 0.07, 0.03]]) {
+        wrapped(s, (dx, dy) => {
+          g.globalAlpha = 0.75;
+          g.fillStyle = f.color;
+          g.beginPath();
+          g.ellipse(s * x + dx, s * y + dy, s * rx, s * ry, 0, 0, TAU);
+          g.fill();
+          g.globalAlpha = 0.22;
+          g.fillStyle = '#ffffff';
+          g.beginPath();
+          g.ellipse(s * (x - rx * 0.3) + dx, s * (y - ry * 0.3) + dy, s * rx * 0.45, s * ry * 0.3, -0.15, 0, TAU);
+          g.fill();
+        });
+      }
+      // Pebbles
+      const pebble = mix(f.background, '#ffffff', 0.35);
+      for (let i = 0; i < 14; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.01 + random() * 0.014);
+        const col = random() < 0.5 ? pebble : f.color;
+        g.globalAlpha = 0.5;
+        g.fillStyle = col;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.arc(x + dx, y + dy, r, 0, TAU);
+          g.fill();
+        });
+      }
+      break;
+    }
+    case 'snow': {
+      // Snowfield (chapter 5 walls): soft drifts shaded in `color` on the white `background`, with
+      // fine flakes and a few glints.
+      const random = seeded(5151);
+      const TAU = Math.PI * 2;
+      for (const [y0, phase, depth] of [[0.18, 0.4, 0.12], [0.5, 2.6, 0.15], [0.83, 4.4, 0.1]]) {
+        const crest = (k: number) => s * (y0 + 0.05 * Math.sin(TAU * k + phase) + 0.02 * Math.sin(TAU * 3 * k + phase));
+        // Drift shadow under the crest
+        const grad = g.createLinearGradient(0, s * (y0 - 0.07), 0, s * (y0 + depth));
+        grad.addColorStop(0, f.color);
+        grad.addColorStop(1, f.background);
+        g.fillStyle = grad;
+        g.globalAlpha = 0.6;
+        g.beginPath();
+        g.moveTo(0, s * (y0 + depth));
+        for (let j = 0; j <= 48; j++) g.lineTo(s * (j / 48), crest(j / 48));
+        g.lineTo(s, s * (y0 + depth));
+        g.closePath();
+        g.fill();
+        // Bright crest line
+        g.globalAlpha = 0.8;
+        g.strokeStyle = '#ffffff';
+        g.lineWidth = s * 0.012;
+        g.beginPath();
+        for (let j = 0; j <= 48; j++) g.lineTo(s * (j / 48), crest(j / 48) - s * 0.006);
+        g.stroke();
+      }
+      // Flakes
+      g.fillStyle = f.color;
+      for (let i = 0; i < 30; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.005 + random() * 0.008);
+        g.globalAlpha = 0.25 + random() * 0.35;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.arc(x + dx, y + dy, r, 0, TAU);
+          g.fill();
+        });
+      }
+      // Glints: tiny four-point stars
+      g.fillStyle = '#ffffff';
+      g.globalAlpha = 0.95;
+      for (const [x, y, r] of [[0.34, 0.33, 0.03], [0.82, 0.62, 0.025], [0.12, 0.74, 0.02]]) {
+        wrapped(s, (dx, dy) => {
+          const cx = s * x + dx, cy = s * y + dy, R = s * r, q = R * 0.22;
+          g.beginPath();
+          g.moveTo(cx, cy - R); g.lineTo(cx + q, cy - q); g.lineTo(cx + R, cy); g.lineTo(cx + q, cy + q);
+          g.lineTo(cx, cy + R); g.lineTo(cx - q, cy + q); g.lineTo(cx - R, cy); g.lineTo(cx - q, cy - q);
+          g.closePath();
+          g.fill();
+        });
+      }
+      break;
+    }
+    case 'ice': {
+      // Frozen path (chapter 5 paths): glassy sheen bands, a branching crack network in `color`,
+      // and small trapped air bubbles.
+      const random = seeded(7373);
+      const TAU = Math.PI * 2;
+      // Sheen: soft diagonal bands, drawn three times so they continue across the tile edges
+      g.strokeStyle = '#ffffff';
+      for (const [o, w, a] of [[0.15, 0.16, 0.08], [0.32, 0.05, 0.14], [0.62, 0.1, 0.07]]) {
+        g.globalAlpha = a;
+        g.lineWidth = s * w;
+        g.beginPath();
+        for (const k of [-1, 0, 1]) {
+          g.moveTo(s * (o + k), s);
+          g.lineTo(s * (o + k + 1), 0);
+        }
+        g.stroke();
+      }
+      // Cracks: jagged random walks with a few side branches
+      g.strokeStyle = f.color;
+      g.lineCap = 'round';
+      g.lineJoin = 'round';
+      const crack = (x: number, y: number, a: number, steps: number, width: number, branch: boolean): void => {
+        const pts: [number, number][] = [[x, y]];
+        for (let i = 0; i < steps; i++) {
+          a += (random() - 0.5) * 0.9;
+          const len = s * (0.04 + random() * 0.05);
+          x += Math.cos(a) * len;
+          y += Math.sin(a) * len;
+          pts.push([x, y]);
+        }
+        g.lineWidth = s * width;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          for (const [px, py] of pts) g.lineTo(px + dx, py + dy);
+          g.stroke();
+        });
+        if (branch) for (let i = 2; i < pts.length - 1; i += 3) {
+          crack(pts[i][0], pts[i][1], a + (random() < 0.5 ? 1 : -1) * (0.8 + random() * 0.6), 2 + Math.floor(random() * 2), width * 0.6, false);
+        }
+      };
+      g.globalAlpha = 0.8;
+      crack(s * 0.08, s * 0.18, 0.55, 15, 0.016, true);
+      g.globalAlpha = 0.55;
+      crack(s * 0.6, s * 0.55, 2.5, 11, 0.012, true);
+      // Bubbles
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = s * 0.006;
+      g.globalAlpha = 0.45;
+      for (let i = 0; i < 10; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.008 + random() * 0.014);
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.arc(x + dx, y + dy, r, 0, TAU);
+          g.stroke();
+        });
+      }
+      break;
+    }
+    case 'iceCrystal': {
+      // Ice cave walls (chapter 5, second design): faceted crystal. A jittered grid that repeats
+      // with the tile is split into triangles, each facet a different brightness, with lit edges.
+      const random = seeded(6262);
+      const n = 4;
+      const jitter: [number, number][] = [];
+      for (let k = 0; k < n * n; k++) jitter.push([(random() - 0.5) * 0.6, (random() - 0.5) * 0.6]);
+      const pt = (i: number, j: number): [number, number] => {
+        const [jx, jy] = jitter[(((j % n) + n) % n) * n + (((i % n) + n) % n)];
+        return [(s * (i + 0.5 + jx)) / n, (s * (j + 0.5 + jy)) / n];
+      };
+      const lit = mix(f.color, '#ffffff', 0.5);
+      g.lineJoin = 'round';
+      g.lineWidth = s * 0.008;
+      g.strokeStyle = lit;
+      for (let j = -1; j < n; j++) for (let i = -1; i < n; i++) {
+        const a = pt(i, j), b = pt(i + 1, j), c = pt(i + 1, j + 1), d = pt(i, j + 1);
+        const tris = (((i + j) % 2) + 2) % 2 === 0 ? [[a, b, c], [a, c, d]] : [[a, b, d], [b, c, d]];
+        for (const tri of tris) {
+          // Shade from the facet's place in the repeating grid, so wrapped copies match
+          const shade = (Math.sin((((i % n) + n) % n) * 12.9898 + (((j % n) + n) % n) * 78.233 + (tri === tris[0] ? 0 : 3.1)) * 43758.5453) % 1;
+          const k = Math.abs(shade);
+          g.fillStyle = k > 0.7 ? lit : f.color;
+          g.globalAlpha = 0.12 + k * 0.45;
+          g.beginPath();
+          g.moveTo(tri[0][0], tri[0][1]);
+          g.lineTo(tri[1][0], tri[1][1]);
+          g.lineTo(tri[2][0], tri[2][1]);
+          g.closePath();
+          g.fill();
+          g.globalAlpha = 0.35;
+          g.stroke();
+        }
+      }
+      // A few bright glints on facet corners
+      g.fillStyle = '#ffffff';
+      g.globalAlpha = 0.8;
+      for (const [i, j] of [[1, 1], [3, 2], [0, 3]]) {
+        const [x, y] = pt(i, j);
+        g.beginPath();
+        g.arc(x, y, s * 0.012, 0, Math.PI * 2);
+        g.fill();
       }
       break;
     }

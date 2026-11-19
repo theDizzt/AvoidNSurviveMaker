@@ -1,7 +1,7 @@
 import { language, t as tr } from './i18n';
 import { createPatternTile, PATTERN_RES } from './theme-pattern';
 import { displayTime } from '../core/time';
-import { toWorld, transformAt, type CompiledObject, type Transform } from '../core/object';
+import { tiltPoint, toWorld, transformAt, type CompiledObject, type Transform } from '../core/object';
 import { primaryColor, secondaryColor, shade } from './localized/theme';
 import { switchColor } from './localized/colors';
 import type { Beam } from '../core/laser';
@@ -536,7 +536,8 @@ function drawCoin(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): 
     o.px + tf.dx - tf.cos * o.px + tf.sin * o.py,
     o.py + tf.dy - tf.sin * o.px - tf.cos * o.py,
   );
-  const { poly } = o;
+  tiltFrame(ctx, o);
+  const { poly } = o.box;
   ctx.beginPath();
   ctx.moveTo(poly[0], poly[1]);
   for (let i = 2; i < poly.length; i += 2) ctx.lineTo(poly[i], poly[i + 1]);
@@ -551,9 +552,9 @@ function drawCoin(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): 
   ctx.lineWidth = 1.5;
   ctx.stroke();
   // Inner ring and a small shine
-  const cx = (o.minX + o.maxX) / 2;
-  const cy = (o.minY + o.maxY) / 2;
-  const r = Math.min(o.maxX - o.minX, o.maxY - o.minY) / 2;
+  const cx = (o.box.minX + o.box.maxX) / 2;
+  const cy = (o.box.minY + o.box.maxY) / 2;
+  const r = Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2;
   if (r > 4) {
     ctx.beginPath();
     ctx.arc(cx, cy, r * 0.62, 0, Math.PI * 2);
@@ -756,9 +757,12 @@ export function drawMap(
     map.objects.forEach((m, i) => {
       if (!isDoor(m) || !shown(i)) return;
       const open = doorOpenAt(m, i);
-      for (const half of doorPanels(m.shape as { x: number; y: number; w: number; h: number })) {
-        walls.rect(half.rect.x + half.slide.x * open, half.rect.y + half.slide.y * open, half.rect.w, half.rect.h);
+      const s = m.shape as { x: number; y: number; w: number; h: number };
+      const panels = new Path2D();
+      for (const half of doorPanels(s)) {
+        panels.rect(half.rect.x + half.slide.x * open, half.rect.y + half.slide.y * open, half.rect.w, half.rect.h);
       }
+      walls.addPath(panels, m.tilt ? tiltMatrix(m.tilt, s.x + s.w / 2, s.y + s.h / 2) : undefined);
     });
     g.fillStyle = theme ? fillStyle(g, theme.wall.fill, { minX: 0, minY: 0, maxX: map.width, maxY: map.height }) : COLORS.wall;
     g.fill(walls, 'nonzero');
@@ -964,7 +968,10 @@ function drawPivotScrew(ctx: CanvasRenderingContext2D, o: CompiledObject, t: num
   ctx.restore();
 }
 
-/** Enter an object's posed frame (rest-pose coordinates draw where the object is at time t) */
+/**
+ * Enter an object's posed frame, before its tilt: the untilted shape (`o.box`, `o.src.shape`)
+ * draws where the object is at time t
+ */
 function enterPose(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): void {
   transformAt(o, t, tf);
   ctx.transform(
@@ -972,6 +979,15 @@ function enterPose(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number):
     o.px + tf.dx - tf.cos * o.px + tf.sin * o.py,
     o.py + tf.dy - tf.sin * o.px - tf.cos * o.py,
   );
+  tiltFrame(ctx, o);
+}
+
+/** Turn the current frame by the object's static tilt about its center */
+function tiltFrame(ctx: CanvasRenderingContext2D, o: CompiledObject): void {
+  if (!o.tilt) return;
+  ctx.translate(o.cx, o.cy);
+  ctx.rotate(o.tilt);
+  ctx.translate(-o.cx, -o.cy);
 }
 
 /** How long a falling rock's shards fly after it lands (ms) */
@@ -1028,9 +1044,9 @@ function drawFallEffects(ctx: CanvasRenderingContext2D, o: CompiledObject, f: Fa
 function drawPulley(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, p: Pulley, angle: number): void {
   ctx.save();
   enterPose(ctx, o, t);
-  const cx = (o.minX + o.maxX) / 2;
-  const cy = (o.minY + o.maxY) / 2;
-  const r = Math.min(o.maxX - o.minX, o.maxY - o.minY) / 2;
+  const cx = (o.box.minX + o.box.maxX) / 2;
+  const cy = (o.box.minY + o.box.maxY) / 2;
+  const r = Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2;
   const hex = switchColor(p.color).hex;
   // Wheel
   ctx.fillStyle = 'rgba(255,255,255,0.88)';
@@ -1167,7 +1183,7 @@ function drawCrystal(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number
   enterPose(ctx, o, t);
   // A gentle bob so it reads as a pickup
   const bob = Math.sin(now / 420) * 2;
-  drawCrystalAt(ctx, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2 + bob, Math.min(o.maxX - o.minX, o.maxY - o.minY), now);
+  drawCrystalAt(ctx, (o.box.minX + o.box.maxX) / 2, (o.box.minY + o.box.maxY) / 2 + bob, Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY), now);
   ctx.restore();
 }
 
@@ -1229,7 +1245,7 @@ export function drawTorchAt(ctx: CanvasRenderingContext2D, cx: number, cy: numbe
 function drawTorch(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, now: number, seed: number): void {
   ctx.save();
   enterPose(ctx, o, t);
-  drawTorchAt(ctx, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, o.maxX - o.minX, o.maxY - o.minY, now, seed);
+  drawTorchAt(ctx, (o.box.minX + o.box.maxX) / 2, (o.box.minY + o.box.maxY) / 2, o.box.maxX - o.box.minX, o.box.maxY - o.box.minY, now, seed);
   ctx.restore();
 }
 
@@ -1319,7 +1335,7 @@ function drawSafeZone(ctx: CanvasRenderingContext2D, o: CompiledObject, t: numbe
   ctx.save();
   enterPose(ctx, o, t);
   ctx.beginPath();
-  const { poly } = o;
+  const { poly } = o.box;
   ctx.moveTo(poly[0], poly[1]);
   for (let i = 2; i < poly.length; i += 2) ctx.lineTo(poly[i], poly[i + 1]);
   ctx.closePath();
@@ -1564,7 +1580,7 @@ function drawSaw(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, m:
     }
     ctx.save();
     ctx.translate(c.x, c.y);
-    ctx.rotate(Math.atan2(tf.sin, tf.cos));
+    ctx.rotate(Math.atan2(tf.sin, tf.cos) + o.tilt);
     // Teeth
     const teeth = Math.max(10, Math.round(r / 2.4));
     ctx.beginPath();
@@ -1621,7 +1637,8 @@ function drawSaw(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, m:
       for (let k = 0; k <= N; k++) {
         const lx = long ? s.x + (s.w * k) / N : side < 0 ? s.x : s.x + s.w;
         const ly = long ? (side < 0 ? s.y : s.y + s.h) : s.y + (s.h * k) / N;
-        const p = toWorld(o, tf, lx, ly, { x: 0, y: 0 });
+        const q = tiltPoint(o, lx, ly, { x: 0, y: 0 });
+        const p = toWorld(o, tf, q.x, q.y, q);
         if (!isWallAt(mask, p.x, p.y)) continue;
         contact.push(long
           ? { x: p.x, y: p.y, dx: along * 0.8, dy: side * 0.6 }
@@ -1715,16 +1732,17 @@ function drawEmitter(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number
   const l = m.laser!;
   const col = switchColor(l.color).hex;
   inFrame(ctx, o, t, () => {
-    polyPath(ctx, o);
+    polyPath(ctx, o.box);
     ctx.fillStyle = '#3a3f4b';
     ctx.fill();
     ctx.strokeStyle = '#1d2027';
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    const cx = (o.minX + o.maxX) / 2;
-    const cy = (o.minY + o.maxY) / 2;
-    const s = Math.min(o.maxX - o.minX, o.maxY - o.minY);
-    const a = (l.angle * Math.PI) / 180;
+    const cx = (o.box.minX + o.box.maxX) / 2;
+    const cy = (o.box.minY + o.box.maxY) / 2;
+    const s = Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY);
+    // The beam angle is in map space; this frame is turned by the tilt
+    const a = (l.angle * Math.PI) / 180 - o.tilt;
     // Barrel toward the beam
     ctx.strokeStyle = '#1d2027';
     ctx.lineWidth = s * 0.28;
@@ -1742,8 +1760,8 @@ function drawEmitter(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number
 /** Mirror (#38): silver glass with a bright rim */
 function drawMirror(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): void {
   inFrame(ctx, o, t, () => {
-    polyPath(ctx, o);
-    const g = ctx.createLinearGradient(o.minX, o.minY, o.maxX, o.maxY);
+    polyPath(ctx, o.box);
+    const g = ctx.createLinearGradient(o.box.minX, o.box.minY, o.box.maxX, o.box.maxY);
     g.addColorStop(0, '#eef6ff');
     g.addColorStop(0.5, '#b8c8dc');
     g.addColorStop(1, '#f6fbff');
@@ -1761,10 +1779,10 @@ function drawPortal(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number,
   const col = switchColor(p.color).hex;
   const edge = p.color === 15 ? '#111217' : darker(col);
   inFrame(ctx, o, t, () => {
-    const cx = (o.minX + o.maxX) / 2;
-    const cy = (o.minY + o.maxY) / 2;
-    const s = Math.min(o.maxX - o.minX, o.maxY - o.minY) / 2;
-    polyPath(ctx, o);
+    const cx = (o.box.minX + o.box.maxX) / 2;
+    const cy = (o.box.minY + o.box.maxY) / 2;
+    const s = Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2;
+    polyPath(ctx, o.box);
     ctx.fillStyle = `${col}40`;
     ctx.fill();
     ctx.strokeStyle = edge;
@@ -1811,24 +1829,19 @@ function drawPortal(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number,
     ctx.font = `700 ${Math.max(8, s * 0.42)}px ${FONT_MAIN}`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(String(p.order + 1), o.maxX - 2, o.maxY - 1);
+    ctx.fillText(String(p.order + 1), o.box.maxX - 2, o.box.maxY - 1);
   });
 }
 
-/** Run `draw` in the object's posed frame at time t */
+/** Run `draw` in the object's posed frame at time t (before its tilt, like `enterPose`) */
 function inFrame(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, draw: () => void): void {
-  transformAt(o, t, tf);
   ctx.save();
-  ctx.transform(
-    tf.cos, tf.sin, -tf.sin, tf.cos,
-    o.px + tf.dx - tf.cos * o.px + tf.sin * o.py,
-    o.py + tf.dy - tf.sin * o.px - tf.cos * o.py,
-  );
+  enterPose(ctx, o, t);
   draw();
   ctx.restore();
 }
 
-function polyPath(ctx: CanvasRenderingContext2D, o: CompiledObject): void {
+function polyPath(ctx: CanvasRenderingContext2D, o: { poly: Float64Array }): void {
   const { poly } = o;
   ctx.beginPath();
   ctx.moveTo(poly[0], poly[1]);
@@ -1852,10 +1865,10 @@ function drawSwitch(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number,
   const col = switchColor(trig.color).hex;
   const edge = trig.color === 15 ? '#111217' : darker(col);
   inFrame(ctx, o, t, () => {
-    const x = o.minX;
-    const y = o.minY;
-    const w = o.maxX - o.minX;
-    const h = o.maxY - o.minY;
+    const x = o.box.minX;
+    const y = o.box.minY;
+    const w = o.box.maxX - o.box.minX;
+    const h = o.box.maxY - o.box.minY;
     const s = Math.min(w, h);
     const r = Math.min(8, s * 0.22);
     // Base plate
@@ -1908,7 +1921,7 @@ function drawEventZone(ctx: CanvasRenderingContext2D, o: CompiledObject, t: numb
   const trig = m.trigger!;
   const col = switchColor(trig.color).hex;
   inFrame(ctx, o, t, () => {
-    polyPath(ctx, o);
+    polyPath(ctx, o.box);
     ctx.fillStyle = `${col}55`;
     ctx.fill();
     ctx.setLineDash([6, 4]);
@@ -1916,9 +1929,9 @@ function drawEventZone(ctx: CanvasRenderingContext2D, o: CompiledObject, t: numb
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.setLineDash([]);
-    const cx = (o.minX + o.maxX) / 2;
-    const cy = (o.minY + o.maxY) / 2;
-    const s = Math.min(16, (o.maxX - o.minX) * 0.3, (o.maxY - o.minY) * 0.3);
+    const cx = (o.box.minX + o.box.maxX) / 2;
+    const cy = (o.box.minY + o.box.maxY) / 2;
+    const s = Math.min(16, (o.box.maxX - o.box.minX) * 0.3, (o.box.maxY - o.box.minY) * 0.3);
     ctx.fillStyle = trig.color === 15 ? '#111217' : darker(col);
     ctx.beginPath();
     if (trig.kind === 'startZone') {
@@ -1936,6 +1949,8 @@ function drawEventZone(ctx: CanvasRenderingContext2D, o: CompiledObject, t: numb
 /** Sliding door (#40) panels are part of the wall mass; a switch door also shows its color */
 function drawDoorStripes(ctx: CanvasRenderingContext2D, m: MapObject, open: number): void {
   const s = m.shape as { x: number; y: number; w: number; h: number };
+  ctx.save();
+  if (m.tilt) ctx.transform(...tiltMatrixArgs(m.tilt, s.x + s.w / 2, s.y + s.h / 2));
   ctx.fillStyle = switchColor(m.door!.color).hex;
   for (const half of doorPanels(s)) {
     const x = half.rect.x + half.slide.x * open;
@@ -1943,6 +1958,20 @@ function drawDoorStripes(ctx: CanvasRenderingContext2D, m: MapObject, open: numb
     if (s.w >= s.h) ctx.fillRect(x + 2, y + half.rect.h / 2 - 2, half.rect.w - 4, 4);
     else ctx.fillRect(x + half.rect.w / 2 - 2, y + 2, 4, half.rect.h - 4);
   }
+  ctx.restore();
+}
+
+/** Canvas transform turning `deg` degrees clockwise about (cx, cy) */
+function tiltMatrixArgs(deg: number, cx: number, cy: number): [number, number, number, number, number, number] {
+  const a = (deg * Math.PI) / 180;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  return [cos, sin, -sin, cos, cx - cos * cx + sin * cy, cy - sin * cx - cos * cy];
+}
+
+function tiltMatrix(deg: number, cx: number, cy: number): DOMMatrix2DInit {
+  const [a, b, c, d, e, f] = tiltMatrixArgs(deg, cx, cy);
+  return { a, b, c, d, e, f };
 }
 
 export function drawTrail(ctx: CanvasRenderingContext2D, pts: readonly number[]): void {

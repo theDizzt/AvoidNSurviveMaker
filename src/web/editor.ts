@@ -3,12 +3,12 @@ import { pointInPoly, pointInRect } from '../core/geometry';
 import { CompiledMotion } from '../core/motion';
 import { objectLights } from '../core/lighting';
 import { compileObject, transformAt, type CompiledObject, type Transform } from '../core/object';
-import { objectsBounds, shapeCentroid, translateObject, type AlignMode, type Turn, type ZOrder } from '../core/arrange';
+import { objectsBounds, shapeCentroid, tiltObject, translateObject, type AlignMode, type Turn, type ZOrder } from '../core/arrange';
 import { gameplayKey } from './localized/level';
 import { formatSeconds } from '../core/simulation';
 import { initialChannels } from '../core/switches';
 import { type MergeOp } from '../core/merge';
-import { flattenShape, polyOutline, shapeBounds, shapeCenter } from '../core/shape';
+import { flattenShape, polyOutline, rotatePoint, shapeBounds, shapeCenter, tiltedBounds, translateShape } from '../core/shape';
 import { encodeMap } from './localized/share';
 import type { FogKind, MapData, MapObject, Point, PolyPoint, Rect, Shape, TriggerKind } from '../core/types';
 import { switchColor } from './localized/colors';
@@ -18,18 +18,21 @@ import { createEmptyMap, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_SECRET_RADIUS, DE
 import { beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, fittedView, FONT_MAIN, fitCanvas, setCamera, staticPicture, traceObject, unitsPerPx } from './render';
 import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
 import { renderThemePanel } from './theme-panel';
-import { badgeFor, badgeTitle, chapterMazePresets } from './theme-registry';
+import { badgeFor, badgeTitle, bundledThemeById, bundledThemeOptions, chapterMazePresets } from './theme-registry';
 import { badgeImage, drawLevelBadge } from './badge';
 import { DEFAULT_BADGE } from './localized/theme-pack';
 
 import { checkSymmetry, mirrorPoint, SYMMETRY_MODES, type SymmetryMode, type SymmetryReport } from '../core/symmetry';
 import { drawFogAreas } from './fog';
-import { Behavior, ObjectTool, Tool, SHAPES, GROUPS, ICONS, isButton, isSquare, toolLabel, objectToolId, ZONE_IDS, sizeText, Hit, Handle, Drag, MAP_SIZES, GRID, HANDLE_PX, PIVOT_SNAP_PX, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP, IDENTITY, newMotion, EditorElements, clone, CommandId, Command, ARROWS, SHORTCUTS, rectFromCorners, rectCorners } from './editor-shared';
+import { Behavior, ObjectTool, Tool, SHAPES, GROUPS, ICONS, isButton, isSquare, toolLabel, objectToolId, ZONE_IDS, sizeText, Hit, Handle, Drag, MAP_SIZES, GRID, HANDLE_PX, PIVOT_SNAP_PX, ROTATE_HANDLE_PX, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP, IDENTITY, newMotion, EditorElements, clone, CommandId, Command, ARROWS, SHORTCUTS, rectFromCorners, rectCorners } from './editor-shared';
 import { EditorDocument, type EditorSelection as Selection } from '../core/editor-document';
 import * as editCommands from '../core/editor-commands';
 import { loadEditorDraft, saveEditorDraft, loadEditorPreference, saveEditorPreference } from './editor-storage';
 import { EditorPropertiesPanel } from './editor-properties';
 export type { EditorElements } from './editor-shared';
+
+/** "30°" / "-12.5°" */
+const tiltText = (deg: number): string => `${Math.round(deg * 10) / 10}°`;
 
 export class Editor {
   onTest: (map: MapData) => void = () => {};
@@ -41,8 +44,8 @@ export class Editor {
   private get map(): MapData { return this.model.map; }
   private set map(value: MapData) { this.model.map = value; }
   /** Maze colors of the map being edited (picks the editor's music) */
-  get mapTheme(): MapData['theme'] {
-    return this.map.theme;
+  get mapLook(): Pick<MapData, 'theme' | 'themeId'> {
+    return { theme: this.map.theme, themeId: this.map.themeId };
   }
   private compiledCache: CompiledObject[] | null = null;
   private readonly routeCache = new WeakMap<CompiledObject, number[]>();
@@ -826,8 +829,11 @@ export class Editor {
     if (!o) return out; // no handles for multi-selections
     if (o.rotation) out.push({ h: { kind: 'pivot' }, p: o.rotation.pivot });
     o.motion?.points.forEach((p, j) => out.push({ h: { kind: 'marker', j }, p }));
+    out.push({ h: { kind: 'rotate' }, p: this.rotateHandlePoint(o) });
     const s = o.shape;
-    if (o.role === 'coin' || o.role === 'crystal') return out; // fixed size: only route markers / pivot
+    if (o.role === 'coin' || o.role === 'crystal') return out; // fixed size: only route markers / pivot / tilt
+    // Shape handles sit on the tilted outline
+    const shapeStart = out.length;
     if (o.laser) {
       const b = shapeBounds(o.shape);
       const a = (o.laser.angle * Math.PI) / 180;
@@ -847,7 +853,24 @@ export class Editor {
         out.push({ h: { kind: 'arc', part: 'end' }, p: at(s.start + s.sweep) });
       }
     } else rectCorners(shapeBounds(s)).forEach((p, j) => out.push({ h: { kind: 'corner', j }, p }));
+    if (o.tilt) {
+      const c = shapeCenter(s);
+      for (let k = shapeStart; k < out.length; k++) if (out[k].h.kind !== 'aim') out[k].p = rotatePoint(out[k].p, c, o.tilt);
+    }
     return out;
+  }
+
+  /** The tilt handle: above the object's center, turned with its tilt */
+  private rotateHandlePoint(o: MapObject): Point {
+    const b = shapeBounds(o.shape);
+    const c = shapeCenter(o.shape);
+    const u = unitsPerPx(this.el.canvas, this.map);
+    return rotatePoint({ x: c.x, y: b.y - ROTATE_HANDLE_PX * u }, c, o.tilt ?? 0);
+  }
+
+  /** Pointer angle around an object's center, degrees clockwise from straight up */
+  private static angleAround(c: Point, p: Point): number {
+    return (Math.atan2(p.y - c.y, p.x - c.x) * 180) / Math.PI + 90;
   }
 
   private hitHandle(p: Point): Handle | null {
@@ -916,7 +939,8 @@ export class Editor {
       }
       if (h) {
         const orig = clone(this.selectedZone() ?? this.selectedObject()!);
-        this.drag = { type: 'handle', h, before: JSON.stringify(this.map), moved: false, orig };
+        const a0 = h.kind === 'rotate' && 'shape' in orig ? Editor.angleAround(shapeCenter(orig.shape), raw) : undefined;
+        this.drag = { type: 'handle', h, before: JSON.stringify(this.map), moved: false, orig, a0 };
         return;
       }
       const hit = this.hitTest(raw);
@@ -994,11 +1018,11 @@ export class Editor {
       this.applyCamera();
       return;
     }
-    const raw = this.pointer(e);
+    let raw = this.pointer(e);
     this.hover = raw;
     const d = this.drag;
     if (!d) return;
-    const p = this.snapPoint(raw);
+    let p = this.snapPoint(raw);
 
     if (d.type === 'box') {
       d.x1 = p.x;
@@ -1046,6 +1070,27 @@ export class Editor {
     }
     const o = this.selectedObject();
     if (!o || !('shape' in d.orig)) return;
+    if (h.kind === 'rotate') {
+      const c = shapeCenter(d.orig.shape);
+      const from = d.orig.tilt ?? 0;
+      let deg = from + Editor.angleAround(c, raw) - (d.a0 ?? 0);
+      // 15° steps while Snap is on or Shift is held (Alt places freely)
+      if ((this.el.snap.checked || e.shiftKey) && !e.altKey) deg = Math.round(deg / 15) * 15;
+      else deg = Math.round(deg);
+      this.map.objects[this.selectedIndex()] = tiltObject(d.orig, deg - from);
+      this.dirty();
+      return;
+    }
+    // A tilted shape is edited in its own (untilted) frame, from where the drag started, then
+    // shifted so the parts that didn't change stay where they were
+    const tilt = d.orig.tilt ?? 0;
+    const shapeHandle = h.kind === 'corner' || h.kind === 'vertex' || h.kind === 'arc';
+    const c0 = shapeCenter(d.orig.shape);
+    if (tilt && shapeHandle) {
+      o.shape = clone(d.orig.shape);
+      raw = rotatePoint(raw, c0, -tilt);
+      p = rotatePoint(p, c0, -tilt);
+    }
     if (h.kind === 'pivot' && o.rotation) {
       // Snap to the exact center / corners when close (hold Alt to place freely)
       const reach = PIVOT_SNAP_PX * unitsPerPx(this.el.canvas, this.map);
@@ -1098,6 +1143,11 @@ export class Editor {
       if (o.shape.type === 'rect') o.shape = { type: 'rect', ...r };
       else if (o.shape.type === 'ellipse') o.shape = { type: 'ellipse', cx: r.x + r.w / 2, cy: r.y + r.h / 2, rx: r.w / 2, ry: r.h / 2 };
     }
+    if (tilt && shapeHandle) {
+      const c1 = shapeCenter(o.shape);
+      const at = rotatePoint(c1, c0, tilt);
+      o.shape = translateShape(o.shape, Math.round((at.x - c1.x) * 100) / 100, Math.round((at.y - c1.y) * 100) / 100);
+    }
     this.dirty();
   }
 
@@ -1119,7 +1169,7 @@ export class Editor {
       // Objects entirely inside the box (PowerPoint style)
       const hits: number[] = [];
       this.map.objects.forEach((o, i) => {
-        const b = shapeBounds(o.shape);
+        const b = tiltedBounds(o.shape, o.tilt);
         if (b.x >= r.x && b.y >= r.y && b.x + b.w <= r.x + r.w && b.y + b.h <= r.y + r.h) hits.push(i);
       });
       this.selectObjects([...d.base, ...hits]);
@@ -1817,6 +1867,46 @@ export class Editor {
   }
 
   /**
+   * The bundled theme (official chapter or custom preset) the map wears when shared on its own:
+   * its badge and music, and its maze colors (one of its designs can be picked for those).
+   */
+  private themePicker(m: MapData): HTMLElement {
+    const sel = document.createElement('select');
+    sel.append(new Option(tr('ed.themeNone'), ''));
+    const picked = m.themeId ? bundledThemeById(m.themeId) : null;
+    const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    let current = '';
+    for (const { id, name, entry } of bundledThemeOptions()) {
+      const style = entry.info.style;
+      sel.append(new Option(name, id));
+      for (const d of style.designs ?? []) sel.append(new Option(`${name} · ${d.name}`, `${id}#${d.id}`));
+      if (picked === entry) {
+        const design = (style.designs ?? []).find((d) => same(d.maze, m.theme) && !same(style.maze, m.theme));
+        current = design ? `${id}#${design.id}` : id;
+      }
+    }
+    sel.value = current;
+    sel.addEventListener('change', () => this.edit(() => {
+      const [id, designId] = sel.value.split('#');
+      const entry = id ? bundledThemeById(id) : null;
+      if (!entry) {
+        delete m.themeId;
+        return;
+      }
+      m.themeId = id;
+      const maze = (designId ? entry.info.style.designs?.find((d) => d.id === designId)?.maze : undefined) ?? entry.info.style.maze;
+      if (maze) m.theme = clone(maze);
+      else delete m.theme;
+    }));
+    const wrap = document.createElement('div');
+    wrap.append(
+      this.properties.group(this.properties.field(tr('ed.mapTheme'), sel, true)),
+      this.properties.note(tr('ed.mapThemeNote')),
+    );
+    return wrap;
+  }
+
+  /**
    * Rebuild the level settings only when they changed, so a field being typed in keeps focus.
    * The fields write into the map object they were built for, so a replaced map (loaded from the
    * menu, undo / redo, new map) always rebuilds them, even when its settings look the same.
@@ -1825,7 +1915,7 @@ export class Editor {
   private renderedLevelMap: MapData | null = null;
   private renderLevel(): void {
     const m = this.map;
-    const json = JSON.stringify([m.title, m.name, m.level, m.stars, this.lastClearMs, m.darkness, m.difficulty]);
+    const json = JSON.stringify([m.title, m.name, m.level, m.stars, this.lastClearMs, m.darkness, m.difficulty, m.themeId, m.theme]);
     if (json === this.renderedLevel && m === this.renderedLevelMap) return;
     this.renderedLevel = json;
     this.renderedLevelMap = m;
@@ -1875,6 +1965,7 @@ export class Editor {
       this.properties.note(tr('ed.theTitleAndNumberAre')),
     ];
 
+    parts.push(this.themePicker(m));
     parts.push(this.properties.toggle(tr('ed.starRatings'), !!m.stars, (on) => {
       if (!on) return void delete m.stars;
       // Suggest times from the last test clear, else 10 / 20 / 30 s
@@ -1957,6 +2048,63 @@ export class Editor {
   // ───────────────────────── Drawing ─────────────────────────
 
   /** Small pill with object info, placed just above-right of (x, y) and kept inside the map */
+  /** The tilt handle: a stem from the object's center, a round knob with a turn arrow, and the angle while turning */
+  private drawRotateHandle(o: MapObject, p: Point, u: number, active: boolean): void {
+    const { ctx } = this;
+    const c = shapeCenter(o.shape);
+    ctx.save();
+    ctx.strokeStyle = COLORS.select;
+    ctx.lineWidth = 1.2 * u;
+    if (active) {
+      // Guide: straight up (0°) and the current direction, with the swept arc between them
+      const r = Math.hypot(p.x - c.x, p.y - c.y);
+      const tilt = ((o.tilt ?? 0) * Math.PI) / 180;
+      ctx.setLineDash([3 * u, 3 * u]);
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y);
+      ctx.lineTo(c.x, c.y - r);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      if (tilt) {
+        ctx.fillStyle = 'rgba(58,159,240,0.15)';
+        ctx.beginPath();
+        ctx.moveTo(c.x, c.y);
+        ctx.arc(c.x, c.y, Math.min(r, 40 * u), -Math.PI / 2, -Math.PI / 2 + tilt, tilt < 0);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    // Center (the axis)
+    ctx.fillStyle = COLORS.select;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 2.5 * u, 0, Math.PI * 2);
+    ctx.fill();
+    // Knob
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = COLORS.ink;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 6.5 * u, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3.2 * u, -Math.PI * 0.9, Math.PI * 0.4);
+    ctx.stroke();
+    const tip = { x: p.x + Math.cos(Math.PI * 0.4) * 3.2 * u, y: p.y + Math.sin(Math.PI * 0.4) * 3.2 * u };
+    ctx.beginPath();
+    ctx.moveTo(tip.x - 2.2 * u, tip.y + 0.4 * u);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.lineTo(tip.x + 0.4 * u, tip.y - 2.2 * u);
+    ctx.stroke();
+    ctx.restore();
+    if (active) this.drawInfoLabel(tiltText(o.tilt ?? 0), p.x + 10 * u, p.y - 6 * u, u);
+  }
+
   private drawInfoLabel(text: string, x: number, y: number, u: number): void {
     const { ctx, map } = this;
     ctx.font = `600 ${12 * u}px ${FONT_MAIN}`;
@@ -2089,7 +2237,7 @@ export class Editor {
     ctx.lineWidth = 1.2 * u;
     for (const o of map.objects) {
       if (!o.spike || o.shape.type !== 'poly') continue;
-      const tip = o.shape.points[0];
+      const tip = o.tilt ? rotatePoint(o.shape.points[0], shapeCenter(o.shape), o.tilt) : o.shape.points[0];
       const a = (o.spike.angle * Math.PI) / 180;
       ctx.beginPath();
       ctx.moveTo(tip.x, tip.y);
@@ -2118,8 +2266,8 @@ export class Editor {
     for (const o of objs) {
       const f = o.src?.fall;
       if (!f) continue;
-      const cx = (o.minX + o.maxX) / 2;
-      const cy = (o.minY + o.maxY) / 2;
+      const cx = o.cx;
+      const cy = o.cy;
       ctx.beginPath();
       ctx.moveTo(cx, cy - f.height);
       ctx.lineTo(cx, cy);
@@ -2214,7 +2362,7 @@ export class Editor {
     map.objects.forEach((o) => {
       const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : o.laser?.switchColor);
       if (c === undefined) return;
-      const b = shapeBounds(o.shape);
+      const b = tiltedBounds(o.shape, o.tilt);
       ctx.fillStyle = switchColor(c).hex;
       ctx.strokeStyle = COLORS.ink;
       ctx.lineWidth = 1.2 * u;
@@ -2241,11 +2389,12 @@ export class Editor {
 
       // "#4 · ID 5 · 120×40" at the top-right of the selection (group members: the group's box too)
       const o = this.selectedObject();
-      const b = zone ?? (o ? shapeBounds(o.shape) : null);
+      const b = zone ?? (o ? tiltedBounds(o.shape, o.tilt) : null);
       if (b) {
         const kind = this.sel?.kind;
+        const size = o ? shapeBounds(o.shape) : b;
         const label = o
-          ? `#${selIndex + 1} · ID ${objectToolId(o)} · ${sizeText(b.w, b.h)}`
+          ? `#${selIndex + 1} · ID ${objectToolId(o)} · ${sizeText(size.w, size.h)}${o.tilt ? ` · ${tiltText(o.tilt)}` : ''}`
           : `${tr(kind === 'start' ? 'zone.start' : 'zone.goal')} · ID ${ZONE_IDS[kind === 'start' ? 'start' : 'goal']} · ${sizeText(b.w, b.h)}`;
         this.drawInfoLabel(label, b.x + b.w, b.y, u);
       }
@@ -2333,6 +2482,10 @@ export class Editor {
     for (const { h, p } of this.handles()) {
       ctx.lineWidth = 1.2 * u;
       ctx.strokeStyle = COLORS.ink;
+      if (h.kind === 'rotate' && o) {
+        this.drawRotateHandle(o, p, u, dr?.type === 'handle' && dr.h.kind === 'rotate');
+        continue;
+      }
       if (h.kind === 'pivot') {
         ctx.fillStyle = COLORS.pivot;
         ctx.beginPath();

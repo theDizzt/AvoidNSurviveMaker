@@ -1,4 +1,4 @@
-import { flattenShape } from './shape';
+import { tiltedFlat } from './shape';
 import type { MapData, MapObject, Rect } from './types';
 
 /**
@@ -128,7 +128,7 @@ export function checkSymmetry(map: MapData, mode: SymmetryMode): SymmetryReport 
   const report: SymmetryReport = { objects: [], start: false, goal: false };
   if (mode === 'off') return report;
   const steps: Exclude<SymmetryMode, 'off' | 'both'>[] = mode === 'both' ? ['mirrorX', 'mirrorY'] : [mode];
-  const objects = map.objects.map((o) => item(kindOf(o), flattenShape(o.shape).poly));
+  const objects = map.objects.map((o) => item(kindOf(o), tiltedFlat(o.shape, o.tilt).poly));
   const zones = [item('zone', rectPoly(map.start)), item('zone', rectPoly(map.goal))];
   const broken = (it: Item, pool: Item[]) =>
     steps.some((step) => {

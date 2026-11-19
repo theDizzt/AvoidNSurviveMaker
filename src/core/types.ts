@@ -267,6 +267,12 @@ export interface Rotation {
 export interface MapObject {
   role: Role;
   shape: Shape;
+  /**
+   * Static tilt in degrees, clockwise on screen, -180–180 (omitted = 0): the shape is placed turned
+   * about its center (`shapeCenter`). Route markers, the rotation pivot and laser / spike angles
+   * are in map space and are not turned by it.
+   */
+  tilt?: number;
   motion?: Motion;
   rotation?: Rotation;
   /** Editor-only grouping: objects sharing a group id are selected and moved together */
@@ -305,7 +311,7 @@ export interface MapObject {
   light?: { radius: number; intensity?: number };
 }
 
-export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal' | 'egyptian' | 'sandBrick' | 'bark' | 'woodGrain';
+export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal' | 'egyptian' | 'sandBrick' | 'bark' | 'woodGrain' | 'thicket' | 'mud' | 'snow' | 'ice' | 'iceCrystal';
 
 /** Colors are '#rrggbb'. Gradients and patterns are laid out in the object's own frame, so they move and rotate with it. */
 export type Fill =
@@ -350,6 +356,12 @@ export interface MapData {
   theme?: Theme;
   /** Named maze design from the containing theme pack. */
   themeDesign?: string;
+  /**
+   * A bundled theme (official chapter or custom theme preset, by its id) the map wears when played
+   * on its own: its badge and music (its maze colors are copied into `theme` when picked).
+   * Ignored inside a theme pack, whose own settings apply.
+   */
+  themeId?: string;
   /** Level title shown in game (falls back to `name`) */
   title?: string;
   /** Level number shown in game, 1–9999 */

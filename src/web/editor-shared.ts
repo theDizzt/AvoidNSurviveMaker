@@ -165,7 +165,9 @@ export type Handle =
   /** Sector: the two arc ends (angles) and the arc middle (radius) */
   | { kind: 'arc'; part: 'start' | 'end' | 'radius' | 'inner' }
   /** Laser: beam direction */
-  | { kind: 'aim' };
+  | { kind: 'aim' }
+  /** Tilt: turns the object about its center */
+  | { kind: 'rotate' };
 
 export type Drag =
   | { type: 'box'; x0: number; y0: number; x1: number; y1: number; square: boolean }
@@ -177,7 +179,7 @@ export type Drag =
     clicked: number | null;
   }
   | { type: 'marquee'; x0: number; y0: number; x1: number; y1: number; add: boolean; base: number[] }
-  | { type: 'handle'; h: Handle; before: string; moved: boolean; orig: MapObject | Rect };
+  | { type: 'handle'; h: Handle; before: string; moved: boolean; orig: MapObject | Rect; /** rotate: pointer angle at the start (deg) */ a0?: number };
 
 
 
@@ -189,6 +191,8 @@ export const GRID = 10;
 export const HANDLE_PX = 7;
 
 export const PIVOT_SNAP_PX = 10;
+/** How far above an object its tilt handle sits (screen px) */
+export const ROTATE_HANDLE_PX = 26;
 
 export const MIN_ZOOM = 0.25;
 

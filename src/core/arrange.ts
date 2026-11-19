@@ -1,4 +1,4 @@
-import { flattenShape, shapeBounds, shapeCenter, translateShape } from './shape';
+import { flattenShape, normalizeTilt, rotatePoint, shapeCenter, tiltedBounds, translateShape } from './shape';
 import type { MapObject, Point, Rect, Shape } from './types';
 
 /**
@@ -29,7 +29,7 @@ export function unionRect(rects: readonly Rect[]): Rect {
 }
 
 export function objectsBounds(objs: readonly MapObject[]): Rect {
-  return unionRect(objs.map((o) => shapeBounds(o.shape)));
+  return unionRect(objs.map((o) => tiltedBounds(o.shape, o.tilt)));
 }
 
 /** Quarter turns (+1 = 90° clockwise on screen) and mirror flips, all about a center point */
@@ -87,6 +87,9 @@ export function turnObjects(objs: readonly MapObject[], t: Turn): MapObject[] {
       const r = t === 'cw' ? a + 90 : t === 'ccw' ? a - 90 : t === 'flipH' ? 180 - a : -a;
       return ((r % 360) + 360) % 360;
     };
+    // A flip mirrors the tilt; quarter turns commute with it
+    if (out.tilt && (t === 'flipH' || t === 'flipV')) out.tilt = normalizeTilt(-out.tilt) || undefined;
+    if (out.tilt === undefined) delete out.tilt;
     if (out.spike) out.spike.angle = turnAngle(out.spike.angle);
     if (out.laser) out.laser.angle = turnAngle(out.laser.angle);
     if (out.motion) {
@@ -175,4 +178,26 @@ export function shapeCentroid(s: Shape): Point {
   }
   if (Math.abs(a) < 1e-9) return shapeCenter(s);
   return { x: cx / (3 * a), y: cy / (3 * a) };
+}
+
+/**
+ * Turn one object about its own center by `deg` degrees (clockwise on screen), on top of the tilt
+ * it had in `from`. The pivot, the laser beam and the spike thrust turn with it; route markers stay.
+ */
+export function tiltObject(from: MapObject, deg: number): MapObject {
+  const out = structuredClone(from);
+  const total = normalizeTilt((from.tilt ?? 0) + deg);
+  if (total) out.tilt = total;
+  else delete out.tilt;
+  const turned = total - (from.tilt ?? 0);
+  if (!turned) return out;
+  const c = shapeCenter(from.shape);
+  const turnAngle = (a: number) => (((Math.round((a + turned) * 10) / 10) % 360) + 360) % 360;
+  if (out.rotation) {
+    const p = rotatePoint(out.rotation.pivot, c, turned);
+    out.rotation.pivot = { x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 };
+  }
+  if (out.laser) out.laser.angle = turnAngle(out.laser.angle);
+  if (out.spike) out.spike.angle = turnAngle(out.spike.angle);
+  return out;
 }

@@ -35,11 +35,21 @@ export interface BadgeStyle {
   image?: string;
 }
 
+export interface ThemeDesign {
+  id: string;
+  name: string;
+  maze?: Theme;
+  themeId?: string;
+}
+
 export interface ThemeStyle {
   /** Maze colors: walls and paths (the map editor's Theme) — applied to levels without their own */
   maze?: Theme;
-  /** Additional named designs, selected by a level's themeDesign. */
-  designs?: { id: string; name: string; maze?: Theme }[];
+  /**
+   * Additional named designs, selected by a level's themeDesign. `themeId` links a bundled theme
+   * (official chapter or custom preset): levels using the design also wear its badge and music.
+   */
+  designs?: ThemeDesign[];
   badge: BadgeStyle;
 }
 
@@ -240,7 +250,8 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
         const id = str(d.id, 61);
         if (!/^[A-Za-z0-9_-]{1,60}$/.test(id) || ids.has(id)) throw new Error('Invalid or duplicate theme design id');
         ids.add(id);
-        const design: { id: string; name: string; maze?: Theme } = { id, name: str(d.name, 60) || id };
+        const design: ThemeDesign = { id, name: str(d.name, 60) || id };
+        if (typeof d.themeId === 'string' && /^[A-Za-z0-9_-]{1,60}$/.test(d.themeId)) design.themeId = d.themeId;
         if (d.maze !== undefined) design.maze = validateMap({ v: 2, width: 960, height: 540,
           start: { x: 0, y: 0, w: 10, h: 10 }, goal: { x: 20, y: 0, w: 10, h: 10 }, objects: [], theme: d.maze }).theme;
         return design;

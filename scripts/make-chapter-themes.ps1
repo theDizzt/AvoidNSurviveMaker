@@ -87,6 +87,10 @@ foreach ($chapter in $chapters) {
     foreach ($field in @('music', 'credits')) {
       if ($previous.$field) { $info[$field] = $previous.$field }
     }
+    # Hand-authored maze colors and designs (e.g. chapter 4's thicket / mud, chapter 5's ice cave)
+    foreach ($field in @('maze', 'designs')) {
+      if ($previous.style.$field) { $info.style[$field] = $previous.style.$field }
+    }
   }
   [IO.File]::WriteAllText($infoPath, ($info | ConvertTo-Json -Depth 20) + "`n")
 }

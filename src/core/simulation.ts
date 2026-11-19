@@ -1,11 +1,11 @@
 import { pointInPoly, pointInRect, segmentPolyCrossings, segmentRectEntry } from './geometry';
 import { displayTime } from './time';
-import { compileMap, compileObject, compileZone, toLocal, toWorld, transformAt, type CompiledObject, type Transform } from './object';
+import { compileMap, compileTiltedAbout, compileZone, toLocal, toWorld, transformAt, type CompiledObject, type Transform } from './object';
 import { autoDoorOpen, doorPanels, initialChannels } from './switches';
 import { BeamCaster, beamHit, type Beam } from './laser';
 import { fallState } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
-import { shapeCenter } from './shape';
+import { rotatePoint, shapeCenter } from './shape';
 
 /** How long a portal pulls the cursor to its center before teleporting (ms) */
 export const PORTAL_PULL_MS = 160;
@@ -203,11 +203,15 @@ export class Simulation {
         slide.push(0, 0);
       } else if (o.role === 'door' && map.objects[i].shape.type === 'rect') {
         const s = map.objects[i].shape as { x: number; y: number; w: number; h: number };
+        // A tilted door's panels turn about the door's center, and slide along the tilt
+        const tilt = map.objects[i].tilt;
+        const c = { x: s.x + s.w / 2, y: s.y + s.h / 2 };
         for (const half of doorPanels(s)) {
-          solids.push({ ...compileObject({ role: 'wall', shape: { type: 'rect', ...half.rect } }), dynamic: true });
+          solids.push({ ...compileTiltedAbout({ role: 'wall', shape: { type: 'rect', ...half.rect }, tilt }, c), dynamic: true });
           src.push(i);
           doorOf.push(i);
-          slide.push(half.slide.x, half.slide.y);
+          const d = tilt ? rotatePoint(half.slide, { x: 0, y: 0 }, tilt) : half.slide;
+          slide.push(d.x, d.y);
         }
       }
     });
@@ -370,7 +374,7 @@ export class Simulation {
     this.pull = null;
     const o = this.objects[pull.dest];
     transformAt(o, this.clock[pull.dest], tfA);
-    toWorld(o, tfA, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, pA);
+    toWorld(o, tfA, o.cx, o.cy, pA);
     this.x = pA.x;
     this.y = pA.y;
     this.offX = this.x - rx;
@@ -759,8 +763,8 @@ export class Simulation {
       const o = this.objects[i];
       const p = this.map.objects[i].pulley!;
       transformAt(o, this.clock[i], tfA);
-      toWorld(o, tfA, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, pA);
-      const r = Math.min(o.maxX - o.minX, o.maxY - o.minY) / 2;
+      toWorld(o, tfA, o.cx, o.cy, pA);
+      const r = Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2;
       const da = Math.hypot(xa - pA.x, ya - pA.y);
       const db = Math.hypot(xb - pA.x, yb - pA.y);
       if (da > r || db > r || da < PULLEY_DEAD_ZONE || db < PULLEY_DEAD_ZONE) continue;
@@ -821,7 +825,7 @@ export class Simulation {
       const dest = this.portalExit(i);
       if (dest < 0) continue;
       transformAt(o, this.clock[i], tfA);
-      toWorld(o, tfA, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, pA);
+      toWorld(o, tfA, o.cx, o.cy, pA);
       this.pull = { start: tb, end: tb + PORTAL_PULL_MS, fromX: xb, fromY: yb, toX: pA.x, toY: pA.y, dest };
     }
   }
@@ -907,8 +911,8 @@ export class Simulation {
         by = pB.y;
       }
       // Earliest point of the segment within the magnet range of the coin's center (local frame)
-      const cx = (o.minX + o.maxX) / 2;
-      const cy = (o.minY + o.maxY) / 2;
+      const cx = o.cx;
+      const cy = o.cy;
       const fx = ax - cx;
       const fy = ay - cy;
       const dx = bx - ax;

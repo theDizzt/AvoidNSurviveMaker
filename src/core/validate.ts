@@ -3,7 +3,7 @@ import { contentHash } from './record-identity';
 import { pointInPoly, pointInRect } from './geometry';
 import { compileObject, toWorld, transformAt, type Transform } from './object';
 import { createColorsApi } from './colors';
-import { shapeBounds, shapeCenter } from './shape';
+import { normalizeTilt, shapeBounds, shapeCenter } from './shape';
 import {
   MAP_VERSION, PACK_VERSION,
   type Door, type Easing, type Fill, type MapData, type MapPack, type Trigger, type TriggerKind, type MapObject, type Motion, type PatternKind, type Point, type PolyPoint, type Rect,
@@ -214,6 +214,10 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     };
     if (o.motion !== undefined) out.motion = motion(o.motion, `${name}.motion`, W, H);
     if (o.rotation !== undefined) out.rotation = rotation(o.rotation, `${name}.rotation`, W, H);
+    if (o.tilt !== undefined) {
+      const tilt = normalizeTilt(num(o.tilt, `${name}.tilt`, -720, 720));
+      if (tilt) out.tilt = tilt;
+    }
     if (o.group !== undefined) {
       const g = num(o.group, `${name}.group`, 1, 1e9);
       if (Number.isInteger(g)) out.group = g;
@@ -361,7 +365,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     return v.toLowerCase();
   }
 
-  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain'] as const satisfies readonly PatternKind[];
+  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'snow', 'ice', 'iceCrystal'] as const satisfies readonly PatternKind[];
 
   function fill(v: unknown, name: string): Fill {
     const o = obj(v, name);
@@ -445,6 +449,10 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     if (o.themeDesign !== undefined) {
       if (typeof o.themeDesign !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(o.themeDesign)) fail('Invalid theme design id');
       map.themeDesign = o.themeDesign;
+    }
+    if (o.themeId !== undefined) {
+      if (typeof o.themeId !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(o.themeId)) fail('Invalid theme id');
+      map.themeId = o.themeId;
     }
     if (o.id !== undefined) {
       if (typeof o.id !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(o.id)) fail('Invalid level id');
