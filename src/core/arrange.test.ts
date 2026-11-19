@@ -406,3 +406,20 @@ describe('phase 4: spikes, boulders, lasers, portals', () => {
     expect(mapErrors(validateMap({ ...base(), objects: [portal(200, 280)] }))[0]).toMatch(/no other/);
   });
 });
+
+describe('input polling rate', () => {
+  it('records keep 1 ms precision even with sparse (125 Hz) samples', async () => {
+    const { Simulation } = await import('./simulation');
+    const map = validateMap({ ...createEmptyMap(), width: 960, height: 540, start: { x: 0, y: 280, w: 20, h: 20 }, goal: { x: 500, y: 280, w: 50, h: 50 } });
+    const times = [1000, 125].map((hz) => {
+      const sim = new Simulation(map);
+      sim.start(10, 290);
+      // 0.5 px per ms to the right: GOAL's edge (x = 500) is crossed at t = 980 ms
+      for (let t = 1000 / hz; sim.status === 'playing' && t < 3000; t += 1000 / hz) sim.feed(t, 10 + t * 0.5, 290);
+      expect(sim.status).toBe('cleared');
+      return Math.floor(sim.endTime);
+    });
+    expect(times[0]).toBe(980);
+    expect(times[1]).toBe(980); // not rounded up to the next 8 ms sample (984)
+  });
+});

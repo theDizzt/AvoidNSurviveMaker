@@ -15,8 +15,8 @@ import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-u
 import { levelKey, recordClear, themeUnlocked, totalStars } from './progress';
 import { filledSlots, themedLevel, type ThemeEntry } from './localized/theme-pack';
 import { OFFICIAL_THEMES, allThemes, badgeFor, chapterMusicFor } from './theme-registry';
-import { onOptionsChange, options, resetOptions, setOption } from './options';
-import { onSkinChange, refreshSkinGate, setSkinGate, setTrailShown, skin } from './skin';
+import { GRAPHICS_LEVELS, onOptionsChange, options, POLLING_RATES, resetOptions, setOption } from './options';
+import { refreshSkinGate, setSkinGate } from './skin';
 import { CustomizeUI } from './customize-ui';
 import { PlayController } from './play';
 import { FONT_TASKS, runPreload, type PreloadTask } from './preload';
@@ -411,10 +411,9 @@ for (const screen of [screens.menu, screens.options, screens.stats]) {
 
 // ───────────────────────── Options ─────────────────────────
 
-type ToggleOption = 'showTimer' | 'showDebug';
+type ToggleOption = 'showDebug';
 type VolumeOption = 'masterVolume' | 'musicVolume' | 'effectsVolume';
 const optionInputs: Record<ToggleOption, HTMLInputElement> = {
-  showTimer: $<HTMLInputElement>('opt-timer'),
   showDebug: $<HTMLInputElement>('opt-debug'),
 };
 
@@ -442,13 +441,6 @@ function syncOptions(): void {
   debugPanel.hidden = !options.showDebug;
 }
 
-// The trail toggle is trail skin #0 (off) or the last trail skin used (on)
-const trailInput = $<HTMLInputElement>('opt-trail');
-const syncTrailInput = () => (trailInput.checked = skin.trail !== 0);
-trailInput.addEventListener('change', () => setTrailShown(trailInput.checked));
-onSkinChange(syncTrailInput);
-syncTrailInput();
-
 for (const [k, input] of Object.entries(optionInputs) as [ToggleOption, HTMLInputElement][]) {
   input.addEventListener('change', () => setOption(k, input.checked));
 }
@@ -458,10 +450,35 @@ for (const [k, input] of Object.entries(volumeInputs) as [VolumeOption, HTMLInpu
 onOptionsChange(syncOptions);
 syncOptions();
 
+// Polling rate (play input samples per second) and graphics quality
+// Both tiles are toggles: each click steps to the next value (Max → 1000 → … → 125 → Max)
+const pollingTile = $<HTMLButtonElement>('opt-polling');
+pollingTile.addEventListener('click', () => {
+  setOption('pollingRate', POLLING_RATES[(POLLING_RATES.indexOf(options.pollingRate) + 1) % POLLING_RATES.length]);
+});
+const graphicsTile = $<HTMLButtonElement>('opt-graphics');
+graphicsTile.addEventListener('click', () => {
+  const next = GRAPHICS_LEVELS[(GRAPHICS_LEVELS.indexOf(options.graphics) + 1) % GRAPHICS_LEVELS.length];
+  setOption('graphics', next);
+});
+let appliedGraphics = options.graphics;
+const syncPerformance = () => {
+  pollingTile.dataset.level = options.pollingRate ? 'capped' : 'max';
+  $('opt-polling-value').textContent = options.pollingRate ? `${options.pollingRate} Hz` : t('options.pollingMax');
+  graphicsTile.dataset.level = options.graphics;
+  $('opt-graphics-value').textContent = t(`options.graphics.${options.graphics}`);
+  // A new resolution: every canvas refits on resize
+  if (options.graphics !== appliedGraphics) {
+    appliedGraphics = options.graphics;
+    window.dispatchEvent(new Event('resize'));
+  }
+};
+onOptionsChange(syncPerformance);
+syncPerformance();
+
 $('options-back').addEventListener('click', () => show('menu'));
 $('options-reset').addEventListener('click', () => {
   resetOptions();
-  setTrailShown(true);
 });
 $('options-licenses').addEventListener('click', () => openLicenses('options'));
 

@@ -1496,6 +1496,14 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 .drecords .dpill-row { gap: 4px; margin-top: 4px; }
 .drecords .dpill { --size: 66px; padding: 0 8px; font-size: 10px; line-height: 1.05; word-break: keep-all; }
 
+/* Graphics and Polling rate: the tile itself cycles through the values; the default lights up */
+.dgraphics .dtile-in { gap: 4px; }
+.dgraphics-value { font-family: var(--font-title); font-size: 30px; font-weight: 700; color: #326bc0; line-height: 1.1; }
+.dgraphics-value { white-space: nowrap; }
+.dgraphics:is([data-level="high"], [data-level="max"]) { background: var(--gradient); color: #fff; border-color: transparent; }
+.dgraphics:is([data-level="high"], [data-level="max"]) .dgraphics-value { color: #fff; }
+.dgraphics:is([data-level="high"], [data-level="max"]) .dtile-in { text-shadow: 0 1px 6px rgba(20, 30, 60, 0.3); }
+
 /* Language picker */
 .dlanguage .dtile-in { gap: 4px; }
 .dlanguage select { max-width: 110px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }

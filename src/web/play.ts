@@ -168,6 +168,7 @@ export class PlayController {
     e.preventDefault();
     this.sim = sim;
     this.runPointer = e.pointerId;
+    this.lastSampleAt = e.timeStamp;
     this.burst = null;
     this.deathNotified = false;
     this.t0 = e.timeStamp;
@@ -182,6 +183,8 @@ export class PlayController {
   private trailTeleports = 0;
   /** The pointer that started the current run; samples from any other pointer are ignored */
   private runPointer = -1;
+  /** Timestamp of the last pointer sample used, for the polling rate option */
+  private lastSampleAt = -Infinity;
 
   /** No trail line across a teleport */
   private breakTrailOnTeleport(): void {
@@ -196,9 +199,15 @@ export class PlayController {
     if (!sim || sim.status !== 'playing') return;
     const toMap = mapPointer(this.el.canvas, this.map);
     const p = this.point;
+    // Polling rate option: use at most this many samples per second. The simulation still runs in
+    // 1 ms steps on each sample's own timestamp, so records keep their 1 ms precision.
+    const gap = options.pollingRate > 0 ? 1000 / options.pollingRate : 0;
     for (const ev of list) {
       // Only the pointer (finger) that started the run moves the cursor
       if (ev.pointerId !== this.runPointer) continue;
+      // Small tolerance: hardware timestamps jitter around the nominal interval
+      if (gap && ev.timeStamp - this.lastSampleAt < gap * 0.9) continue;
+      this.lastSampleAt = ev.timeStamp;
       toMap(ev.clientX, ev.clientY, p);
       sim.feed(ev.timeStamp - this.t0, p.x, p.y);
       this.breakTrailOnTeleport();
@@ -346,12 +355,10 @@ export class PlayController {
     // Maps without a number or title (e.g. editor test play) still show their name in the badge
     const top = drawLevelBadge(ctx, map.level === undefined && !map.title ? { ...map, title: badgeTitle(map) } : map, style, badgeImage(this.badge?.imageUrl), now);
 
-    if (options.showTimer) {
-      const elapsed = sim.status === 'ready' ? 0
-        : sim.status === 'playing' ? now - this.t0
-          : sim.status === 'cleared' ? recordTime(sim.endTime) : sim.endTime;
-      drawStopwatch(ctx, map, elapsed, now);
-    }
+    const elapsed = sim.status === 'ready' ? 0
+      : sim.status === 'playing' ? now - this.t0
+        : sim.status === 'cleared' ? recordTime(sim.endTime) : sim.endTime;
+    drawStopwatch(ctx, map, elapsed, now);
 
     if (sim.status === 'playing') {
       if (sim.coinTotal) this.drawCoinCount(top);

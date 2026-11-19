@@ -1,12 +1,16 @@
 /**
  * High-precision pointer input collection.
  *
- * - pointerrawupdate (Chromium, HTTPS/localhost): fires as soon as input arrives, not tied to display frames
- * - Otherwise: pointermove
- * - Either way, getCoalescedEvents() recovers every raw sample that was batched together.
- *   → with a 1000Hz mouse, we receive every sample at ~1ms intervals
+ * pointermove is delivered once per display frame, and getCoalescedEvents() recovers every raw
+ * sample batched into it, each with its own timestamp: with a 1000 Hz mouse we still get every
+ * sample at ~1 ms intervals, so collision checks are exactly as precise.
+ *
+ * pointerrawupdate is deliberately NOT used: it dispatches one main-thread task per hardware
+ * sample (1000–8000 per second on gaming mice), which starved rendering and made the game stutter
+ * at high polling rates. The run is only drawn once per frame anyway, so it bought no visible
+ * latency.
  */
-export type InputSource = 'pointerrawupdate' | 'pointermove';
+export type InputSource = 'pointermove';
 
 export class HighResPointer {
   readonly source: InputSource;
@@ -15,7 +19,7 @@ export class HighResPointer {
   private attached = false;
 
   constructor(private readonly onSamples: (samples: readonly PointerEvent[]) => void) {
-    this.source = 'onpointerrawupdate' in window ? 'pointerrawupdate' : 'pointermove';
+    this.source = 'pointermove';
     this.coalesced = typeof PointerEvent !== 'undefined' && 'getCoalescedEvents' in PointerEvent.prototype;
   }
 

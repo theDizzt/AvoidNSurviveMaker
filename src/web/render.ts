@@ -13,6 +13,7 @@ import { libraryFontCss } from './library-fonts';
 import { CompiledMotion } from '../core/motion';
 import { shapeCenter } from '../core/shape';
 import type { LightSource } from '../core/lighting';
+import { renderScale } from './graphics';
 
 export const COLORS = {
   bg: '#f6fbff',
@@ -119,7 +120,8 @@ function viewOf(canvas: HTMLCanvasElement, map: MapData): View {
 
 /**
  * Size the canvas to a 16:9 box that fits the parent's width and the window's height,
- * and place the map inside it (scaled to fit, centered). Backing resolution follows devicePixelRatio.
+ * and place the map inside it (scaled to fit, centered). Backing resolution follows devicePixelRatio,
+ * capped by the graphics option (graphics.ts).
  */
 export function fitCanvas(canvas: HTMLCanvasElement, map: MapData): void {
   // data-fit="screen": use the largest 16:9 area of the whole window (play screen)
@@ -130,7 +132,7 @@ export function fitCanvas(canvas: HTMLCanvasElement, map: MapData): void {
     : Math.max(320, (window.innerHeight - RESERVED_HEIGHT) * SCREEN_ASPECT);
   const cssW = Math.max(160, Math.floor(Math.min(avail, byHeight, screen ? Infinity : MAX_CSS_WIDTH)));
   const cssH = Math.round(cssW / SCREEN_ASPECT);
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = renderScale(cssW, cssH);
   canvas.style.width = `${cssW}px`;
   canvas.style.height = `${cssH}px`;
   canvas.width = Math.round(cssW * dpr);

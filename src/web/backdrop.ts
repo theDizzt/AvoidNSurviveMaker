@@ -6,6 +6,7 @@ import { DeathBurst } from './death-burst';
 import { demoPlayable, planDemoRun } from './demo-pilot';
 import { COLORS, drawCoinPulls, drawMap, drawTrail } from './render';
 import { OFFICIAL_THEMES } from './theme-registry';
+import { backdropFps, renderScale } from './graphics';
 
 /**
  * Page background behind the menus:
@@ -16,7 +17,6 @@ import { OFFICIAL_THEMES } from './theme-registry';
  */
 export type BackdropMode = 'demo' | 'grid' | 'theme' | 'none';
 
-const FPS = 30;
 /** Decorative background: bound fill-rate and offscreen shadow memory on HiDPI/4K displays. */
 const MAX_BACKGROUND_PIXELS = 1280 * 720;
 const CURSOR_PX = 9;
@@ -106,7 +106,7 @@ export class Backdrop {
   }
 
   private resize(): void {
-    const dpr = Math.min(window.devicePixelRatio || 1,
+    const dpr = Math.min(renderScale(window.innerWidth, window.innerHeight),
       Math.sqrt(MAX_BACKGROUND_PIXELS / Math.max(1, window.innerWidth * window.innerHeight)));
     this.canvas.width = Math.round(window.innerWidth * dpr);
     this.canvas.height = Math.round(window.innerHeight * dpr);
@@ -136,7 +136,7 @@ export class Backdrop {
 
   private frame(now: number): void {
     this.raf = requestAnimationFrame((t) => this.frame(t));
-    if (now - this.last < 1000 / FPS - 2) return;
+    if (now - this.last < 1000 / backdropFps() - 2) return;
     this.last = now;
     this.run ??= this.nextRun(now);
     const run = this.run;
