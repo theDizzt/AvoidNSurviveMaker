@@ -7,7 +7,7 @@
 /** Pointer skins by number. #0 'none': no skin, the system mouse cursor stays visible during a run */
 export const POINTER_SKINS = ['none', 'dot', 'ring', 'square', 'diamond', 'triangle', 'star', 'cross', 'arrow', 'sword'] as const;
 /** Trail skins by number. #0 'none': no trail */
-export const TRAIL_SKINS = ['none', 'line', 'glow', 'dual', 'dashed', 'dots', 'fade', 'solidDashed', 'slash'] as const;
+export const TRAIL_SKINS = ['none', 'line', 'glow', 'dual', 'dashed', 'dots', 'fade', 'solidDashed', 'stars', 'slash'] as const;
 export type PointerShape = (typeof POINTER_SKINS)[number];
 export type TrailStyle = (typeof TRAIL_SKINS)[number];
 
@@ -391,6 +391,47 @@ export function drawSkinTrail(ctx: CanvasRenderingContext2D, skin: Skin, pts: re
       ctx.strokeStyle = rgba(skin.primary, 0.9);
       ctx.stroke();
       break;
+    case 'stars': {
+      // Small five-pointed stars along the path, alternating colors, growing toward the head
+      const gap = 9 * u;
+      const outer = 2.8 * u;
+      const inner = outer * 0.45;
+      const total = pts.length;
+      const paths = [new Path2D(), new Path2D()];
+      let n = 0;
+      eachRun(pts, (from, to) => {
+        let left = 0;
+        for (let i = from + 2; i < to; i += 2) {
+          const x0 = pts[i - 2];
+          const y0 = pts[i - 1];
+          const dx = pts[i] - x0;
+          const dy = pts[i + 1] - y0;
+          const len = Math.hypot(dx, dy);
+          const s = 0.45 + 0.55 * (i / total);
+          let d = left;
+          while (d <= len) {
+            const x = x0 + (dx * d) / (len || 1);
+            const y = y0 + (dy * d) / (len || 1);
+            const p = paths[n % 2];
+            const turn = (n++ * 0.7) % (Math.PI * 2);
+            for (let j = 0; j < 10; j++) {
+              const r = (j % 2 ? inner : outer) * s;
+              const a = turn - Math.PI / 2 + (j * Math.PI) / 5;
+              if (j === 0) p.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+              else p.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+            }
+            p.closePath();
+            d += gap;
+          }
+          left = d - len;
+        }
+      });
+      ctx.fillStyle = rgba(skin.primary, 0.9);
+      ctx.fill(paths[0]);
+      ctx.fillStyle = rgba(skin.accent, 0.9);
+      ctx.fill(paths[1]);
+      break;
+    }
     case 'slash': {
       // A blade cut: hair-thin at both ends, widest just behind the cursor, with a bright edge
       // (accent) along one side
@@ -446,30 +487,58 @@ function loadSkin(): Skin {
   return out;
 }
 
-/** Live skin; read it directly, change it through setSkin / resetSkin */
-export const skin: Readonly<Skin> = loadSkin();
+/** The player's saved choice, which may include a reward skin they can't use right now */
+const chosen: Skin = loadSkin();
+
+/** Whether a pointer/trail skin may be used (reward skins need their achievement) */
+let skinGate: (kind: 'pointer' | 'trail', n: number) => boolean = () => true;
+
+export function skinAllowed(kind: 'pointer' | 'trail', n: number): boolean {
+  return skinGate(kind, n);
+}
+
+/** Live skin (the choice, with locked skins replaced by the defaults); change it through setSkin / resetSkin */
+export const skin: Readonly<Skin> = { ...chosen };
+
+function applyGate(): void {
+  Object.assign(skin as Skin, chosen);
+  if (!skinGate('pointer', chosen.pointer)) (skin as Skin).pointer = DEFAULT_SKIN.pointer;
+  if (!skinGate('trail', chosen.trail)) (skin as Skin).trail = DEFAULT_SKIN.trail;
+}
+
+/** Install the unlock check; call refreshSkinGate() whenever what it answers changes */
+export function setSkinGate(fn: (kind: 'pointer' | 'trail', n: number) => boolean): void {
+  skinGate = fn;
+  refreshSkinGate();
+}
+
+export function refreshSkinGate(): void {
+  const before = `${skin.pointer}/${skin.trail}`;
+  applyGate();
+  if (`${skin.pointer}/${skin.trail}` !== before) for (const fn of listeners) fn(skin);
+}
 
 function commitSkin(): void {
-  if (skin.trail > 0) lastTrail = skin.trail;
+  if (chosen.trail > 0) lastTrail = chosen.trail;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...skin, lastTrail }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...chosen, lastTrail }));
   } catch {
     /* ignore when storage is unavailable */
   }
+  applyGate();
   for (const fn of listeners) fn(skin);
 }
 
 export function setSkin(patch: Partial<Skin>): void {
-  const s = skin as Skin;
-  if (validIndex(patch.pointer, POINTER_SKINS.length)) s.pointer = patch.pointer;
-  if (validIndex(patch.trail, TRAIL_SKINS.length)) s.trail = patch.trail;
-  if (isPaletteColor(patch.primary)) s.primary = patch.primary;
-  if (isPaletteColor(patch.accent)) s.accent = patch.accent;
+  if (validIndex(patch.pointer, POINTER_SKINS.length) && skinGate('pointer', patch.pointer)) chosen.pointer = patch.pointer;
+  if (validIndex(patch.trail, TRAIL_SKINS.length) && skinGate('trail', patch.trail)) chosen.trail = patch.trail;
+  if (isPaletteColor(patch.primary)) chosen.primary = patch.primary;
+  if (isPaletteColor(patch.accent)) chosen.accent = patch.accent;
   commitSkin();
 }
 
 export function resetSkin(): void {
-  Object.assign(skin as Skin, DEFAULT_SKIN);
+  Object.assign(chosen, DEFAULT_SKIN);
   commitSkin();
 }
 

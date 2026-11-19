@@ -16,7 +16,7 @@ import { levelKey, recordClear, themeUnlocked, totalStars } from './progress';
 import { filledSlots, themedLevel, type ThemeEntry } from './localized/theme-pack';
 import { OFFICIAL_THEMES, allThemes, badgeFor, chapterMusicFor } from './theme-registry';
 import { onOptionsChange, options, resetOptions, setOption } from './options';
-import { onSkinChange, setTrailShown, skin } from './skin';
+import { onSkinChange, refreshSkinGate, setSkinGate, setTrailShown, skin } from './skin';
 import { CustomizeUI } from './customize-ui';
 import { PlayController } from './play';
 import { FONT_TASKS, runPreload, type PreloadTask } from './preload';
@@ -37,7 +37,7 @@ import { installMenuMusicControls, menuMusicUrl } from './menu-music';
 import { applyI18n } from './i18n-dom';
 import { Achievements } from './achievements';
 import { AchievementsUI } from './achievements-ui';
-import { ACHIEVEMENTS } from '../core/achievements';
+import { ACHIEVEMENTS, rewardAchievement } from '../core/achievements';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -124,10 +124,10 @@ const campaign = new CampaignUI($('themes-screen'), $('levels-screen'));
 const fitDia = (id: string, maxW: number, maxH: number) => fitRotatedGrid($(id), $(id).querySelector<HTMLElement>('.dgrid')!, maxW, maxH, 1.5);
 const fitMenu = () => fitDia('menu-dia', Math.min(1000, window.innerWidth * 0.96), Math.max(320, Math.min(window.innerHeight * 0.8, window.innerHeight - 230)));
 /** Options and stats: larger panels; the screen scrolls rather than shrinking text too far */
-/** Width kept free beside the achievements grid for its page buttons */
-const ACH_SIDE = 200;
-/** Height kept free below the achievements grid (page number, Status · Back · Category) */
-const ACH_BELOW = 185;
+/** Width kept free beside the achievements grid: page buttons, Status/Category (left) and Back (right) */
+const ACH_SIDE = 500;
+/** Height kept free below the achievements grid (page number) */
+const ACH_BELOW = 40;
 /** `side`: width kept free beside the grid (page buttons) */
 const fitPanel = (id: string, side = 0, below = 0) => {
   const wrap = $(id);
@@ -565,17 +565,14 @@ openInEditor.addEventListener('click', () => {
 });
 
 editor.onTest = (map) => showPlay(map, { test: true });
-play.onClear = (map, replay, time, crystal) => {
+play.onClear = (map, _replay, time, crystal) => {
   // Campaign stars (and the crystal star, if carried to GOAL)
   const c = campaignOf(currentKey);
   if (c && !testing) {
     const stars = recordClear(c.theme, c.index, map, time, crystal);
     if (c.theme.official) {
       const key = levelKey(c.theme, c.index);
-      achievements.record(key, time, stars);
-      void recordSync.submitReplay(key, replay).then(result => {
-        if (result === 'failed') showToast(t('records.verificationFailed'), 'error');
-      });
+      achievements.record(key, time, stars, crystal);
     }
   }
   // A clear of the same gameplay verifies the editor's map for sharing
@@ -598,9 +595,10 @@ const achievementsUI = new AchievementsUI({
   filter: $<HTMLButtonElement>('achievements-filter'),
   category: $<HTMLButtonElement>('achievements-category'),
 }, achievements, (def) => {
+  if (def.kind === 'discord') return () => $('menu-discord').click();
   for (const key of def.levels) {
     const record = achievements.records[key];
-    if (record && (def.kind === 'clear' || record.stars >= 3)) continue;
+    if (def.kind === 'stars' && record && record.stars >= 3) continue;
     const [id, slot] = key.split('/');
     const theme = OFFICIAL_THEMES.find(t => t.info.id === id);
     if (!theme || !themeUnlocked(theme) || !filledSlots(theme).includes(Number(slot))) continue;
@@ -608,6 +606,13 @@ const achievementsUI = new AchievementsUI({
   }
   return null;
 });
+// Reward skins unlock with their achievement
+setSkinGate((kind, n) => {
+  const def = rewardAchievement(kind, n);
+  return !def || !!achievements.unlocks[def.id];
+});
+achievements.subscribe(refreshSkinGate);
+$('menu-discord').addEventListener('click', () => achievements.claimDiscord());
 achievements.onUnlock = (ids) => {
   const names = ids.slice(0, 3).map(id => t(ACHIEVEMENTS.find(d => d.id === id)!.name)).join(', ');
   showToast(t('ach.unlocked', { names }) + (ids.length > 3 ? t('ach.more', { n: ids.length - 3 }) : ''), 'ok');

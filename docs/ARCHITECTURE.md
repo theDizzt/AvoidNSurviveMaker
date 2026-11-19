@@ -22,20 +22,16 @@ flowchart TB
   end
   CONTENT[themes/ · custom-themes/ · src/assets/<br/>bundled by import.meta.glob] --> MAIN
   SCREENS <-->|auth, RPC| SB[(Supabase<br/>auth.users · profiles · level_records)]
-  SCREENS -->|replay| VERIFY[verify-replay Edge Function]
-  VERIFY --> CORE
-  CONTENT --> VERIFY
-  VERIFY --> VERIFIED[(verified_level_records)]
 ```
 
 ## 1. 계층
 
 | 계층 | 폴더 | 규칙 |
 |---|---|---|
-| Core | `src/core/` | 순수 TypeScript, **DOM 없음**. 맵 스키마, 기하, 시뮬레이션, 검증, 테마 팩 형식. Node(테스트)에서 실행할 수 있고, 나중에 서버에서 리플레이 검증에 쓸 수 있습니다. |
+| Core | `src/core/` | 순수 TypeScript, **DOM 없음**. 맵 스키마, 기하, 시뮬레이션, 검증, 테마 팩 형식. Node(테스트)에서 실행할 수 있습니다. |
 | Web | `src/web/` | DOM, 캔버스, 오디오, 저장소, 네트워크를 다루는 모든 코드. core 를 import 하며, 반대 방향은 없습니다. |
 | Content | `themes/`, `custom-themes/`, `src/assets/` | JSON 레벨, 테마 팩, 폰트, 음악. 빌드 시 Vite 가 번들합니다. |
-| Backend | `supabase/migrations/`, `supabase/functions/`, `src/server/` | SQL 권한과 RPC, 인증된 공식 맵 리플레이 검증 함수. 게임 코어를 공유하며 검증 결과만 별도 순위 테이블에 저장합니다. |
+| Backend | `supabase/migrations/` | SQL 권한과 RPC. 기록·사망·플레이 시간·도전과제를 계정에 저장합니다. |
 
 `src/core/index.ts` 가 core API 를 다시 내보냅니다. 단위 테스트는 코드 옆에 있습니다(`*.test.ts`, Vitest).
 
@@ -150,7 +146,7 @@ stateDiagram-v2
 | 계정별 미전송 플레이 시간 / 기록 | localStorage, 나중에 재시도 | `auth/playtime.ts`, `auth/records.ts` |
 | 계정, 플레이 시간, 레벨 기록 | Supabase | `auth/*` |
 
-레벨 키: 챕터는 `<theme id>/<stable map id>@<content hash>`, 커스텀 팩은 여기에 `custom:` 접두사를 붙입니다. JSON의 `id`와 게임플레이·별 기준·규칙 버전 해시를 사용합니다. 버전 없는 과거 기록은 보존하지만 현재 레벨 기록으로 합치지 않습니다.
+레벨 키: 챕터는 `<theme id>/<stable map id>`, 커스텀 팩은 여기에 `custom:` 접두사를 붙입니다. 맵을 수정해도 키가 바뀌지 않으므로 기록이 그대로 이어집니다. 예전에 붙이던 `@<content hash>`는 클라이언트(`progress.ts`)와 서버(`submit_level_records`, `add_deaths`)가 떼어 내며, `20261121040000_unversioned_level_keys.sql`이 중복 행을 합쳤습니다.
 
 ## 5. 백엔드 (Supabase)
 
@@ -181,7 +177,7 @@ erDiagram
   - 서버는 병합하여 가장 낮은 `best_ms` 와 가장 높은 `stars` 를 유지합니다.
   - **Options → Sync records** 는 현재 계정의 로컬 기록만 올리고 같은 계정의 기록을 내려받습니다. 게스트·이전 공용 기록은 **Import guest records** 로 명시적으로 가져옵니다.
   - Row level security: 플레이어는 자신의 행만 읽습니다.
-- **순위 기록**: `verify-replay` Edge Function이 배포된 공식 맵으로 입력을 재생하여 시간·별·크리스탈을 계산합니다. 서비스 전용 RPC로 `verified_level_records`에 쓰며, 순위표는 이 별도 테이블만 조회합니다. 개인 백업의 값은 순위에 영향을 주지 않습니다. 배포와 제한은 [REPLAY_VERIFICATION.md](REPLAY_VERIFICATION.md)를 참고하세요.
+- **순위 기록**: 재미용 게임이라 리플레이 검증 없이, 순위표는 각 계정의 공식 레벨 기록(`level_records`)을 그대로 조회합니다.
 - 클라이언트는 테이블에 직접 쓰지 않습니다. 모든 쓰기는 `auth.uid()` 를 확인하는 `security definer` 함수를 거칩니다.
 - `.env.local`(Supabase 키)이 없으면 게임은 완전히 오프라인으로 동작하며, 계정 기능만 사용할 수 없습니다.
 

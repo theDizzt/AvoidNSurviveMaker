@@ -7,6 +7,5 @@ dist
 /memo
 /temp
 .vercel
-/supabase/functions/verify-replay/verifier.js
 .env*
 !.env.example

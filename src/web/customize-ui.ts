@@ -1,8 +1,22 @@
+import { rewardAchievement } from '../core/achievements';
 import { t, type MessageKey } from './i18n';
 import {
-  drawPointer, drawSkinTrail, onSkinChange, PALETTE, PALETTE_COLUMNS, POINTER_SKINS, resetSkin, setSkin, skin, TRAIL_SKINS, type Skin,
+  drawPointer, drawSkinTrail, onSkinChange, PALETTE, PALETTE_COLUMNS, POINTER_SKINS, resetSkin, setSkin, skin, skinAllowed, TRAIL_SKINS, type Skin,
 } from './skin';
 import { fitRotatedGrid } from './campaign-ui';
+
+/** Padlock drawn in place of a locked skin's preview */
+function lockIcon(): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('class', 'cz-lock-icon');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M7 10V7a5 5 0 0 1 10 0v3h1.5A1.5 1.5 0 0 1 20 11.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20.5v-9A1.5 1.5 0 0 1 5.5 10zm2 0h6V7a3 3 0 0 0-6 0zm3 4a1.75 1.75 0 0 0-1 3.18V19h2v-1.82A1.75 1.75 0 0 0 12 14z');
+  path.setAttribute('fill-rule', 'evenodd');
+  svg.append(path);
+  return svg;
+}
 
 const FLOOR = '#f4ecd8';
 const WALL = '#8a7a5c';
@@ -114,7 +128,16 @@ export class CustomizeUI {
         b.title = t(label);
         b.addEventListener('click', () => {
           if (dir === 0) this.openList(title === 'customize.pointerSkin' ? 'pointer' : 'trail', b);
-          else pick((current() + dir + count) % count);
+          else {
+            // Step over skins that are still locked
+            const kind = title === 'customize.pointerSkin' ? 'pointer' : 'trail';
+            let n = current();
+            for (let k = 0; k < count; k++) {
+              n = (n + dir + count) % count;
+              if (skinAllowed(kind, n)) break;
+            }
+            pick(n);
+          }
         });
         arrows.append(b);
       }
@@ -276,12 +299,22 @@ export class CustomizeUI {
           continue;
         }
         const [btn, inner] = tile('button', 'cz-list-item', col, line);
-        const [icon, g] = hiDpiCanvas(kind === 'pointer' ? 44 : 72, 44);
-        if (kind === 'pointer') this.drawPointerIcon(g, n);
-        else this.drawTrailIcon(g, n);
         btn.setAttribute('aria-pressed', String(n === chosen));
-        inner.append(icon, el('small', 'cz-num', '#' + n), el('strong', '', t(('customize.' + kind + '.' + names[n]) as MessageKey)));
+        const reward = skinAllowed(kind, n) ? undefined : rewardAchievement(kind, n);
+        if (reward) {
+          // A reward skin not earned yet: no preview, just a lock and the achievement that unlocks it
+          btn.classList.add('is-locked');
+          btn.setAttribute('aria-disabled', 'true');
+          btn.title = t('customize.lockedBy', { name: t(reward.name) });
+          inner.append(lockIcon(), el('small', 'cz-num', '#' + n), el('small', 'cz-lock', t(reward.name)));
+        } else {
+          const [icon, g] = hiDpiCanvas(kind === 'pointer' ? 44 : 72, 44);
+          if (kind === 'pointer') this.drawPointerIcon(g, n);
+          else this.drawTrailIcon(g, n);
+          inner.append(icon, el('small', 'cz-num', '#' + n), el('strong', '', t(('customize.' + kind + '.' + names[n]) as MessageKey)));
+        }
         btn.addEventListener('click', () => {
+          if (reward) return;
           setSkin(kind === 'pointer' ? { pointer: n } : { trail: n });
           done();
         });

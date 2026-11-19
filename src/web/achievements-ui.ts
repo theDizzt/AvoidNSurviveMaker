@@ -1,4 +1,4 @@
-import { ACHIEVEMENTS, achievementProgress, type AchievementDefinition } from '../core/achievements';
+import { ACHIEVEMENTS, achievementProgress, CHAPTER_IDS, levelLabel, TOTAL_STARS, type AchievementDefinition } from '../core/achievements';
 import { t, type MessageKey } from './i18n';
 import type { Achievements } from './achievements';
 import { installDiamondProgress } from './diamond-dial';
@@ -21,8 +21,25 @@ function tile<K extends 'div' | 'button'>(tag: K, className: string, col: string
   return [node, inner];
 }
 
+/** What the player has to do, in words */
+function goal(def: AchievementDefinition): string {
+  if (def.kind === 'discord') return t('ach.discordGoal');
+  if (def.kind === 'time') return t('ach.timeGoal', { level: levelLabel(def.levels[0]), ms: def.maxMs ?? 0 });
+  if (def.category === 'chapter') {
+    const chapter = CHAPTER_IDS.indexOf(def.levels[0].split('/')[0] as (typeof CHAPTER_IDS)[number]) + 1;
+    return t('ach.chapterStarsGoal', { n: def.target, chapter });
+  }
+  return t(def.target === TOTAL_STARS ? 'ach.allStarsGoal' : 'ach.starsGoal', { n: def.target });
+}
+
+/** The best time on a time achievement's level, or the bare goal when not cleared yet */
+function bestTime(def: AchievementDefinition, records: Readonly<Record<string, { best: number }>>): string {
+  const best = records[def.levels[0]]?.best;
+  return best ? t('ach.bestTime', { ms: Math.floor(best) }) : `0 / ${def.target}`;
+}
+
 const FILTERS = ['all', 'progress', 'complete'] as const;
-const CATEGORIES = ['all', 'clear', 'stars', 'chapter'] as const;
+const CATEGORIES = ['all', 'stars', 'chapter', 'special'] as const;
 /**
  * A 4×4 grid turned 45°: the 2×2 summary tile in the middle and the achievements on the ring
  * around it. The layout is the same with rows and columns swapped, so it is mirror-symmetric on
@@ -180,10 +197,10 @@ export class AchievementsUI {
     node.classList.toggle('is-unlocked', !!unlock);
     node.classList.toggle('is-selected', this.selected === def);
     node.setAttribute('aria-label', `${t(def.name)} · ${value} / ${def.target}`);
-    inner.append(el('span', unlock ? '★' : '◇', 'ach-badge'), el('strong', t(def.name)));
+    inner.append(el('span', unlock ? '★' : '◇', 'ach-badge'), el('strong', t(def.name)), el('small', `${value} / ${def.target}`, 'ach-amount'));
     if (unlock && !unlock.seen) inner.prepend(el('span', t('ach.new'), 'ach-new'));
-    // Progress like the loading screen: the diamond track fills clockwise, the count sits in the gap
-    const count = el('span', `${value} / ${def.target}`, 'ach-count');
+    // Progress like the loading screen: the diamond track fills clockwise, the percentage sits in the gap
+    const count = el('span', `${Math.floor((value / def.target) * 100)}%`, 'ach-count');
     count.setAttribute('aria-hidden', 'true');
     inner.append(count);
     installDiamondProgress(inner, () => {})(value / def.target);
@@ -222,24 +239,21 @@ export class AchievementsUI {
     }
     const unlock = model.unlocks[def.id];
     const value = unlock ? def.target : achievementProgress(def, model.records);
-    const description = def.category === 'chapter' ? t('ach.chapterGoal', { n: def.target })
-      : t(`ach.${def.kind}Goal` as MessageKey, { n: def.target });
+    const description = goal(def);
+    const reward = def.reward
+      ? t('ach.reward', { reward: t(def.reward.kind === 'pointer' ? 'ach.rewardPointer' : 'ach.rewardTrail', { n: def.reward.skin }) })
+      : t('ach.rewardTbd');
     const parts: HTMLElement[] = [
       el('span', unlock ? '★' : '◇', 'ach-badge'),
       el('strong', t(def.name), 'ach-detail-name'),
       el('p', description, 'ach-desc'),
-      el('small', `${value} / ${def.target}`),
+      el('small', def.kind === 'time' ? bestTime(def, model.records) : `${value} / ${def.target}`),
+      el('small', reward, 'ach-reward'),
     ];
     if (unlock) {
       parts.push(el('small', `${!unlock.seen ? t('ach.new') + ' · ' : ''}${t('ach.complete')} · ${new Date(unlock.at).toLocaleDateString()}${!unlock.confirmed ? ' · ' + t('ach.waiting') : ''}`));
-    } else if (def.kind !== 'stars') {
-      const missing = def.levels.filter((k) => {
-        const r = model.records[k];
-        return !r || (def.kind === 'perfect' && r.stars < 3);
-      }).map((k) => {
-        const [theme, index] = k.split('/');
-        return `${theme === 'workshop' ? '1' : '2'}-${String(Number(index) + 1).padStart(2, '0')}`;
-      });
+    } else if (def.category === 'chapter' && def.kind === 'stars') {
+      const missing = def.levels.filter((k) => (model.records[k]?.stars ?? 0) < 3).map(levelLabel);
       if (missing.length) parts.push(el('small', t('ach.remaining', { levels: missing.slice(0, 8).join(', ') + (missing.length > 8 ? '…' : '') }), 'ach-remaining'));
     }
     if (!unlock && this.challenge(def)) {

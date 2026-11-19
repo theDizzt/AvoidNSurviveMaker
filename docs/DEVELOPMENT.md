@@ -40,7 +40,7 @@ npm run build     # dist/ 에 정적 사이트 생성 — GitHub Pages, Vercel �
 
 ```
 src/
-  core/            # DOM 의존성 없음 — 나중에 서버에서도 재사용 가능 (리플레이 검증)
+  core/            # DOM 의존성 없음
     types.ts       # 맵 스키마 (MapData v2): 오브젝트 = 모양 × 역할 × 이동/회전
     geometry.ts    # 선분/다각형 교차, 점-다각형 포함 판정, 사각형 헬퍼
     shape.ts       # 사각형 / 원 / 다각형 / 자유 곡선 → 그리기와 충돌에 함께 쓰는 하나의 다각형
@@ -147,4 +147,4 @@ URL 이 고정되어야 하는 파일(예: `favicon.ico`, `robots.txt`)만 루�
 - [x] URL 공유 (서버 불필요)
 - [x] 계정: Supabase 가입 / 로그인, 이메일 인증, CAPTCHA, `Nickname#tag`
 - [x] 레벨별 순위표
-- [ ] 맵 탐색/검색/좋아요, 서버 측 리플레이 검증
+- [ ] 맵 탐색/검색/좋아요

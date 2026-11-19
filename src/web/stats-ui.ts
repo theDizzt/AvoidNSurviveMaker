@@ -23,14 +23,12 @@ const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(Math.max(0, STARS_PE
 
 /** Short name of a level key: '1-04' for chapters, 'Custom 4' for custom packs */
 function levelName(key: string): string {
-  if (key.includes('@')) {
-    for (const [chapter, theme] of OFFICIAL_THEMES.entries()) {
-      for (let i = 0; i < levelSlots(theme); i++) {
-        if (levelKey(theme, i) === key) return chapterLevelCode(chapter + 1, i + 1);
-      }
+  // Older keys ended in "@<content hash>"; the level is the same
+  key = key.split('@')[0];
+  for (const [chapter, theme] of OFFICIAL_THEMES.entries()) {
+    for (let i = 0; i < levelSlots(theme); i++) {
+      if (levelKey(theme, i) === key) return chapterLevelCode(chapter + 1, i + 1);
     }
-    // Historical versions must not be labeled as a different current slot.
-    return key.split('@')[0];
   }
   const m = /^(custom:)?(.+)\/(\d+)$/.exec(key);
   if (!m) return key;

@@ -53,8 +53,12 @@ export function contentHash(map: MapData): string {
   return sha256(JSON.stringify(canonical({ rules: REPLAY_RULES, gameplay: JSON.parse(gameplayKey(map)), stars: map.stars ?? null })));
 }
 
+/**
+ * Record key of a level: "<theme>/<level id>" ("custom:" in front for custom packs). The same
+ * level keeps its key, and its records, when its map is updated. Older saves added
+ * "@<content hash>"; progress.ts and the server drop that suffix.
+ */
 export function recordIdentity(themeId: string, map: MapData, official: boolean): string {
-  const hash = contentHash(map);
-  // Older custom maps have no stable ID; content identity avoids index collisions.
-  return `${official ? '' : 'custom:'}${themeId}/${map.id ?? hash.slice(0, 32)}@${hash}`;
+  // Older custom maps have no stable ID; their content identity avoids index collisions.
+  return `${official ? '' : 'custom:'}${themeId}/${map.id ?? contentHash(map).slice(0, 32)}`;
 }

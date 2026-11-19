@@ -4,7 +4,6 @@ import type { Account } from './account';
 import { supabase } from './supabase';
 import { recordTime } from '../../core/time';
 import { clearLeaderboardCache } from './leaderboard';
-import type { Replay } from '../../core/simulation';
 
 const PENDING_PREFIX = 'avoid-n-survive:pending-records:';
 /** The server accepts at most this many records per call */
@@ -67,24 +66,6 @@ export class RecordSync {
 
   get available(): boolean {
     return !!supabase && !!this.userId;
-  }
-
-  /** Public rankings are a separate server-replayed submission, never a backup promotion. */
-  async submitReplay(key: string, replay: Replay): Promise<'saved' | 'failed' | 'skipped'> {
-    if (!supabase || !this.userId) return 'skipped';
-    const userId = this.userId, generation = this.generation;
-    try {
-      const token = await this.token(userId, generation);
-      const { data, error } = await supabase.functions.invoke('verify-replay', {
-        body: { key, replay }, headers: { Authorization: `Bearer ${token}` },
-      });
-      if (generation !== this.generation) return 'skipped';
-      if (error || data?.ok !== true) return 'failed';
-      clearLeaderboardCache();
-      return 'saved';
-    } catch {
-      return generation !== this.generation ? 'skipped' : 'failed';
-    }
   }
 
   get canImportGuest(): boolean {
@@ -157,10 +138,13 @@ export class RecordSync {
     return { ok: true, uploaded: payload.length, downloaded };
   }
 
-  /** Send records from clears that haven't reached the server yet */
-  private async flush(): Promise<void> {
+  /**
+   * Send records from clears that haven't reached the server yet. `download`: also when there
+   * is nothing to send, to bring the account's records into this browser (sign-in)
+   */
+  private async flush(download = false): Promise<void> {
     const payload = toPayload(this.pending);
-    if (!supabase || !this.userId || this.sending || payload.length === 0) return;
+    if (!supabase || !this.userId || this.sending || (payload.length === 0 && !download)) return;
     const userId = this.userId;
     const generation = this.generation;
     const batch = payload.slice(0, BATCH);
@@ -181,7 +165,7 @@ export class RecordSync {
     } finally {
       this.sending = false;
       // A different account may have queued records while the previous request was in flight.
-      if (generation !== this.generation && this.userId) void this.flush();
+      if (generation !== this.generation && this.userId) void this.flush(true);
     }
   }
 
@@ -214,7 +198,8 @@ export class RecordSync {
     }
     mergeRecords(this.pending);
     this.onSaved();
-    void this.flush();
+    // Signing in on any browser brings the account's records down
+    void this.flush(true);
   }
 
   private persist(): void {

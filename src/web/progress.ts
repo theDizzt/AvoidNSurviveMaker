@@ -23,7 +23,8 @@ export interface LevelRecord {
   crystal?: boolean;
 }
 
-let records: Record<string, LevelRecord> = load();
+/** Loaded at the end of this module, once the level keys below can be computed */
+let records: Record<string, LevelRecord> = {};
 
 function load(user: string | null = activeUser): Record<string, LevelRecord> {
   const cached = sessionRecords.get(storageKey(user));
@@ -40,7 +41,7 @@ function load(user: string | null = activeUser): Record<string, LevelRecord> {
     for (const [k, record] of Object.entries(out)) {
       if (k.startsWith('pastel/')) out[k.replace(/^pastel\//, 'workshop/')] ??= record;
     }
-    return out;
+    return currentRecords(out);
   } catch {
     return {};
   }
@@ -121,6 +122,7 @@ export function allRecords(): Readonly<Record<string, LevelRecord>> {
  * Returns how many levels changed here.
  */
 export function mergeRecords(incoming: Record<string, LevelRecord>, authoritative = false): number {
+  incoming = currentRecords(incoming);
   let changed = 0;
   const next = { ...records };
   for (const [k, r] of Object.entries(incoming)) {
@@ -164,3 +166,41 @@ export function totalStars(): number {
 export function themeUnlocked(theme: ThemeEntry): boolean {
   return !theme.official || totalStars() >= theme.info.unlockStars;
 }
+
+/**
+ * Official level key → the key of that level now. Older saves keyed official levels by slot
+ * ("workshop/0") or by an earlier revision of the map ("workshop/0@<old hash>"); their records
+ * carry over to the current revision, so a map update never hides a player's progress.
+ */
+let currentKeys: Map<string, string> | null = null;
+function currentKey(k: string): string {
+  if (k.startsWith('custom:') || k.startsWith('empty:')) return k;
+  if (!currentKeys) {
+    const keys = new Map<string, string>();
+    for (const theme of OFFICIAL_THEMES) {
+      for (const i of filledSlots(theme)) keys.set(levelKey(theme, i).split('@')[0], levelKey(theme, i));
+    }
+    for (const theme of OFFICIAL_THEMES) {
+      for (const i of filledSlots(theme)) if (!keys.has(`${theme.info.id}/${i}`)) keys.set(`${theme.info.id}/${i}`, levelKey(theme, i));
+    }
+    currentKeys = keys;
+  }
+  return currentKeys.get(k.split('@')[0]) ?? k;
+}
+
+/** Re-key records to the current levels, keeping the best of any that land on the same level */
+function currentRecords(input: Record<string, LevelRecord>): Record<string, LevelRecord> {
+  const out: Record<string, LevelRecord> = {};
+  for (const [k, r] of Object.entries(input)) {
+    const to = currentKey(k);
+    const prev = out[to];
+    out[to] = prev ? {
+      stars: Math.max(prev.stars, r.stars),
+      best: Math.min(prev.best, r.best),
+      ...(prev.crystal || r.crystal ? { crystal: true } : {}),
+    } : r;
+  }
+  return out;
+}
+
+records = load();

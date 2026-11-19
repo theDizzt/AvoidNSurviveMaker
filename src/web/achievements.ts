@@ -4,8 +4,10 @@ import { supabase } from './auth/supabase';
 import { allRecords } from './progress';
 
 interface Unlock { at: string; seen: boolean; confirmed: boolean }
-interface Saved { records: Record<string, AchievementRecord>; unlocks: Record<string, Unlock> }
-const PREFIX = 'avoid-n-survive:achievements:v1:';
+interface Saved { records: Record<string, AchievementRecord>; unlocks: Record<number, Unlock> }
+const PREFIX = 'avoid-n-survive:achievements:v3:';
+/** Saves of earlier achievement lists (v2 could hold unlocks converted from v1): only their records are reused */
+const LEGACY_PREFIXES = ['avoid-n-survive:achievements:v2:', 'avoid-n-survive:achievements:v1:'];
 
 export class Achievements {
   private owner = 'guest';
@@ -15,7 +17,7 @@ export class Achievements {
   private listeners = new Set<() => void>();
   storageAvailable = true;
   syncStatus: 'local' | 'pending' | 'synced' = 'local';
-  onUnlock: (ids: string[]) => void = () => {};
+  onUnlock: (ids: number[]) => void = () => {};
 
   constructor(account: Account) {
     this.load();
@@ -37,7 +39,8 @@ export class Achievements {
       const previous = this.state;
       this.load();
       this.merge(previous.records);
-      for (const [id, unlock] of Object.entries(previous.unlocks)) {
+      for (const [key, unlock] of Object.entries(previous.unlocks)) {
+        const id = Number(key);
         const incoming = this.state.unlocks[id];
         if (!incoming) this.state.unlocks[id] = unlock;
         else incoming.seen ||= unlock.seen;
@@ -57,7 +60,7 @@ export class Achievements {
 
   get signedIn(): boolean { return this.owner !== 'guest'; }
   get records(): Readonly<Record<string, AchievementRecord>> { return this.state.records; }
-  get unlocks(): Readonly<Record<string, Unlock>> { return this.state.unlocks; }
+  get unlocks(): Readonly<Record<number, Unlock>> { return this.state.unlocks; }
   subscribe(fn: () => void): void { this.listeners.add(fn); }
   private emit(): void { this.listeners.forEach(fn => fn()); }
 
@@ -67,17 +70,32 @@ export class Achievements {
       const key = versionedKey.split('@')[0];
       if (!r || !Number.isFinite(r.best) || r.best <= 0 || !Number.isFinite(r.stars)) continue;
       const prev = this.state.records[key];
-      this.state.records[key] = { best: Math.min(prev?.best ?? Infinity, r.best), stars: Math.max(prev?.stars ?? 0, Math.min(3, Math.max(0, Math.floor(r.stars)))) };
+      this.state.records[key] = {
+        best: Math.min(prev?.best ?? Infinity, r.best),
+        stars: Math.max(prev?.stars ?? 0, Math.min(3, Math.max(0, Math.floor(r.stars)))),
+        ...(prev?.crystal || r.crystal === true ? { crystal: true } : {}),
+      };
     }
   }
 
-  record(key: string, time: number, stars: number): void {
-    this.merge({ [key]: { best: time, stars } });
+  record(key: string, time: number, stars: number, crystal = false): void {
+    this.merge({ [key]: { best: time, stars, ...(crystal ? { crystal: true } : {}) } });
     this.evaluate(true);
   }
 
+  /** The Discord invite was opened: unlock the Discord achievement (and tell the server) */
+  claimDiscord(): void {
+    const def = ACHIEVEMENTS.find(d => d.kind === 'discord');
+    if (!def || this.state.unlocks[def.id]) return;
+    this.state.unlocks[def.id] = { at: new Date().toISOString(), seen: false, confirmed: !this.signedIn };
+    this.persist();
+    this.emit();
+    this.onUnlock([def.id]);
+    void this.refresh();
+  }
+
   private evaluate(notify: boolean): void {
-    const added: string[] = [];
+    const added: number[] = [];
     for (const def of ACHIEVEMENTS) {
       if (!this.state.unlocks[def.id] && achievementProgress(def, this.state.records) >= def.target) {
         this.state.unlocks[def.id] = { at: new Date().toISOString(), seen: false, confirmed: !this.signedIn };
@@ -101,15 +119,27 @@ export class Achievements {
     this.syncStatus = 'pending';
     this.emit();
     try {
+      // A Discord visit the server hasn't recorded yet
+      const discord = ACHIEVEMENTS.find(d => d.kind === 'discord');
+      if (discord && this.state.unlocks[discord.id] && !this.state.unlocks[discord.id].confirmed) {
+        await supabase.rpc('claim_discord_achievement');
+        if (epoch !== this.epoch || request !== this.request) return;
+      }
       const [records, unlocks] = await Promise.all([
-        supabase.from('level_records').select('level_key,best_ms,stars').eq('user_id', owner),
+        supabase.from('level_records').select('level_key,best_ms,stars,crystal').eq('user_id', owner),
         supabase.rpc('refresh_achievements'),
       ]);
       if (epoch !== this.epoch || request !== this.request) return;
       if (!records.error) {
-        this.merge(Object.fromEntries((records.data ?? []).map(r => [r.level_key, { best: r.best_ms, stars: r.stars }])));
+        this.merge(Object.fromEntries((records.data ?? []).map(r => [r.level_key, { best: r.best_ms, stars: r.stars, crystal: r.crystal === true }])));
       }
       if (!unlocks.error) {
+        // The server's list is the truth: drop confirmed unlocks it no longer has (e.g. the table
+        // was emptied). Unconfirmed ones are clears it hasn't seen yet and stay.
+        const onServer = new Set(((unlocks.data ?? []) as { achievement_id: number }[]).map(row => row.achievement_id));
+        for (const [id, u] of Object.entries(this.state.unlocks)) {
+          if (u.confirmed && !onServer.has(Number(id))) delete this.state.unlocks[Number(id)];
+        }
         for (const row of unlocks.data ?? []) {
           if (!ACHIEVEMENTS.some(d => d.id === row.achievement_id)) continue;
           this.state.unlocks[row.achievement_id] = { at: row.unlocked_at, seen: this.state.unlocks[row.achievement_id]?.seen ?? false, confirmed: true };
@@ -134,11 +164,20 @@ export class Achievements {
     this.storageAvailable = true;
     this.syncStatus = this.signedIn ? 'pending' : 'local';
     try {
+      // Old saves had different achievements: keep their records, drop their unlocks
+      for (const prefix of LEGACY_PREFIXES) {
+        const old = JSON.parse(localStorage.getItem(prefix + this.owner) ?? '{}')?.records;
+        if (old && typeof old === 'object') this.merge(old);
+      }
       const raw = JSON.parse(localStorage.getItem(PREFIX + this.owner) ?? '{}');
       if (raw?.records && typeof raw.records === 'object') this.merge(raw.records);
       for (const d of ACHIEVEMENTS) {
-        const u = raw?.unlocks?.[d.id];
-        if (u && typeof u.at === 'string' && Number.isFinite(Date.parse(u.at))) {
+        const u = raw?.unlocks?.[d.id] as Partial<Unlock> | undefined;
+        // A saved unlock the records don't support is kept only if the server confirmed it
+        // (the next refresh checks it again) or it can't be derived from records (Discord)
+        const earned = d.kind === 'discord' || (this.signedIn && u?.confirmed === true)
+          || achievementProgress(d, this.state.records) >= d.target;
+        if (u && earned && typeof u.at === 'string' && Number.isFinite(Date.parse(u.at))) {
           this.state.unlocks[d.id] = { at: u.at, seen: u.seen === true, confirmed: u.confirmed === true };
         }
       }

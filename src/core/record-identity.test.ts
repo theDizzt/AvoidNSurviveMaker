@@ -8,20 +8,22 @@ it('matches standard SHA-256 vectors including multiblock input', () => {
   expect(sha256('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq')).toBe('248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1');
 });
 
-it('retains identity across slots and labels but separates gameplay and scoring revisions', () => {
+it("keeps a level's identity across slots, labels and map updates", () => {
   const map = { ...createEmptyMap(), id: 'stable', level: 1 };
   const key = recordIdentity('world', map, true);
   expect(recordIdentity('world', { ...map, level: 8, name: 'Renamed' }, true)).toBe(key);
-  expect(recordIdentity('world', { ...map, goal: { ...map.goal, x: 1000 } }, true)).not.toBe(key);
+  expect(recordIdentity('world', { ...map, goal: { ...map.goal, x: 1000 } }, true)).toBe(key);
+  expect(key).toBe('world/stable');
   expect(contentHash({ ...map, stars: { one: 3000, two: 2000, three: 1000 } })).not.toBe(contentHash(map));
   expect(recordIdentity('world', map, false)).not.toBe(key);
   expect(validateMap(map).id).toBe('stable');
 });
 
-it('isolates legacy custom content with the same pack ID without relying on slot indexes', () => {
+it('keys custom levels by pack and level id, not by slot or content', () => {
   const map = createEmptyMap();
   const key = recordIdentity('same-pack', map, false);
-  expect(recordIdentity('same-pack', { ...map, width: 1800 }, false)).not.toBe(key);
+  expect(key.startsWith('custom:same-pack/')).toBe(true);
+  expect(recordIdentity('same-pack', { ...map, width: 1800 }, false)).toBe(key);
   expect(recordIdentity('same-pack', { ...map, level: 5 }, false)).toBe(key);
 });
 
