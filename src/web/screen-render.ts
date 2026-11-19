@@ -1,12 +1,12 @@
-import { t as tr } from '../core/i18n';
+import { t as tr } from './i18n';
 import {
   BUILTIN_FONTS, DEFAULT_BUTTON, difficultyLabel, STAGE_H, STAGE_W,
   type BuiltinFont, type LayoutElement, type LevelButtonStyle, type ScreenLayout, type Visibility,
-} from '../core/screen-layout';
-import { isLibraryFont } from '../core/font-catalog';
+} from './localized/screen-layout';
+import { isLibraryFont } from './localized/font-catalog';
 import { formatSeconds } from '../core/simulation';
 import { ensureLibraryFont, libraryFontCss } from './library-fonts';
-import { STARS_PER_LEVEL, type ThemeInfo } from '../core/theme-pack';
+import { STARS_PER_LEVEL, type ThemeInfo } from './localized/theme-pack';
 import type { TextEffects } from '../core/text-effects';
 import { FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
 
@@ -35,7 +35,11 @@ export interface ScreenData {
   assets: Record<string, string>;
   /** Unique per theme, so bundled fonts of different themes don't clash */
   fontScope: string;
-  levels: { available: boolean; stars: number; cleared: boolean; difficulty: number; title: string }[];
+  levels: { available: boolean; stars: number; cleared: boolean; difficulty: number; title: string; crystal?: boolean; hasCrystal?: boolean }[];
+  /** The theme's star total (levels × 3 + crystal stars); default levels × 3 */
+  maxStars?: number;
+  /** Crystal stars earned in the theme (already capped) */
+  crystals?: number;
   /** Optional level index for level-specific elements */
   level?: number;
   best?: number | null;
@@ -82,7 +86,7 @@ export function fillText(text: string, d: ScreenData): string {
   const i = d.level ?? 0;
   const lv = d.levels[i];
   const cleared = d.levels.filter((l) => l.cleared).length;
-  const stars = d.level !== undefined ? lv?.stars ?? 0 : d.levels.reduce((s, l) => s + l.stars, 0);
+  const stars = d.level !== undefined ? (lv?.stars ?? 0) + (lv?.crystal ? 1 : 0) : d.levels.reduce((s, l) => s + l.stars, 0) + (d.crystals ?? 0);
   const vars: Record<string, string> = {
     theme: d.info.name,
     description: d.info.description,
@@ -92,7 +96,7 @@ export function fillText(text: string, d: ScreenData): string {
     cleared: String(cleared),
     total: String(Math.max(d.levels.filter((l) => l.available).length, 1)),
     stars: String(stars),
-    maxStars: String(d.level !== undefined ? STARS_PER_LEVEL : d.levels.length * STARS_PER_LEVEL),
+    maxStars: String(d.level !== undefined ? STARS_PER_LEVEL + (lv?.hasCrystal ? 1 : 0) : d.maxStars ?? d.levels.length * STARS_PER_LEVEL),
     n: String(i + 1),
     nn: String(i + 1).padStart(2, '0'),
     title: lv?.title ?? '',

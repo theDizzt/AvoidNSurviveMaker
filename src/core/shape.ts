@@ -91,12 +91,30 @@ export function flattenShape(s: Shape): FlatShape {
   }
 }
 
-/** Outline of a sector: the apex, then the arc (a full circle has no apex) */
+/**
+ * Outline of a sector: the apex, then the arc (a full circle has no apex).
+ * A ring sector (`inner`) runs along the outer arc, then back along the inner arc; a full ring
+ * closes both circles with a zero-width seam, so it is still one ring with a hole in it.
+ */
 export function sectorOutline(s: Extract<Shape, { type: 'sector' }>): number[] {
   const full = s.sweep >= 360;
   const arc = (Math.min(360, s.sweep) * Math.PI) / 180;
   const a0 = (s.start * Math.PI) / 180;
   const n = Math.min(512, Math.max(full ? 24 : 2, Math.ceil((arc * s.r) / CURVE_STEP)));
+  const inner = s.inner !== undefined && s.inner > 0 && s.inner < s.r ? s.inner : 0;
+  if (inner) {
+    const out: number[] = [];
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + (arc * i) / n;
+      out.push(s.cx + Math.cos(a) * s.r, s.cy + Math.sin(a) * s.r);
+    }
+    const m = Math.min(512, Math.max(full ? 24 : 2, Math.ceil((arc * inner) / CURVE_STEP)));
+    for (let i = m; i >= 0; i--) {
+      const a = a0 + (arc * i) / m;
+      out.push(s.cx + Math.cos(a) * inner, s.cy + Math.sin(a) * inner);
+    }
+    return out;
+  }
   const out: number[] = full ? [] : [s.cx, s.cy];
   const steps = full ? n : n + 1;
   for (let i = 0; i < steps; i++) {

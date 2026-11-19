@@ -39,6 +39,7 @@ Supabase Dashboard → **SQL Editor** → 아래 파일을 순서대로 붙여 �
 7. [`supabase/migrations/20261118020000_leaderboard.sql`](../supabase/migrations/20261118020000_leaderboard.sql) — 레벨별 순위표 (검증된 기록만)
 8. [`supabase/migrations/20261118030000_records_always_verified.sql`](../supabase/migrations/20261118030000_records_always_verified.sql) — 임시: 모든 기록을 검증된 것으로 처리
 9. [`supabase/migrations/20261118040000_public_profiles_invoker.sql`](../supabase/migrations/20261118040000_public_profiles_invoker.sql) — 공개 프로필 전용 테이블 및 invoker 뷰로 Security Definer View 경고 해결 (PostgreSQL 15 이상)
+10. [`supabase/migrations/20261120000000_crystal_stars.sql`](../supabase/migrations/20261120000000_crystal_stars.sql) — 크리스탈 별(#59): 레벨 기록에 `crystal` 칸 추가, `submit_level_records` 가 받아서 OR 로 병합
 
 1–8을 이미 적용한 DB는 9번만 실행합니다. SQL은 트랜잭션으로 적용되며 기존 계정·기록은 유지합니다.
 Git push나 Vercel 재배포만으로 DB 마이그레이션이 실행되지는 않습니다.
@@ -48,7 +49,7 @@ Git push나 Vercel 재배포만으로 DB 마이그레이션이 실행되지는 �
 
 ## 2. Auth 설정
 
-배포 전에 마이그레이션 5(보안 강화)가 반드시 필요합니다. 전체 프로필은 본인만 볼 수 있고, 공개 정보는 `public_profiles` 를 사용합니다. 기록은 미검증 개인 백업이며 계정당 2000개로 제한됩니다. 제한과 배포 세부 사항은 [보안 경계](SECURITY.md) 를 참고하세요.
+배포 전에 마이그레이션 5(보안 강화)가 반드시 필요합니다. 전체 프로필은 본인만 볼 수 있고, 공개 정보(닉네임#태그)는 순위표 RPC `level_leaderboard`로만 노출됩니다(`public_profiles` 뷰는 `20261121020000_drop_public_profiles.sql`에서 삭제). 기록은 미검증 개인 백업이며 계정당 2000개로 제한됩니다. 제한과 배포 세부 사항은 [보안 경계](SECURITY.md) 를 참고하세요.
 
 Supabase Dashboard → **Authentication**:
 
@@ -106,9 +107,11 @@ publishable(anon) 키는 공개되어도 되는 키이며, 데이터는 row leve
 
 ## 레벨 기록
 
-로그인한 플레이어가 챕터 레벨을 클리어하면 최고 시간(정수 ms)과 별을 `submit_level_records(records)` 로 보냅니다. 보내지 못한 기록은 계정별로 브라우저에 남겨 두고 다음 클리어나 로그인 때 다시 시도합니다. 서버는 병합하므로 기록은 좋아지기만 합니다: `best_ms` 는 가장 낮은 값을, `stars` 는 가장 높은 값을 유지합니다.
+로그인한 플레이어가 챕터 레벨을 클리어하면 최고 시간(정수 ms)과 별을 `submit_level_records(records)` 로 보냅니다. 보내지 못한 기록은 계정별로 브라우저에 남겨 두고 다음 클리어나 로그인 때 다시 시도합니다. 서버는 병합하므로 기록은 좋아지기만 합니다: `best_ms` 는 가장 낮은 값을, `stars` 는 가장 높은 값을 유지합니다. 크리스탈 별을 들고 클리어한 기록은 `crystal: true` 로 함께 보내며, 한 번 얻은 크리스탈 별은 사라지지 않습니다(OR 병합). 크리스탈 별 마이그레이션을 적용하기 전의 서버는 이 값을 무시하고, 브라우저에 저장된 크리스탈 별은 그대로 유지됩니다.
 
-로그인 전(또는 이 기능이 생기기 전)에 세운 기록은 플레이어가 **Options → Level records → Sync records** 를 누를 때까지 브라우저에 남습니다. 이 버튼은 이 브라우저의 모든 기록을 올리고 계정의 기록을 내려받으며, 양쪽 모두 각 레벨의 최고 기록을 유지합니다.
+진행 기록은 계정별로 분리됩니다. **Options → Level records → Sync records** 는 현재 계정의 로컬 기록만 올리고 해당 계정의 서버 기록을 내려받습니다. 다른 계정으로 전환하면 표시되는 별과 진행 기록도 전환되며, 진행 중이던 플레이는 초기화됩니다.
+
+로그인 전 기록과 이전 버전의 공용 브라우저 기록은 게스트 영역에 보존됩니다. 소유 계정을 구분할 수 없으므로 로그인하거나 동기화해도 자동으로 계정에 합치지 않습니다. **Import guest records** 를 누르면 현재 계정으로 명시적으로 복사하고 업로드를 시도합니다. 각 레벨의 더 좋은 시간과 별을 유지하며 원본 게스트 기록은 남습니다. 오프라인이면 계정별 미전송 목록에 보관합니다. 이미 서버에서 섞인 기록은 이 변경으로 자동 분리되지 않습니다.
 
 **Main menu → Stats** 는 프로필과 모든 `level_records` 행을 데이터베이스에서 직접 읽습니다.
 
@@ -122,7 +125,7 @@ publishable(anon) 키는 공개되어도 되는 키이며, 데이터는 row leve
 
 레벨 선택 화면에는 사이드 패널이 있습니다: 챕터 정보(번호, 이름, 별, 난이도, 설명)와, 마우스를 올린 레벨의 순위표를 `level_leaderboard(key, limit)` 로 읽어 보여 줍니다 — 상위 10명과 플레이어 본인의 순위. 로그인 여부와 관계없이 누구나 읽을 수 있으며, 공개 태그, 시간, 별만 반환합니다.
 
-**검증된** 기록만 순위에 오릅니다. 현재는 마이그레이션 8 이 모든 기록을 검증된 것으로 표시하므로 모든 클리어가 순위에 오릅니다 — 브라우저에서 위조한 제출도 포함됩니다([보안 경계](SECURITY.md) 참고). 신뢰할 수 있는 리플레이 검증기가 생기면 새 제출은 다시 미검증으로 저장해야 합니다. 커스텀 팩 레벨은 팩 id 가 유일하지 않으므로 순위표가 없습니다.
+재미로 즐기는 게임이라 서버 리플레이 검증은 하지 않습니다. `20261121010000_drop_replay_verification.sql` 적용 후 순위표는 각 계정의 `level_records`(공식 레벨 기록)를 그대로 순위에 올립니다. 커스텀 팩은 ID가 팩끼리 겹칠 수 있어 순위표가 없습니다.
 
 ## 흐름
 

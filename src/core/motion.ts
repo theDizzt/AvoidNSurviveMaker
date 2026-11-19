@@ -1,4 +1,4 @@
-import type { Easing, Motion, Point, Repeat, Rotation } from './types';
+import type { Easing, Motion, Point, Repeat, Rotation, Wave } from './types';
 
 export function ease(e: Easing, f: number): number {
   switch (e) {
@@ -41,8 +41,53 @@ function catmullRom(p0: Point, p1: Point, p2: Point, p3: Point, t: number, out: 
   );
 }
 
+/**
+ * The polyline `pts` (one leg) weaving across itself like a sine wave: offset sideways by
+ * amplitude · sin(π · n · s / L) at distance s, where n half-waves fit the leg exactly, so the
+ * offset is 0 at both ends and legs join without a jump. The first bump goes to the side
+ * (ux, uy) → (-uy, ux) of the direction of travel: up for a route heading left, down for one
+ * heading right.
+ */
+export function weave(pts: readonly number[], w: Wave): number[] {
+  const n = pts.length / 2;
+  if (n < 2 || w.amplitude <= 0) return [...pts];
+  const cum: number[] = [0];
+  for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]));
+  const len = cum[n - 1];
+  if (len <= 0) return [...pts];
+  const halves = Math.max(1, Math.round((2 * len) / w.wavelength));
+  const k = (Math.PI * halves) / len;
+  // Fine enough for a smooth wave and for the boulder to roll along it
+  const step = Math.max(0.5, Math.min(3, w.wavelength / 32));
+  const out: number[] = [];
+  let seg = 1;
+  const samples = Math.max(2, Math.ceil(len / step));
+  for (let i = 0; i <= samples; i++) {
+    const s = (len * i) / samples;
+    while (seg < n - 1 && cum[seg] < s) seg++;
+    const x0 = pts[seg * 2 - 2];
+    const y0 = pts[seg * 2 - 1];
+    const dx = pts[seg * 2] - x0;
+    const dy = pts[seg * 2 + 1] - y0;
+    const sl = cum[seg] - cum[seg - 1];
+    const f = sl > 0 ? (s - cum[seg - 1]) / sl : 0;
+    const ux = sl > 0 ? dx / sl : 0;
+    const uy = sl > 0 ? dy / sl : 0;
+    const off = w.amplitude * Math.sin(k * s);
+    out.push(x0 + dx * f - uy * off, y0 + dy * f + ux * off);
+  }
+  return out;
+}
+
 /** Flattened route legs for a motion whose anchor rests at `anchor` */
 function buildLegs(m: Motion, anchor: Point): Leg[] {
+  const legs = buildPlainLegs(m, anchor);
+  const w = m.wave;
+  if (!w || w.amplitude <= 0) return legs;
+  return legs.map((leg) => makeLeg(weave(Array.from(leg.pts), w), m.speed));
+}
+
+function buildPlainLegs(m: Motion, anchor: Point): Leg[] {
   if (m.speed <= 0) return [];
 
   if (m.type === 'circle') {
@@ -70,7 +115,7 @@ function buildLegs(m: Motion, anchor: Point): Leg[] {
     const a = nodes[i];
     const b = nodes[(i + 1) % nodes.length];
     const pts: number[] = [];
-    if (m.type === 'linear') {
+    if ((m.segmentTypes?.[i] ?? m.type) === 'linear') {
       pts.push(a.x, a.y, b.x, b.y);
     } else {
       const at = (k: number) => {

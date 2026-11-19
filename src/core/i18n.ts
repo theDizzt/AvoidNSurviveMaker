@@ -7,8 +7,7 @@ import zh from '../locale/zh.json';
  * carry {placeholders}, filled from the vars passed to t(). en.json is the reference: a key
  * missing from another language falls back to English.
  *
- * The language is picked once, when this module loads (many strings are built into constants at
- * startup), so changing it saves the choice and reloads the page.
+ * Translation is explicit and independent of browser storage or mutable global locale state.
  */
 export type MessageKey = keyof typeof en;
 export type MessageVars = Record<string, string | number>;
@@ -23,33 +22,19 @@ export const LANGUAGES = [
 export type Language = (typeof LANGUAGES)[number]['id'];
 
 export const DEFAULT_LANGUAGE: Language = 'en';
-const STORAGE_KEY = 'avoid-n-survive:language';
-
-function storedLanguage(): Language {
-  try {
-    const v = globalThis.localStorage?.getItem(STORAGE_KEY);
-    if (LANGUAGES.some((l) => l.id === v)) return v as Language;
-  } catch {
-    // Storage blocked (private mode, tests): use the default
-  }
-  return DEFAULT_LANGUAGE;
-}
-
-export const language: Language = storedLanguage();
-const messages: Record<string, string> = LANGUAGES.find((l) => l.id === language)!.messages;
 const fallback: Record<string, string> = en;
 
-export function t(key: MessageKey, vars?: MessageVars): string {
+export function translate(language: Language, key: MessageKey, vars?: MessageVars): string {
+  const messages: Record<string, string> = LANGUAGES.find((l) => l.id === language)?.messages ?? fallback;
   const s = messages[key] ?? fallback[key] ?? key;
   return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s;
 }
 
-/** Save the language for the next page load; returns false when it could not be stored */
-export function saveLanguage(id: Language): boolean {
-  try {
-    localStorage.setItem(STORAGE_KEY, id);
-    return true;
-  } catch {
-    return false;
-  }
+export type Translator = (key: MessageKey, vars?: MessageVars) => string;
+
+export function createTranslator(language: Language): Translator {
+  return (key, vars) => translate(language, key, vars);
 }
+
+/** Deterministic default for server and headless callers. */
+export const t: Translator = createTranslator(DEFAULT_LANGUAGE);

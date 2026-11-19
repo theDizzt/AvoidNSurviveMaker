@@ -1,5 +1,5 @@
-import { t } from '../core/i18n';
-import { LIBRARY_FONTS, type CatalogFont } from '../core/font-catalog';
+import { t } from './i18n';
+import { LIBRARY_FONTS, type CatalogFont } from './localized/font-catalog';
 import { ensureLibraryFont, libraryFontCss } from './library-fonts';
 
 const SCRIPTS: [CatalogFont['script'], string][] = [['latin', t('fontPicker.latin')], ['korean', t('fontPicker.korean')], ['japanese', t('fontPicker.japanese')], ['chinese', t('fontPicker.chinese')]];

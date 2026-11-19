@@ -1,15 +1,15 @@
-import { DEFAULT_LANGUAGE, language, LANGUAGES, t as tr } from '../core/i18n';
+import { DEFAULT_LANGUAGE, language, LANGUAGES, t as tr } from './i18n';
 import { fontPicker } from './font-picker';
 import { gameAudio } from './audio';
-import { levelLabel } from '../core/level';
+import { levelLabel } from './localized/level';
 import { compileMap } from '../core/object';
 import {
   averageDifficulty, blankThemeInfo, DEFAULT_BADGE, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo,
   type BadgeFont, type BadgeKind, type BadgeStyle, type ThemeEntry, type ThemeInfo, type ThemeText,
-} from '../core/theme-pack';
+} from './localized/theme-pack';
 import type { MapData } from '../core/types';
 import type { TextEffects } from '../core/text-effects';
-import { createEmptyMap, validateMap, validatePack } from '../core/validate';
+import { createEmptyMap, validateMap, validatePack } from './localized/validate';
 import { badgeImage, drawLevelBadge } from './badge';
 import { beginFrame, drawMap, fitCanvas } from './render';
 import { renderThemePanel } from './theme-panel';

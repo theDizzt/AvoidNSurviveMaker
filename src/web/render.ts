@@ -1,16 +1,18 @@
-import { language, t as tr } from '../core/i18n';
+import { language, t as tr } from './i18n';
 import { createPatternTile, PATTERN_RES } from './theme-pattern';
 import { displayTime } from '../core/time';
 import { toWorld, transformAt, type CompiledObject, type Transform } from '../core/object';
-import { primaryColor, secondaryColor, shade } from '../core/theme';
-import { switchColor } from '../core/colors';
+import { primaryColor, secondaryColor, shade } from './localized/theme';
+import { switchColor } from './localized/colors';
 import type { Beam } from '../core/laser';
 import { autoDoorOpen, doorPanels, initialChannels } from '../core/switches';
-import { isLibraryFont } from '../core/font-catalog';
-import type { Fill, MapData, MapObject, Point, Rect, TextBox } from '../core/types';
+import { isLibraryFont } from './localized/font-catalog';
+import type { Fall, Fill, MapData, MapObject, Point, Pulley, Rect, TextBox } from '../core/types';
+import { fallState } from '../core/hazards';
 import { libraryFontCss } from './library-fonts';
 import { CompiledMotion } from '../core/motion';
 import { shapeCenter } from '../core/shape';
+import type { LightSource } from '../core/lighting';
 
 export const COLORS = {
   bg: '#f6fbff',
@@ -21,6 +23,13 @@ export const COLORS = {
   grid: 'rgba(60,100,160,0.08)',
   /** Grid drawn over walls and obstacles (editor option): stronger so it shows on any surface */
   gridTop: 'rgba(36,52,80,0.28)',
+  /** Editor: center lines / symmetry axes */
+  centerLine: 'rgba(124,92,230,0.85)',
+  /** Editor: mirror images of objects while checking symmetry */
+  mirrorGhost: 'rgba(124,92,230,0.55)',
+  /** Editor: objects that break the symmetry */
+  asymmetric: 'rgba(226,60,80,0.95)',
+  asymmetricFill: 'rgba(226,60,80,0.18)',
   wall: '#8fa3bf',
   wallEdge: '#6a809f',
   /** Safe zone (#48) */
@@ -491,6 +500,10 @@ export interface DrawMapOptions {
   now?: number;
   /** Coins still needed: GOAL turns dark gray and shows collected / total, e.g. "3/10" */
   coinsLeft?: number;
+  /** Per object index: 1 while the cursor carries that torch (#58): not drawn in place */
+  carried?: ArrayLike<number>;
+  /** Per object index (pulleys, #52): how far it has turned (radians) */
+  pulleyAngle?: ArrayLike<number>;
 }
 
 /** A coin: gold disc with a rim and a highlight, in the object's own (posed) frame */
@@ -538,7 +551,10 @@ function drawCoin(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): 
  */
 export function drawCoinPulls(
   ctx: CanvasRenderingContext2D,
-  sim: { readonly collected: Uint8Array; readonly collectedAt: Float64Array; readonly collectedPos: Float64Array },
+  sim: {
+    readonly collected: Uint8Array; readonly collectedAt: Float64Array; readonly collectedPos: Float64Array;
+    readonly objects?: readonly { role: string }[];
+  },
   t: number, x: number, y: number, pullMs: number,
 ): void {
   for (let i = 0; i < sim.collected.length; i++) {
@@ -548,6 +564,11 @@ export function drawCoinPulls(
     const k = f * f;
     const cx = sim.collectedPos[i * 2] + (x - sim.collectedPos[i * 2]) * k;
     const cy = sim.collectedPos[i * 2 + 1] + (y - sim.collectedPos[i * 2 + 1]) * k;
+    if (sim.objects?.[i]?.role === 'crystal') {
+      // The crystal star shrinks into the cursor (it stays with it as the small held star)
+      drawCrystalAt(ctx, cx, cy, 48 * (1 - 0.65 * k), t, 1 - 0.3 * k);
+      continue;
+    }
     const r = 12 * (1 - 0.6 * k);
     ctx.save();
     ctx.globalAlpha = 1 - 0.5 * k;
@@ -585,8 +606,10 @@ const darkLayers = new WeakMap<CanvasRenderingContext2D, HTMLCanvasElement>();
  * `alpha` < 1 previews it in the editor.
  */
 export function drawGlobalDark(
-  ctx: CanvasRenderingContext2D, map: MapData, lights: readonly { x: number; y: number; r: number }[], alpha = 1,
+  ctx: CanvasRenderingContext2D, map: MapData, lights: readonly LightSource[], alpha = 1,
 ): void {
+  const opacity = Math.max(0, Math.min(100, map.darkness?.intensity ?? 100)) / 100;
+  if (opacity === 0 || alpha <= 0) return;
   const m = ctx.getTransform();
   const cw = ctx.canvas.width;
   const ch = ctx.canvas.height;
@@ -606,9 +629,12 @@ export function drawGlobalDark(
   // Lights: fully clear in the middle, fading out over the outer third
   g.globalCompositeOperation = 'destination-out';
   for (const l of lights) {
+    if (!Number.isFinite(l.r) || l.r <= 0 || !Number.isFinite(l.x) || !Number.isFinite(l.y)) continue;
+    const strength = Math.max(0, Math.min(100, l.intensity ?? 100)) / 100;
+    if (!Number.isFinite(strength) || strength <= 0) continue;
     const grad = g.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r);
-    grad.addColorStop(0, 'rgba(0,0,0,1)');
-    grad.addColorStop(0.65, 'rgba(0,0,0,1)');
+    grad.addColorStop(0, `rgba(0,0,0,${strength})`);
+    grad.addColorStop(0.65, `rgba(0,0,0,${strength})`);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grad;
     g.beginPath();
@@ -618,7 +644,7 @@ export function drawGlobalDark(
   g.globalCompositeOperation = 'source-over';
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalAlpha = alpha;
+  ctx.globalAlpha = alpha * opacity;
   ctx.drawImage(layer, 0, 0);
   ctx.restore();
 }
@@ -752,6 +778,25 @@ export function drawMap(
   objects.forEach((o, i) => {
     if (o.role === 'coin' && shown(i)) drawCoin(ctx, o, timeOf(i));
   });
+  // Falling rocks (#51): a shadow growing where the rock will land, and shards once it has
+  const fallEdge = theme ? theme.wall.edge : COLORS.wallEdge;
+  objects.forEach((o, i) => {
+    const f = map.objects[i]?.fall;
+    if (f) drawFallEffects(ctx, o, f, timeOf(i), fallEdge, i);
+  });
+  // Pulleys (#52)
+  objects.forEach((o, i) => {
+    const p = map.objects[i]?.pulley;
+    if (p && o.role === 'pulley' && shown(i)) drawPulley(ctx, o, timeOf(i), p, opts.pulleyAngle?.[i] ?? 0);
+  });
+  // Crystal stars (#59)
+  objects.forEach((o, i) => {
+    if (o.role === 'crystal' && shown(i)) drawCrystal(ctx, o, timeOf(i), opts.now ?? t);
+  });
+  // Torches (#57 / #58), unless being carried
+  objects.forEach((o, i) => {
+    if (o.role === 'torch' && shown(i) && !opts.carried?.[i]) drawTorch(ctx, o, timeOf(i), opts.now ?? t, i);
+  });
   objects.forEach((o, i) => {
     if (!shown(i)) return;
     const m = map.objects[i];
@@ -837,6 +882,333 @@ function enterPose(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number):
     o.px + tf.dx - tf.cos * o.px + tf.sin * o.py,
     o.py + tf.dy - tf.sin * o.px - tf.cos * o.py,
   );
+}
+
+/** How long a falling rock's shards fly after it lands (ms) */
+const SHATTER_MS = 450;
+
+/**
+ * Around a falling rock (#51): while it falls, a shadow on its landing place that darkens as it
+ * nears; right after it lands, shards flying apart and a puff of dust.
+ */
+function drawFallEffects(ctx: CanvasRenderingContext2D, o: CompiledObject, f: Fall, t: number, color: string, seed: number): void {
+  const s = fallState(f, t);
+  const cx = (o.minX + o.maxX) / 2;
+  const cy = (o.minY + o.maxY) / 2;
+  const r = Math.min(o.maxX - o.minX, o.maxY - o.minY) / 2;
+  ctx.save();
+  if (s.falling) {
+    ctx.fillStyle = `rgba(20,24,34,${0.12 + 0.3 * s.u * s.u})`;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.55, r * (0.45 + 0.55 * s.u), r * (0.18 + 0.22 * s.u), 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (s.sinceLanding < SHATTER_MS) {
+    const k = s.sinceLanding / SHATTER_MS;
+    // Dust
+    ctx.fillStyle = `rgba(200,190,170,${0.45 * (1 - k)})`;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.4, r * (0.8 + 0.9 * k), r * (0.35 + 0.3 * k), 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Shards: fixed directions per rock, flying out and falling back with gravity
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 1 - k;
+    for (let n = 0; n < 8; n++) {
+      const a = -Math.PI + (n / 7) * Math.PI + Math.sin(seed * 7.3 + n) * 0.25;
+      const v = r * (1.6 + ((n * 37 + seed * 11) % 7) / 6);
+      const x = cx + Math.cos(a) * v * k;
+      const y = cy + Math.sin(a) * v * k + r * 2.2 * k * k;
+      const size = r * (0.22 + ((n * 13 + seed) % 5) / 20);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(k * (n % 2 ? 6 : -5));
+      ctx.beginPath();
+      ctx.moveTo(-size, -size * 0.4);
+      ctx.lineTo(size * 0.6, -size * 0.7);
+      ctx.lineTo(size, size * 0.5);
+      ctx.lineTo(-size * 0.3, size * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+}
+
+/** Pulley (#52): a wheel with a rim in its switch color and spokes that turn as it is turned */
+function drawPulley(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, p: Pulley, angle: number): void {
+  ctx.save();
+  enterPose(ctx, o, t);
+  const cx = (o.minX + o.maxX) / 2;
+  const cy = (o.minY + o.maxY) / 2;
+  const r = Math.min(o.maxX - o.minX, o.maxY - o.minY) / 2;
+  const hex = switchColor(p.color).hex;
+  // Wheel
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  ctx.strokeStyle = hex;
+  ctx.lineWidth = Math.max(2, r * 0.16);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - ctx.lineWidth / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Groove
+  ctx.strokeStyle = 'rgba(36,52,80,0.35)';
+  ctx.lineWidth = Math.max(1, r * 0.04);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.72, 0, Math.PI * 2);
+  ctx.stroke();
+  // Spokes, turning with the pulley
+  ctx.strokeStyle = hex;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1.5, r * 0.1);
+  ctx.beginPath();
+  for (let k = 0; k < 6; k++) {
+    const a = angle + (k * Math.PI) / 3;
+    ctx.moveTo(cx + Math.cos(a) * r * 0.2, cy + Math.sin(a) * r * 0.2);
+    ctx.lineTo(cx + Math.cos(a) * r * 0.7, cy + Math.sin(a) * r * 0.7);
+  }
+  ctx.stroke();
+  // Handle on the rim, so the turning reads clearly
+  ctx.fillStyle = '#243450';
+  ctx.beginPath();
+  ctx.arc(cx + Math.cos(angle) * r * 0.82, cy + Math.sin(angle) * r * 0.82, Math.max(2, r * 0.1), 0, Math.PI * 2);
+  ctx.fill();
+  // Hub
+  ctx.fillStyle = hex;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#243450';
+  ctx.lineWidth = Math.max(1, r * 0.04);
+  ctx.stroke();
+  // ↻ hint: which way winds forward
+  ctx.strokeStyle = 'rgba(36,52,80,0.4)';
+  ctx.lineWidth = Math.max(1, r * 0.05);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.88, -Math.PI * 0.9, -Math.PI * 0.55);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Five-pointed star outline centered at (cx, cy) */
+function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, inner: number, turn = 0): void {
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const a = -Math.PI / 2 + turn + (k * Math.PI) / 5;
+    const rr = k % 2 ? inner : r;
+    if (k === 0) ctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    else ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+}
+
+/** One crystal-star pulse (ms) */
+const CRYSTAL_PULSE_MS = 1200;
+
+/**
+ * A crystal star (#59) `size` across at (cx, cy): a faceted ice-blue to violet star that pulses:
+ * it swells a little and brightens, and a ring of light spreads from it and fades. `now` drives
+ * the pulse; `alpha` fades it all.
+ */
+export function drawCrystalAt(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, now: number, alpha = 1): void {
+  const phase = (now % CRYSTAL_PULSE_MS) / CRYSTAL_PULSE_MS;
+  // 0 → 1 → 0 early in each pulse, then rest
+  const beat = Math.pow(Math.sin(Math.PI * Math.min(1, phase * 1.6)), 2);
+  const r = (size / 2) * (1 + 0.08 * beat);
+  const inner = r * 0.48;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  // Halo, brighter at the peak
+  const halo = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r * 1.3);
+  halo.addColorStop(0, `rgba(170,230,255,${0.3 + 0.35 * beat})`);
+  halo.addColorStop(1, 'rgba(170,230,255,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 1.3, 0, Math.PI * 2);
+  ctx.fill();
+  // Ring of light spreading out and fading over the pulse
+  ctx.strokeStyle = `rgba(150,220,255,${0.6 * (1 - phase)})`;
+  ctx.lineWidth = Math.max(0.8, r * 0.08 * (1 - phase));
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * (0.9 + 0.8 * phase), 0, Math.PI * 2);
+  ctx.stroke();
+  // Body
+  const body = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+  body.addColorStop(0, '#d9fbff');
+  body.addColorStop(0.45, '#6fd6ff');
+  body.addColorStop(1, '#8a6cff');
+  starPath(ctx, cx, cy, r, inner);
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#4b3fb8';
+  ctx.lineWidth = Math.max(0.8, r * 0.07);
+  ctx.stroke();
+  // Facets: a line from the center to every point and notch, lighter on the upper-left
+  ctx.save();
+  starPath(ctx, cx, cy, r, inner);
+  ctx.clip();
+  for (let k = 0; k < 10; k++) {
+    const a = -Math.PI / 2 + (k * Math.PI) / 5;
+    const rr = k % 2 ? inner : r;
+    const next = -Math.PI / 2 + ((k + 1) * Math.PI) / 5;
+    const nr = (k + 1) % 2 ? inner : r;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    ctx.lineTo(cx + Math.cos(next) * nr, cy + Math.sin(next) * nr);
+    ctx.closePath();
+    ctx.fillStyle = k % 2 ? 'rgba(255,255,255,0.22)' : 'rgba(40,20,120,0.12)';
+    ctx.fill();
+  }
+  // Pulse: the whole star brightens at the peak
+  ctx.fillStyle = `rgba(255,255,255,${0.35 * beat})`;
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  ctx.restore();
+  // Center sparkle
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(cx - r * 0.12, cy - r * 0.14, r * 0.09, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCrystal(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, now: number): void {
+  ctx.save();
+  enterPose(ctx, o, t);
+  // A gentle bob so it reads as a pickup
+  const bob = Math.sin(now / 420) * 2;
+  drawCrystalAt(ctx, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2 + bob, Math.min(o.maxX - o.minX, o.maxY - o.minY), now);
+  ctx.restore();
+}
+
+/**
+ * A torch standing at (cx, cy) in a w×h box (map units): a wooden handle, a wrapped head and a
+ * flickering flame with a warm glow. `now` animates the flame; `seed` keeps torches out of step.
+ */
+export function drawTorchAt(ctx: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number, now: number, seed = 0): void {
+  const top = cy - h / 2;
+  const flameH = h * 0.46;
+  const flameW = w * 0.62;
+  const flicker = 1 + 0.08 * Math.sin(now / 95 + seed * 1.7) + 0.05 * Math.sin(now / 37 + seed);
+  const sway = Math.sin(now / 140 + seed) * w * 0.05;
+  const fy = top + flameH; // flame base
+  ctx.save();
+  // Glow
+  const glowR = Math.max(w, h) * 0.9;
+  const glow = ctx.createRadialGradient(cx, fy - flameH * 0.4, 0, cx, fy - flameH * 0.4, glowR);
+  glow.addColorStop(0, 'rgba(255,190,90,0.38)');
+  glow.addColorStop(1, 'rgba(255,190,90,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, fy - flameH * 0.4, glowR, 0, Math.PI * 2);
+  ctx.fill();
+  // Handle: tapers toward the bottom
+  ctx.fillStyle = '#8a5a2b';
+  ctx.strokeStyle = '#5b3a1e';
+  ctx.lineWidth = Math.max(0.8, w * 0.05);
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.17, fy);
+  ctx.lineTo(cx + w * 0.17, fy);
+  ctx.lineTo(cx + w * 0.1, cy + h / 2);
+  ctx.lineTo(cx - w * 0.1, cy + h / 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Wrapped head
+  ctx.fillStyle = '#5b3a1e';
+  ctx.beginPath();
+  ctx.roundRect(cx - w * 0.24, fy - h * 0.02, w * 0.48, h * 0.12, w * 0.06);
+  ctx.fill();
+  // Flame: outer orange, inner yellow
+  const flame = (scale: number, color: string) => {
+    const fh = flameH * flicker * scale;
+    const fw = flameW * scale;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(cx + sway * scale, fy - fh);
+    ctx.bezierCurveTo(cx + fw * 0.55, fy - fh * 0.55, cx + fw * 0.5, fy, cx, fy);
+    ctx.bezierCurveTo(cx - fw * 0.5, fy, cx - fw * 0.55, fy - fh * 0.55, cx + sway * scale, fy - fh);
+    ctx.fill();
+  };
+  flame(1, '#ff8a1f');
+  flame(0.62, '#ffd45e');
+  flame(0.3, '#fff6c8');
+  ctx.restore();
+}
+
+function drawTorch(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, now: number, seed: number): void {
+  ctx.save();
+  enterPose(ctx, o, t);
+  drawTorchAt(ctx, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, o.maxX - o.minX, o.maxY - o.minY, now, seed);
+  ctx.restore();
+}
+
+const secretLayers = new WeakMap<CanvasRenderingContext2D, HTMLCanvasElement>();
+
+/**
+ * Secret walls (#55): drawn like the wall mass over everything under them. Around `cursor`, each
+ * one fades away within its reveal radius so the player sees what lies beneath. `alpha` < 1 is the
+ * see-through editor view.
+ */
+export function drawSecretWalls(
+  ctx: CanvasRenderingContext2D, map: MapData, objects: readonly CompiledObject[], t: number,
+  cursor: Point | null, alpha = 1, state: { hidden?: ArrayLike<number>; clock?: ArrayLike<number> } = {},
+): void {
+  const secrets = objects.flatMap((o, i) => (o.role === 'secret' && !state.hidden?.[i] ? [i] : []));
+  if (!secrets.length || alpha <= 0) return;
+  const m = ctx.getTransform();
+  const cw = ctx.canvas.width;
+  const ch = ctx.canvas.height;
+  let layer = secretLayers.get(ctx);
+  if (!layer) secretLayers.set(ctx, (layer = document.createElement('canvas')));
+  if (layer.width !== cw || layer.height !== ch) {
+    layer.width = cw;
+    layer.height = ch;
+  }
+  const g = layer.getContext('2d')!;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, cw, ch);
+  g.setTransform(m);
+  const theme = map.theme;
+  const whole: Bounds = { minX: 0, minY: 0, maxX: map.width, maxY: map.height };
+  const fill = theme ? fillStyle(g, theme.wall.fill, whole) : COLORS.wall;
+  const edge = theme ? theme.wall.edge : COLORS.wallEdge;
+  for (const i of secrets) {
+    const o = objects[i];
+    const pose = transformAt(o, state.clock?.[i] ?? t, tf);
+    g.beginPath();
+    traceObject(g, o, pose);
+    g.fillStyle = fill;
+    g.fill();
+    // In play there is no outline: the secret wall must look exactly like the wall mass around it.
+    // The see-through editor view keeps it so the object can be found.
+    if (alpha < 1) {
+      g.strokeStyle = edge;
+      g.lineWidth = 2;
+      g.stroke();
+    }
+    if (cursor) {
+      // Reveal: clear within the radius, fading out over the outer third
+      const r = o.src?.secret?.radius ?? 60;
+      g.save();
+      g.beginPath();
+      traceObject(g, o, pose);
+      g.clip();
+      g.globalCompositeOperation = 'destination-out';
+      const grad = g.createRadialGradient(cursor.x, cursor.y, 0, cursor.x, cursor.y, r);
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(0.65, 'rgba(0,0,0,1)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad;
+      g.fillRect(cursor.x - r, cursor.y - r, r * 2, r * 2);
+      g.restore();
+    }
+  }
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(layer, 0, 0);
+  ctx.restore();
 }
 
 /** Safe zone (#48): see-through grey */

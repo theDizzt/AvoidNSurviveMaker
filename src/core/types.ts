@@ -24,7 +24,7 @@ export type Shape =
    * Pie slice: apex (cx, cy), radius r, from angle `start` sweeping `sweep` degrees clockwise on
    * screen (0° = right, 90° = down). sweep 360 = a full circle.
    */
-  | { type: 'sector'; cx: number; cy: number; r: number; start: number; sweep: number };
+  | { type: 'sector'; cx: number; cy: number; r: number; start: number; sweep: number; /** Ring sector (#53/#54): inner radius, 0 < inner < r */ inner?: number };
 
 /**
  * path: safe floor (once a map has any path, everything outside paths is deadly). wall: deadly.
@@ -35,8 +35,14 @@ export type Shape =
  * text: words drawn on the map, no effect on play (see `text`).
  * safe: a safe zone — nothing can kill the cursor while it is inside (it also counts as floor).
  * fog: fog or sand dust drifting over the area, covering the cursor, obstacles and walls (see `fog`).
+ * torch: a harmless light source (#57 / #58, see `torch` and `light`).
+ * secret: a secret wall (#55): covers what lies under it like a wall, harmless (see `secret`).
+ * pulley: a pulley (#52) in a switch color: circling the cursor inside it turns it, which drives the
+ *   objects linked to its color with the 'pulley' action (see `pulley`).
+ * crystal: a crystal star (#59), at most one per map: picked up like a coin, it earns a bonus star
+ *   when the cursor carries it to GOAL.
  */
-export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog';
+export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret' | 'crystal' | 'pulley';
 
 /** fog: grey-white fog (#49) · sand: blowing sand dust (#50) */
 export type FogKind = 'fog' | 'sand';
@@ -157,7 +163,8 @@ export interface Trigger {
 }
 
 /** What a linked object does while its color is ON */
-export type LinkAction = 'start' | 'stop' | 'remove';
+/** pulley: the object's motion / rotation runs only as a pulley (#52) of its color is turned */
+export type LinkAction = 'start' | 'stop' | 'remove' | 'pulley';
 
 export interface Link {
   color: SwitchColor;
@@ -189,6 +196,8 @@ export type MotionType = 'linear' | 'curve' | 'circle';
  */
 export interface Motion {
   type: MotionType;
+  /** Per-leg overrides, starting at the anchor; final entry controls the loop return. */
+  segmentTypes?: ('linear' | 'curve')[];
   points: Point[];
   /** px/s */
   speed: number;
@@ -201,6 +210,42 @@ export interface Motion {
   clockwise: boolean;
   /** Draw the route as a dotted line in game */
   showPath?: boolean;
+  /**
+   * Wavy route (#30 rolling boulder): the object weaves side to side across the route like a
+   * sine wave. `amplitude` px to each side, `wavelength` px per full wave (adjusted a little per
+   * leg so every leg holds whole half-waves and the wave is 0 at each marker).
+   */
+  wave?: Wave;
+}
+
+/**
+ * Falling rock (#51), a wall: waits `waitMs` (not there), then drops from `height` px above its
+ * resting place to it in `fallMs` (speeding up like gravity), shatters and is gone; repeats.
+ * `delay`: ms before the first wait starts.
+ */
+export interface Fall {
+  height: number;
+  fallMs: number;
+  waitMs: number;
+  delay: number;
+}
+
+/**
+ * Pulley (#52): turned by circling the cursor inside it. One clockwise turn moves the objects
+ * linked to its color (action 'pulley') `turnMs` ms forward along their motion; counter-clockwise
+ * moves them back (never before the start). `hold`: they stay put when it isn't turned; `unwind`:
+ * they slowly run back to the start, at `unwind` % of real time.
+ */
+export interface Pulley {
+  color: SwitchColor;
+  mode: 'hold' | 'unwind';
+  turnMs: number;
+  unwind: number;
+}
+
+export interface Wave {
+  amplitude: number;
+  wavelength: number;
 }
 
 /** Rotation around `pivot` (rest position; the pivot travels with the object's motion). */
@@ -238,6 +283,10 @@ export interface MapObject {
   spike?: Spike;
   /** Wall that rolls (spins with the distance it travels) along its route (#30) */
   boulder?: boolean;
+  /** Falling rock (#51): drops from `height` above its resting (landing) place, then shatters */
+  fall?: Fall;
+  /** role 'pulley' (#52) */
+  pulley?: Pulley;
   /** role 'laser' */
   laser?: Laser;
   /** role 'portal' */
@@ -248,6 +297,12 @@ export interface MapObject {
   text?: TextBox;
   /** role 'fog' */
   fog?: Fog;
+  /** role 'torch' (#57): a harmless light source (see `light`); `carry` (#58): the cursor picks it up and carries it */
+  torch?: { carry?: boolean };
+  /** role 'secret' (#55): looks like a wall, harmless; only `radius` px around the cursor shows what lies under it */
+  secret?: { radius: number };
+  /** Future light-source objects: clear global darkness around the moving shape center. */
+  light?: { radius: number; intensity?: number };
 }
 
 export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal';
@@ -280,6 +335,8 @@ export interface StarTimes {
 }
 
 export interface MapData {
+  /** Stable within its theme. Retain when moving slots; change when replacing a level. */
+  id?: string;
   v: typeof MAP_VERSION;
   /** File name (used for exports); the in-game title is `title` */
   name: string;
@@ -296,8 +353,8 @@ export interface MapData {
   /** Level number shown in game, 1–9999 */
   level?: number;
   stars?: StarTimes;
-  /** Global darkness: the whole map is dark during a run except a light around the cursor */
-  darkness?: { light: number };
+  /** Global darkness (#42). `light` is the optional cursor light radius (0 disables it). */
+  darkness?: { light: number; /** 0 = visible, 100 = black outside light sources; legacy default 100 */ intensity?: number };
   /** Difficulty rating 1.00–10.00 shown on level select */
   difficulty?: number;
 }

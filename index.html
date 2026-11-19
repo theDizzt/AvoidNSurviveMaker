@@ -180,7 +180,10 @@
               <span class="dtile-in">
                 <strong data-i18n="options.records"></strong>
                 <small id="records-status" data-i18n="records.signedOut"></small>
-                <button type="button" id="records-sync" class="dpill" disabled data-i18n="options.sync"></button>
+                <span class="dpill-row">
+                  <button type="button" id="records-sync" class="dpill" disabled data-i18n="options.sync"></button>
+                  <button type="button" id="records-import-guest" class="dpill" disabled data-i18n="records.importGuest" data-i18n-title="records.importGuestHint"></button>
+                </span>
               </span>
             </div>
             <label class="dtile dtoggle" style="grid-column: 1; grid-row: 3" data-i18n-title="options.trailHint">
@@ -254,21 +257,39 @@
     </div>
 
     <div id="achievements-screen" class="screen menu" hidden>
-      <div class="menu-inner">
+      <div class="menu-inner menu-diamonds">
         <h2 class="logo logo-sm" data-i18n="menu.achievements"></h2>
-        <p class="muted" data-i18n="common.comingSoon"></p>
-        <div class="menu-buttons">
-          <button type="button" id="achievements-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
+        <p id="achievements-status" class="tagline stats-message" role="status"></p>
+        <!-- A 4×4 diamond (summary in the middle, achievements around it) between the page buttons;
+             Status and Category on the left, Back on the right, so the grid gets the full height -->
+        <div class="dpage-row ach-row">
+          <div class="ach-side">
+            <button type="button" id="achievements-filter" class="dsmall"><span class="dtile-in"></span></button>
+            <button type="button" id="achievements-category" class="dsmall"><span class="dtile-in"></span></button>
+          </div>
+          <button type="button" id="achievements-prev" class="dpage" data-i18n-aria-label="customize.prevPage"><span>‹</span></button>
+          <div class="dia-wrap" id="achievements-dia">
+            <div class="dgrid dgrid-panel" id="achievements-grid" style="--cols: 4"></div>
+          </div>
+          <button type="button" id="achievements-next" class="dpage" data-i18n-aria-label="customize.nextPage"><span>›</span></button>
+          <div class="ach-side">
+            <button type="button" id="achievements-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
+          </div>
         </div>
+        <p id="achievements-page" class="dpage-label" aria-live="polite"></p>
       </div>
     </div>
 
     <div id="customize-screen" class="screen menu" hidden>
-      <div class="menu-inner">
+      <div class="menu-inner menu-diamonds">
         <h2 class="logo logo-sm" data-i18n="menu.customize"></h2>
-        <p class="muted" data-i18n="common.comingSoon"></p>
-        <div class="menu-buttons">
-          <button type="button" id="customize-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
+        <!-- Tiles are filled in by CustomizeUI; Back stays in the bottom corner -->
+        <div class="dia-wrap" id="customize-dia">
+          <div class="dgrid dgrid-panel" id="customize-grid" style="--cols: 4">
+            <button type="button" id="customize-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 4">
+              <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -320,6 +341,9 @@
           <label class="check" title="N"><input type="checkbox" id="opt-snap" checked /> <span data-i18n="editor.snap"></span></label>
           <label class="check" title="P"><input type="checkbox" id="opt-preview" /> <span data-i18n="editor.previewMotion"></span></label>
           <label class="check" data-i18n-title="editor.gridTopHint"><input type="checkbox" id="opt-grid-top" /> <span data-i18n="editor.gridTop"></span></label>
+          <label class="check" data-i18n-title="editor.centerLinesHint"><input type="checkbox" id="opt-center" /> <span data-i18n="editor.centerLines"></span></label>
+          <label class="sym-pick" data-i18n-title="editor.symmetryHint"><span data-i18n="editor.symmetry"></span> <select id="opt-symmetry"></select></label>
+          <span id="symmetry-status" class="sym-status" role="status" hidden></span>
           <button type="button" id="btn-undo" title="Ctrl+Z" data-i18n="common.undo"></button>
           <button type="button" id="btn-redo" title="Ctrl+Y" data-i18n="common.redo"></button>
           <button type="button" id="btn-shortcuts" title="?" aria-pressed="false" data-i18n="editor.shortcuts"></button>

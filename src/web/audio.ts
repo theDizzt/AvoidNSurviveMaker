@@ -1,11 +1,12 @@
-import { t } from '../core/i18n';
+import { t } from './i18n';
 import { onOptionsChange, options } from './options';
 import clickUrl from '../sfx/click.mp3';
 import coinUrl from '../sfx/coin.mp3';
 import finishUrl from '../sfx/finish.mp3';
+import starUrl from '../sfx/star.mp3';
 
 /** Sound effect files (src/sfx) */
-const SFX = { click: clickUrl, coin: coinUrl, finish: finishUrl } as const;
+const SFX = { click: clickUrl, coin: coinUrl, finish: finishUrl, star: starUrl } as const;
 export type Sfx = keyof typeof SFX;
 
 /** Music crossfade: the old track fades out while the new one fades in (seconds) */
@@ -16,6 +17,23 @@ interface Track {
   source: AudioBufferSourceNode;
   /** Per-track fade gain, in front of the shared music volume */
   fade: GainNode;
+}
+
+/** Below this level (about -46 dB) a sample counts as silence */
+const SILENCE = 0.005;
+/** Start this much before the first sound, so its attack isn't clipped (s) */
+const ATTACK = 0.005;
+
+/** Time of the first audible sample, so effects play the moment they're triggered */
+function soundStart(buffer: AudioBuffer): number {
+  let first = buffer.length;
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const data = buffer.getChannelData(c);
+    for (let i = 0; i < first; i++) {
+      if (Math.abs(data[i]) > SILENCE) { first = i; break; }
+    }
+  }
+  return first >= buffer.length ? 0 : Math.max(0, first / buffer.sampleRate - ATTACK);
 }
 
 /** All sound sources pass through their category gain, then the master gain. */
@@ -31,6 +49,8 @@ class GameAudio {
   private trackUrl: string | null = null;
   /** Decoded sound effects, loaded once the audio context exists */
   private readonly sfx = new Map<Sfx, AudioBuffer>();
+  /** Where each effect's sound actually begins (s): files may start with silence */
+  private readonly sfxStart = new Map<Sfx, number>();
 
   constructor() {
     onOptionsChange(() => this.sync());
@@ -68,7 +88,9 @@ class GameAudio {
       try {
         const response = await fetch(SFX[name]);
         if (!response.ok) throw new Error(t('audio.downloadFailed', { status: response.status }));
-        this.sfx.set(name, await ctx.decodeAudioData(await response.arrayBuffer()));
+        const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+        this.sfx.set(name, buffer);
+        this.sfxStart.set(name, soundStart(buffer));
       } catch (error) {
         console.warn(`Could not load sound effect "${name}".`, error);
       }
@@ -84,7 +106,7 @@ class GameAudio {
     source.buffer = buffer;
     source.connect(this.effects);
     source.onended = () => source.disconnect();
-    source.start();
+    source.start(0, this.sfxStart.get(name) ?? 0);
   }
 
   private sync(): void {

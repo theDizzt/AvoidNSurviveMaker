@@ -1,6 +1,6 @@
-import { DEFAULT_BADGE, type BadgeFont, type BadgeStyle } from '../core/theme-pack';
+import { DEFAULT_BADGE, type BadgeFont, type BadgeStyle } from './localized/theme-pack';
 import type { MapData } from '../core/types';
-import { isLibraryFont } from '../core/font-catalog';
+import { isLibraryFont } from './localized/font-catalog';
 import { libraryFontCss } from './library-fonts';
 import { fillTextFx, FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
 

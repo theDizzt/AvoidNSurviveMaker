@@ -1,4 +1,4 @@
-import { language, t } from '../core/i18n';
+import { language, t } from './i18n';
 import { FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
 
 export interface PreloadTask {

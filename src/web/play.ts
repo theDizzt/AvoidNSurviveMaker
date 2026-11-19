@@ -1,7 +1,10 @@
-import { t as tr } from '../core/i18n';
-import { levelLabel, starGoals, starsFor, starText } from '../core/level';
+import { t as tr } from './i18n';
+import { levelLabel, starGoals, starsFor, starText } from './localized/level';
 import { recordTime } from '../core/time';
-import { DEFAULT_BADGE, type BadgeStyle } from '../core/theme-pack';
+import { objectLights } from '../core/lighting';
+import { toWorld, transformAt, type Transform } from '../core/object';
+import { DEFAULT_BADGE, type BadgeStyle } from './localized/theme-pack';
+import { drawPointer, drawSkinTrail, skin } from './skin';
 import { badgeImage, drawLevelBadge } from './badge';
 import { badgeTitle } from './theme-registry';
 import { COIN_PULL_MS, formatSeconds, Simulation, type Replay } from '../core/simulation';
@@ -12,7 +15,7 @@ import { gameAudio } from './audio';
 import { DeathBurst } from './death-burst';
 import { drawFogAreas } from './fog';
 import {
-  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawDarkAreas, drawGlobalDark, drawMap, drawStopwatch, drawTrail, fitCanvas,
+  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawCrystalAt, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, drawStopwatch, drawTorchAt, fitCanvas,
   FONT_MAIN, mapPointer, unitsPerPx,
 } from './render';
 
@@ -24,6 +27,9 @@ const IDLE_MARGIN_MS = 40;
 const TRAIL_POINTS = 800;
 /** On-screen size (CSS px) of the virtual cursor that replaces the system cursor during a run */
 const CURSOR_PX = 8;
+/** A carryable torch (#58) is picked up when the cursor comes this close to its edge (map units) */
+const TORCH_PICKUP = 6;
+const poseTmp: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
 
 export interface PlayElements {
   /** The play screen; gets the `running` class while a run is in progress */
@@ -35,7 +41,8 @@ export interface PlayElements {
 
 export class PlayController {
   /** Called on clear (used to verify editor test plays) */
-  onClear: ((map: MapData, replay: Replay, time: number) => void) | null = null;
+  /** `crystal`: the run carried the map's crystal star (#59) to GOAL */
+  onClear: ((map: MapData, replay: Replay, time: number, crystal: boolean) => void) | null = null;
   /** Called when the maze ends a run (wall, moving wall, void, bounds, laser) — not for runs the
    *  browser stopped (cursor left the window, focus lost, non-mouse pointer) */
   onDeath: ((map: MapData) => void) | null = null;
@@ -53,6 +60,8 @@ export class PlayController {
   private readonly stats = new InputStats();
   private t0 = 0;
   private trail: number[] = [];
+  /** Per map object: 1 while the cursor carries that torch (#58); cosmetic, reset every run */
+  private carried = new Uint8Array(0);
   private readonly point = { x: 0, y: 0 };
   private notified = false;
   private deathNotified = false;
@@ -112,6 +121,7 @@ export class PlayController {
     this.deathNotified = false;
     this.sim = new Simulation(this.map);
     this.trail = [];
+    this.carried = new Uint8Array(this.map.objects.length);
     this.notified = false;
   }
 
@@ -158,6 +168,7 @@ export class PlayController {
     this.deathNotified = false;
     this.t0 = e.timeStamp;
     this.trail = [p.x, p.y];
+    this.carried = new Uint8Array(this.map.objects.length);
     this.trailTeleports = 0;
     this.notified = false;
     // Hide the system cursor right away instead of on the next frame
@@ -196,6 +207,8 @@ export class PlayController {
   /** The run whose coin count `coinsLeft` was last seen in (for the coin sound) */
   private coinSim: Simulation | null = null;
   private coinsLeft = 0;
+  /** Whether that run already held its crystal star (for the star sound) */
+  private crystalHeld = false;
 
   private frame(): void {
     if (!this.visible || !this.map) return;
@@ -206,23 +219,32 @@ export class PlayController {
       const target = now - this.t0 - IDLE_MARGIN_MS;
       if (target > sim.time) sim.advanceTo(target);
       this.breakTrailOnTeleport();
+      this.pickUpTorches();
     }
     // Coins are collected both here and in the pointer handler, so compare with the last frame
     if (this.coinSim !== sim) {
       this.coinSim = sim;
       this.coinsLeft = sim.coinsLeft;
-    } else if (sim.coinsLeft < this.coinsLeft) {
-      this.coinsLeft = sim.coinsLeft;
-      gameAudio.play('coin');
+      this.crystalHeld = sim.crystalHeld;
+    } else {
+      if (sim.coinsLeft < this.coinsLeft) {
+        this.coinsLeft = sim.coinsLeft;
+        gameAudio.play('coin');
+      }
+      // The crystal star (#59) was just picked up
+      if (sim.crystalHeld && !this.crystalHeld) gameAudio.play('star');
+      this.crystalHeld = sim.crystalHeld;
     }
     const running = sim.status === 'playing';
     if (sim.status === 'dead' && !this.deathNotified) {
       this.deathNotified = true;
-      this.burst = new DeathBurst(sim.x, sim.y, COLORS.cursor, now);
+      this.burst = new DeathBurst(sim.x, sim.y, skin.primary, now);
       if (sim.endReason !== 'blur' && sim.endReason !== 'left') gameAudio.death();
       if (sim.endReason !== 'blur' && sim.endReason !== 'left' && sim.endReason !== 'pointer') this.onDeath?.(this.map);
     }
     if (running !== this.el.root.classList.contains('running')) this.el.root.classList.toggle('running', running);
+    const native = skin.pointer === 0;
+    if (native !== this.el.root.classList.contains('native-cursor')) this.el.root.classList.toggle('native-cursor', native);
     if (sim.status === 'cleared' && !this.notified) {
       this.notified = true;
       gameAudio.play('finish');
@@ -230,7 +252,7 @@ export class PlayController {
       const prev = this.best.get(key);
       const time = recordTime(sim.endTime);
       if (prev === undefined || time < prev) this.best.set(key, time);
-      this.onClear?.(this.map, sim.getReplay(), time);
+      this.onClear?.(this.map, sim.getReplay(), time, sim.crystalHeld);
     }
 
     this.draw(now);
@@ -247,30 +269,56 @@ export class PlayController {
     }
   }
 
+  /** The picked-up crystal star has finished flying into the cursor */
+  private crystalFlownIn(t: number): boolean {
+    const i = this.sim.objects.findIndex((o) => o.role === 'crystal');
+    return i < 0 || t - this.sim.collectedAt[i] >= COIN_PULL_MS;
+  }
+
+  /** Carryable torches (#58) the cursor touches are picked up and carried for the rest of the run */
+  private pickUpTorches(): void {
+    const { sim, map, carried } = this;
+    map.objects.forEach((m, i) => {
+      if (!m.torch?.carry || carried[i] || sim.hidden[i]) return;
+      const o = sim.objects[i];
+      const c = toWorld(o, transformAt(o, sim.clock[i], poseTmp), (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, { x: 0, y: 0 });
+      const reach = Math.max(o.maxX - o.minX, o.maxY - o.minY) / 2 + TORCH_PICKUP;
+      if (Math.hypot(sim.x - c.x, sim.y - c.y) <= reach) carried[i] = 1;
+    });
+  }
+
   private draw(now: number): void {
     const { ctx, map, sim } = this;
     const t = sim.status === 'ready' ? 0 : sim.time;
     beginFrame(ctx, map);
-    const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress };
-    drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now });
-    if (options.showTrail) drawTrail(ctx, this.trail);
+    const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle };
+    const playing = sim.status === 'playing';
+    const carried = playing ? this.carried : undefined;
+    drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried });
+    drawSkinTrail(ctx, skin, this.trail, unitsPerPx(this.el.canvas, map));
     if (sim.status !== 'ready') drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
+    // Secret walls cover the floor, obstacles and trail under them, except right around the cursor
+    drawSecretWalls(ctx, map, sim.objects, t, playing ? { x: sim.x, y: sim.y } : null, 1, state);
 
-    if (sim.status === 'playing') {
+    if (playing) {
+      const u = unitsPerPx(this.el.canvas, map);
       // The system cursor is hidden during a run (CSS .running); this dot is exactly where the
       // simulation has the cursor, so what you see is what is checked for collisions
-      const u = unitsPerPx(this.el.canvas, map);
-      const r = (CURSOR_PX / 2) * u;
-      ctx.fillStyle = COLORS.cursor;
-      ctx.beginPath();
-      ctx.arc(sim.x, sim.y, r, 0, Math.PI * 2);
-      ctx.fill();
-      // Thin light rim so the dot stays visible on dark walls and floors
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-      ctx.lineWidth = u;
-      ctx.beginPath();
-      ctx.arc(sim.x, sim.y, r - u / 2, 0, Math.PI * 2);
-      ctx.stroke();
+      // (pointer skin #0 draws nothing: the system cursor stays visible instead, see .native-cursor)
+      drawPointer(ctx, skin, sim.x, sim.y, u, CURSOR_PX);
+      // A held crystal star circles the cursor once it has flown in
+      if (sim.crystalHeld && this.crystalFlownIn(t)) {
+        const a = now / 380;
+        drawCrystalAt(ctx, sim.x + Math.cos(a) * 15 * u, sim.y + Math.sin(a) * 15 * u, 13 * u, now);
+      }
+      // Carried torches ride just up and to the right of the cursor
+      map.objects.forEach((_, i) => {
+        if (!this.carried[i]) return;
+        const o = sim.objects[i];
+        const w = o.maxX - o.minX;
+        const h = o.maxY - o.minY;
+        drawTorchAt(ctx, sim.x + w * 0.5 + 6 * u, sim.y - h * 0.35, w, h, now, i);
+      });
     }
 
     // Fog, sand dust and darkness go over the cursor and trail; the timer and messages stay readable on top
@@ -279,9 +327,11 @@ export class PlayController {
     if (map.darkness && (sim.status === 'playing' || sim.status === 'ready')) {
       const light = map.darkness.light;
       const s = map.start;
-      drawGlobalDark(ctx, map, sim.status === 'playing'
-        ? [{ x: sim.x, y: sim.y, r: light }]
-        : [{ x: s.x + s.w / 2, y: s.y + s.h / 2, r: Math.max(light, Math.hypot(s.w, s.h) / 2 + 12) }]);
+      const lights = objectLights(sim.objects, t, playing ? { ...state, carried: this.carried, cursor: { x: sim.x, y: sim.y } } : state);
+      if (light > 0) lights.push(sim.status === 'playing'
+        ? { x: sim.x, y: sim.y, r: light }
+        : { x: s.x + s.w / 2, y: s.y + s.h / 2, r: Math.max(light, Math.hypot(s.w, s.h) / 2 + 12) });
+      drawGlobalDark(ctx, map, lights);
     }
 
     if (this.burst && !this.burst.draw(ctx, now, unitsPerPx(this.el.canvas, map))) this.burst = null;
@@ -328,7 +378,8 @@ export class PlayController {
           : '',
         this.nextHint ?? tr('play.tryAgain'),
       ].filter(Boolean).join(' — ');
-      drawBanner(ctx, map, `${stars !== null ? `${starText(stars)}  ` : ''}${tr('play.cleared', { time: formatSeconds(recordTime(sim.endTime)) })}`, sub, '#d48f00');
+      const crystal = sim.hasCrystal ? (sim.crystalHeld ? tr('play.crystalGot') : tr('play.crystalMissed')) : '';
+      drawBanner(ctx, map, `${stars !== null ? `${starText(stars)}${sim.crystalHeld ? ' ✦' : ''}  ` : ''}${tr('play.cleared', { time: formatSeconds(recordTime(sim.endTime)) })}`, [crystal, sub].filter(Boolean).join(' — '), '#d48f00');
     }
   }
 

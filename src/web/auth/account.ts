@@ -1,6 +1,6 @@
-import { t } from '../../core/i18n';
+import { t } from '../i18n';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
-import { formatTag } from '../../core/account';
+import { formatTag } from '../localized/account';
 import { supabase } from './supabase';
 
 export interface Profile {
@@ -63,6 +63,7 @@ export class Account {
   /** Message from the email-verification redirect, shown once after boot */
   notice: { kind: 'ok' | 'error'; text: string } | null = null;
   private readonly listeners = new Set<() => void>();
+  private sessionGeneration = 0;
 
   get configured(): boolean {
     return supabase !== null;
@@ -118,13 +119,20 @@ export class Account {
   }
 
   private async applySession(session: Session | null): Promise<void> {
+    const generation = ++this.sessionGeneration;
     const user = session?.user ?? null;
     const changed = user?.id !== this.user?.id;
     this.user = user;
+    if (changed) {
+      this.profile = null;
+      this.emit(); // switch account-scoped state before waiting for the profile
+    }
     if (!user) {
       this.profile = null;
     } else if (changed || !this.profile) {
-      this.profile = await this.fetchProfile(user.id);
+      const profile = await this.fetchProfile(user.id);
+      if (generation !== this.sessionGeneration) return;
+      this.profile = profile;
     }
     this.emit();
   }

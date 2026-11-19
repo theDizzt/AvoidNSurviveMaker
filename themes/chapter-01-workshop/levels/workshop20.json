@@ -207,7 +207,7 @@
           "x": 1199.9962350499577,
           "y": 539.9997646903148
         },
-        "speed": 60,
+        "speed": 52,
         "angle": 360,
         "clockwise": true,
         "repeat": "loop",
@@ -302,12 +302,13 @@
       }
     }
   ],
+  "id": "19",
   "title": "Radar",
   "level": 20,
   "difficulty": 3,
   "stars": {
-    "three": 7200,
-    "two": 9200,
-    "one": 13200
+    "three": 7800,
+    "two": 11700,
+    "one": 15600
   }
 }

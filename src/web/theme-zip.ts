@@ -1,9 +1,9 @@
-import { t } from '../core/i18n';
+import { language, t } from './i18n';
 import { strFromU8, strToU8, zipSync } from 'fflate';
-import { unpackBoundedZip, ZIP_LIMITS } from '../core/bounded-zip';
-import { MAX_PACK_LEVELS, validateThemeInfo } from '../core/theme-pack';
+import { unpackBoundedZip, ZIP_LIMITS } from './localized/bounded-zip';
+import { MAX_PACK_LEVELS, validateThemeInfo } from './localized/theme-pack';
 import type { MapData } from '../core/types';
-import { validateMap } from '../core/validate';
+import { validateMap } from './localized/validate';
 import type { StoredTheme } from './theme-registry';
 
 /**
@@ -29,7 +29,7 @@ async function unpack(bytes: ArrayBuffer): Promise<Record<string, Uint8Array>> {
         else resolve(event.data.files);
       };
       worker.onerror = () => { clearTimeout(timer); reject(new Error(t('zip.extractFailed'))); };
-      worker.postMessage(bytes, [bytes]);
+      worker.postMessage({ bytes, language }, [bytes]);
     });
   } finally {
     worker.terminate();

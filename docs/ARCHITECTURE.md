@@ -1,7 +1,7 @@
 # 아키텍처
 
 Avoid N Survive Maker 는 정적인 단일 페이지 웹 게임입니다(TypeScript + Vite, UI 프레임워크 없음).
-코드 계층 두 개, 빌드 시 읽어 들이는 콘텐츠 폴더, 계정을 위한 선택적 Supabase 백엔드로 이루어져 있습니다.
+브라우저 UI와 공용 게임 코어, 빌드 시 읽어 들이는 콘텐츠 폴더, 계정 및 순위 검증을 위한 선택적 Supabase 백엔드로 이루어져 있습니다.
 
 ```mermaid
 flowchart TB
@@ -28,12 +28,14 @@ flowchart TB
 
 | 계층 | 폴더 | 규칙 |
 |---|---|---|
-| Core | `src/core/` | 순수 TypeScript, **DOM 없음**. 맵 스키마, 기하, 시뮬레이션, 검증, 테마 팩 형식. Node(테스트)에서 실행할 수 있고, 나중에 서버에서 리플레이 검증에 쓸 수 있습니다. |
+| Core | `src/core/` | 순수 TypeScript, **DOM 없음**. 맵 스키마, 기하, 시뮬레이션, 검증, 테마 팩 형식. Node(테스트)에서 실행할 수 있습니다. |
 | Web | `src/web/` | DOM, 캔버스, 오디오, 저장소, 네트워크를 다루는 모든 코드. core 를 import 하며, 반대 방향은 없습니다. |
 | Content | `themes/`, `custom-themes/`, `src/assets/` | JSON 레벨, 테마 팩, 폰트, 음악. 빌드 시 Vite 가 번들합니다. |
-| Backend | `supabase/migrations/` | SQL 만 있음: 테이블, row level security, `security definer` RPC. 자체 서버 코드는 없습니다. |
+| Backend | `supabase/migrations/` | SQL 권한과 RPC. 기록·사망·플레이 시간·도전과제를 계정에 저장합니다. |
 
 `src/core/index.ts` 가 core API 를 다시 내보냅니다. 단위 테스트는 코드 옆에 있습니다(`*.test.ts`, Vitest).
+
+편집 상태·명령·저장·속성 패널 및 번역기 주입의 경계는 [EDITOR_ARCHITECTURE.md](EDITOR_ARCHITECTURE.md)를 참고하세요.
 
 ## 2. Core (`src/core`)
 
@@ -96,7 +98,7 @@ stateDiagram-v2
 | menu | `index.html` + `main.ts` | 45° 회전한 타일 그리드(`fitRotatedGrid`), 3D 레이어 로고(CSS) |
 | themes / levels | `campaign-ui.ts`, `screen-render.ts` | 월드와 레벨 선택. 테마가 커스텀 레벨 선택 레이아웃을 가질 수 있음 |
 | play | `play.ts` | 캔버스 게임 루프. HUD 패널 숨김, 단축키 R / N / F / Esc |
-| editor | `editor.ts`, `theme-panel.ts`, `float-panel.ts`, `context-menu.ts` | 맵 에디터, 테마 프리셋(챕터 테마 포함) |
+| editor | `editor.ts`, `editor-properties.ts`, `editor-storage.ts`, `editor-shared.ts` | 입력·캔버스 조정, 속성 패널, 브라우저 저장, 표시 정의를 분리. 편집 상태·명령·히스토리는 `core/editor-document.ts`, `core/editor-commands.ts` |
 | themeEditor | `theme-editor.ts`, `screen-designer.ts`, `theme-zip.ts` | 테마 팩: 색상, 배지, 표지, 음악, 레벨, 커스텀 화면, zip 가져오기/내보내기 |
 | options / licenses | `options.ts`, `menu-music.ts`, `font-licenses.ts` | 볼륨, 잔상, 타이머, 디버그 패널, 메뉴 음악 교체, 기록 동기화 |
 | stats | `stats-ui.ts` | 프로필과 `level_records` 를 데이터베이스에서 직접 읽음 |
@@ -138,13 +140,13 @@ stateDiagram-v2
 |---|---|---|
 | 옵션 (볼륨, 잔상, 타이머 등) | localStorage | `options.ts` |
 | 메뉴 음악 교체 | IndexedDB (Blob) | `menu-music.ts` |
-| 레벨 키별 캠페인 진행 (최고 ms, 별) | localStorage `avoid-n-survive:progress` | `progress.ts` |
-| 에디터 초안 + 검증 상태 | localStorage | `editor.ts` |
+| 레벨 키별 캠페인 진행 (최고 ms, 별) | localStorage `avoid-n-survive:progress:account:<user id>`; 게스트·이전 공용 기록은 `avoid-n-survive:progress` | `progress.ts` |
+| 에디터 초안 + 검증 상태 및 표시 설정 | localStorage | `editor-storage.ts` |
 | 커스텀 테마 팩 | localStorage (data URL) | `theme-registry.ts` |
 | 계정별 미전송 플레이 시간 / 기록 | localStorage, 나중에 재시도 | `auth/playtime.ts`, `auth/records.ts` |
 | 계정, 플레이 시간, 레벨 기록 | Supabase | `auth/*` |
 
-레벨 키: 챕터는 `<theme id>/<index>`, 커스텀 팩은 `custom:<theme id>/<index>`.
+레벨 키: 챕터는 `<theme id>/<stable map id>`, 커스텀 팩은 여기에 `custom:` 접두사를 붙입니다. 맵을 수정해도 키가 바뀌지 않으므로 기록이 그대로 이어집니다. 예전에 붙이던 `@<content hash>`는 클라이언트(`progress.ts`)와 서버(`submit_level_records`, `add_deaths`)가 떼어 내며, `20261121040000_unversioned_level_keys.sql`이 중복 행을 합쳤습니다.
 
 ## 5. 백엔드 (Supabase)
 
@@ -173,8 +175,9 @@ erDiagram
 - **레벨 기록**:
   - 클리어할 때마다 `submit_level_records(jsonb)` 로 올립니다.
   - 서버는 병합하여 가장 낮은 `best_ms` 와 가장 높은 `stars` 를 유지합니다.
-  - **Options → Sync records** 는 로컬 기록을 모두 올리고 계정의 기록을 내려받습니다.
+  - **Options → Sync records** 는 현재 계정의 로컬 기록만 올리고 같은 계정의 기록을 내려받습니다. 게스트·이전 공용 기록은 **Import guest records** 로 명시적으로 가져옵니다.
   - Row level security: 플레이어는 자신의 행만 읽습니다.
+- **순위 기록**: 재미용 게임이라 리플레이 검증 없이, 순위표는 각 계정의 공식 레벨 기록(`level_records`)을 그대로 조회합니다.
 - 클라이언트는 테이블에 직접 쓰지 않습니다. 모든 쓰기는 `auth.uid()` 를 확인하는 `security definer` 함수를 거칩니다.
 - `.env.local`(Supabase 키)이 없으면 게임은 완전히 오프라인으로 동작하며, 계정 기능만 사용할 수 없습니다.
 

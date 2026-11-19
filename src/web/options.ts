@@ -1,6 +1,5 @@
 /** Player options, persisted per browser. */
 export interface Options {
-  showTrail: boolean;
   showTimer: boolean;
   showDebug: boolean;
   masterVolume: number;
@@ -9,7 +8,6 @@ export interface Options {
 }
 
 export const DEFAULT_OPTIONS: Readonly<Options> = {
-  showTrail: true,
   showTimer: true,
   showDebug: false,
   masterVolume: 80,
@@ -24,7 +22,7 @@ function load(): Options {
   const out = { ...DEFAULT_OPTIONS };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, unknown>;
-    for (const k of ['showTrail', 'showTimer', 'showDebug'] as const) {
+    for (const k of ['showTimer', 'showDebug'] as const) {
       if (typeof saved[k] === 'boolean') out[k] = saved[k];
     }
     for (const k of ['masterVolume', 'musicVolume', 'effectsVolume'] as const) {

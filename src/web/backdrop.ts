@@ -1,6 +1,6 @@
 import { compileMap, type CompiledObject } from '../core/object';
 import { COIN_PULL_MS, Simulation, type ReplaySample } from '../core/simulation';
-import { levelSlots, themedLevel, type ThemeEntry } from '../core/theme-pack';
+import { levelSlots, themedLevel, type ThemeEntry } from './localized/theme-pack';
 import type { MapData } from '../core/types';
 import { DeathBurst } from './death-burst';
 import { demoPlayable, planDemoRun } from './demo-pilot';

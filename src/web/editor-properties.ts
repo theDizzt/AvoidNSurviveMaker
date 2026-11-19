@@ -1,0 +1,784 @@
+import type { CommandId } from './editor-shared';
+import { t as tr } from './i18n';
+
+import { objectsBounds } from '../core/arrange';
+
+import { shapeCenter } from '../core/shape';
+
+import type { Easing, FogKind, LinkAction, MapData, MapObject, Motion, MotionType, Rect, Repeat, Role, Rotation } from '../core/types';
+import { SWITCH_COLORS, switchColor } from './localized/colors';
+
+import { DEFAULT_BOULDER_WAVE, DEFAULT_SECRET_RADIUS, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS } from './localized/validate';
+import { TEXT_BASE_FONTS } from './render';
+
+import { fontPicker } from './font-picker';
+
+import type { EditorSelection } from '../core/editor-document';
+import { TRIGGER_NAMES, isButton, describeObject, objectToolId, ZONE_IDS, sizeText, REPEAT_OPTIONS, EASING_OPTIONS, ROUTE_OPTIONS, DIRECTION_OPTIONS, newMotion, Command } from './editor-shared';
+
+export interface EditorPropertiesHost {
+  readonly map: MapData;
+  readonly selection: EditorSelection;
+  lastColor: number;
+  alignToMap: boolean;
+  edit(fn: () => void): void;
+  selectedZone(): Rect | null;
+  selectedObject(): MapObject | null;
+  selIds(): number[];
+  startMarkers(index: number): void;
+  duplicateSelected(): void;
+  deleteSelected(): void;
+  commands(): Record<CommandId, Command>;
+}
+
+/** DOM projection of an editor document, with explicit edit/navigation callbacks. */
+export class EditorPropertiesPanel {
+  constructor(private readonly root: HTMLElement, private readonly host: EditorPropertiesHost) {}
+  field(label: string, control: HTMLElement, wide = false): HTMLElement {
+    const wrap = document.createElement('label');
+    wrap.className = wide ? 'field wide' : 'field';
+    const span = document.createElement('span');
+    span.textContent = label;
+    wrap.append(span, control);
+    return wrap;
+  }
+
+  numField(label: string, value: number, apply: (v: number) => void, step = 1): HTMLElement {
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = String(step);
+    input.value = String(Math.round(value * 100) / 100);
+    input.addEventListener('change', () => {
+      const v = Number(input.value);
+      if (!Number.isFinite(v)) {
+        input.value = String(value);
+        return;
+      }
+      this.host.edit(() => apply(v));
+    });
+    return this.field(label, input);
+  }
+
+  selectField<T extends string>(label: string, value: T, options: [T, string][], apply: (v: T) => void, wide = false): HTMLElement {
+    const sel = document.createElement('select');
+    for (const [v, text] of options) sel.append(new Option(text, v, false, v === value));
+    sel.addEventListener('change', () => this.host.edit(() => apply(sel.value as T)));
+    return this.field(label, sel, wide);
+  }
+
+  toggle(label: string, checked: boolean, apply: (on: boolean) => void): HTMLElement {
+    const wrap = document.createElement('label');
+    wrap.className = 'toggle';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = checked;
+    input.addEventListener('change', () => this.host.edit(() => apply(input.checked)));
+    const span = document.createElement('span');
+    span.textContent = label;
+    wrap.append(input, span);
+    return wrap;
+  }
+
+  button(label: string, onClick: () => void, cls = ''): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    if (cls) b.className = cls;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  group(...children: HTMLElement[]): HTMLElement {
+    const g = document.createElement('div');
+    g.className = 'fields';
+    g.append(...children);
+    return g;
+  }
+
+  note(text: string): HTMLElement {
+    const p = document.createElement('p');
+    p.className = 'muted';
+    p.textContent = text;
+    return p;
+  }
+
+  actions(...children: HTMLElement[]): HTMLElement {
+    const d = document.createElement('div');
+    d.className = 'actions';
+    d.append(...children);
+    return d;
+  }
+
+  heading(text: string): HTMLElement {
+    const h = document.createElement('h5');
+    h.textContent = text;
+    return h;
+  }
+
+  rectFields(r: Rect): HTMLElement {
+    return this.group(
+      this.numField('X', r.x, (v) => (r.x = Math.round(v))),
+      this.numField('Y', r.y, (v) => (r.y = Math.round(v))),
+      this.numField(tr('common.width'), r.w, (v) => (r.w = Math.max(1, Math.round(v)))),
+      this.numField(tr('common.height'), r.h, (v) => (r.h = Math.max(1, Math.round(v)))),
+    );
+  }
+
+  renderProps(): void {
+    const box = this.root;
+    const zone = this.host.selectedZone();
+    if (zone) {
+      const title = document.createElement('h4');
+      const z = this.host.selection?.kind === 'start' ? 'start' : 'goal';
+      title.textContent = `ID ${ZONE_IDS[z]} · ${tr(z === 'start' ? 'ed.startArea' : 'ed.goalArea')}`;
+      box.replaceChildren(title, this.rectFields(zone));
+      return;
+    }
+    const ids = this.host.selIds();
+    if (ids.length > 1) {
+      box.replaceChildren(...this.multiProps(ids));
+      return;
+    }
+    const o = this.host.selectedObject();
+    if (!o) {
+      box.replaceChildren(this.note(tr('ed.pickAToolFromThe')));
+      return;
+    }
+    const idx = ids[0];
+    const title = document.createElement('h4');
+    title.textContent = `#${idx + 1} · ID ${objectToolId(o)} · ${describeObject(o)}${o.group !== undefined ? ` · ${tr('ed.groupN', { n: o.group })}` : ''}`;
+    const parts: HTMLElement[] = [title];
+
+    if ((o.role === 'path' || o.role === 'wall') && !o.saw) {
+      parts.push(this.group(
+        this.selectField<Role>(tr('ed.type'), o.role, [['path', tr('ed.pathSafeFloor')], ['wall', tr('ed.wallDeadly')]], (v) => (o.role = v), true),
+      ));
+    } else if (o.role === 'coin' || o.role === 'dark' || o.role === 'crystal') {
+      parts.push(this.note(o.role === 'coin'
+        ? tr('ed.coinNote')
+        : o.role === 'crystal' ? tr('ed.crystalNote') : tr('ed.darkNote')));
+    } else if (o.role === 'safe') {
+      parts.push(this.note(tr('ed.nothingCanHurtTheCursor')));
+    } else if (o.fog) {
+      parts.push(...this.fogProps(o));
+    }
+
+    // Shape
+    const s = o.shape;
+    if (o.role === 'crystal' && s.type === 'rect') {
+      // Always 48×48: only its position
+      parts.push(this.group(
+        this.numField(tr('ed.centerX'), s.x + s.w / 2, (v) => (s.x = Math.round(v - s.w / 2))),
+        this.numField(tr('ed.centerY'), s.y + s.h / 2, (v) => (s.y = Math.round(v - s.h / 2))),
+      ));
+    } else if (s.type === 'rect') {
+      parts.push(this.group(
+        this.numField('X', s.x, (v) => (s.x = Math.round(v))),
+        this.numField('Y', s.y, (v) => (s.y = Math.round(v))),
+        this.numField(tr('common.width'), s.w, (v) => (s.w = Math.max(1, Math.round(v)))),
+        this.numField(tr('common.height'), s.h, (v) => (s.h = Math.max(1, Math.round(v)))),
+      ));
+    } else if (o.role === 'coin' && s.type === 'ellipse') {
+      parts.push(this.group(
+        this.numField(tr('ed.centerX'), s.cx, (v) => (s.cx = Math.round(v))),
+        this.numField(tr('ed.centerY'), s.cy, (v) => (s.cy = Math.round(v))),
+      ));
+    } else if (s.type === 'ellipse') {
+      parts.push(this.group(
+        this.numField(tr('ed.centerX'), s.cx, (v) => (s.cx = Math.round(v))),
+        this.numField(tr('ed.centerY'), s.cy, (v) => (s.cy = Math.round(v))),
+        this.numField(tr('ed.radiusX'), s.rx, (v) => (s.rx = Math.max(1, Math.round(v)))),
+        this.numField(tr('ed.radiusY'), s.ry, (v) => (s.ry = Math.max(1, Math.round(v)))),
+      ));
+    } else if (s.type === 'sector') {
+      parts.push(this.group(
+        this.numField(tr('ed.apexX'), s.cx, (v) => (s.cx = Math.round(v))),
+        this.numField(tr('ed.apexY'), s.cy, (v) => (s.cy = Math.round(v))),
+        this.numField(tr('ed.radius'), s.r, (v) => {
+          s.r = Math.max(1, Math.round(v));
+          if (s.inner && s.inner >= s.r) s.inner = Math.max(1, s.r - 2);
+        }),
+        ...(s.inner !== undefined ? [this.numField(tr('ed.innerRadius'), s.inner, (v) => (s.inner = Math.min(s.r - 1, Math.max(1, Math.round(v)))))] : []),
+        this.numField(tr('ed.startAngle'), s.start, (v) => (s.start = ((Math.round(v) % 360) + 360) % 360), 15),
+        this.numField(tr('ed.sweep'), s.sweep, (v) => (s.sweep = Math.min(360, Math.max(1, Math.round(v)))), 15),
+      ));
+      parts.push(this.note(tr('ed.0PointsRight90Down')));
+    } else {
+      const curved = s.points.filter((p) => p.smooth).length;
+      parts.push(this.note(tr('ed.vertices', { n: s.points.length, curved })));
+    }
+
+    if (o.trigger) parts.push(...this.triggerProps(o));
+    if (o.door) parts.push(...this.doorProps(o));
+    if (o.spike) parts.push(...this.spikeProps(o));
+    if (o.fall) parts.push(...this.fallProps(o));
+    if (o.pulley) parts.push(...this.pulleyProps(o));
+    if (o.saw) parts.push(...this.sawProps(o));
+    if (o.text) parts.push(...this.textProps(o));
+    if (o.boulder) {
+      parts.push(this.heading(tr('ed.rollingBoulder')), this.note(o.motion ? tr('ed.boulderRolls') : tr('ed.boulderNoRoute')));
+      const m = o.motion;
+      if (m) {
+        // Wavy route: the boulder weaves across its route as it rolls (height 0 = straight)
+        const w = m.wave ?? { amplitude: 0, wavelength: DEFAULT_BOULDER_WAVE.wavelength };
+        const setWave = (next: { amplitude: number; wavelength: number }) => {
+          if (next.amplitude > 0) m.wave = next;
+          else delete m.wave;
+        };
+        parts.push(
+          this.group(
+            this.numField(tr('ed.waveAmplitude'), w.amplitude, (v) => setWave({ ...w, amplitude: Math.round(Math.min(LIMITS.maxWaveAmplitude, Math.max(0, v))) }), 2),
+            this.numField(tr('ed.waveLength'), w.wavelength, (v) => setWave({ ...w, wavelength: Math.round(Math.min(LIMITS.maxWavelength, Math.max(LIMITS.minWavelength, v))) }), 10),
+          ),
+          this.note(tr('ed.waveNote')),
+        );
+      }
+    }
+    if (o.role === 'torch') {
+      const light = o.light ?? (o.light = { radius: DEFAULT_TORCH_LIGHT });
+      parts.push(
+        this.heading(tr(o.torch?.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch')),
+        this.group(
+          this.numField(tr('ed.torchRadius'), light.radius, (v) => (light.radius = Math.round(Math.min(LIMITS.maxLight, Math.max(0, v)))), 10),
+          this.numField(tr('ed.torchIntensity'), light.intensity ?? 100, (v) => {
+            const k = Math.round(Math.min(100, Math.max(0, v)));
+            if (k === 100) delete light.intensity;
+            else light.intensity = k;
+          }, 5),
+        ),
+        this.toggle(tr('ed.torchCarry'), !!o.torch?.carry, (on) => {
+          if (on) o.torch = { carry: true };
+          else delete o.torch;
+        }),
+        this.note(tr('ed.torchNote')),
+      );
+    }
+    if (o.role === 'secret') {
+      const sw = o.secret ?? (o.secret = { radius: DEFAULT_SECRET_RADIUS });
+      parts.push(
+        this.heading(tr('ed.nameSecret')),
+        this.group(this.numField(tr('ed.secretRadius'), sw.radius, (v) => (sw.radius = Math.round(Math.min(LIMITS.maxLight, Math.max(1, v)))), 10)),
+        this.note(tr('ed.secretNote')),
+      );
+    }
+    if (o.laser) parts.push(...this.laserProps(o));
+    if (o.portal) parts.push(...this.portalProps(o));
+    if (o.role === 'mirror') parts.push(this.heading(tr('ed.mirror')), this.note(tr('ed.laserBeamsBounceOffEvery')));
+    if (o.role === 'path') {
+      parts.push(this.toggle(tr('ed.pierceWalls'), !!o.pierce, (on) => {
+        if (on) o.pierce = true;
+        else delete o.pierce;
+      }));
+    }
+    if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'fog' || o.role === 'mirror') parts.push(...this.linkProps(o));
+
+    // Movement (a spike's thrust is its movement)
+    if (!o.spike && !o.fall) {
+    // Movement
+    parts.push(this.heading(tr('ed.movement')), this.toggle(tr('ed.movesAlongARoute'), !!o.motion, (on) => {
+      if (on) {
+        o.motion = newMotion(o);
+        queueMicrotask(() => this.host.startMarkers(idx));
+      } else {
+        delete o.motion;
+      }
+    }));
+    if (o.motion) {
+      const m: Motion = o.motion;
+      const fields = [
+        this.selectField<MotionType>(tr('ed.route'), m.type, ROUTE_OPTIONS, (v) => {
+          if (v === 'circle' && m.type !== 'circle') {
+            const c = shapeCenter(o.shape);
+            m.points = [m.points[0] ?? { x: c.x, y: c.y - 80 }];
+            m.repeat = 'loop';
+            m.easing = 'none';
+          }
+          m.type = v;
+          delete m.segmentTypes;
+        }),
+        this.selectField<Repeat>(tr('ed.repeat'), m.repeat, REPEAT_OPTIONS, (v) => (m.repeat = v)),
+        this.numField(tr('ed.speedPxS'), m.speed, (v) => (m.speed = Math.min(LIMITS.maxSpeed, Math.max(0, v))), 10),
+        this.selectField<Easing>(tr('ed.smooth'), m.easing, EASING_OPTIONS, (v) => (m.easing = v)),
+        this.numField(tr('ed.startDelayMs'), m.delay, (v) => (m.delay = Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, Math.round(v)))), 100),
+      ];
+      if (m.type === 'circle') {
+        fields.push(this.selectField(tr('ed.direction'), m.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (m.clockwise = v === 'cw')));
+      }
+      parts.push(this.group(...fields));
+      if (m.type !== 'circle' && m.points.length) {
+        parts.push(this.heading(tr('ed.routeSegments')), this.note(tr('ed.routeSegmentsHint')));
+        const count = m.points.length + (m.repeat === 'loop' ? 1 : 0);
+        for (let i = 0; i < count; i++) {
+          const from = i === 0 ? tr('ed.routeStart') : String(i);
+          const to = i === m.points.length ? tr('ed.routeStart') : String(i + 1);
+          parts.push(this.selectField<'linear' | 'curve'>(`${from} → ${to}`,
+            m.segmentTypes?.[i] ?? m.type,
+            [['linear', tr('ed.straight')], ['curve', tr('ed.curve')]], (v) => {
+              m.segmentTypes = Array.from({ length: m.points.length + 1 }, (_, j) =>
+                m.segmentTypes?.[j] ?? (m.type === 'curve' ? 'curve' : 'linear'));
+              m.segmentTypes[i] = v;
+            }));
+        }
+      }
+      parts.push(this.toggle(tr('ed.showPath'), !!m.showPath, (on) => {
+        if (on) m.showPath = true;
+        else delete m.showPath;
+      }));
+      parts.push(this.note(
+        m.type === 'circle'
+          ? m.points.length ? tr('ed.orbitSet') : tr('ed.orbitUnset')
+          : tr(m.points.length === 1 ? 'ed.markersOne' : 'ed.markersMany', { n: m.points.length }),
+      ));
+      parts.push(this.actions(
+        this.button(m.type === 'circle' ? tr('ed.setOrbit') : tr('ed.placeMarkers'), () => this.host.startMarkers(idx)),
+        this.button(tr('ed.removeLast'), () => m.points.length && this.host.edit(() => {
+          m.segmentTypes?.splice(m.points.length - 1, 1);
+          m.points.pop();
+        })),
+        this.button(tr('ed.clear'), () => m.points.length && this.host.edit(() => {
+          m.points = [];
+          delete m.segmentTypes;
+        })),
+      ));
+    }
+
+    }
+
+    // Rotation (a boulder spins by rolling, a saw by itself)
+    if (!o.boulder && !o.saw && !o.fall) {
+    // Rotation
+    parts.push(this.heading(tr('ed.rotation')), this.toggle(tr('ed.rotatesAroundAPivot'), !!o.rotation, (on) => {
+      if (on) o.rotation = defaultRotation(o);
+      else delete o.rotation;
+    }));
+    if (o.rotation) {
+      const r: Rotation = o.rotation;
+      parts.push(this.group(
+        this.numField(tr('ed.speedS'), r.speed, (v) => (r.speed = Math.min(LIMITS.maxRotSpeed, Math.max(0, v))), 5),
+        this.numField(tr('common.angle'), r.angle, (v) => (r.angle = Math.min(LIMITS.maxAngle, Math.max(0, v))), 15),
+        this.selectField(tr('ed.direction'), r.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (r.clockwise = v === 'cw')),
+        this.selectField<Repeat>(tr('ed.repeat'), r.repeat, REPEAT_OPTIONS, (v) => (r.repeat = v)),
+        this.selectField<Easing>(tr('ed.smooth'), r.easing, EASING_OPTIONS, (v) => (r.easing = v)),
+        this.numField(tr('ed.startDelayMs'), r.delay, (v) => (r.delay = Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, Math.round(v)))), 100),
+        this.numField(tr('ed.pivotX'), r.pivot.x, (v) => (r.pivot = { ...r.pivot, x: Math.round(v) })),
+        this.numField(tr('ed.pivotY'), r.pivot.y, (v) => (r.pivot = { ...r.pivot, y: Math.round(v) })),
+      ));
+      parts.push(this.toggle(tr('ed.showPivot'), !!r.showPivot, (on) => {
+        if (on) r.showPivot = true;
+        else delete r.showPivot;
+      }));
+      parts.push(this.note(tr('ed.angle360LoopContinuousSpin')));
+      parts.push(this.actions(this.button(tr('ed.centerPivot'), () => this.host.edit(() => (r.pivot = shapeCenter(o.shape))))));
+    }
+
+    }
+
+    parts.push(...this.arrangeProps(false));
+    parts.push(this.actions(
+      this.button(tr('common.duplicate'), () => this.host.duplicateSelected()),
+      this.button(tr('common.delete'), () => this.host.deleteSelected(), 'danger'),
+    ));
+    box.replaceChildren(...parts);
+  }
+
+  colorPicker(value: number, apply: (c: number) => void): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'swatches';
+    wrap.setAttribute('role', 'radiogroup');
+    SWITCH_COLORS.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'swatch';
+      b.style.background = c.hex;
+      b.title = c.name;
+      b.setAttribute('aria-label', c.name);
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(i === value));
+      b.addEventListener('click', () => {
+        this.host.lastColor = i;
+        this.host.edit(() => apply(i));
+      });
+      wrap.append(b);
+    });
+    return wrap;
+  }
+
+  triggerProps(o: MapObject): HTMLElement[] {
+    const t = o.trigger!;
+    const out: HTMLElement[] = [this.heading(TRIGGER_NAMES[t.kind]), this.colorPicker(t.color, (c) => (t.color = c))];
+    const fields: HTMLElement[] = [];
+    if (t.kind === 'switch' || t.kind === 'timer') {
+      fields.push(this.selectField(tr('ed.pressedBy'), t.click ? 'click' : 'touch', [['touch', tr('ed.touchingIt')], ['click', tr('ed.clickingOnIt')]], (v) => {
+        if (v === 'click') t.click = true;
+        else delete t.click;
+      }));
+    }
+    if (t.kind === 'timer' || t.kind === 'hold') {
+      fields.push(this.numField(t.kind === 'timer' ? tr('ed.onFor') : tr('ed.holdFor'), (t.duration ?? 1000) / 1000,
+        (v) => (t.duration = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1));
+    }
+    if (fields.length) out.push(this.group(...fields));
+    if (t.kind === 'switch' || t.kind === 'hold') {
+      out.push(this.toggle(tr('ed.startsOn'), !!t.initial, (on) => {
+        if (on) t.initial = true;
+        else delete t.initial;
+      }));
+    }
+    if (isButton(t.kind)) {
+      out.push(this.toggle(tr('ed.canBeSwitchedBack'), !t.once, (on) => {
+        if (on) delete t.once;
+        else t.once = true;
+      }));
+    }
+    out.push(this.toggle(tr('ed.revertWhenOff'), !!t.revert, (on) => {
+      if (on) t.revert = true;
+      else delete t.revert;
+    }));
+    const linked = this.host.map.objects.filter((m) => m.link?.color === t.color || (m.door?.mode === 'switch' && m.door.color === t.color)).length;
+    const what = {
+      switch: tr('ed.whatSwitch'),
+      timer: tr('ed.whatTimer'),
+      hold: tr('ed.whatHold'),
+      startZone: tr('ed.whatStartZone'),
+      stopZone: tr('ed.whatStopZone'),
+    }[t.kind];
+    out.push(this.note(`${what} ${tr(linked === 1 ? 'ed.linkedOne' : 'ed.linkedMany', { n: linked, color: switchColor(t.color).name })}`));
+    return out;
+  }
+
+  fallProps(o: MapObject): HTMLElement[] {
+    const f = o.fall!;
+    const sec = (v: number) => v / 1000;
+    const ms = (v: number, min: number) => Math.round(Math.min(LIMITS.maxDelay, Math.max(min, v)) * 1000);
+    return [
+      this.heading(tr('ed.nameFall')),
+      this.group(
+        this.numField(tr('ed.fallHeight'), f.height, (v) => (f.height = Math.max(1, Math.round(v))), 10),
+        this.numField(tr('ed.fallTimeS'), sec(f.fallMs), (v) => (f.fallMs = ms(v, 0.05)), 0.1),
+        this.numField(tr('ed.restS'), sec(f.waitMs), (v) => (f.waitMs = ms(v, 0)), 0.1),
+        this.numField(tr('ed.startDelayS'), sec(f.delay), (v) => (f.delay = Math.round(Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, v)) * 1000)), 0.1),
+      ),
+      this.note(tr('ed.fallNote')),
+    ];
+  }
+
+  pulleyProps(o: MapObject): HTMLElement[] {
+    const p = o.pulley!;
+    const linked = this.host.map.objects.filter((m) => m.link?.action === 'pulley' && m.link.color === p.color).length;
+    const out: HTMLElement[] = [
+      this.heading(tr('ed.namePulley')),
+      this.colorPicker(p.color, (c) => (p.color = c)),
+      this.group(
+        this.selectField<'hold' | 'unwind'>(tr('ed.pulleyRelease'), p.mode, [['hold', tr('ed.pulleyHold')], ['unwind', tr('ed.pulleyUnwind')]], (v) => (p.mode = v), true),
+        this.numField(tr('ed.pulleyTurnS'), p.turnMs / 1000, (v) => (p.turnMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1),
+        ...(p.mode === 'unwind' ? [this.numField(tr('ed.pulleyUnwindSpeed'), p.unwind, (v) => (p.unwind = Math.round(Math.min(100, Math.max(0, v)))), 10)] : []),
+      ),
+      this.note(tr('ed.pulleyNote')),
+      this.note(tr(linked === 1 ? 'ed.linkedOne' : 'ed.linkedMany', { n: linked, color: switchColor(p.color).name })),
+    ];
+    return out;
+  }
+
+  spikeProps(o: MapObject): HTMLElement[] {
+    const s = o.spike!;
+    const sec = (v: number) => v / 1000;
+    const ms = (v: number) => Math.round(Math.min(LIMITS.maxDelay, Math.max(0.01, v)) * 1000);
+    return [
+      this.heading(tr('ed.spikeStake')),
+      this.group(
+        this.numField(tr('ed.direction2'), s.angle, (v) => (s.angle = ((Math.round(v) % 360) + 360) % 360), 15),
+        this.numField(tr('ed.reach'), s.reach, (v) => (s.reach = Math.max(1, Math.round(v))), 5),
+        this.numField(tr('ed.thrustS'), sec(s.thrustMs), (v) => (s.thrustMs = ms(v)), 0.05),
+        this.numField(tr('ed.returnS'), sec(s.returnMs), (v) => (s.returnMs = ms(v)), 0.1),
+        this.numField(tr('ed.restS'), sec(s.waitMs), (v) => (s.waitMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0, v)) * 1000)), 0.1),
+        this.numField(tr('ed.startDelayS'), sec(s.delay), (v) => (s.delay = Math.round(Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, v)) * 1000)), 0.1),
+      ),
+      this.note(tr('ed.restsThrustsOutFastThen')),
+    ];
+  }
+
+  fogProps(o: MapObject): HTMLElement[] {
+    const f = o.fog!;
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.min = '0';
+    range.max = '100';
+    range.step = '5';
+    range.value = String(f.density);
+    const out = document.createElement('output');
+    out.textContent = `${f.density}%`;
+    range.addEventListener('input', () => (out.textContent = `${range.value}%`));
+    range.addEventListener('change', () => this.host.edit(() => (f.density = Math.max(0, Math.min(100, Number(range.value))))));
+    const control = document.createElement('div');
+    control.className = 'range-field';
+    control.append(range, out);
+    return [
+      this.group(
+        this.selectField<FogKind>(tr('ed.type'), f.kind, [['fog', tr('ed.nameFog')], ['sand', tr('ed.nameSand')]], (v) => (f.kind = v), true),
+        this.field(tr('ed.fogDensity'), control, true),
+      ),
+      this.note(tr('ed.fogNote')),
+    ];
+  }
+
+  sawProps(o: MapObject): HTMLElement[] {
+    const s = o.saw!;
+    if (s.kind === 'disc') {
+      return [
+        this.heading(tr('ed.circularGrinder')),
+        this.group(
+          this.selectField(tr('ed.spin'), s.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (s.clockwise = v === 'cw')),
+          this.numField(tr('ed.speedS'), s.spin, (v) => (s.spin = Math.min(LIMITS.maxRotSpeed, Math.max(0, Math.round(v)))), 90),
+        ),
+        this.note(tr('ed.deadlyThrowsDustWhereIt')),
+      ];
+    }
+    const sec = (v: number) => v / 1000;
+    return [
+      this.heading(tr('ed.sawBlade')),
+      this.group(
+        this.numField(tr('ed.strokePx'), s.stroke, (v) => (s.stroke = Math.max(0, Math.round(v))), 4),
+        this.numField(tr('ed.strokeTimeS'), sec(s.strokeMs), (v) => (s.strokeMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.05),
+      ),
+      this.note(tr('ed.deadlySawsBackAndForth')),
+    ];
+  }
+
+  textProps(o: MapObject): HTMLElement[] {
+    const t = o.text!;
+    const area = document.createElement('textarea');
+    area.rows = 3;
+    area.maxLength = 500;
+    area.value = t.text;
+    area.addEventListener('change', () => this.host.edit(() => (t.text = area.value)));
+    const colorInput = (value: string, apply: (v: string) => void) => {
+      const c = document.createElement('input');
+      c.type = 'color';
+      c.value = value;
+      c.addEventListener('change', () => this.host.edit(() => apply(c.value.toLowerCase())));
+      return c;
+    };
+    const font = document.createElement('select');
+    for (const [v, label] of TEXT_BASE_FONTS) font.append(new Option(label, v, false, v === t.font));
+    fontPicker(font, t.font);
+    font.addEventListener('change', () => this.host.edit(() => (t.font = font.value)));
+    const out: HTMLElement[] = [
+      this.heading(tr('ed.textBox')),
+      this.field(tr('common.text'), area, true),
+      this.group(
+        this.field(tr('common.font'), font, true),
+        this.numField(tr('common.size'), t.size, (v) => (t.size = Math.min(200, Math.max(6, Math.round(v)))), 2),
+        this.field(tr('common.color'), colorInput(t.color, (v) => (t.color = v))),
+        this.selectField(tr('common.align'), t.align, [['left', tr('common.left')], ['center', tr('common.center')], ['right', tr('common.right')]], (v) => (t.align = v)),
+      ),
+      this.toggle(tr('common.bold'), t.bold, (on) => (t.bold = on)),
+      this.toggle(tr('common.outline'), !!t.outline, (on) => {
+        if (on) t.outline = '#ffffff';
+        else delete t.outline;
+      }),
+    ];
+    if (t.outline) {
+      out.push(this.group(
+        this.field(tr('ed.outlineColor'), colorInput(t.outline, (v) => (t.outline = v))),
+        this.numField(tr('ed.outlineWidth'), t.outlineWidth, (v) => (t.outlineWidth = Math.min(20, Math.max(0, v))), 0.5),
+      ));
+    }
+    out.push(this.toggle(tr('common.background'), !!t.background, (on) => {
+      if (on) t.background = '#ffffffb3';
+      else delete t.background;
+    }));
+    if (t.background) {
+      const bg = t.background;
+      const alpha = parseInt(bg.slice(7, 9), 16) / 255;
+      const hex2 = (a: number) => Math.round(Math.min(1, Math.max(0, a)) * 255).toString(16).padStart(2, '0');
+      out.push(this.group(
+        this.field(tr('common.background'), colorInput(bg.slice(0, 7), (v) => (t.background = v + bg.slice(7, 9)))),
+        this.numField(tr('ed.opacity'), Math.round(alpha * 100), (v) => (t.background = bg.slice(0, 7) + hex2(v / 100)), 5),
+      ));
+    }
+    // Effects: each one is a toggle that reveals its settings
+    out.push(this.toggle(tr('fx.shadow'), !!t.shadow, (on) => {
+      if (on) t.shadow = '#000000';
+      else delete t.shadow;
+    }));
+    if (t.shadow) out.push(this.group(this.field(tr('fx.shadowColor'), colorInput(t.shadow, (v) => (t.shadow = v)))));
+    out.push(this.toggle(tr('fx.glow'), !!t.glow, (on) => {
+      if (on) t.glow = '#3ae8ff';
+      else delete t.glow;
+    }));
+    if (t.glow) out.push(this.group(this.field(tr('fx.glowColor'), colorInput(t.glow, (v) => (t.glow = v)))));
+    out.push(this.toggle(tr('fx.gradient'), !!t.gradient, (on) => {
+      if (on) t.gradient = '#ff7a3a';
+      else delete t.gradient;
+    }));
+    if (t.gradient) out.push(this.group(this.field(tr('fx.gradientColor'), colorInput(t.gradient, (v) => (t.gradient = v)))));
+    out.push(this.toggle(tr('fx.depth'), !!t.depth, (on) => {
+      if (on) {
+        t.depth = 4;
+        t.depthColor ??= '#1a2233';
+      } else {
+        delete t.depth;
+        delete t.depthColor;
+      }
+    }));
+    if (t.depth) {
+      out.push(this.group(
+        this.numField(tr('fx.depthSize'), t.depth, (v) => (t.depth = Math.min(30, Math.max(1, Math.round(v)))), 1),
+        this.field(tr('fx.depthColor'), colorInput(t.depthColor ?? '#000000', (v) => (t.depthColor = v))),
+      ));
+    }
+    out.push(this.note(tr('ed.onlyDecorationTheCursorCan')));
+    return out;
+  }
+
+  laserProps(o: MapObject): HTMLElement[] {
+    const l = o.laser!;
+    const out: HTMLElement[] = [
+      this.heading(tr('ed.laser')),
+      this.colorPicker(l.color, (c) => (l.color = c)),
+      this.group(this.numField(tr('ed.direction2'), l.angle, (v) => (l.angle = ((Math.round(v) % 360) + 360) % 360), 15)),
+      this.toggle(tr('ed.beamOnAtTheStart'), l.on, (on) => (l.on = on)),
+      this.toggle(tr('ed.aSwitchFlipsItOn'), l.switchColor !== undefined, (on) => {
+        if (on) l.switchColor = this.host.lastColor;
+        else delete l.switchColor;
+      }),
+    ];
+    if (l.switchColor !== undefined) {
+      const sc = l.switchColor;
+      out.push(this.colorPicker(sc, (c) => (l.switchColor = c)), this.note(tr(l.on ? 'ed.laserSwitchOff' : 'ed.laserSwitchOn', { color: switchColor(sc).name })));
+    }
+    out.push(this.note(tr('ed.dragTheOrangeDiamondTo')));
+    return out;
+  }
+
+  portalProps(o: MapObject): HTMLElement[] {
+    const p = o.portal!;
+    const same = this.host.map.objects.filter((m) => m.portal?.color === p.color).length;
+    return [
+      this.heading(tr('ed.teleportPortal')),
+      this.colorPicker(p.color, (c) => (p.color = c)),
+      this.group(
+        this.selectField(tr('ed.direction'), p.mode, [['both', tr('ed.bothWays')], ['in', tr('ed.entranceOnly')], ['out', tr('ed.exitOnly')]], (v) => (p.mode = v), true),
+        this.numField(tr('ed.order'), p.order + 1, (v) => (p.order = Math.max(0, Math.min(9999, Math.round(v) - 1)))),
+      ),
+      this.note(tr('ed.portalNote', { color: switchColor(p.color).name, n: same })),
+    ];
+  }
+
+  doorProps(o: MapObject): HTMLElement[] {
+    const d = o.door!;
+    const out: HTMLElement[] = [
+      this.heading(tr('ed.autoDoor')),
+      this.group(
+        this.selectField(tr('ed.opens'), d.mode, [['auto', tr('ed.byItselfCycle')], ['switch', tr('ed.whileASwitchIsOn')]], (v) => (d.mode = v), true),
+        this.numField(tr('ed.openCloseTimeS'), d.moveMs / 1000, (v) => (d.moveMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1),
+        ...(d.mode === 'auto' ? [this.numField(tr('ed.staysOpenShutS'), d.waitMs / 1000, (v) => (d.waitMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0, v)) * 1000)), 0.1)] : []),
+      ),
+    ];
+    if (d.mode === 'switch') out.push(this.colorPicker(d.color, (c) => (d.color = c)));
+    out.push(this.note(tr('ed.theDoorSplitsAcrossIts')));
+    return out;
+  }
+
+  linkProps(o: MapObject): HTMLElement[] {
+    const out: HTMLElement[] = [this.heading(tr('ed.switchLink')), this.toggle(tr('ed.reactsToASwitch'), !!o.link, (on) => {
+      if (on) o.link = { color: this.host.lastColor, action: o.motion || o.rotation ? 'start' : 'remove' };
+      else delete o.link;
+    })];
+    const l = o.link;
+    if (l) {
+      out.push(
+        this.colorPicker(l.color, (c) => (l.color = c)),
+        this.group(this.selectField<LinkAction>(tr('ed.whileOn'), l.action, [
+          ['start', tr('ed.movesStartsMoving')],
+          ['stop', tr('ed.stopsMoving')],
+          ['remove', tr('ed.isRemoved')],
+          ['pulley', tr('ed.movesWithPulley')],
+        ], (v) => (l.action = v), true)),
+        this.note(tr(l.action === 'pulley' ? 'ed.movesWithPulleyNote' : 'ed.movesObjectsStayStillUntil')),
+      );
+    }
+    return out;
+  }
+
+  cmdButton(c: Command, text: string): HTMLButtonElement {
+    const b = this.button(text, () => c.enabled && c.run(), 'cmd-btn');
+    b.title = c.keys ? `${c.label} (${c.keys})` : c.label;
+    b.setAttribute('aria-label', c.label);
+    b.disabled = !c.enabled;
+    return b;
+  }
+
+  arrangeProps(multi: boolean): HTMLElement[] {
+    const c = this.host.commands();
+    const row = (...b: HTMLButtonElement[]) => {
+      const d = this.actions(...b);
+      d.classList.add('cmd-row');
+      return d;
+    };
+    const out: HTMLElement[] = [
+      this.heading(tr('ed.arrange')),
+      row(this.cmdButton(c.front, tr('ed.btnFront')), this.cmdButton(c.forward, tr('ed.btnFwd')), this.cmdButton(c.backward, tr('ed.btnBack')), this.cmdButton(c.back, tr('ed.btnRear'))),
+      row(
+        this.cmdButton(c.alignLeft, '⇤'), this.cmdButton(c.alignCenter, '⇹'), this.cmdButton(c.alignRight, '⇥'),
+        this.cmdButton(c.alignTop, '⤒'), this.cmdButton(c.alignMiddle, '⇳'), this.cmdButton(c.alignBottom, '⤓'),
+      ),
+    ];
+    if (multi) {
+      out.push(row(this.cmdButton(c.distH, tr('ed.btnDistH')), this.cmdButton(c.distV, tr('ed.btnDistV'))));
+      // A view preference, not a map edit: no undo step
+      const wrap = document.createElement('label');
+      wrap.className = 'toggle';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = this.host.alignToMap;
+      input.addEventListener('change', () => {
+        this.host.alignToMap = input.checked;
+        this.renderProps();
+      });
+      const span = document.createElement('span');
+      span.textContent = tr('ed.alignToTheMapInstead');
+      wrap.append(input, span);
+      out.push(wrap);
+    } else {
+      out.push(this.note(tr('ed.aSingleObjectAlignsTo')));
+    }
+    out.push(
+      row(this.cmdButton(c.rotCW, '↻ 90°'), this.cmdButton(c.rotCCW, '↺ 90°'), this.cmdButton(c.flipH, tr('ed.btnFlipH')), this.cmdButton(c.flipV, tr('ed.btnFlipV'))),
+    );
+    return out;
+  }
+
+  multiProps(ids: number[]): HTMLElement[] {
+    const c = this.host.commands();
+    const objs = ids.map((i) => this.host.map.objects[i]);
+    const title = document.createElement('h4');
+    const g = objs[0].group;
+    title.textContent = g !== undefined && objs.every((o) => o.group === g) ? tr('ed.groupTitle', { g, n: ids.length }) : tr('ed.selectedTitle', { n: ids.length });
+    const b = objectsBounds(objs);
+    const row = (...bs: HTMLButtonElement[]) => {
+      const d = this.actions(...bs);
+      d.classList.add('cmd-row');
+      return d;
+    };
+    return [
+      title,
+      this.note(tr('ed.multiNote', { paths: objs.filter((o) => o.role === 'path').length, walls: objs.filter((o) => o.role === 'wall').length, size: sizeText(b.w, b.h), first: ids[0] + 1 })),
+      ...this.arrangeProps(true),
+      this.heading(tr('ed.group')),
+      row(this.cmdButton(c.group, tr('ed.group')), this.cmdButton(c.ungroup, tr('ed.ungroup')), this.cmdButton(c.regroup, tr('ed.regroup'))),
+      this.heading(tr('ed.mergeShapes')),
+      row(
+        this.cmdButton(c.union, tr('ed.union')), this.cmdButton(c.combine, tr('ed.combine')), this.cmdButton(c.fragment, tr('ed.fragment')),
+        this.cmdButton(c.intersect, tr('ed.intersect')), this.cmdButton(c.subtract, tr('ed.subtract')),
+      ),
+      this.note(tr('ed.theResultIsAFreeform')),
+      this.heading(tr('ed.type')),
+      row(this.cmdButton(c.makePath, tr('ed.allPaths')), this.cmdButton(c.makeWall, tr('ed.allWalls'))),
+      this.actions(
+        this.button(tr('common.duplicate'), () => this.host.duplicateSelected()),
+        this.button(tr('common.delete'), () => this.host.deleteSelected(), 'danger'),
+      ),
+    ];
+  }
+}

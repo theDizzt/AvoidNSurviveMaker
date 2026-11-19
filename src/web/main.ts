@@ -1,11 +1,11 @@
-import { language, LANGUAGES, saveLanguage, t, type Language } from '../core/i18n';
+import { language, LANGUAGES, saveLanguage, t, type Language } from './i18n';
 import { renderFontLicenses } from './font-licenses';
 import './style.css';
 // Game version, e.g. "Update 20" — edit the VERSION file at the repo root
 import versionFile from '../../VERSION?raw';
 import { BUILTIN_LEVELS } from '../core/levels';
-import { chapterLevelCode, levelLabel } from '../core/level';
-import { decodeMap, decodePack } from '../core/share';
+import { chapterLevelCode, levelLabel } from './localized/level';
+import { decodeMap, decodePack } from './localized/share';
 import type { MapData, MapPack } from '../core/types';
 import { Editor } from './editor';
 import { ThemeEditor } from './theme-editor';
@@ -13,9 +13,11 @@ import { customTheme } from './theme-registry';
 import { installTooltips } from './tooltip';
 import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-ui';
 import { levelKey, recordClear, themeUnlocked, totalStars } from './progress';
-import { filledSlots, themedLevel, type ThemeEntry } from '../core/theme-pack';
+import { filledSlots, themedLevel, type ThemeEntry } from './localized/theme-pack';
 import { OFFICIAL_THEMES, allThemes, badgeFor, chapterMusicFor } from './theme-registry';
 import { onOptionsChange, options, resetOptions, setOption } from './options';
+import { onSkinChange, refreshSkinGate, setSkinGate, setTrailShown, skin } from './skin';
+import { CustomizeUI } from './customize-ui';
 import { PlayController } from './play';
 import { FONT_TASKS, runPreload, type PreloadTask } from './preload';
 import { Backdrop, type BackdropMode } from './backdrop';
@@ -33,6 +35,9 @@ import { IrisTransition } from './iris-transition';
 import { gameAudio } from './audio';
 import { installMenuMusicControls, menuMusicUrl } from './menu-music';
 import { applyI18n } from './i18n-dom';
+import { Achievements } from './achievements';
+import { AchievementsUI } from './achievements-ui';
+import { ACHIEVEMENTS, rewardAchievement } from '../core/achievements';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -91,6 +96,9 @@ const editor = new Editor({
   snap: $<HTMLInputElement>('opt-snap'),
   preview: $<HTMLInputElement>('opt-preview'),
   gridTop: $<HTMLInputElement>('opt-grid-top'),
+  center: $<HTMLInputElement>('opt-center'),
+  symmetry: $<HTMLSelectElement>('opt-symmetry'),
+  symmetryStatus: $('symmetry-status'),
   undo: $<HTMLButtonElement>('btn-undo'),
   redo: $<HTMLButtonElement>('btn-redo'),
   shortcuts: $<HTMLButtonElement>('btn-shortcuts'),
@@ -116,19 +124,26 @@ const campaign = new CampaignUI($('themes-screen'), $('levels-screen'));
 const fitDia = (id: string, maxW: number, maxH: number) => fitRotatedGrid($(id), $(id).querySelector<HTMLElement>('.dgrid')!, maxW, maxH, 1.5);
 const fitMenu = () => fitDia('menu-dia', Math.min(1000, window.innerWidth * 0.96), Math.max(320, Math.min(window.innerHeight * 0.8, window.innerHeight - 230)));
 /** Options and stats: larger panels; the screen scrolls rather than shrinking text too far */
-const fitPanel = (id: string) => {
+/** Width kept free beside the achievements grid: page buttons, Status/Category (left) and Back (right) */
+const ACH_SIDE = 500;
+/** Height kept free below the achievements grid (page number) */
+const ACH_BELOW = 40;
+/** `side`: width kept free beside the grid (page buttons) */
+const fitPanel = (id: string, side = 0, below = 0) => {
   const wrap = $(id);
   const flat = window.innerWidth < 640; // too narrow for a turned grid: style.css lays out upright cards
   wrap.classList.toggle('dia-flat', flat);
   if (flat) {
     wrap.style.width = wrap.style.height = '';
     wrap.querySelector<HTMLElement>('.dgrid')!.style.transform = '';
-  } else fitDia(id, Math.min(1100, window.innerWidth * 0.96), Math.max(480, window.innerHeight - 150));
+  } else fitDia(id, Math.min(1100, window.innerWidth * 0.96 - side), Math.max(below ? 280 : 480, window.innerHeight - 150 - below));
 };
 window.addEventListener('resize', () => {
   if (current === 'menu') fitMenu();
   if (current === 'options') fitPanel('options-dia');
   if (current === 'stats') fitPanel('stats-dia');
+  if (current === 'achievements') fitPanel('achievements-dia', ACH_SIDE, ACH_BELOW);
+  if (current === 'customize') fitPanel('customize-dia');
 });
 campaign.onBack = (from) => show(from === 'levels' ? 'themes' : 'menu');
 campaign.onPlay = (theme, level) => {
@@ -250,8 +265,16 @@ function showImmediately(next: Screen): void {
     void stats.render();
     $('stats-back').focus();
   }
-  if (next === 'achievements') $('achievements-back').focus();
-  if (next === 'customize') $('customize-back').focus();
+  if (next === 'achievements') {
+    achievementsUI.open();
+    requestAnimationFrame(() => fitPanel('achievements-dia', ACH_SIDE, ACH_BELOW));
+    $('achievements-back').focus();
+  }
+  if (next === 'customize') {
+    customizeUI.show();
+    requestAnimationFrame(() => fitPanel('customize-dia'));
+    $('customize-back').focus();
+  }
   if (next === 'licenses') {
     renderFontLicenses($('licenses-list'));
     $('licenses-back').focus();
@@ -379,10 +402,9 @@ for (const screen of [screens.menu, screens.options, screens.stats]) {
 
 // ───────────────────────── Options ─────────────────────────
 
-type ToggleOption = 'showTrail' | 'showTimer' | 'showDebug';
+type ToggleOption = 'showTimer' | 'showDebug';
 type VolumeOption = 'masterVolume' | 'musicVolume' | 'effectsVolume';
 const optionInputs: Record<ToggleOption, HTMLInputElement> = {
-  showTrail: $<HTMLInputElement>('opt-trail'),
   showTimer: $<HTMLInputElement>('opt-timer'),
   showDebug: $<HTMLInputElement>('opt-debug'),
 };
@@ -411,6 +433,13 @@ function syncOptions(): void {
   debugPanel.hidden = !options.showDebug;
 }
 
+// The trail toggle is trail skin #0 (off) or the last trail skin used (on)
+const trailInput = $<HTMLInputElement>('opt-trail');
+const syncTrailInput = () => (trailInput.checked = skin.trail !== 0);
+trailInput.addEventListener('change', () => setTrailShown(trailInput.checked));
+onSkinChange(syncTrailInput);
+syncTrailInput();
+
 for (const [k, input] of Object.entries(optionInputs) as [ToggleOption, HTMLInputElement][]) {
   input.addEventListener('change', () => setOption(k, input.checked));
 }
@@ -421,7 +450,10 @@ onOptionsChange(syncOptions);
 syncOptions();
 
 $('options-back').addEventListener('click', () => show('menu'));
-$('options-reset').addEventListener('click', resetOptions);
+$('options-reset').addEventListener('click', () => {
+  resetOptions();
+  setTrailShown(true);
+});
 $('options-licenses').addEventListener('click', () => openLicenses('options'));
 
 // Language: saved, then the page reloads so every string (many are built at startup) switches
@@ -452,6 +484,7 @@ screens.licenses.addEventListener('keydown', (e) => {
 });
 $('menu-stats').addEventListener('click', () => show('stats'));
 $('menu-achievements').addEventListener('click', () => show('achievements'));
+const customizeUI = new CustomizeUI($('customize-grid'));
 $('menu-customize').addEventListener('click', () => show('customize'));
 $('stats-refresh').addEventListener('click', () => void stats.render());
 for (const s of ['stats', 'achievements', 'customize'] as const) {
@@ -532,10 +565,16 @@ openInEditor.addEventListener('click', () => {
 });
 
 editor.onTest = (map) => showPlay(map, { test: true });
-play.onClear = (map, _replay, time) => {
-  // Campaign stars
+play.onClear = (map, _replay, time, crystal) => {
+  // Campaign stars (and the crystal star, if carried to GOAL)
   const c = campaignOf(currentKey);
-  if (c) recordClear(c.theme, c.index, map, time);
+  if (c && !testing) {
+    const stars = recordClear(c.theme, c.index, map, time, crystal);
+    if (c.theme.official) {
+      const key = levelKey(c.theme, c.index);
+      achievements.record(key, time, stars, crystal);
+    }
+  }
   // A clear of the same gameplay verifies the editor's map for sharing
   editor.markVerified(map, time);
 };
@@ -546,6 +585,38 @@ play.onExit = leavePlay;
 // ───────────────────────── Accounts ─────────────────────────
 
 const account = new Account();
+const achievements = new Achievements(account);
+const achievementsUI = new AchievementsUI({
+  grid: $('achievements-grid'),
+  status: $('achievements-status'),
+  prev: $<HTMLButtonElement>('achievements-prev'),
+  next: $<HTMLButtonElement>('achievements-next'),
+  page: $('achievements-page'),
+  filter: $<HTMLButtonElement>('achievements-filter'),
+  category: $<HTMLButtonElement>('achievements-category'),
+}, achievements, (def) => {
+  if (def.kind === 'discord') return () => $('menu-discord').click();
+  for (const key of def.levels) {
+    const record = achievements.records[key];
+    if (def.kind === 'stars' && record && record.stars >= 3) continue;
+    const [id, slot] = key.split('/');
+    const theme = OFFICIAL_THEMES.find(t => t.info.id === id);
+    if (!theme || !themeUnlocked(theme) || !filledSlots(theme).includes(Number(slot))) continue;
+    return () => { campaign.renderLevels(theme); show('levels'); };
+  }
+  return null;
+});
+// Reward skins unlock with their achievement
+setSkinGate((kind, n) => {
+  const def = rewardAchievement(kind, n);
+  return !def || !!achievements.unlocks[def.id];
+});
+achievements.subscribe(refreshSkinGate);
+$('menu-discord').addEventListener('click', () => achievements.claimDiscord());
+achievements.onUnlock = (ids) => {
+  const names = ids.slice(0, 3).map(id => t(ACHIEVEMENTS.find(d => d.id === id)!.name)).join(', ');
+  showToast(t('ach.unlocked', { names }) + (ids.length > 3 ? t('ach.more', { n: ids.length - 3 }) : ''), 'ok');
+};
 // Total time the game is open, saved to the player's profile
 const playTime = new PlayTimeTracker(account);
 // Deaths in runs (total and per level), saved to the player's account
@@ -561,14 +632,18 @@ play.onDeath = () => {
 // Best time (ms) and stars per level, saved to the player's account
 const recordSync = new RecordSync(account);
 recordSync.onSaved = () => {
+  void achievements.refresh();
   if (current === 'levels' && campaign.currentTheme) campaign.renderLevels(campaign.currentTheme);
   if (current === 'themes') campaign.renderThemes();
   $('menu-stars').textContent = String(totalStars());
+  renderLevelOptions();
 };
 const recordsButton = $<HTMLButtonElement>('records-sync');
+const importGuestButton = $<HTMLButtonElement>('records-import-guest');
 const recordsStatus = $('records-status');
 const signedOutRecords = t('records.signedOut');
 function renderRecordsOption(): void {
+  importGuestButton.disabled = !recordSync.canImportGuest || !!recordsButton.dataset.busy;
   if (recordsButton.dataset.busy) return;
   recordsButton.disabled = !recordSync.available;
   if (recordSync.available) {
@@ -585,9 +660,23 @@ account.onChange(() => current === 'stats' && void stats.render());
 account.onChange(renderRecordsOption);
 account.onChange(clearLeaderboardCache); // so the player's own row is marked after signing in
 renderRecordsOption();
+let progressUser = account.user?.id ?? null;
+account.onChange(() => {
+  const next = account.user?.id ?? null;
+  if (next === progressUser) return;
+  progressUser = next;
+  // A run started by the previous player must not be recorded for the next one.
+  if (current === 'play') play.load(currentMap);
+});
+importGuestButton.addEventListener('click', () => {
+  recordSync.importGuest();
+  showToast(t('records.guestImported'), 'ok');
+  renderRecordsOption();
+});
 recordsButton.addEventListener('click', async () => {
   recordsButton.dataset.busy = '1';
   recordsButton.disabled = true;
+  importGuestButton.disabled = true;
   recordsStatus.textContent = t('records.syncing');
   const result = await recordSync.syncAll();
   delete recordsButton.dataset.busy;
@@ -656,7 +745,10 @@ async function boot(): Promise<void> {
   const setProgress = installDiamondProgress($('preload-dia'), (r) => (percent.textContent = `${Math.round(r * 100)}%`));
   const text = $('preload-text');
   const shared = sharedMapTask() ?? sharedPackTask();
-  const accountTask: PreloadTask = { label: t('common.account'), run: () => account.init() };
+  const accountTask: PreloadTask = { label: t('common.account'), run: async () => {
+    await account.init();
+    achievements.initializeGuest();
+  } };
   const tasks = [...FONT_TASKS, accountTask, ...(shared ? [shared] : [])];
 
   await runPreload(tasks, (done, total, label) => {

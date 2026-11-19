@@ -1,5 +1,5 @@
-import { t } from '../core/i18n';
-import { FONT_CATALOG, LICENSE_LABELS, type CatalogFont, type FontLicense } from '../core/font-catalog';
+import { t } from './i18n';
+import { FONT_CATALOG, LICENSE_LABELS, type CatalogFont, type FontLicense } from './localized/font-catalog';
 import oflText from '../assets/fonts/OFL.txt?raw';
 import { ensureLibraryFont, libraryFontCss } from './library-fonts';
 

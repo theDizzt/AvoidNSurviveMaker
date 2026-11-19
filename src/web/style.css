@@ -278,6 +278,8 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 #play-canvas { cursor: crosshair; }
 /* During a run the system cursor is replaced by the 8×8 virtual cursor drawn on the canvas */
 .play-view.running, .play-view.running * { cursor: none !important; }
+/* Pointer skin #0: no skin, the system cursor stays visible during a run */
+.play-view.running.native-cursor, .play-view.running.native-cursor * { cursor: default !important; }
 
 .status { margin: 10px 0; color: var(--muted); min-height: 1.5em; }
 
@@ -398,6 +400,10 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .bar-sep { width: 1px; height: 22px; background: var(--border-strong); }
 .editor-bar .zoom-btn { padding: 5px 10px; min-width: 32px; font-weight: 700; }
 .editor-bar .zoom-level { padding: 5px 8px; min-width: 58px; font-variant-numeric: tabular-nums; }
+.editor-bar .sym-pick { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.editor-bar .sym-pick select { padding: 3px 8px; border-radius: 999px; font: inherit; font-size: 13px; }
+.editor-bar .sym-status { padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #2f7a4f; background: rgba(60, 170, 110, 0.14); }
+.editor-bar .sym-status.bad { color: #b3263c; background: rgba(226, 60, 80, 0.14); }
 /* Viewport map while zoomed in: the whole map with the visible area framed (click or drag to move).
    Bottom center above the hint, clear of the side panels */
 .editor-minimap {
@@ -582,6 +588,8 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .pal-start .pal-zone { color: #1fa889; background: rgba(63, 196, 166, 0.16); }
 .pal-goal .pal-zone { color: #d48f00; background: rgba(255, 196, 60, 0.2); }
 .pal-coin svg { fill: #ffd25e; stroke: #d39a12; }
+.pal-torch svg { stroke: #5b3a1e; stroke-width: 0.6; }
+.pal-crystal svg { fill: #6fd6ff; stroke: #4b3fb8; }
 .pal-dark svg { fill: #1b1f27; stroke: #000; }
 .pal-global-dark svg { fill: #1b1f27; stroke: #000; }
 .pal-global-dark[aria-pressed="true"] { background: #2a2f3a; }
@@ -1407,8 +1415,8 @@ button.se-back:hover, button.se-start:hover, button.se-back:focus-visible, butto
  * controls stay readable. Under 640px wide main.ts adds .dia-flat and the tiles fall back to a
  * plain two-column grid of upright cards.
  */
-#options-screen, #stats-screen { overflow-y: auto; align-items: safe center; }
-#options-screen .menu-inner, #stats-screen .menu-inner { margin-block: auto; padding-block: 24px; gap: 10px; }
+#options-screen, #stats-screen, #achievements-screen, #customize-screen { overflow-y: auto; align-items: safe center; }
+#options-screen .menu-inner, #stats-screen .menu-inner, #achievements-screen .menu-inner, #customize-screen .menu-inner { margin-block: auto; padding-block: 24px; gap: 10px; }
 .dgrid-panel { --cell: 168px; --gap: 12px; }
 .dgrid-panel .dtile-in strong { font-family: var(--font-main); font-size: 17px; }
 .dgrid-panel .dtile-in small { font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
@@ -1472,8 +1480,11 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 .dvolume:has(input:focus-visible) .ddial-thumb { stroke: #326bc0; stroke-width: 4; }
 
 /* Records sync */
-.drecords .dtile-in { gap: 4px; }
-.drecords small { max-width: 130px; }
+.drecords .dtile-in { gap: 3px; }
+.drecords small { max-width: 130px; line-height: 1.25; }
+/* Sync and Import side by side, so both stay inside the diamond */
+.drecords .dpill-row { gap: 4px; margin-top: 4px; }
+.drecords .dpill { --size: 66px; padding: 0 8px; font-size: 10px; line-height: 1.05; word-break: keep-all; }
 
 /* Language picker */
 .dlanguage .dtile-in { gap: 4px; }
@@ -1511,8 +1522,134 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
   grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto;
 }
 .dia-flat .dtile { grid-column: auto !important; grid-row: auto !important; min-height: 120px; }
-.dia-flat .dtile-music, .dia-flat .dtile-stars { grid-column: 1 / -1 !important; }
+.dia-flat .dtile-music, .dia-flat .dtile-stars, .dia-flat .cz-preview-tile, .dia-flat .cz-palette-tile { grid-column: 1 / -1 !important; }
 .dia-flat .dtile-in { position: static; inset: auto; transform: none; height: 100%; padding: 16px 12px; }
 .dia-flat .dtile-deco { display: none; }
 .dia-flat .dvolume { min-height: 190px; }
 .dia-flat .dvolume .dtile-in { position: relative; }
+
+body:has(#play-view.running) .toast { visibility: hidden; }
+
+
+/* ───────────────────────── Achievements diamonds ───────────────────────── */
+.ach-tile .dtile-in { gap: 3px; }
+.ach-tile .ach-amount { font-size: 11px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ach-tile.is-unlocked .ach-amount { color: #8a6410; }
+.ach-tile .dtile-in strong { font-size: 14px !important; line-height: 1.2; overflow-wrap: anywhere; }
+.ach-badge { font-family: var(--font-title); font-size: 16px; font-weight: 700; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ach-tile.is-unlocked { background: linear-gradient(135deg, #fff8dc, #ffe08a); border-color: rgba(182, 138, 38, 0.6); }
+.ach-tile.is-unlocked .ach-badge, .ach-detail .ach-badge { color: #b68a26; }
+.ach-tile.is-dimmed { opacity: 0.32; filter: grayscale(0.6); }
+.ach-new { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #fff; background: var(--danger); border-radius: 999px; padding: 1px 6px; }
+.ach-detail .dtile-in { gap: 6px; padding: 22%; }
+#achievements-dia .ach-detail strong { font-family: var(--font-title); font-size: 48px !important; line-height: 1; }
+#achievements-dia .ach-detail strong.ach-detail-name { font-size: 24px !important; line-height: 1.15; overflow-wrap: anywhere; }
+.ach-detail .ach-desc { margin: 0; font-size: 13px; line-height: 1.35; }
+.ach-detail small { font-size: 12px !important; }
+.ach-remaining { opacity: 0.75; overflow-wrap: anywhere; }
+.ach-cta { font-weight: 700; color: #8a6410; }
+.ach-control .dtile-in { gap: 4px; }
+.ach-control .dtile-in strong { font-size: 15px !important; }
+
+/* ───────────────────────── Customize diamonds ───────────────────────── */
+.cz-preview-tile { background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(214, 236, 255, 0.9)); }
+.cz-preview-tile .dtile-in { padding: 14%; }
+.cz-preview { max-width: 100%; height: auto !important; aspect-ratio: 1; }
+.cz-picker .dtile-in { gap: 3px; }
+.cz-picker canvas { flex: none; }
+.cz-picker .cz-name { font-size: 14px !important; line-height: 1.2; overflow-wrap: anywhere; }
+.cz-step { --size: 40px; font-size: 17px; font-weight: 700; }
+.cz-slot .dtile-in { gap: 5px; }
+.cz-slot[aria-pressed="true"] { box-shadow: 0 16px 34px rgba(58, 96, 150, 0.28), 0 0 0 4px var(--accent); }
+.cz-chip { width: 40px; height: 40px; transform: rotate(45deg); border-radius: 6px; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(36, 52, 80, 0.3); }
+.cz-hex { font-variant-numeric: tabular-nums; }
+/* The palette sits in the turned tile's own frame: rows and columns run along the diamond's edges */
+.cz-palette-tile { display: grid; place-items: center; padding: 22px; }
+.cz-palette { width: 100%; height: 100%; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 4px; }
+.cz-swatch { min-width: 0; min-height: 0; padding: 0; border-radius: 5px; border: 1px solid rgba(36, 52, 80, 0.25); cursor: pointer; transition: transform 0.1s; }
+.cz-swatch:hover { transform: scale(1.15); z-index: 1; }
+.cz-swatch[aria-checked="true"] { outline: 3px solid var(--text); outline-offset: 1px; box-shadow: 0 0 0 1px #fff inset; z-index: 1; }
+.cz-swatch:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+.dia-flat .cz-palette-tile { aspect-ratio: 1; max-width: 360px; width: 100%; justify-self: center; min-height: 0; }
+.ach-tile.is-selected { box-shadow: 0 16px 34px rgba(58, 96, 150, 0.28), 0 0 0 4px var(--accent); z-index: 1; }
+
+/* Skin list: every pointer or trail skin as a small diamond grid over the screen */
+.cz-overlay { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; overflow: hidden; background: rgba(22, 32, 52, 0.62); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.cz-list-stage { display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 100%; max-height: 100%; overflow: visible; }
+.cz-list-row { display: flex; align-items: center; gap: 28px; }
+/* Page buttons: white diamonds either side of the grid */
+.dpage {
+  flex: none; width: 58px; height: 58px; margin: 12px; padding: 0; border-radius: 12px; transform: rotate(45deg);
+  display: grid; place-items: center; border: 1px solid rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.9); box-shadow: 0 10px 26px rgba(36, 52, 80, 0.3); cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+.dpage span { transform: rotate(-45deg); font-size: 28px; font-weight: 700; line-height: 1; color: var(--text); }
+.dpage:hover:not(:disabled), .dpage:focus-visible { transform: rotate(45deg) scale(1.08); box-shadow: 0 14px 32px rgba(36, 52, 80, 0.35), 0 0 0 3px var(--accent); outline: none; }
+.dpage:disabled { opacity: 0.35; cursor: default; }
+.cz-page-label { margin: 0; color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 1px 6px rgba(20, 30, 50, 0.6); }
+.cz-list .dtile-deco { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.3); backdrop-filter: none; -webkit-backdrop-filter: none; }
+@media (max-width: 640px) { .cz-list-row, .dpage-row { gap: 4px; } .dpage { width: 40px; height: 40px; margin: 8px; } .dpage span { font-size: 20px; } }
+.cz-overlay-head { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.cz-overlay-head h3 { margin: 0; font-family: var(--font-title); font-size: 28px; color: #fff; text-shadow: 0 2px 10px rgba(20, 30, 50, 0.55); }
+/* Close: a small diamond like the other menu buttons; the ✕ stays upright */
+.cz-overlay-close { width: 38px; height: 38px; margin: 8px; padding: 0; border-radius: 9px; background: rgba(255, 255, 255, 0.92); box-shadow: 0 6px 16px rgba(36, 52, 80, 0.3); transform: rotate(45deg); display: grid; place-items: center; transition: transform 0.15s, border-color 0.15s; }
+.cz-overlay-close span { transform: rotate(-45deg); line-height: 1; }
+.cz-overlay-close:hover, .cz-overlay-close:focus-visible { transform: rotate(45deg) scale(1.1); border-color: var(--accent); }
+.cz-list { --cell: 120px; --gap: 10px; }
+.cz-list-item .dtile-in { gap: 3px; }
+.cz-list-item .dtile-in strong { font-size: 14px !important; }
+.cz-list-item .cz-num { font-weight: 700; color: var(--muted); }
+/* No card behind the list: solid tiles so the screen underneath doesn't show through */
+.cz-list-item { background: #fff; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.cz-list-item[aria-pressed="true"] { background: #e6f2ff; box-shadow: 0 16px 34px rgba(20, 40, 80, 0.35), 0 0 0 4px var(--accent); }
+.cz-list-item[aria-pressed="true"] .dtile-in strong { color: #1d63b8; }
+.cz-list-item.is-locked { background: #c9ccd2; border-color: rgba(255, 255, 255, 0.45); cursor: not-allowed; box-shadow: none; }
+button.cz-list-item.is-locked:hover, button.cz-list-item.is-locked:focus-visible { transform: none; box-shadow: none; filter: none; }
+.cz-list-item .cz-lock-icon { width: 30px; height: 30px; fill: #6b7280; }
+.cz-list-item.is-locked .cz-num { color: #5b6270; }
+.cz-list-item .cz-lock { font-size: 11px; font-weight: 700; color: #4b5260; max-width: 9em; line-height: 1.2; }
+.cz-overlay .dia-flat { width: min(420px, 100%) !important; }
+
+/* Page buttons beside the achievements grid */
+.dpage-row { display: flex; align-items: center; justify-content: center; gap: 28px; max-width: 100%; }
+.dpage-row .dpage { background: rgba(255, 255, 255, 0.85); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass); box-shadow: 0 10px 26px rgba(58, 96, 150, 0.22); }
+#achievements-page { margin: 0; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Achievement progress: the loading screen's diamond track, open at the bottom corner, with the count in the gap */
+.ach-tile .dprogress-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; cursor: inherit; }
+.ach-tile .ddial-track, .ach-tile .ddial-fill { stroke-width: 5; }
+.ach-tile .ach-count {
+  position: absolute; left: 50%; top: 88%; transform: translate(-50%, -50%);
+  font-family: var(--font-title); font-weight: 700; font-size: 12px; color: #2a7fd0; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.ach-tile.is-unlocked .ach-count { color: #1b9a72; }
+.ach-tile .dtile-in > :not(svg):not(.ach-count) { position: relative; }
+.dia-flat .ach-tile .dtile-in { position: relative; min-height: 150px; }
+
+/* Achievements: Status · Back · Category under the grid, as diamonds side by side */
+/* Status / Category (left) and Back (right) beside the page buttons */
+.ach-row { gap: 20px; }
+.ach-side { display: flex; flex-direction: column; align-items: center; gap: 22px; width: 108px; }
+.ach-side .dback { width: 76px; height: 76px; margin: 12px; }
+@media (max-width: 640px) {
+  .ach-row { flex-wrap: wrap; }
+  .ach-row .dia-wrap { order: -1; flex-basis: 100%; }
+  .ach-side { flex-direction: row; width: auto; gap: 8px; }
+}
+.dsmall {
+  position: relative; flex: none; width: 76px; height: 76px; margin: 14px; padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 14px; overflow: hidden; transform: rotate(45deg);
+  background: rgba(255, 255, 255, 0.85); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  box-shadow: 0 10px 26px rgba(58, 96, 150, 0.2); color: var(--text); cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.dsmall .dtile-in { padding: 0; gap: 1px; }
+.dsmall .dtile-in strong { font-size: 13px; }
+.dsmall .dstat-label { font-size: 9px !important; }
+.dsmall:hover, .dsmall:focus-visible { transform: rotate(45deg) scale(1.08); box-shadow: 0 14px 30px rgba(58, 96, 150, 0.3), 0 0 0 3px rgba(255, 255, 255, 0.9); outline: none; }
+/* "Mark new as seen": a small pill in the summary tile, only while something is new */
+.ach-seen { margin-top: 6px; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #fff; border: 1px solid rgba(182, 138, 38, 0.5); color: #8a6410; cursor: pointer; }
+.ach-seen:hover, .ach-seen:focus-visible { background: #fff8dc; outline: none; box-shadow: 0 0 0 2px #b68a26; }
+
+/* Crystal star (#59): a 4th, blue star once earned */
+.dstars .dcrystal { color: #3b9cff; text-shadow: 0 0 6px rgba(80, 170, 255, 0.85), 0 0 1px #1d4fb8; opacity: 1; }

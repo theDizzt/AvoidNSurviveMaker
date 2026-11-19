@@ -1,5 +1,5 @@
-import { t as tr } from '../../core/i18n';
-import { byteLength, emailError, formatPlayTime, NICKNAME_MAX_BYTES, nicknameError, passwordError } from '../../core/account';
+import { t as tr } from '../i18n';
+import { byteLength, emailError, formatPlayTime, NICKNAME_MAX_BYTES, nicknameError, passwordError } from '../localized/account';
 import type { Account, AuthResult } from './account';
 import { Captcha } from './captcha';
 import { renderTag } from '../player-tag';

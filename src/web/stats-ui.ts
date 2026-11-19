@@ -1,15 +1,15 @@
-import { t as tr } from '../core/i18n';
-import { formatPlayTime } from '../core/account';
+import { t as tr } from './i18n';
+import { formatPlayTime } from './localized/account';
 import { formatTime } from '../core/simulation';
 import { formatUtc } from '../core/time';
-import { levelAt, levelSlots, STARS_PER_LEVEL } from '../core/theme-pack';
+import { levelAt, levelSlots, maxStars, STARS_PER_LEVEL } from './localized/theme-pack';
 import type { Account } from './auth/account';
 import type { AccountDeaths, DeathTracker } from './auth/deaths';
 import type { AccountRecord, RecordSync } from './auth/records';
 import { levelKey } from './progress';
 import { renderTag } from './player-tag';
 import { customTheme, OFFICIAL_THEMES } from './theme-registry';
-import { chapterLevelCode } from '../core/level';
+import { chapterLevelCode } from './localized/level';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -23,6 +23,13 @@ const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(Math.max(0, STARS_PE
 
 /** Short name of a level key: '1-04' for chapters, 'Custom 4' for custom packs */
 function levelName(key: string): string {
+  // Older keys ended in "@<content hash>"; the level is the same
+  key = key.split('@')[0];
+  for (const [chapter, theme] of OFFICIAL_THEMES.entries()) {
+    for (let i = 0; i < levelSlots(theme); i++) {
+      if (levelKey(theme, i) === key) return chapterLevelCode(chapter + 1, i + 1);
+    }
+  }
   const m = /^(custom:)?(.+)\/(\d+)$/.exec(key);
   if (!m) return key;
   const n = Number(m[3]) + 1;
@@ -77,10 +84,13 @@ export class StatsUI {
     if (!rows) return this.message(tr('stats.loadFailed'));
 
     const byKey = new Map(rows.map((r) => [r.level_key, r]));
-    const totalStars = rows.reduce((s, r) => s + r.stars, 0);
-    const perfect = rows.filter((r) => r.stars >= STARS_PER_LEVEL).length;
+    const activeKeys = new Set([...OFFICIAL_THEMES, ...(customTheme() ? [customTheme()!] : [])]
+      .flatMap(theme => Array.from({ length: levelSlots(theme) }, (_, i) => levelKey(theme, i))));
+    const currentRows = rows.filter(r => activeKeys.has(r.level_key));
+    const totalStars = currentRows.reduce((s, r) => s + r.stars, 0);
+    const perfect = currentRows.filter((r) => r.stars >= STARS_PER_LEVEL).length;
     const lastUpdate = rows.reduce<string | undefined>((a, r) => (!a || r.updated_at > a ? r.updated_at : a), undefined);
-    const officialMax = OFFICIAL_THEMES.reduce((s, t) => s + levelSlots(t) * STARS_PER_LEVEL, 0);
+    const officialMax = OFFICIAL_THEMES.reduce((s, t) => s + maxStars(t), 0);
 
     this.message(tr('stats.saved'));
     this.set('stars', String(totalStars));
@@ -90,7 +100,7 @@ export class StatsUI {
     this.set('player-note', tr('stats.joined', { date: date(profile.created_at) }));
     this.set('time', formatPlayTime(profile.total_play_seconds));
     this.set('time-note', `${profile.total_play_seconds.toLocaleString()}s`);
-    this.set('cleared', String(rows.length));
+    this.set('cleared', String(currentRows.length));
     this.set('cleared-note', tr('stats.perfect', { n: perfect }));
     this.set('last', date(lastUpdate));
     const deaths = serverDeaths && this.withUnsent(serverDeaths);

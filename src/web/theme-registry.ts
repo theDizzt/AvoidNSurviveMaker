@@ -1,7 +1,7 @@
-import { language, t as tr } from '../core/i18n';
-import { assignSlots, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo, type ThemeEntry, type ThemeInfo } from '../core/theme-pack';
+import { language, t as tr } from './i18n';
+import { assignSlots, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo, type ThemeEntry, type ThemeInfo } from './localized/theme-pack';
 import type { MapData, Theme } from '../core/types';
-import { validateMap } from '../core/validate';
+import { validateMap } from './localized/validate';
 
 /**
  * All playable themes: the official ones from the repo's themes/ folder (bundled at build time)

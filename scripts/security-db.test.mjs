@@ -14,7 +14,7 @@ const asUser = async (id) => {
 };
 try {
   await db.exec(`
-    create role anon; create role authenticated;
+    create role anon; create role authenticated; create role service_role;
     create schema auth;
     create table auth.users (id uuid primary key, raw_user_meta_data jsonb,
       created_at timestamptz not null default now());
@@ -217,6 +217,65 @@ try {
   await db.exec('set role anon');
   assert.equal(Number(await scalar('select count(*) from public.public_profiles')), 2);
   console.log('PASS: public UUID access blocked through view and table; tags, lifecycle, own profile and leaderboard preserved');
+  await db.exec('reset role; grant usage on schema public to service_role');
+  for (const migration of ['20261119010000_achievements.sql', '20261120000000_crystal_stars.sql', '20261120010000_verified_replays.sql',
+    '20261121000000_achievement_int_ids.sql', '20261121010000_drop_replay_verification.sql',
+    '20261121020000_drop_public_profiles.sql', '20261121030000_leaderboard_across_versions.sql']) {
+    await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`, import.meta.url), 'utf8'));
+  }
+  // No replay verification: its tables and functions are gone
+  for (const name of ['verified_level_records', 'replay_verification_limits', 'achievement_definitions', 'public_profiles']) {
+    assert.equal(await scalar('select to_regclass($1) is null', [`public.${name}`]), true);
+  }
+  const versionedKey = `workshop/0@${'a'.repeat(64)}`;
+  await asUser(b);
+  await submit([{ key: versionedKey, best_ms: 30, stars: 3, crystal: true }]);
+  await submit([{ key: `custom:pack/${'c'.repeat(8)}@${'c'.repeat(64)}`, best_ms: 5, stars: 3 }]);
+  // Own records rank directly; custom keys never do
+  assert.equal((await board(versionedKey))[0].best_ms, 30);
+  assert.equal((await board(`custom:pack/${'c'.repeat(8)}@${'c'.repeat(64)}`)).length, 0);
+  // Another revision of the same level, and the old slot key, share one board
+  assert.equal((await board(`workshop/0@${'b'.repeat(64)}`))[0].best_ms, 30);
+  assert.equal((await board('workshop/0'))[0].best_ms, 30);
+  await addDeaths(1, [{ key: versionedKey, count: 1 }]);
+  assert.equal(Number(await scalar('select deaths from public.level_deaths where level_key = $1', [versionedKey])), 1);
+  console.log('PASS: replay verification removed; leaderboards rank official records');
+
+  // Unversioned keys: duplicate rows of one level merge into "<theme>/<id>"
+  await db.exec('reset role');
+  await db.query("insert into public.level_records (user_id, level_key, best_ms, stars, crystal) values ($1, 'workshop/0', 50, 2, false) on conflict do nothing", [b]);
+  await db.query(`insert into public.level_records (user_id, level_key, best_ms, stars, crystal) values ($1, $2, 40, 1, false)`, [b, `workshop/0@${'b'.repeat(64)}`]);
+  await db.query("insert into public.level_deaths (user_id, level_key, deaths) values ($1, 'workshop/0', 2) on conflict do nothing", [b]);
+  await db.exec(await readFile(new URL('../supabase/migrations/20261121040000_unversioned_level_keys.sql', import.meta.url), 'utf8'));
+  assert.equal(Number(await scalar("select count(*) from public.level_records where position('@' in level_key) > 0")), 0);
+  assert.equal(Number(await scalar("select count(*) from public.level_deaths where position('@' in level_key) > 0")), 0);
+  const merged = (await db.query("select best_ms, stars, crystal from public.level_records where user_id = $1 and level_key = 'workshop/0'", [b])).rows[0];
+  assert.deepEqual([merged.best_ms, merged.stars, merged.crystal], [30, 3, true]);
+  assert.equal(Number(await scalar("select deaths from public.level_deaths where user_id = $1 and level_key = 'workshop/0'", [b])), 3);
+  // Old clients still send the suffix; it is dropped on the way in
+  await asUser(b);
+  await submit([{ key: `workshop/1@${'e'.repeat(64)}`, best_ms: 700, stars: 2 }]);
+  await submit([{ key: 'custom:pack/my-level', best_ms: 700, stars: 2 }]);
+  await addDeaths(1, [{ key: `workshop/1@${'e'.repeat(64)}`, count: 1 }]);
+  await db.exec('reset role');
+  assert.equal(Number(await scalar("select count(*) from public.level_records where user_id = $1 and level_key in ('workshop/1', 'custom:pack/my-level')", [b])), 2);
+  assert.equal(Number(await scalar("select deaths from public.level_deaths where user_id = $1 and level_key = 'workshop/1'", [b])), 1);
+  assert.equal((await board(`workshop/0@${'f'.repeat(64)}`))[0].best_ms, 30);
+  console.log('PASS: level keys without content hashes; duplicates merged, old clients normalized');
+
+  // Achievements v2: integer ids, rules inside refresh_achievements()
+  await asUser(b);
+  const ids = async () => (await db.query('select achievement_id from public.refresh_achievements() order by 1')).rows.map(r => r.achievement_id);
+  // workshop/0: 3 stars + crystal = 4 stars, 30 ms <= 35 ms
+  assert.deepEqual(await ids(), [14]);
+  await submit(Array.from({ length: 4 }, (_, i) => ({ key: `desert/${i}@${'d'.repeat(64)}`, best_ms: 900, stars: 3 })));
+  assert.deepEqual(await ids(), [1, 14]); // 16 stars
+  await db.query('select public.claim_discord_achievement()');
+  assert.deepEqual(await ids(), [1, 12, 14]);
+  await assert.rejects(db.query('insert into public.user_achievements (user_id, achievement_id) values ($1, 2)', [b]), /permission denied/);
+  await db.exec('reset role; set role anon');
+  await assert.rejects(db.query('select public.claim_discord_achievement()'), /permission denied/);
+  console.log('PASS: achievements v2 issue by integer id from records, Discord claim needs an account');
 } finally {
   await db.close();
 }

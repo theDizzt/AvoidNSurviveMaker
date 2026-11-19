@@ -13,7 +13,7 @@ import type { MapData, Point, Role } from '../core/types';
  */
 
 /** Maps the demo can't play by just moving (clicks, coins, teleports, beams…) */
-const UNSUPPORTED: ReadonlySet<Role> = new Set<Role>(['coin', 'trigger', 'door', 'laser', 'mirror', 'portal']);
+const UNSUPPORTED: ReadonlySet<Role> = new Set<Role>(['coin', 'trigger', 'door', 'laser', 'mirror', 'portal', 'pulley', 'secret']);
 
 /** Grid cells across the longer map side */
 const CELLS = 96;
@@ -27,7 +27,7 @@ const MAX_EXPANSIONS = 160_000;
 const SLICE = 1500;
 
 export function demoPlayable(map: MapData): boolean {
-  return !map.darkness && map.objects.every((o) => !UNSUPPORTED.has(o.role));
+  return !map.darkness && map.objects.every((o) => !UNSUPPORTED.has(o.role) && !o.fall);
 }
 
 const tf: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };

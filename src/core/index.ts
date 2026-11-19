@@ -14,3 +14,4 @@ export * from './theme-pack';
 export * from './arrange';
 export * from './merge';
 export * from './screen-layout';
+export * from './symmetry';

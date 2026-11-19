@@ -1,10 +1,10 @@
-import { t as tr } from '../core/i18n';
+import { t as tr } from './i18n';
 import { fontPicker } from './font-picker';
 import {
   BUILTIN_FONTS, DEFAULT_BUTTON, SCREEN_PLACEHOLDERS,
   type ButtonShape, type ElementKind, type LayoutElement, type LevelButtonStyle, type ScreenLayout, type Visibility,
-} from '../core/screen-layout';
-import { LEVELS_PER_THEME, themedLevel, type ThemeEntry } from '../core/theme-pack';
+} from './localized/screen-layout';
+import { LEVELS_PER_THEME, themedLevel, type ThemeEntry } from './localized/theme-pack';
 import { renderScreen, type ScreenData } from './screen-render';
 import { emptyLayout, newElement, SCREEN_TEMPLATES } from './screen-templates';
 import type { StoredTheme } from './theme-registry';
