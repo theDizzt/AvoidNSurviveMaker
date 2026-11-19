@@ -125,6 +125,10 @@ function motion(v: unknown, name: string, W: number, H: number): Motion {
   return {
     type,
     points: arr(o.points, `${name}.points`, LIMITS.maxMarkers).map((p, i) => point(p, `${name}.points[${i}]`, W, H)),
+    ...(o.segmentTypes !== undefined ? {
+      segmentTypes: arr(o.segmentTypes, `${name}.segmentTypes`, LIMITS.maxMarkers + 1)
+        .map((v, i) => oneOf(v, `${name}.segmentTypes[${i}]`, ['linear', 'curve'] as const)),
+    } : {}),
     speed: num(o.speed, `${name}.speed`, 0, LIMITS.maxSpeed),
     repeat: oneOf(o.repeat, `${name}.repeat`, REPEATS),
     easing: oneOf(o.easing, `${name}.easing`, EASINGS),

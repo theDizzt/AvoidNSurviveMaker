@@ -189,6 +189,8 @@ export type MotionType = 'linear' | 'curve' | 'circle';
  */
 export interface Motion {
   type: MotionType;
+  /** Per-leg overrides, starting at the anchor; final entry controls the loop return. */
+  segmentTypes?: ('linear' | 'curve')[];
   points: Point[];
   /** px/s */
   speed: number;

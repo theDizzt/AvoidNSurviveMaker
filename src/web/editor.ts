@@ -1143,7 +1143,14 @@ export class Editor {
       this.edit(() => {
         o.motion ??= { ...DEFAULT_MOTION, points: [] };
         if (o.motion.type === 'circle') o.motion.points = [p];
-        else if (o.motion.points.length < LIMITS.maxMarkers) o.motion.points.push(p);
+        else if (o.motion.points.length < LIMITS.maxMarkers) {
+          if (o.motion.segmentTypes) {
+            o.motion.segmentTypes = Array.from({ length: o.motion.points.length + 1 }, (_, j) =>
+              o.motion!.segmentTypes?.[j] ?? (o.motion!.type === 'curve' ? 'curve' : 'linear'));
+            o.motion.segmentTypes.splice(o.motion.points.length, 0, o.motion.type);
+          }
+          o.motion.points.push(p);
+        }
       });
       if (o.motion?.type === 'circle') this.finishModes();
       return;
@@ -2313,6 +2320,7 @@ export class Editor {
             m.easing = 'none';
           }
           m.type = v;
+          delete m.segmentTypes;
         }),
         this.selectField<Repeat>(tr('ed.repeat'), m.repeat, REPEAT_OPTIONS, (v) => (m.repeat = v)),
         this.numField(tr('ed.speedPxS'), m.speed, (v) => (m.speed = Math.min(LIMITS.maxSpeed, Math.max(0, v))), 10),
@@ -2323,6 +2331,21 @@ export class Editor {
         fields.push(this.selectField(tr('ed.direction'), m.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (m.clockwise = v === 'cw')));
       }
       parts.push(this.group(...fields));
+      if (m.type !== 'circle' && m.points.length) {
+        parts.push(this.heading(tr('ed.routeSegments')), this.note(tr('ed.routeSegmentsHint')));
+        const count = m.points.length + (m.repeat === 'loop' ? 1 : 0);
+        for (let i = 0; i < count; i++) {
+          const from = i === 0 ? tr('ed.routeStart') : String(i);
+          const to = i === m.points.length ? tr('ed.routeStart') : String(i + 1);
+          parts.push(this.selectField<'linear' | 'curve'>(`${from} → ${to}`,
+            m.segmentTypes?.[i] ?? m.type,
+            [['linear', tr('ed.straight')], ['curve', tr('ed.curve')]], (v) => {
+              m.segmentTypes = Array.from({ length: m.points.length + 1 }, (_, j) =>
+                m.segmentTypes?.[j] ?? (m.type === 'curve' ? 'curve' : 'linear'));
+              m.segmentTypes[i] = v;
+            }));
+        }
+      }
       parts.push(this.toggle(tr('ed.showPath'), !!m.showPath, (on) => {
         if (on) m.showPath = true;
         else delete m.showPath;
@@ -2334,8 +2357,14 @@ export class Editor {
       ));
       parts.push(this.actions(
         this.button(m.type === 'circle' ? tr('ed.setOrbit') : tr('ed.placeMarkers'), () => this.startMarkers(idx)),
-        this.button(tr('ed.removeLast'), () => m.points.length && this.edit(() => m.points.pop())),
-        this.button(tr('ed.clear'), () => m.points.length && this.edit(() => (m.points = []))),
+        this.button(tr('ed.removeLast'), () => m.points.length && this.edit(() => {
+          m.segmentTypes?.splice(m.points.length - 1, 1);
+          m.points.pop();
+        })),
+        this.button(tr('ed.clear'), () => m.points.length && this.edit(() => {
+          m.points = [];
+          delete m.segmentTypes;
+        })),
       ));
     }
 
