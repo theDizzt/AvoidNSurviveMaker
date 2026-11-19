@@ -41,7 +41,7 @@ export interface PlayElements {
 
 export class PlayController {
   /** Called on clear (used to verify editor test plays) */
-  /** `crystal`: the run carried the map's crystal star (#56) to GOAL */
+  /** `crystal`: the run carried the map's crystal star (#59) to GOAL */
   onClear: ((map: MapData, replay: Replay, time: number, crystal: boolean) => void) | null = null;
   /** Called when the maze ends a run (wall, moving wall, void, bounds, laser) — not for runs the
    *  browser stopped (cursor left the window, focus lost, non-mouse pointer) */
@@ -283,7 +283,7 @@ export class PlayController {
     const { ctx, map, sim } = this;
     const t = sim.status === 'ready' ? 0 : sim.time;
     beginFrame(ctx, map);
-    const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress };
+    const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle };
     const playing = sim.status === 'playing';
     const carried = playing ? this.carried : undefined;
     drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried });

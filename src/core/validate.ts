@@ -6,7 +6,7 @@ import { shapeBounds, shapeCenter } from './shape';
 import {
   MAP_VERSION, PACK_VERSION,
   type Door, type Easing, type Fill, type MapData, type MapPack, type Trigger, type TriggerKind, type MapObject, type Motion, type PatternKind, type Point, type PolyPoint, type Rect,
-  type Repeat, type Rotation, type Shape, type SurfaceStyle, type Theme, type Wave,
+  type Repeat, type Rotation, type Shape, type SurfaceStyle, type Theme, type Wave, type Fall, type Pulley,
 } from './types';
 
 export const LIMITS = {
@@ -30,7 +30,7 @@ export const LIMITS = {
   maxPackLevels: 200,
   /** Coins are always this size (diameter) */
   coinSize: 24,
-  /** Crystal stars (#56) are always this size, and a map has at most this many */
+  /** Crystal stars (#59) are always this size, and a map has at most this many */
   crystalSize: 48,
   maxCrystals: 1,
   /** Global darkness light radius */
@@ -203,7 +203,7 @@ function door(v: unknown, name: string): Door {
 function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
   const o = obj(v, name);
   const out: MapObject = {
-    role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret', 'crystal'] as const),
+    role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret', 'crystal', 'pulley'] as const),
     shape: shape(o.shape, `${name}.shape`, W, H),
   };
   if (o.motion !== undefined) out.motion = motion(o.motion, `${name}.motion`, W, H);
@@ -241,11 +241,32 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
     };
     delete out.motion; // a spike's own thrust is its movement
   }
-  if (out.role === 'wall' && o.boulder === true && !out.spike) {
+  if (out.role === 'wall' && o.fall !== undefined && !out.spike) {
+    const f = obj(o.fall, `${name}.fall`);
+    out.fall = {
+      height: num(f.height, `${name}.fall.height`, 1, Math.max(W, H) * 2),
+      fallMs: num(f.fallMs, `${name}.fall.fallMs`, 50, LIMITS.maxDelay),
+      waitMs: num(f.waitMs, `${name}.fall.waitMs`, 0, LIMITS.maxDelay),
+      delay: num(f.delay, `${name}.fall.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
+    };
+    // It only drops: no route or rotation of its own
+    delete out.motion;
+    delete out.rotation;
+  }
+  if (out.role === 'pulley') {
+    const pl = obj(o.pulley, `${name}.pulley`);
+    out.pulley = {
+      color: colorIndex(pl.color, `${name}.pulley.color`),
+      mode: oneOf(pl.mode, `${name}.pulley.mode`, ['hold', 'unwind'] as const),
+      turnMs: num(pl.turnMs, `${name}.pulley.turnMs`, 50, LIMITS.maxDelay),
+      unwind: num(pl.unwind, `${name}.pulley.unwind`, 0, 100),
+    };
+  }
+  if (out.role === 'wall' && o.boulder === true && !out.spike && !out.fall) {
     out.boulder = true;
     delete out.rotation; // it spins by rolling
   }
-  if (out.role === 'wall' && o.saw !== undefined && !out.spike && !out.boulder) {
+  if (out.role === 'wall' && o.saw !== undefined && !out.spike && !out.boulder && !out.fall) {
     const s = obj(o.saw, `${name}.saw`);
     const kind = oneOf(s.kind, `${name}.saw.kind`, ['disc', 'blade'] as const);
     out.saw = {
@@ -308,7 +329,7 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
   }
   if (o.link !== undefined && (out.role === 'path' || out.role === 'wall' || out.role === 'coin' || out.role === 'dark' || out.role === 'fog' || out.role === 'mirror')) {
     const l = obj(o.link, `${name}.link`);
-    out.link = { color: colorIndex(l.color, `${name}.link.color`), action: oneOf(l.action, `${name}.link.action`, ['start', 'stop', 'remove'] as const) };
+    out.link = { color: colorIndex(l.color, `${name}.link.color`), action: oneOf(l.action, `${name}.link.action`, ['start', 'stop', 'remove', 'pulley'] as const) };
   }
   if (o.light !== undefined) {
     const light = obj(o.light, `${name}.light`);
@@ -482,12 +503,17 @@ function overlapsRect(m: MapObject, rect: Rect, t: number): boolean {
 export function mapErrors(map: MapData): string[] {
   const out: string[] = [];
   const colors = new Set(map.objects.filter((o) => o.trigger).map((o) => o.trigger!.color));
+  const pulleys = new Set(map.objects.filter((o) => o.pulley).map((o) => o.pulley!.color));
   const crystals = map.objects.filter((o) => o.role === 'crystal').length;
   if (crystals > LIMITS.maxCrystals) out.push(t('mapError.crystalMany', { n: crystals, max: LIMITS.maxCrystals }));
   map.objects.forEach((o, i) => {
-    const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : o.laser?.switchColor);
-    if (c !== undefined && !colors.has(c)) {
-      out.push(t('mapError.noSwitch', { n: i + 1, color: switchColor(c).name }));
+    if (o.link?.action === 'pulley') {
+      if (!pulleys.has(o.link.color)) out.push(t('mapError.noPulley', { n: i + 1, color: switchColor(o.link.color).name }));
+    } else {
+      const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : o.laser?.switchColor);
+      if (c !== undefined && !colors.has(c)) {
+        out.push(t('mapError.noSwitch', { n: i + 1, color: switchColor(c).name }));
+      }
     }
     if (o.portal) {
       const p = o.portal;
@@ -553,6 +579,10 @@ export const DEFAULT_MOTION: Readonly<Motion> = {
 
 /** A new #30 boulder's route weaves like this (the size of the default 26 px boulder) */
 export const DEFAULT_BOULDER_WAVE: Readonly<Wave> = { amplitude: 14, wavelength: 120 };
+/** A new falling rock (#51) */
+export const DEFAULT_FALL: Readonly<Fall> = { height: 300, fallMs: 600, waitMs: 1200, delay: 0 };
+/** A new pulley's settings, besides its color (#52) */
+export const DEFAULT_PULLEY: Readonly<Omit<Pulley, 'color'>> = { mode: 'hold', turnMs: 1000, unwind: 50 };
 /** Light radius of a new torch (#57 / #58) */
 export const DEFAULT_TORCH_LIGHT = 120;
 /** How far around the cursor a secret wall (#55) shows what lies under it */

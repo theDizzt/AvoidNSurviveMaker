@@ -21,7 +21,7 @@ import { SWITCH_COLORS, switchColor } from '../core/colors';
 import { boulderShape, spikeShape } from '../core/hazards';
 import { BeamCaster } from '../core/laser';
 import {
-  createEmptyMap, DEFAULT_BOULDER_WAVE, DEFAULT_MOTION, DEFAULT_SECRET_RADIUS, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS, mapErrors, mapWarnings, validateMap,
+  createEmptyMap, DEFAULT_BOULDER_WAVE, DEFAULT_FALL, DEFAULT_MOTION, DEFAULT_PULLEY, DEFAULT_SECRET_RADIUS, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS, mapErrors, mapWarnings, validateMap,
 } from '../core/validate';
 import {
   beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, fittedView, FONT_MAIN, fitCanvas, setCamera, staticPicture,
@@ -48,7 +48,7 @@ interface ObjectTool {
   /** role 'trigger': which kind of switch / zone */
   trigger?: TriggerKind;
   /** Walls with a built-in behavior */
-  special?: 'spike' | 'boulder' | 'disc' | 'blade';
+  special?: 'spike' | 'boulder' | 'disc' | 'blade' | 'fall';
   /** role 'fog': fog or sand dust */
   fog?: FogKind;
   /** shape 'sector': a ring sector (#53/#54) */
@@ -88,7 +88,7 @@ const ICONS: Record<ShapeKind, string> = {
 const SPECIAL_IDS = {
   sectorPath: 27, sectorWall: 28, spike: 29, boulder: 30, coin: 31, laser: 37, mirror: 38, portal: 39, door: 40, dark: 41, globalDark: 42,
   disc: 43, blade: 44, movingDisc: 45, movingBlade: 46, text: 47, safe: 48, fog: 49, sand: 50,
-  ringPath: 53, ringWall: 54, secret: 55, crystal: 56, torch: 57, carryTorch: 58,
+  fall: 51, pulley: 52, ringPath: 53, ringWall: 54, secret: 55, secretFree: 56, torch: 57, carryTorch: 58, crystal: 59,
 } as const;
 const TRIGGER_IDS: Record<TriggerKind, number> = { switch: 32, timer: 33, hold: 34, startZone: 35, stopZone: 36 };
 const TRIGGER_NAMES: Record<TriggerKind, string> = {
@@ -99,12 +99,12 @@ const isButton = (k: TriggerKind | undefined) => k === 'switch' || k === 'timer'
 
 const ROLE_NAMES: Record<Role, string> = {
   path: tr('ed.namePath'), wall: tr('ed.nameWall'), coin: tr('ed.nameCoin'), dark: tr('ed.nameDark'), trigger: tr('ed.nameSwitch'), door: tr('ed.nameDoor'), laser: tr('ed.laser'), mirror: tr('ed.mirror'), portal: tr('ed.namePortal'),
-  text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'), torch: tr('ed.nameTorch'), secret: tr('ed.nameSecret'), crystal: tr('ed.nameCrystal'),
+  text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'), torch: tr('ed.nameTorch'), secret: tr('ed.nameSecret'), crystal: tr('ed.nameCrystal'), pulley: tr('ed.namePulley'),
 };
 /** "Fog" / "Sand Dust" */
 const fogName = (kind: FogKind | undefined) => tr(kind === 'sand' ? 'ed.nameSand' : 'ed.nameFog');
 /** Objects that always stay square */
-const isSquare = (o: { role: Role; trigger?: { kind: TriggerKind }; saw?: { kind: string } }) => o.role === 'portal' || o.role === 'laser' || isButton(o.trigger?.kind) || o.saw?.kind === 'disc';
+const isSquare = (o: { role: Role; trigger?: { kind: TriggerKind }; saw?: { kind: string } }) => o.role === 'pulley' || o.role === 'portal' || o.role === 'laser' || isButton(o.trigger?.kind) || o.saw?.kind === 'disc';
 
 /** "Moving …" / "Rotating …" */
 function withBehavior(beh: Behavior, name: string): string {
@@ -115,6 +115,7 @@ function toolLabel(t: ObjectTool): string {
   if (t.role === 'trigger') return TRIGGER_NAMES[t.trigger ?? 'switch'];
   if (t.special === 'spike') return tr('ed.nameSpike');
   if (t.special === 'boulder') return tr('ed.nameBoulder');
+  if (t.special === 'fall') return tr('ed.nameFall');
   if (t.role === 'fog') return fogName(t.fog);
   if (t.role === 'torch') return tr(t.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch');
   if (t.special === 'disc' || t.special === 'blade') return withBehavior(t.behavior === 'moving' ? 'moving' : 'static', tr(t.special === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
@@ -138,6 +139,8 @@ function describeObject(o: MapObject): string {
   if (o.role === 'trigger') return withBehavior(beh, tr('ed.colorName', { color: switchColor(o.trigger?.color ?? 0).name, name: TRIGGER_NAMES[o.trigger?.kind ?? 'switch'] }));
   if (o.spike) return tr('ed.nameSpike');
   if (o.boulder) return tr('ed.nameBoulder');
+  if (o.fall) return tr('ed.nameFall');
+  if (o.role === 'pulley') return tr('ed.colorName', { color: switchColor(o.pulley?.color ?? 0).name, name: tr('ed.namePulley') });
   if (o.role === 'fog') return withBehavior(beh, fogName(o.fog?.kind));
   if (o.role === 'torch') return withBehavior(beh, tr(o.torch?.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch'));
   if (o.saw) return withBehavior(o.motion ? 'moving' : 'static', tr(o.saw.kind === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
@@ -161,8 +164,10 @@ function objectToolId(o: MapObject): number {
   if (o.role === 'safe') return SPECIAL_IDS.safe;
   if (o.role === 'fog') return o.fog?.kind === 'sand' ? SPECIAL_IDS.sand : SPECIAL_IDS.fog;
   if (o.role === 'torch') return o.torch?.carry ? SPECIAL_IDS.carryTorch : SPECIAL_IDS.torch;
-  if (o.role === 'secret') return SPECIAL_IDS.secret;
+  if (o.role === 'secret') return isFreeform(o.shape) ? SPECIAL_IDS.secretFree : SPECIAL_IDS.secret;
   if (o.role === 'crystal') return SPECIAL_IDS.crystal;
+  if (o.role === 'pulley') return SPECIAL_IDS.pulley;
+  if (o.fall) return SPECIAL_IDS.fall;
   if (o.role === 'trigger') return TRIGGER_IDS[o.trigger?.kind ?? 'switch'];
   if (o.shape.type === 'sector' && o.shape.inner) return o.role === 'path' ? SPECIAL_IDS.ringPath : SPECIAL_IDS.ringWall;
   if (o.shape.type === 'sector') return o.role === 'path' ? SPECIAL_IDS.sectorPath : SPECIAL_IDS.sectorWall;
@@ -885,7 +890,13 @@ export class Editor {
     const cloudIcon = '<path d="M6 17 C2.5 17 2.5 12 6 12 C6 8 11 7 12.5 10 C14 7 19.5 8 18.5 12 C22 12 22 17 18 17 Z"/>';
     addButton(row, fogTool('fog'), `${svg(`${cloudIcon}<path d="M4 20 L20 20" stroke-width="1.6" fill="none" stroke-linecap="round"/>`)}<span class="pal-num">49</span>`, tr('ed.palFog'), 'pal-fog');
     addButton(row, fogTool('sand'), `${svg(`${cloudIcon}<circle cx="5" cy="20.5" r="1"/><circle cx="10" cy="21" r="1"/><circle cx="15" cy="20.5" r="1"/><circle cx="20" cy="21" r="1"/>`)}<span class="pal-num">50</span>`, tr('ed.palSandDust'), 'pal-sand');
-    // Ring sectors (#53/#54), secret wall (#55), torches (#57/#58)
+    // Falling rock (#51) and pulley (#52)
+    const fallTool: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'poly', special: 'fall' };
+    const fallRock = boulderShape(12, 9, 6.5).map((p) => `${p.x},${p.y}`).join(' ');
+    addButton(row, fallTool, `${svg(`<polygon points="${fallRock}"/><path d="M12 17 L12 23 M9.5 20.5 L12 23 L14.5 20.5" stroke-width="1.6" fill="none" stroke-linecap="round"/>`)}<span class="pal-num">51</span>`, tr('ed.palFall'), 'pal-wall pal-moving');
+    const pulleyTool: ObjectTool = { kind: 'object', role: 'pulley', behavior: 'static', shape: 'ellipse' };
+    addButton(row, pulleyTool, `${svg('<circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 5 L12 19 M5.9 8.5 L18.1 15.5 M5.9 15.5 L18.1 8.5" stroke-width="1.6"/><circle cx="12" cy="12" r="2.4"/>')}<span class="pal-num">52</span>`, tr('ed.palPulley'), 'pal-switch');
+    // Ring sectors (#53/#54), secret walls (#55/#56), torches (#57/#58), crystal star (#59)
     const ringIcon = '<path d="M4 20 L4 4 A16 16 0 0 1 20 20 L13 20 A9 9 0 0 0 4 11 Z"/>';
     const ringPath: ObjectTool = { kind: 'object', role: 'path', behavior: 'static', shape: 'sector', ring: true };
     const ringWall: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'sector', ring: true };
@@ -893,12 +904,14 @@ export class Editor {
     addButton(row, ringWall, `${svg(ringIcon)}<span class="pal-num">54</span>`, tr('ed.palRingWall'), 'pal-wall pal-static');
     const secretTool: ObjectTool = { kind: 'object', role: 'secret', behavior: 'static', shape: 'rect' };
     addButton(row, secretTool, `${svg('<rect x="3" y="4" width="18" height="16" rx="1.5"/><circle cx="12" cy="12" r="4.5" fill="#fff" fill-opacity="0.9"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">55</span>`, tr('ed.palSecretWall'), 'pal-wall pal-static');
-    const crystalTool: ObjectTool = { kind: 'object', role: 'crystal', behavior: 'static', shape: 'rect' };
-    addButton(row, crystalTool, `${svg('<path d="M12 2 L14.9 8.6 L22 9.3 L16.6 14 L18.2 21 L12 17.3 L5.8 21 L7.4 14 L2 9.3 L9.1 8.6 Z"/>')}<span class="pal-num">56</span>`, tr('ed.palCrystal'), 'pal-crystal');
+    const secretFreeTool: ObjectTool = { kind: 'object', role: 'secret', behavior: 'static', shape: 'free' };
+    addButton(row, secretFreeTool, `${svg('<path d="M4 18 C3 9 9 3 13 7 S 21 8 20 15 S 9 21 4 18 Z"/><circle cx="12" cy="12.5" r="4" fill="#fff" fill-opacity="0.9"/><circle cx="12" cy="12.5" r="1.4"/>')}<span class="pal-num">56</span>`, tr('ed.palSecretWallFree'), 'pal-wall pal-static');
     const torchIcon = '<path d="M10 12 L14 12 L13 22 L11 22 Z" fill="#8a5a2b"/><path d="M12 2.5 C15.5 6.5 16 9 14.6 11.5 L9.4 11.5 C8 9 8.5 6.5 12 2.5 Z" fill="#ff8a1f"/><path d="M12 6 C13.6 8 13.8 9.6 13 11 L11 11 C10.2 9.6 10.4 8 12 6 Z" fill="#ffd45e"/>';
     const torchTool = (carry: boolean): ObjectTool => ({ kind: 'object', role: 'torch', behavior: 'static', shape: 'rect', ...(carry ? { carry: true } : {}) });
     addButton(row, torchTool(false), `${svg(torchIcon)}<span class="pal-num">57</span>`, tr('ed.palTorch'), 'pal-torch');
     addButton(row, torchTool(true), `${svg(`${torchIcon}<path d="M16 14 L22.5 17 L19.4 18 L18.4 21.2 Z" fill="#2b86e0"/>`)}<span class="pal-num">58</span>`, tr('ed.palCarryTorch'), 'pal-torch');
+    const crystalTool: ObjectTool = { kind: 'object', role: 'crystal', behavior: 'static', shape: 'rect' };
+    addButton(row, crystalTool, `${svg('<path d="M12 2 L14.9 8.6 L22 9.3 L16.6 14 L18.2 21 L12 17.3 L5.8 21 L7.4 14 L2 9.3 L9.1 8.6 Z"/>')}<span class="pal-num">59</span>`, tr('ed.palCrystal'), 'pal-crystal');
     // #42 is a map setting, not an object: the button toggles it
     const g = document.createElement('button');
     g.type = 'button';
@@ -1074,7 +1087,7 @@ export class Editor {
       const t = this.tool;
       const how = tr(t.special === 'spike' ? 'ed.howSpike'
         : t.special === 'boulder' ? 'ed.howBoulder'
-          : t.role === 'torch' || t.role === 'crystal' ? 'ed.howTorch'
+          : t.role === 'torch' || t.role === 'crystal' || t.special === 'fall' ? 'ed.howTorch'
           : t.role === 'mirror' ? 'ed.howMirror'
             : t.role === 'laser' ? 'ed.howLaser'
               : t.role === 'portal' ? 'ed.howPortal' : t.shape === 'sector' ? 'ed.howSector' : t.role === 'coin' ? 'ed.howCoin' : t.shape === 'poly' || t.shape === 'free' ? 'ed.howPoints' : t.shape === 'ellipse' ? 'ed.howEllipse' : 'ed.howRect');
@@ -1102,7 +1115,7 @@ export class Editor {
     const objs = this.compiled;
     const zoneTrigger = (i: number) => !isButton(this.map.objects[i]?.trigger?.kind);
     // Text boxes are drawn over everything, so they are picked first
-    for (const role of ['text', 'coin', 'crystal', 'torch', 'portal', 'laser', 'trigger', 'wall', 'door', 'mirror'] as const) {
+    for (const role of ['text', 'coin', 'crystal', 'torch', 'pulley', 'portal', 'laser', 'trigger', 'wall', 'door', 'mirror'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
@@ -1534,7 +1547,9 @@ export class Editor {
 
     if (tool.shape === 'sector') return this.addObject(tool, this.sectorFromDrag(d, tool.ring));
     if (tool.special === 'spike' || tool.role === 'mirror') return this.addObject(tool, this.lineShapeFromDrag(tool, d));
-    if (tool.special === 'boulder') return this.addObject(tool, { type: 'poly', points: boulderShape(d.x0, d.y0, 26) });
+    if (tool.special === 'boulder' || tool.special === 'fall') return this.addObject(tool, { type: 'poly', points: boulderShape(d.x0, d.y0, 26) });
+    // Pulleys: an 80 px wheel centered on the click (a drag sets its size)
+    if (tool.role === 'pulley' && r.w < 4 && r.h < 4) r = { x: d.x0 - 40, y: d.y0 - 40, w: 80, h: 80 };
     // Lasers 24×24 and portals 40×40, square, centered on the click
     if (tool.role === 'laser' || tool.role === 'portal') {
       const size = tool.role === 'laser' ? 24 : 40;
@@ -1648,6 +1663,8 @@ export class Editor {
       if (tool.carry) o.torch = { carry: true };
     }
     if (tool.role === 'secret') o.secret = { radius: DEFAULT_SECRET_RADIUS };
+    if (tool.special === 'fall') o.fall = { ...DEFAULT_FALL };
+    if (tool.role === 'pulley') o.pulley = { color: this.lastColor, ...DEFAULT_PULLEY };
     if (tool.role === 'laser') o.laser = { color: this.lastColor, angle: 0, on: true };
     if (tool.role === 'portal') {
       const same = this.map.objects.filter((m) => m.portal?.color === this.lastColor).length;
@@ -1904,7 +1921,7 @@ export class Editor {
     const toMap = this.alignToMap || (zone ? true : units.length < 2);
     const cmd = (label: string, enabled: boolean, run: () => void, keys?: string): Command => ({ label, enabled, run, keys });
     const align = (mode: AlignMode, label: string) => cmd(label, n > 0 || !!zone, () => this.align(mode));
-    const mergeable = ids.every((i) => (objs[i].role === 'path' || objs[i].role === 'wall' || objs[i].role === 'dark') && !objs[i].spike && !objs[i].boulder && !objs[i].saw);
+    const mergeable = ids.every((i) => (objs[i].role === 'path' || objs[i].role === 'wall' || objs[i].role === 'dark') && !objs[i].spike && !objs[i].boulder && !objs[i].saw && !objs[i].fall);
     const merge = (op: MergeOp, label: string) => cmd(label, n >= 2 && mergeable, () => this.merge(op));
     return {
       cut: cmd(tr('ed.cut'), n > 0, () => this.copySelected() && this.deleteSelected(), 'Ctrl+X'),
@@ -2431,6 +2448,8 @@ export class Editor {
     if (o.trigger) parts.push(...this.triggerProps(o));
     if (o.door) parts.push(...this.doorProps(o));
     if (o.spike) parts.push(...this.spikeProps(o));
+    if (o.fall) parts.push(...this.fallProps(o));
+    if (o.pulley) parts.push(...this.pulleyProps(o));
     if (o.saw) parts.push(...this.sawProps(o));
     if (o.text) parts.push(...this.textProps(o));
     if (o.boulder) {
@@ -2491,7 +2510,7 @@ export class Editor {
     if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'fog' || o.role === 'mirror') parts.push(...this.linkProps(o));
 
     // Movement (a spike's thrust is its movement)
-    if (!o.spike) {
+    if (!o.spike && !o.fall) {
     // Movement
     parts.push(this.heading(tr('ed.movement')), this.toggle(tr('ed.movesAlongARoute'), !!o.motion, (on) => {
       if (on) {
@@ -2563,7 +2582,7 @@ export class Editor {
     }
 
     // Rotation (a boulder spins by rolling, a saw by itself)
-    if (!o.boulder && !o.saw) {
+    if (!o.boulder && !o.saw && !o.fall) {
     // Rotation
     parts.push(this.heading(tr('ed.rotation')), this.toggle(tr('ed.rotatesAroundAPivot'), !!o.rotation, (on) => {
       if (on) o.rotation = defaultRotation(o);
@@ -2662,6 +2681,41 @@ export class Editor {
       stopZone: tr('ed.whatStopZone'),
     }[t.kind];
     out.push(this.note(`${what} ${tr(linked === 1 ? 'ed.linkedOne' : 'ed.linkedMany', { n: linked, color: switchColor(t.color).name })}`));
+    return out;
+  }
+
+  /** Falling rock (#51): drop height and timing */
+  private fallProps(o: MapObject): HTMLElement[] {
+    const f = o.fall!;
+    const sec = (v: number) => v / 1000;
+    const ms = (v: number, min: number) => Math.round(Math.min(LIMITS.maxDelay, Math.max(min, v)) * 1000);
+    return [
+      this.heading(tr('ed.nameFall')),
+      this.group(
+        this.numField(tr('ed.fallHeight'), f.height, (v) => (f.height = Math.max(1, Math.round(v))), 10),
+        this.numField(tr('ed.fallTimeS'), sec(f.fallMs), (v) => (f.fallMs = ms(v, 0.05)), 0.1),
+        this.numField(tr('ed.restS'), sec(f.waitMs), (v) => (f.waitMs = ms(v, 0)), 0.1),
+        this.numField(tr('ed.startDelayS'), sec(f.delay), (v) => (f.delay = Math.round(Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, v)) * 1000)), 0.1),
+      ),
+      this.note(tr('ed.fallNote')),
+    ];
+  }
+
+  /** Pulley (#52): color, what happens when it isn't turned, and how far a turn winds */
+  private pulleyProps(o: MapObject): HTMLElement[] {
+    const p = o.pulley!;
+    const linked = this.map.objects.filter((m) => m.link?.action === 'pulley' && m.link.color === p.color).length;
+    const out: HTMLElement[] = [
+      this.heading(tr('ed.namePulley')),
+      this.colorPicker(p.color, (c) => (p.color = c)),
+      this.group(
+        this.selectField<'hold' | 'unwind'>(tr('ed.pulleyRelease'), p.mode, [['hold', tr('ed.pulleyHold')], ['unwind', tr('ed.pulleyUnwind')]], (v) => (p.mode = v), true),
+        this.numField(tr('ed.pulleyTurnS'), p.turnMs / 1000, (v) => (p.turnMs = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1),
+        ...(p.mode === 'unwind' ? [this.numField(tr('ed.pulleyUnwindSpeed'), p.unwind, (v) => (p.unwind = Math.round(Math.min(100, Math.max(0, v)))), 10)] : []),
+      ),
+      this.note(tr('ed.pulleyNote')),
+      this.note(tr(linked === 1 ? 'ed.linkedOne' : 'ed.linkedMany', { n: linked, color: switchColor(p.color).name })),
+    ];
     return out;
   }
 
@@ -2880,8 +2934,9 @@ export class Editor {
           ['start', tr('ed.movesStartsMoving')],
           ['stop', tr('ed.stopsMoving')],
           ['remove', tr('ed.isRemoved')],
+          ['pulley', tr('ed.movesWithPulley')],
         ], (v) => (l.action = v), true)),
-        this.note(tr('ed.movesObjectsStayStillUntil')),
+        this.note(tr(l.action === 'pulley' ? 'ed.movesWithPulleyNote' : 'ed.movesObjectsStayStillUntil')),
       );
     }
     return out;
@@ -3279,6 +3334,22 @@ export class Editor {
     }
     ctx.setLineDash([]);
 
+    // Falling rocks (#51): a dashed drop line from where each one starts falling, with its outline there
+    ctx.setLineDash([4 * u, 4 * u]);
+    ctx.strokeStyle = 'rgba(226,72,108,0.65)';
+    ctx.lineWidth = 1.2 * u;
+    for (const o of objs) {
+      const f = o.src?.fall;
+      if (!f) continue;
+      const cx = (o.minX + o.maxX) / 2;
+      const cy = (o.minY + o.maxY) / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - f.height);
+      ctx.lineTo(cx, cy);
+      traceObject(ctx, o, { dx: 0, dy: -f.height, cos: 1, sin: 0 });
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
     // Secret walls see-through (the reveal follows the mouse), outlined like the other areas
     drawSecretWalls(ctx, map, objs, t, this.hover, 0.5);
     ctx.setLineDash([5 * u, 4 * u]);

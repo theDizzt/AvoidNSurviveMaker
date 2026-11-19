@@ -22,7 +22,7 @@ function run(m: MapData, points: [number, number][]): Simulation {
   return sim;
 }
 
-describe('crystal star (#56)', () => {
+describe('crystal star (#59)', () => {
   it('is always 48×48 around where it was placed', () => {
     const [o] = mapWith([crystal(500, 300)]).objects;
     expect(o.shape).toEqual({ type: 'rect', x: 476, y: 276, w: LIMITS.crystalSize, h: LIMITS.crystalSize });

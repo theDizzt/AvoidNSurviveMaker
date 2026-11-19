@@ -3,6 +3,9 @@ import { displayTime } from './time';
 import { compileMap, compileObject, compileZone, toLocal, toWorld, transformAt, type CompiledObject, type Transform } from './object';
 import { autoDoorOpen, doorPanels, initialChannels } from './switches';
 import { BeamCaster, beamHit, type Beam } from './laser';
+import { fallState } from './hazards';
+import { CompiledMotion, CompiledRotation } from './motion';
+import { shapeCenter } from './shape';
 
 /** How long a portal pulls the cursor to its center before teleporting (ms) */
 export const PORTAL_PULL_MS = 160;
@@ -10,8 +13,12 @@ export const PORTAL_PULL_MS = 160;
 export const COIN_MAGNET = 36;
 /** How long a collected coin takes to fly into the cursor (ms, drawing only) */
 export const COIN_PULL_MS = 180;
-/** A crystal star (#56, 48×48) is picked up this close to its center */
+/** A crystal star (#59, 48×48) is picked up this close to its center */
 export const CRYSTAL_MAGNET = 48;
+/** An unwinding pulley (#52) starts running back this long (ms) after it was last turned */
+export const PULLEY_UNWIND_AFTER = 150;
+/** Turning only counts this far (map units) from a pulley's center, where the angle is stable */
+const PULLEY_DEAD_ZONE = 3;
 import type { MapData, Point } from './types';
 
 export type SimStatus = 'ready' | 'playing' | 'dead' | 'cleared';
@@ -74,7 +81,7 @@ export class Simulation {
   /** Number of coins on the map */
   readonly coinTotal: number;
   coinsLeft: number;
-  /** The map has a crystal star (#56) */
+  /** The map has a crystal star (#59) */
   readonly hasCrystal: boolean;
   /** The cursor has picked up the crystal star this run; a clear with it earns the bonus star */
   crystalHeld = false;
@@ -88,6 +95,19 @@ export class Simulation {
   private readonly coins: readonly number[];
   /** Indices (into `objects`) of the crystal stars (at most one on a valid map) */
   private readonly crystals: readonly number[];
+  /** Falling rocks (#51): hidden while not falling */
+  private readonly falls: readonly number[];
+
+  // ── Pulleys (#52) ──
+  private readonly pulleys: readonly number[];
+  /** Per object (pulleys): how far it has turned (radians, + = clockwise), for drawing */
+  readonly pulleyAngle: Float64Array;
+  /** Per color: the motion time (ms) its pulleys have wound the 'pulley'-linked objects to */
+  readonly pulleyTime = new Float64Array(16);
+  /** Per color: the furthest that time can go (end of 'once' motions; Infinity otherwise) */
+  private readonly pulleyCap = new Float64Array(16);
+  /** Per object (pulleys): when it was last turned */
+  private readonly lastTurn: Float64Array;
 
   // ── Switches ──
   /** Per switch color: 1 while ON */
@@ -200,6 +220,24 @@ export class Simulation {
     this.solidSlide = Float64Array.from(slide);
     this.coins = this.objects.flatMap((o, i) => (o.role === 'coin' ? [i] : []));
     this.crystals = this.objects.flatMap((o, i) => (o.role === 'crystal' ? [i] : []));
+    this.falls = map.objects.flatMap((o, i) => (o.fall ? [i] : []));
+    this.pulleys = map.objects.flatMap((o, i) => (o.role === 'pulley' && o.pulley ? [i] : []));
+    this.pulleyAngle = new Float64Array(this.objects.length);
+    this.lastTurn = new Float64Array(this.objects.length);
+    // How far a pulley can wind each color: until every linked 'once' motion / rotation has ended
+    for (const m of map.objects) {
+      if (m.link?.action !== 'pulley') continue;
+      let end = 0;
+      if (m.motion) {
+        const route = new CompiledMotion(m.motion, shapeCenter(m.shape));
+        end = Math.max(end, m.motion.repeat === 'once' ? route.pass + Math.max(0, m.motion.delay) : Infinity);
+      }
+      if (m.rotation) {
+        const turn = new CompiledRotation(m.rotation);
+        end = Math.max(end, m.rotation.repeat === 'once' ? turn.dur + Math.max(0, m.rotation.delay) : Infinity);
+      }
+      this.pulleyCap[m.link.color] = Math.max(this.pulleyCap[m.link.color], end);
+    }
     this.hasCrystal = this.crystals.length > 0;
     this.triggers = this.objects.flatMap((o, i) => (o.role === 'trigger' ? [i] : []));
     this.linked = map.objects.flatMap((o, i) => (o.link ? [i] : []));
@@ -579,6 +617,9 @@ export class Simulation {
     this.holdFired.fill(0);
     this.progress.fill(0);
     for (let i = 0; i < this.clock.length; i++) this.clock[i] = 0;
+    this.pulleyTime?.fill(0);
+    this.pulleyAngle?.fill(0);
+    this.lastTurn?.fill(-Infinity);
     for (const d of this.doors) {
       const door = this.map.objects[d].door!;
       this.doorOpen[d] = door.mode === 'auto' ? autoDoorOpen(door, 0) : this.channels[door.color];
@@ -614,9 +655,12 @@ export class Simulation {
     }
     this.updateDerived(ta);
     const dt = tb - ta;
+    this.unwindPulleys(tb, dt);
     for (let i = 0; i < this.clock.length; i++) this.clockB[i] = tb;
     for (const i of this.linked) {
-      if (this.runs(i)) this.clockB[i] = this.clock[i] + dt;
+      const link = this.map.objects[i].link!;
+      if (link.action === 'pulley') this.clockB[i] = this.pulleyTime[link.color];
+      else if (this.runs(i)) this.clockB[i] = this.clock[i] + dt;
       else if (this.rewinds(i)) this.clockB[i] = Math.max(0, this.clock[i] - dt);
       else this.clockB[i] = this.clock[i];
     }
@@ -636,6 +680,7 @@ export class Simulation {
     for (const d of this.doors) this.doorOpen[d] = this.openB[d];
     if (this.caster.any) this.beams = this.pendingBeams;
     this.checkPortals(xa, ya, xb, yb, tb);
+    this.turnPulleys(xa, ya, xb, yb, tb);
     const dt = tb - ta;
     const out: number[] = [];
     for (const i of this.triggers) {
@@ -685,6 +730,48 @@ export class Simulation {
       }
     }
     this.updateDerived(tb);
+  }
+
+  /**
+   * Circling the cursor inside a pulley turns it by the angle swept around its center (both ends of
+   * the segment inside it); that winds its color's linked objects forward (clockwise) or back.
+   */
+  private turnPulleys(xa: number, ya: number, xb: number, yb: number, tb: number): void {
+    for (const i of this.pulleys) {
+      if (this.hidden[i]) continue;
+      const o = this.objects[i];
+      const p = this.map.objects[i].pulley!;
+      transformAt(o, this.clock[i], tfA);
+      toWorld(o, tfA, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, pA);
+      const r = Math.min(o.maxX - o.minX, o.maxY - o.minY) / 2;
+      const da = Math.hypot(xa - pA.x, ya - pA.y);
+      const db = Math.hypot(xb - pA.x, yb - pA.y);
+      if (da > r || db > r || da < PULLEY_DEAD_ZONE || db < PULLEY_DEAD_ZONE) continue;
+      let d = Math.atan2(yb - pA.y, xb - pA.x) - Math.atan2(ya - pA.y, xa - pA.x);
+      if (d > Math.PI) d -= Math.PI * 2;
+      else if (d < -Math.PI) d += Math.PI * 2;
+      if (d === 0) continue;
+      this.lastTurn[i] = tb;
+      this.windPulley(i, (d / (Math.PI * 2)) * p.turnMs);
+    }
+  }
+
+  /** Move pulley `i`'s color `ms` along (clamped to the start and the end); the wheel turns with it */
+  private windPulley(i: number, ms: number): void {
+    const p = this.map.objects[i].pulley!;
+    const before = this.pulleyTime[p.color];
+    const after = Math.min(this.pulleyCap[p.color], Math.max(0, before + ms));
+    this.pulleyTime[p.color] = after;
+    this.pulleyAngle[i] += ((after - before) / p.turnMs) * Math.PI * 2;
+  }
+
+  /** Unwinding pulleys that haven't been turned lately run their objects back toward the start */
+  private unwindPulleys(tb: number, dt: number): void {
+    for (const i of this.pulleys) {
+      const p = this.map.objects[i].pulley!;
+      if (p.mode !== 'unwind' || p.unwind <= 0 || tb - this.lastTurn[i] < PULLEY_UNWIND_AFTER) continue;
+      if (this.pulleyTime[p.color] > 0) this.windPulley(i, (-dt * p.unwind) / 100);
+    }
   }
 
   /** Touching a portal starts the pull toward its center */
@@ -759,6 +846,12 @@ export class Simulation {
     }
     for (const i of this.coins) if (this.collected[i]) this.hidden[i] = 1;
     for (const i of this.crystals) if (this.collected[i]) this.hidden[i] = 1;
+    // Falling rocks are only there while falling (a switch can still remove them)
+    for (const i of this.falls) {
+      const falling = fallState(this.map.objects[i].fall!, this.clock[i]).falling;
+      if (!falling) this.hidden[i] = 1;
+      else if (!this.map.objects[i].link) this.hidden[i] = 0;
+    }
     for (const i of this.triggers) {
       const trig = this.map.objects[i].trigger!;
       if (trig.kind === 'timer') {

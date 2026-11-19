@@ -1480,8 +1480,11 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 .dvolume:has(input:focus-visible) .ddial-thumb { stroke: #326bc0; stroke-width: 4; }
 
 /* Records sync */
-.drecords .dtile-in { gap: 4px; }
-.drecords small { max-width: 130px; }
+.drecords .dtile-in { gap: 3px; }
+.drecords small { max-width: 130px; line-height: 1.25; }
+/* Sync and Import side by side, so both stay inside the diamond */
+.drecords .dpill-row { gap: 4px; margin-top: 4px; }
+.drecords .dpill { --size: 66px; padding: 0 8px; font-size: 10px; line-height: 1.05; word-break: keep-all; }
 
 /* Language picker */
 .dlanguage .dtile-in { gap: 4px; }
@@ -1634,7 +1637,5 @@ body:has(#play-view.running) .toast { visibility: hidden; }
 .ach-seen { margin-top: 6px; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #fff; border: 1px solid rgba(182, 138, 38, 0.5); color: #8a6410; cursor: pointer; }
 .ach-seen:hover, .ach-seen:focus-visible { background: #fff8dc; outline: none; box-shadow: 0 0 0 2px #b68a26; }
 
-/* Crystal star (#56) after a level's stars: lit once earned */
-.dstars .dcrystal { margin-left: 2px; }
-.dstars .dcrystal.on { color: #6fd6ff; text-shadow: 0 0 6px rgba(111, 214, 255, 0.9), 0 0 1px #4b3fb8; }
-.dstars .dcrystal.off { opacity: 0.35; }
+/* Crystal star (#59): a 4th, blue star once earned */
+.dstars .dcrystal { color: #3b9cff; text-shadow: 0 0 6px rgba(80, 170, 255, 0.85), 0 0 1px #1d4fb8; opacity: 1; }

@@ -7,7 +7,8 @@ import { switchColor } from '../core/colors';
 import type { Beam } from '../core/laser';
 import { autoDoorOpen, doorPanels, initialChannels } from '../core/switches';
 import { isLibraryFont } from '../core/font-catalog';
-import type { Fill, MapData, MapObject, Point, Rect, TextBox } from '../core/types';
+import type { Fall, Fill, MapData, MapObject, Point, Pulley, Rect, TextBox } from '../core/types';
+import { fallState } from '../core/hazards';
 import { libraryFontCss } from './library-fonts';
 import { CompiledMotion } from '../core/motion';
 import { shapeCenter } from '../core/shape';
@@ -501,6 +502,8 @@ export interface DrawMapOptions {
   coinsLeft?: number;
   /** Per object index: 1 while the cursor carries that torch (#58): not drawn in place */
   carried?: ArrayLike<number>;
+  /** Per object index (pulleys, #52): how far it has turned (radians) */
+  pulleyAngle?: ArrayLike<number>;
 }
 
 /** A coin: gold disc with a rim and a highlight, in the object's own (posed) frame */
@@ -775,7 +778,18 @@ export function drawMap(
   objects.forEach((o, i) => {
     if (o.role === 'coin' && shown(i)) drawCoin(ctx, o, timeOf(i));
   });
-  // Crystal stars (#56)
+  // Falling rocks (#51): a shadow growing where the rock will land, and shards once it has
+  const fallEdge = theme ? theme.wall.edge : COLORS.wallEdge;
+  objects.forEach((o, i) => {
+    const f = map.objects[i]?.fall;
+    if (f) drawFallEffects(ctx, o, f, timeOf(i), fallEdge, i);
+  });
+  // Pulleys (#52)
+  objects.forEach((o, i) => {
+    const p = map.objects[i]?.pulley;
+    if (p && o.role === 'pulley' && shown(i)) drawPulley(ctx, o, timeOf(i), p, opts.pulleyAngle?.[i] ?? 0);
+  });
+  // Crystal stars (#59)
   objects.forEach((o, i) => {
     if (o.role === 'crystal' && shown(i)) drawCrystal(ctx, o, timeOf(i), opts.now ?? t);
   });
@@ -870,6 +884,111 @@ function enterPose(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number):
   );
 }
 
+/** How long a falling rock's shards fly after it lands (ms) */
+const SHATTER_MS = 450;
+
+/**
+ * Around a falling rock (#51): while it falls, a shadow on its landing place that darkens as it
+ * nears; right after it lands, shards flying apart and a puff of dust.
+ */
+function drawFallEffects(ctx: CanvasRenderingContext2D, o: CompiledObject, f: Fall, t: number, color: string, seed: number): void {
+  const s = fallState(f, t);
+  const cx = (o.minX + o.maxX) / 2;
+  const cy = (o.minY + o.maxY) / 2;
+  const r = Math.min(o.maxX - o.minX, o.maxY - o.minY) / 2;
+  ctx.save();
+  if (s.falling) {
+    ctx.fillStyle = `rgba(20,24,34,${0.12 + 0.3 * s.u * s.u})`;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.55, r * (0.45 + 0.55 * s.u), r * (0.18 + 0.22 * s.u), 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (s.sinceLanding < SHATTER_MS) {
+    const k = s.sinceLanding / SHATTER_MS;
+    // Dust
+    ctx.fillStyle = `rgba(200,190,170,${0.45 * (1 - k)})`;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.4, r * (0.8 + 0.9 * k), r * (0.35 + 0.3 * k), 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Shards: fixed directions per rock, flying out and falling back with gravity
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 1 - k;
+    for (let n = 0; n < 8; n++) {
+      const a = -Math.PI + (n / 7) * Math.PI + Math.sin(seed * 7.3 + n) * 0.25;
+      const v = r * (1.6 + ((n * 37 + seed * 11) % 7) / 6);
+      const x = cx + Math.cos(a) * v * k;
+      const y = cy + Math.sin(a) * v * k + r * 2.2 * k * k;
+      const size = r * (0.22 + ((n * 13 + seed) % 5) / 20);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(k * (n % 2 ? 6 : -5));
+      ctx.beginPath();
+      ctx.moveTo(-size, -size * 0.4);
+      ctx.lineTo(size * 0.6, -size * 0.7);
+      ctx.lineTo(size, size * 0.5);
+      ctx.lineTo(-size * 0.3, size * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+}
+
+/** Pulley (#52): a wheel with a rim in its switch color and spokes that turn as it is turned */
+function drawPulley(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, p: Pulley, angle: number): void {
+  ctx.save();
+  enterPose(ctx, o, t);
+  const cx = (o.minX + o.maxX) / 2;
+  const cy = (o.minY + o.maxY) / 2;
+  const r = Math.min(o.maxX - o.minX, o.maxY - o.minY) / 2;
+  const hex = switchColor(p.color).hex;
+  // Wheel
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  ctx.strokeStyle = hex;
+  ctx.lineWidth = Math.max(2, r * 0.16);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - ctx.lineWidth / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Groove
+  ctx.strokeStyle = 'rgba(36,52,80,0.35)';
+  ctx.lineWidth = Math.max(1, r * 0.04);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.72, 0, Math.PI * 2);
+  ctx.stroke();
+  // Spokes, turning with the pulley
+  ctx.strokeStyle = hex;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1.5, r * 0.1);
+  ctx.beginPath();
+  for (let k = 0; k < 6; k++) {
+    const a = angle + (k * Math.PI) / 3;
+    ctx.moveTo(cx + Math.cos(a) * r * 0.2, cy + Math.sin(a) * r * 0.2);
+    ctx.lineTo(cx + Math.cos(a) * r * 0.7, cy + Math.sin(a) * r * 0.7);
+  }
+  ctx.stroke();
+  // Handle on the rim, so the turning reads clearly
+  ctx.fillStyle = '#243450';
+  ctx.beginPath();
+  ctx.arc(cx + Math.cos(angle) * r * 0.82, cy + Math.sin(angle) * r * 0.82, Math.max(2, r * 0.1), 0, Math.PI * 2);
+  ctx.fill();
+  // Hub
+  ctx.fillStyle = hex;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#243450';
+  ctx.lineWidth = Math.max(1, r * 0.04);
+  ctx.stroke();
+  // ↻ hint: which way winds forward
+  ctx.strokeStyle = 'rgba(36,52,80,0.4)';
+  ctx.lineWidth = Math.max(1, r * 0.05);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.88, -Math.PI * 0.9, -Math.PI * 0.55);
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** Five-pointed star outline centered at (cx, cy) */
 function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, inner: number, turn = 0): void {
   ctx.beginPath();
@@ -882,23 +1001,36 @@ function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: numb
   ctx.closePath();
 }
 
+/** One crystal-star pulse (ms) */
+const CRYSTAL_PULSE_MS = 1200;
+
 /**
- * A crystal star (#56) `size` across at (cx, cy): a faceted ice-blue to violet star with a soft
- * halo and a slowly travelling glint. `now` animates the glint; `alpha` fades it.
+ * A crystal star (#59) `size` across at (cx, cy): a faceted ice-blue to violet star that pulses:
+ * it swells a little and brightens, and a ring of light spreads from it and fades. `now` drives
+ * the pulse; `alpha` fades it all.
  */
 export function drawCrystalAt(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, now: number, alpha = 1): void {
-  const r = size / 2;
+  const phase = (now % CRYSTAL_PULSE_MS) / CRYSTAL_PULSE_MS;
+  // 0 → 1 → 0 early in each pulse, then rest
+  const beat = Math.pow(Math.sin(Math.PI * Math.min(1, phase * 1.6)), 2);
+  const r = (size / 2) * (1 + 0.08 * beat);
   const inner = r * 0.48;
   ctx.save();
   ctx.globalAlpha *= alpha;
-  // Halo
-  const halo = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r * 1.25);
-  halo.addColorStop(0, 'rgba(170,230,255,0.45)');
+  // Halo, brighter at the peak
+  const halo = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r * 1.3);
+  halo.addColorStop(0, `rgba(170,230,255,${0.3 + 0.35 * beat})`);
   halo.addColorStop(1, 'rgba(170,230,255,0)');
   ctx.fillStyle = halo;
   ctx.beginPath();
-  ctx.arc(cx, cy, r * 1.25, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r * 1.3, 0, Math.PI * 2);
   ctx.fill();
+  // Ring of light spreading out and fading over the pulse
+  ctx.strokeStyle = `rgba(150,220,255,${0.6 * (1 - phase)})`;
+  ctx.lineWidth = Math.max(0.8, r * 0.08 * (1 - phase));
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * (0.9 + 0.8 * phase), 0, Math.PI * 2);
+  ctx.stroke();
   // Body
   const body = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
   body.addColorStop(0, '#d9fbff');
@@ -928,14 +1060,8 @@ export function drawCrystalAt(ctx: CanvasRenderingContext2D, cx: number, cy: num
     ctx.fillStyle = k % 2 ? 'rgba(255,255,255,0.22)' : 'rgba(40,20,120,0.12)';
     ctx.fill();
   }
-  // Glint sweeping across every few seconds
-  const g = ((now / 1600) % 1.6) - 0.3;
-  const gx = cx - r + g * 2 * r;
-  const glint = ctx.createLinearGradient(gx - r * 0.3, cy - r, gx + r * 0.3, cy + r);
-  glint.addColorStop(0, 'rgba(255,255,255,0)');
-  glint.addColorStop(0.5, 'rgba(255,255,255,0.75)');
-  glint.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = glint;
+  // Pulse: the whole star brightens at the peak
+  ctx.fillStyle = `rgba(255,255,255,${0.35 * beat})`;
   ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
   ctx.restore();
   // Center sparkle

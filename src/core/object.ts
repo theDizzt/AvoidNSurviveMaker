@@ -1,4 +1,4 @@
-import { BladeMotion, Roller, SawSpin, SpikeMover } from './hazards';
+import { BladeMotion, FallMover, FallSpin, Roller, SawSpin, SpikeMover } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
 import { flattenShape, shapeCenter } from './shape';
 import type { MapData, MapObject, Point, Rect, Role } from './types';
@@ -41,16 +41,18 @@ export function compileObject(o: MapObject): CompiledObject {
   const saw = o.role === 'wall' ? o.saw : undefined;
   // A saw blade saws along its long side
   const axis = flat.maxX - flat.minX >= flat.maxY - flat.minY ? { x: 1, y: 0 } : { x: 0, y: 1 };
-  const motion = o.spike ? new SpikeMover(o.spike)
+  const motion = o.fall ? new FallMover(o.fall)
+    : o.spike ? new SpikeMover(o.spike)
     : saw?.kind === 'blade' ? new BladeMotion(route?.moves ? route : null, axis, saw)
       : route;
   // A boulder spins about its own center by the distance it has rolled; a grinder spins steadily
-  const rotation = o.boulder && route?.moves
+  const rotation = o.fall ? new FallSpin(o.fall)
+    : o.boulder && route?.moves
     ? new Roller(route, Math.min(flat.maxX - flat.minX, flat.maxY - flat.minY) / 2)
     : saw?.kind === 'disc' ? new SawSpin(saw)
       : saw ? null
         : o.rotation ? new CompiledRotation(o.rotation) : null;
-  const pivot = o.boulder || saw ? center : o.rotation?.pivot ?? { x: 0, y: 0 };
+  const pivot = o.boulder || saw || o.fall ? center : o.rotation?.pivot ?? { x: 0, y: 0 };
   return {
     src: o,
     role: o.role,

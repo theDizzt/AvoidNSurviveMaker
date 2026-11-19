@@ -37,10 +37,12 @@ export type Shape =
  * fog: fog or sand dust drifting over the area, covering the cursor, obstacles and walls (see `fog`).
  * torch: a harmless light source (#57 / #58, see `torch` and `light`).
  * secret: a secret wall (#55): covers what lies under it like a wall, harmless (see `secret`).
- * crystal: a crystal star (#56), at most one per map: picked up like a coin, it earns a bonus star
+ * pulley: a pulley (#52) in a switch color: circling the cursor inside it turns it, which drives the
+ *   objects linked to its color with the 'pulley' action (see `pulley`).
+ * crystal: a crystal star (#59), at most one per map: picked up like a coin, it earns a bonus star
  *   when the cursor carries it to GOAL.
  */
-export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret' | 'crystal';
+export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret' | 'crystal' | 'pulley';
 
 /** fog: grey-white fog (#49) · sand: blowing sand dust (#50) */
 export type FogKind = 'fog' | 'sand';
@@ -161,7 +163,8 @@ export interface Trigger {
 }
 
 /** What a linked object does while its color is ON */
-export type LinkAction = 'start' | 'stop' | 'remove';
+/** pulley: the object's motion / rotation runs only as a pulley (#52) of its color is turned */
+export type LinkAction = 'start' | 'stop' | 'remove' | 'pulley';
 
 export interface Link {
   color: SwitchColor;
@@ -215,6 +218,31 @@ export interface Motion {
   wave?: Wave;
 }
 
+/**
+ * Falling rock (#51), a wall: waits `waitMs` (not there), then drops from `height` px above its
+ * resting place to it in `fallMs` (speeding up like gravity), shatters and is gone; repeats.
+ * `delay`: ms before the first wait starts.
+ */
+export interface Fall {
+  height: number;
+  fallMs: number;
+  waitMs: number;
+  delay: number;
+}
+
+/**
+ * Pulley (#52): turned by circling the cursor inside it. One clockwise turn moves the objects
+ * linked to its color (action 'pulley') `turnMs` ms forward along their motion; counter-clockwise
+ * moves them back (never before the start). `hold`: they stay put when it isn't turned; `unwind`:
+ * they slowly run back to the start, at `unwind` % of real time.
+ */
+export interface Pulley {
+  color: SwitchColor;
+  mode: 'hold' | 'unwind';
+  turnMs: number;
+  unwind: number;
+}
+
 export interface Wave {
   amplitude: number;
   wavelength: number;
@@ -255,6 +283,10 @@ export interface MapObject {
   spike?: Spike;
   /** Wall that rolls (spins with the distance it travels) along its route (#30) */
   boulder?: boolean;
+  /** Falling rock (#51): drops from `height` above its resting (landing) place, then shatters */
+  fall?: Fall;
+  /** role 'pulley' (#52) */
+  pulley?: Pulley;
   /** role 'laser' */
   laser?: Laser;
   /** role 'portal' */

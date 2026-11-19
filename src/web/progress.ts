@@ -18,7 +18,7 @@ export interface LevelRecord {
   stars: number;
   /** Best clear time (ms) */
   best: number;
-  /** Cleared while carrying the level's crystal star (#56) at least once */
+  /** Cleared while carrying the level's crystal star (#59) at least once */
   crystal?: boolean;
 }
 
@@ -132,7 +132,7 @@ export function mergeRecords(incoming: Record<string, LevelRecord>, authoritativ
   return changed;
 }
 
-/** Crystal stars (#56) earned in a theme, up to 3 */
+/** Crystal stars (#59) earned in a theme, up to 3 */
 export function themeCrystals(theme: ThemeEntry): number {
   const n = filledSlots(theme).reduce((s, i) => s + (records[key(theme, i)]?.crystal ? 1 : 0), 0);
   return Math.min(CRYSTALS_PER_THEME, n);

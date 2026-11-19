@@ -1,5 +1,5 @@
 import type { CompiledMotion } from './motion';
-import type { Point, PolyPoint, Saw, Spike } from './types';
+import type { Fall, Point, PolyPoint, Saw, Spike } from './types';
 
 /**
  * Movement of a spike stake: rest → fast thrust (eases out) → slow return (eases in and out).
@@ -130,4 +130,47 @@ export function spikeShape(base: Point, tip: Point, width: number): PolyPoint[] 
     { x: r(base.x + nx * h), y: r(base.y + ny * h) },
     { x: r(base.x - nx * h), y: r(base.y - ny * h) },
   ];
+}
+
+/**
+ * Where a falling rock (#51) is in its cycle at time t: falling (fraction `u` of the drop, 0–1) or
+ * not there; `sinceLanding` is the ms since it last landed (Infinity before the first landing).
+ */
+export function fallState(f: Fall, t: number): { falling: boolean; u: number; sinceLanding: number } {
+  const tt = t - f.delay;
+  const period = f.waitMs + f.fallMs;
+  if (tt < 0 || period <= 0 || f.fallMs <= 0) return { falling: false, u: 0, sinceLanding: Infinity };
+  const p = tt % period;
+  const landed = tt >= period ? p : Infinity;
+  if (p < f.waitMs) return { falling: false, u: 0, sinceLanding: landed };
+  return { falling: true, u: (p - f.waitMs) / f.fallMs, sinceLanding: Infinity };
+}
+
+/**
+ * The drop: from `height` above down to the resting place, speeding up (u²). While not falling it
+ * rests at the landing place, hidden, so it never jumps within a collision check.
+ */
+export class FallMover {
+  readonly moves = true;
+
+  constructor(private readonly f: Fall) {}
+
+  offsetAt(t: number, out: Point): Point {
+    const s = fallState(this.f, t);
+    out.x = 0;
+    out.y = s.falling ? -this.f.height * (1 - s.u * s.u) : 0;
+    return out;
+  }
+}
+
+/** A falling rock tumbles a little on the way down */
+export class FallSpin {
+  readonly dur = 1;
+
+  constructor(private readonly f: Fall) {}
+
+  angleAt(t: number): number {
+    const s = fallState(this.f, t);
+    return s.falling ? s.u * s.u * Math.PI * 0.9 : 0;
+  }
 }

@@ -21,7 +21,7 @@ export const LEVELS_PER_THEME = 21;
 /** Practical cap for custom packs */
 export const MAX_PACK_LEVELS = 999;
 export const STARS_PER_LEVEL = 3;
-/** Crystal stars (#56) that count per theme */
+/** Crystal stars (#59) that count per theme */
 export const CRYSTALS_PER_THEME = 3;
 export const STARS_PER_THEME = LEVELS_PER_THEME * STARS_PER_LEVEL;
 export const MIN_DIFFICULTY = 1;
@@ -262,7 +262,7 @@ export function levelSlots(entry: ThemeEntry): number {
 }
 
 /**
- * Crystal stars (#56) a theme can give: an official theme always counts 3 (its total is
+ * Crystal stars (#59) a theme can give: an official theme always counts 3 (its total is
  * 21 × 3 + 3 = 66, 1056 over the 16 official themes, even while some of its crystals aren't built
  * yet); a custom pack counts the levels that have one, up to 3.
  */

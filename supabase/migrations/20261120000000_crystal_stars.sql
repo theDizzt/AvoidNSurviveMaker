@@ -1,4 +1,4 @@
--- Crystal stars (#56): a level record also remembers whether the player has cleared the level
+-- Crystal stars (#59): a level record also remembers whether the player has cleared the level
 -- while carrying its crystal star. Apply after 20261119010000_achievements.sql.
 --
 -- Existing records are kept (crystal = false). submit_level_records() accepts an optional boolean
@@ -10,7 +10,7 @@ begin;
 alter table public.level_records
   add column crystal boolean not null default false;
 comment on column public.level_records.crystal is
-  'The level was cleared at least once while carrying its crystal star (#56).';
+  'The level was cleared at least once while carrying its crystal star (#59).';
 
 drop function if exists public.submit_level_records(jsonb);
 

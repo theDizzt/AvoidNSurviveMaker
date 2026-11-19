@@ -76,13 +76,13 @@ function inner(...children: (HTMLElement | string)[]): HTMLElement {
   return i;
 }
 
-/** ★★★, plus a crystal star (#56) after them on levels that have one: lit once earned */
-function starRow(n: number, crystal?: { earned: boolean }): HTMLElement {
+/** ★★★, plus a 4th, blue star once the level's crystal star (#59) has been earned */
+function starRow(n: number, crystal = false): HTMLElement {
   const s = el('span', 'dstars');
   for (let k = 0; k < 3; k++) s.append(el('span', k < n ? 'on' : 'off', '★'));
   if (crystal) {
-    const c = el('span', `dcrystal ${crystal.earned ? 'on' : 'off'}`, '✦');
-    c.title = tr(crystal.earned ? 'campaign.crystalEarned' : 'campaign.crystalMissing');
+    const c = el('span', 'dcrystal', '★');
+    c.title = tr('campaign.crystalEarned');
     s.append(c);
   }
   return s;
@@ -367,7 +367,7 @@ export class CampaignUI {
       applyTextFx(no, t.info.style.badge.numberFx, 24, design.button?.numberColor ?? t.info.style.badge.numberColor);
       const parts: (HTMLElement | string)[] = [no];
       if (map) {
-        const crystal = map.objects.some((o) => o.role === 'crystal') ? { earned: !!rec?.crystal } : undefined;
+        const crystal = !!rec?.crystal && map.objects.some((o) => o.role === 'crystal');
         parts.push(starRow(rec?.stars ?? 0, crystal), el('small', 'dlevel-diff', diff(map.difficulty ?? 1)));
         if (rec) parts.push(el('small', 'dlevel-best', formatSeconds(rec.best)));
         const chapterNo = OFFICIAL_THEMES.indexOf(t);
@@ -513,7 +513,8 @@ export class CampaignUI {
       const li = el('li', `dboard-row${r.is_me ? ' me' : ''}${r.place <= 3 ? ` top${r.place}` : ''}`);
       const name = el('span', 'dboard-name');
       renderTag(name, formatTag(r.nickname, r.discriminator));
-      li.append(el('span', 'dboard-place', String(r.place)), name, el('span', 'dboard-time', formatSeconds(r.best_ms)), starRow(r.stars));
+      // Rank, name and time only: no star count on the leaderboard
+      li.append(el('span', 'dboard-place', String(r.place)), name, el('span', 'dboard-time', formatSeconds(r.best_ms)));
       if (r.is_me) li.title = tr('board.yourRecord');
       list.append(li);
     }
