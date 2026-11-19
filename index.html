@@ -258,13 +258,20 @@
       <div class="menu-inner menu-diamonds">
         <h2 class="logo logo-sm" data-i18n="menu.achievements"></h2>
         <p id="achievements-status" class="tagline stats-message" role="status"></p>
-        <!-- Tiles are filled in by AchievementsUI; Back stays in the bottom corner -->
-        <div class="dia-wrap" id="achievements-dia">
-          <div class="dgrid dgrid-panel" id="achievements-grid" style="--cols: 4">
-            <button type="button" id="achievements-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 5">
-              <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
-            </button>
+        <!-- Symmetric: a 4×4 diamond (summary in the middle, achievements around it) between the
+             page buttons, then the page number and Status · Back · Category -->
+        <div class="dpage-row">
+          <button type="button" id="achievements-prev" class="dpage" data-i18n-aria-label="customize.prevPage"><span>‹</span></button>
+          <div class="dia-wrap" id="achievements-dia">
+            <div class="dgrid dgrid-panel" id="achievements-grid" style="--cols: 4"></div>
           </div>
+          <button type="button" id="achievements-next" class="dpage" data-i18n-aria-label="customize.nextPage"><span>›</span></button>
+        </div>
+        <p id="achievements-page" class="dpage-label" aria-live="polite"></p>
+        <div class="ach-controls">
+          <button type="button" id="achievements-filter" class="dsmall"><span class="dtile-in"></span></button>
+          <button type="button" id="achievements-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
+          <button type="button" id="achievements-category" class="dsmall"><span class="dtile-in"></span></button>
         </div>
       </div>
     </div>

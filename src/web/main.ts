@@ -124,20 +124,25 @@ const campaign = new CampaignUI($('themes-screen'), $('levels-screen'));
 const fitDia = (id: string, maxW: number, maxH: number) => fitRotatedGrid($(id), $(id).querySelector<HTMLElement>('.dgrid')!, maxW, maxH, 1.5);
 const fitMenu = () => fitDia('menu-dia', Math.min(1000, window.innerWidth * 0.96), Math.max(320, Math.min(window.innerHeight * 0.8, window.innerHeight - 230)));
 /** Options and stats: larger panels; the screen scrolls rather than shrinking text too far */
-const fitPanel = (id: string) => {
+/** Width kept free beside the achievements grid for its page buttons */
+const ACH_SIDE = 200;
+/** Height kept free below the achievements grid (page number, Status · Back · Category) */
+const ACH_BELOW = 185;
+/** `side`: width kept free beside the grid (page buttons) */
+const fitPanel = (id: string, side = 0, below = 0) => {
   const wrap = $(id);
   const flat = window.innerWidth < 640; // too narrow for a turned grid: style.css lays out upright cards
   wrap.classList.toggle('dia-flat', flat);
   if (flat) {
     wrap.style.width = wrap.style.height = '';
     wrap.querySelector<HTMLElement>('.dgrid')!.style.transform = '';
-  } else fitDia(id, Math.min(1100, window.innerWidth * 0.96), Math.max(480, window.innerHeight - 150));
+  } else fitDia(id, Math.min(1100, window.innerWidth * 0.96 - side), Math.max(below ? 280 : 480, window.innerHeight - 150 - below));
 };
 window.addEventListener('resize', () => {
   if (current === 'menu') fitMenu();
   if (current === 'options') fitPanel('options-dia');
   if (current === 'stats') fitPanel('stats-dia');
-  if (current === 'achievements') fitPanel('achievements-dia');
+  if (current === 'achievements') fitPanel('achievements-dia', ACH_SIDE, ACH_BELOW);
   if (current === 'customize') fitPanel('customize-dia');
 });
 campaign.onBack = (from) => show(from === 'levels' ? 'themes' : 'menu');
@@ -262,7 +267,7 @@ function showImmediately(next: Screen): void {
   }
   if (next === 'achievements') {
     achievementsUI.open();
-    requestAnimationFrame(() => fitPanel('achievements-dia'));
+    requestAnimationFrame(() => fitPanel('achievements-dia', ACH_SIDE, ACH_BELOW));
     $('achievements-back').focus();
   }
   if (next === 'customize') {
@@ -578,7 +583,15 @@ play.onExit = leavePlay;
 
 const account = new Account();
 const achievements = new Achievements(account);
-const achievementsUI = new AchievementsUI($('achievements-grid'), $('achievements-status'), achievements, (def) => {
+const achievementsUI = new AchievementsUI({
+  grid: $('achievements-grid'),
+  status: $('achievements-status'),
+  prev: $<HTMLButtonElement>('achievements-prev'),
+  next: $<HTMLButtonElement>('achievements-next'),
+  page: $('achievements-page'),
+  filter: $<HTMLButtonElement>('achievements-filter'),
+  category: $<HTMLButtonElement>('achievements-category'),
+}, achievements, (def) => {
   for (const key of def.levels) {
     const record = achievements.records[key];
     if (record && (def.kind === 'clear' || record.stars >= 3)) continue;

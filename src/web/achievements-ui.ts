@@ -1,6 +1,7 @@
 import { ACHIEVEMENTS, achievementProgress, type AchievementDefinition } from '../core/achievements';
 import { t, type MessageKey } from '../core/i18n';
 import type { Achievements } from './achievements';
+import { installDiamondProgress } from './diamond-dial';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, text = '', className = ''): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -22,80 +23,83 @@ function tile<K extends 'div' | 'button'>(tag: K, className: string, col: string
 
 const FILTERS = ['all', 'progress', 'complete'] as const;
 const CATEGORIES = ['all', 'clear', 'stars', 'chapter'] as const;
-const COLS = 4;
+/**
+ * A 4×4 grid turned 45°: the 2×2 summary tile in the middle and the achievements on the ring
+ * around it. The layout is the same with rows and columns swapped, so it is mirror-symmetric on
+ * screen. Ring cells in clockwise screen order from the top corner: right-down edge, bottom
+ * corner, left-up edge.
+ */
+const SLOTS: readonly [number, number][] = [
+  [1, 1], [2, 1], [3, 1], [4, 1],
+  [4, 2], [4, 3], [4, 4],
+  [3, 4], [2, 4], [1, 4],
+  [1, 3], [1, 2],
+];
+export const ACHIEVEMENTS_PER_PAGE = SLOTS.length;
+
+export interface AchievementsElements {
+  grid: HTMLElement;
+  status: HTMLElement;
+  prev: HTMLButtonElement;
+  next: HTMLButtonElement;
+  page: HTMLElement;
+  /** Status filter and category filter, either side of Back */
+  filter: HTMLButtonElement;
+  category: HTMLButtonElement;
+}
 
 /**
  * Achievements as a 45°-turned grid like the other menu screens: a 2×2 detail tile (the overview,
- * or the focused achievement), one diamond per achievement in a fixed order, then the filter and
- * "mark seen" tiles and Back (static in index.html). Filters dim the tiles that don't match.
+ * or the focused achievement), a fixed number of achievements per page with diamond page buttons
+ * either side, and the filter / "mark seen" tiles and Back (static in index.html) on the last row.
+ * Each achievement shows its progress like the loading screen: a diamond track filling clockwise.
  */
 export class AchievementsUI {
   private filter = 0;
   private category = 0;
+  private page = 0;
   /** Achievement shown in the detail tile; null = the overview */
   private focused: AchievementDefinition | null = null;
   /** Achievement picked by a click: a second click on it starts the challenge */
   private selected: AchievementDefinition | null = null;
   private readonly detail: HTMLElement;
-  private readonly tiles: { def: AchievementDefinition; node: HTMLButtonElement; inner: HTMLElement }[] = [];
+  /** Achievement tiles of the current page (and the empty cells after them) */
+  private pageNodes: HTMLElement[] = [];
   private readonly filterBtn: HTMLButtonElement;
   private readonly categoryBtn: HTMLButtonElement;
 
   constructor(
-    grid: HTMLElement,
-    private readonly status: HTMLElement,
+    private readonly els: AchievementsElements,
     private readonly model: Achievements,
     private readonly challenge: (def: AchievementDefinition) => (() => void) | null,
   ) {
-    const back = grid.querySelector('#achievements-back');
-    const [detailTile, detail] = tile('div', 'dtile-stars ach-detail', '1 / span 2', '1 / span 2');
+    const { grid } = els;
+    const [detailTile, detail] = tile('div', 'dtile-stars ach-detail', '2 / span 2', '2 / span 2');
     detail.setAttribute('aria-live', 'polite');
     this.detail = detail;
-    const nodes: HTMLElement[] = [detailTile];
+    grid.append(detailTile);
 
-    // The detail tile takes the first two cells of rows 1–2; achievements fill the cells around it
-    const cells: [number, number][] = [];
-    for (let row = 1; cells.length < ACHIEVEMENTS.length; row++) {
-      for (let col = 1; col <= COLS; col++) if (!(row <= 2 && col <= 2)) cells.push([col, row]);
-    }
-    ACHIEVEMENTS.forEach((def, i) => {
-      const [col, row] = cells[i];
-      const [node, inner] = tile('button', 'ach-tile', String(col), String(row));
-      node.addEventListener('mouseenter', () => this.focus(def));
-      node.addEventListener('focus', () => this.focus(def));
-      node.addEventListener('click', () => {
-        const run = this.selected === def && !model.unlocks[def.id] ? this.challenge(def) : null;
-        if (run) return run();
-        this.selected = def;
-        this.focused = null;
-        this.focus(def);
-        for (const tl of this.tiles) tl.node.classList.toggle('is-selected', tl.def === def);
-      });
-      this.tiles.push({ def, node, inner });
-      nodes.push(node);
-    });
-
-    const lastRow = cells[cells.length - 1][1] + 1;
-    const pill = (col: number, onClick: () => void): HTMLButtonElement => {
-      const [node] = tile('button', 'ach-control', String(col), String(lastRow));
-      node.addEventListener('click', onClick);
-      nodes.push(node);
-      return node;
-    };
-    this.filterBtn = pill(1, () => {
+    this.filterBtn = els.filter;
+    this.filterBtn.addEventListener('click', () => {
       this.filter = (this.filter + 1) % FILTERS.length;
+      this.page = 0;
       this.render();
     });
-    this.categoryBtn = pill(2, () => {
+    this.categoryBtn = els.category;
+    this.categoryBtn.addEventListener('click', () => {
       this.category = (this.category + 1) % CATEGORIES.length;
+      this.page = 0;
       this.render();
     });
-    const seen = pill(3, () => model.markSeen());
-    seen.querySelector('.dtile-in')!.append(el('span', '✓', 'dicon'), el('strong', t('ach.markSeen')));
-    if (back instanceof HTMLElement) back.style.gridRow = String(lastRow);
 
+    els.prev.addEventListener('click', () => this.turn(-1));
+    els.next.addEventListener('click', () => this.turn(1));
     grid.addEventListener('mouseleave', () => this.focus(this.selected));
-    grid.prepend(...nodes);
+    grid.closest('.screen')?.addEventListener('keydown', (e) => {
+      if (!(e instanceof KeyboardEvent) || (e.key !== 'PageUp' && e.key !== 'PageDown')) return;
+      e.preventDefault();
+      this.turn(e.key === 'PageUp' ? -1 : 1);
+    });
     model.subscribe(() => this.render());
     this.render();
   }
@@ -103,15 +107,9 @@ export class AchievementsUI {
   open(): void {
     this.focused = null;
     this.selected = null;
-    for (const tl of this.tiles) tl.node.classList.remove('is-selected');
+    this.page = 0;
     this.render();
     void this.model.refresh();
-  }
-
-  private focus(def: AchievementDefinition | null): void {
-    if (this.focused === def) return;
-    this.focused = def;
-    this.renderDetail();
   }
 
   private matches(def: AchievementDefinition): boolean {
@@ -121,30 +119,86 @@ export class AchievementsUI {
     return (f === 'all' || (f === 'complete') === unlocked) && (c === 'all' || def.category === c);
   }
 
+  private get list(): AchievementDefinition[] {
+    return ACHIEVEMENTS.filter((d) => this.matches(d));
+  }
+
+  private get pages(): number {
+    return Math.max(1, Math.ceil(this.list.length / ACHIEVEMENTS_PER_PAGE));
+  }
+
+  private turn(dir: -1 | 1): void {
+    const to = Math.max(0, Math.min(this.pages - 1, this.page + dir));
+    if (to === this.page) return;
+    this.page = to;
+    this.render();
+    this.pageNodes.find((n): n is HTMLButtonElement => n instanceof HTMLButtonElement)?.focus();
+  }
+
+  private focus(def: AchievementDefinition | null): void {
+    if (this.focused === def) return;
+    this.focused = def;
+    this.renderDetail();
+  }
+
   render(): void {
-    const model = this.model;
-    this.status.textContent = !model.storageAvailable ? t('ach.sessionOnly')
+    const { model, els } = this;
+    els.status.textContent = !model.storageAvailable ? t('ach.sessionOnly')
       : !model.signedIn ? t('ach.local') : t(model.syncStatus === 'synced' ? 'ach.synced' : 'ach.pending');
-    for (const { def, node, inner } of this.tiles) {
-      const unlock = model.unlocks[def.id];
-      const value = unlock ? def.target : achievementProgress(def, model.records);
-      node.classList.toggle('is-unlocked', !!unlock);
-      node.classList.toggle('is-dimmed', !this.matches(def));
-      node.setAttribute('aria-label', `${t(def.name)} · ${value} / ${def.target}`);
-      const bar = el('span', '', 'ach-bar');
-      bar.style.setProperty('--p', String(value / def.target));
-      inner.replaceChildren(
-        el('span', unlock ? '★' : '◇', 'ach-badge'),
-        el('strong', t(def.name)),
-        bar,
-        el('small', `${value} / ${def.target}`),
-      );
-      if (unlock && !unlock.seen) inner.prepend(el('span', t('ach.new'), 'ach-new'));
-    }
+
+    const list = this.list;
+    const pages = this.pages;
+    this.page = Math.min(this.page, pages - 1);
+    const shown = list.slice(this.page * ACHIEVEMENTS_PER_PAGE, (this.page + 1) * ACHIEVEMENTS_PER_PAGE);
+    for (const n of this.pageNodes) n.remove();
+    this.pageNodes = SLOTS.map(([col, row], i) => {
+      const def = shown[i];
+      if (!def) {
+        // Empty cells keep the grid's shape on the last page
+        const [deco] = tile('div', 'dtile-deco', String(col), String(row));
+        deco.setAttribute('aria-hidden', 'true');
+        return deco;
+      }
+      return this.achievementTile(def, col, row);
+    });
+    els.grid.prepend(...this.pageNodes);
+
+    els.page.textContent = list.length ? `${this.page + 1} / ${pages}` : t('ach.pageEmpty');
+    els.prev.disabled = this.page === 0;
+    els.next.disabled = this.page >= pages - 1;
     const label = (text: string, value: string) => [el('small', text, 'dstat-label'), el('strong', value)];
     this.filterBtn.querySelector('.dtile-in')!.replaceChildren(...label(t('ach.filter'), t(`ach.${FILTERS[this.filter]}` as MessageKey)));
     this.categoryBtn.querySelector('.dtile-in')!.replaceChildren(...label(t('ach.category'), t(`ach.${CATEGORIES[this.category]}` as MessageKey)));
     this.renderDetail();
+  }
+
+  private achievementTile(def: AchievementDefinition, col: number, row: number): HTMLButtonElement {
+    const { model } = this;
+    const unlock = model.unlocks[def.id];
+    const value = unlock ? def.target : achievementProgress(def, model.records);
+    const [node, inner] = tile('button', 'ach-tile', String(col), String(row));
+    node.classList.toggle('is-unlocked', !!unlock);
+    node.classList.toggle('is-selected', this.selected === def);
+    node.setAttribute('aria-label', `${t(def.name)} · ${value} / ${def.target}`);
+    inner.append(el('span', unlock ? '★' : '◇', 'ach-badge'), el('strong', t(def.name)));
+    if (unlock && !unlock.seen) inner.prepend(el('span', t('ach.new'), 'ach-new'));
+    // Progress like the loading screen: the diamond track fills clockwise, the count sits in the gap
+    const count = el('span', `${value} / ${def.target}`, 'ach-count');
+    count.setAttribute('aria-hidden', 'true');
+    inner.append(count);
+    installDiamondProgress(inner, () => {})(value / def.target);
+
+    node.addEventListener('mouseenter', () => this.focus(def));
+    node.addEventListener('focus', () => this.focus(def));
+    node.addEventListener('click', () => {
+      const run = this.selected === def && !model.unlocks[def.id] ? this.challenge(def) : null;
+      if (run) return run();
+      this.selected = def;
+      this.focused = null;
+      this.focus(def);
+      for (const n of this.pageNodes) n.classList.toggle('is-selected', n === node);
+    });
+    return node;
   }
 
   private renderDetail(): void {
@@ -157,6 +211,13 @@ export class AchievementsUI {
         el('strong', `${count} / ${ACHIEVEMENTS.length}`),
         el('small', t('menu.achievements')),
       );
+      // "Mark new as seen" only while something is new
+      if (ACHIEVEMENTS.some((d) => model.unlocks[d.id] && !model.unlocks[d.id].seen)) {
+        const seen = el('button', `✓ ${t('ach.markSeen')}`, 'ach-seen');
+        seen.type = 'button';
+        seen.addEventListener('click', () => model.markSeen());
+        this.detail.append(seen);
+      }
       return;
     }
     const unlock = model.unlocks[def.id];

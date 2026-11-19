@@ -214,50 +214,92 @@ export class CustomizeUI {
     g.restore();
   }
 
-  /** Every pointer or trail skin at once, as a small diamond grid over the screen */
+  /**
+   * Every pointer or trail skin as a diamond grid over the dimmed screen: 16 cells (4×4) per page,
+   * with diamond page buttons on either side
+   */
   private openList(kind: 'pointer' | 'trail', opener: HTMLElement): void {
     const names = kind === 'pointer' ? POINTER_SKINS : TRAIL_SKINS;
-    const cols = 3;
+    const COLS = 4;
+    const PER_PAGE = COLS * COLS;
+    const pages = Math.max(1, Math.ceil(names.length / PER_PAGE));
+    const chosen = kind === 'pointer' ? skin.pointer : skin.trail;
+    let page = Math.floor(chosen / PER_PAGE);
+
     const title = t(kind === 'pointer' ? 'customize.pointerSkin' : 'customize.trailSkin');
     const overlay = el('div', 'cz-overlay');
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-label', title);
-    const card = el('div', 'cz-overlay-card');
+    const stage = el('div', 'cz-list-stage');
     const head = el('div', 'cz-overlay-head');
     const close = el('button', 'cz-overlay-close');
-    close.append(el('span', '', '✕'));
     close.type = 'button';
+    close.append(el('span', '', '✕'));
     close.setAttribute('aria-label', t('common.close'));
     head.append(el('h3', '', title), close);
+
+    const pageButton = (dir: -1 | 1): HTMLButtonElement => {
+      const btn = el('button', 'dpage');
+      btn.type = 'button';
+      btn.append(el('span', '', dir < 0 ? '‹' : '›'));
+      btn.setAttribute('aria-label', t(dir < 0 ? 'customize.prevPage' : 'customize.nextPage'));
+      btn.addEventListener('click', () => turn(dir));
+      return btn;
+    };
+    const prev = pageButton(-1);
+    const next = pageButton(1);
     const wrap = el('div', 'dia-wrap');
     const grid = el('div', 'dgrid dgrid-panel cz-list');
-    grid.style.setProperty('--cols', String(cols));
-    const cell = (n: number): [string, string] => [String((n % cols) + 1), String(Math.floor(n / cols) + 1)];
-    const buttons: HTMLButtonElement[] = [];
-    names.forEach((name, n) => {
-      const [b, inner] = tile('button', 'cz-list-item', ...cell(n));
-      const [icon, g] = hiDpiCanvas(kind === 'pointer' ? 44 : 72, 44);
-      if (kind === 'pointer') this.drawPointerIcon(g, n);
-      else this.drawTrailIcon(g, n);
-      b.setAttribute('aria-pressed', String((kind === 'pointer' ? skin.pointer : skin.trail) === n));
-      inner.append(icon, el('small', 'cz-num', `#${n}`), el('strong', '', t(`customize.${kind}.${name}` as MessageKey)));
-      b.addEventListener('click', () => {
-        setSkin(kind === 'pointer' ? { pointer: n } : { trail: n });
-        done();
-      });
-      grid.append(b);
-      buttons.push(b);
-    });
-    // Fill the last row so the grid stays a clean diamond
-    for (let n = names.length; n % cols; n++) {
-      const [deco] = tile('div', 'dtile-deco', ...cell(n));
-      deco.setAttribute('aria-hidden', 'true');
-      grid.append(deco);
-    }
+    grid.style.setProperty('--cols', String(COLS));
     wrap.append(grid);
-    card.append(head, wrap);
-    overlay.append(card);
+    const row = el('div', 'cz-list-row');
+    row.append(prev, wrap, next);
+    const pageLabel = el('p', 'dpage-label cz-page-label');
+    pageLabel.setAttribute('aria-live', 'polite');
+    stage.append(head, row, pageLabel);
+    overlay.append(stage);
+
+    let buttons: HTMLButtonElement[] = [];
+    const render = () => {
+      buttons = [];
+      const cells: HTMLElement[] = [];
+      for (let slot = 0; slot < PER_PAGE; slot++) {
+        const n = page * PER_PAGE + slot;
+        const col = String((slot % COLS) + 1);
+        const line = String(Math.floor(slot / COLS) + 1);
+        if (n >= names.length) {
+          // Empty cells keep the page a full 4×4 diamond
+          const [deco] = tile('div', 'dtile-deco', col, line);
+          deco.setAttribute('aria-hidden', 'true');
+          cells.push(deco);
+          continue;
+        }
+        const [btn, inner] = tile('button', 'cz-list-item', col, line);
+        const [icon, g] = hiDpiCanvas(kind === 'pointer' ? 44 : 72, 44);
+        if (kind === 'pointer') this.drawPointerIcon(g, n);
+        else this.drawTrailIcon(g, n);
+        btn.setAttribute('aria-pressed', String(n === chosen));
+        inner.append(icon, el('small', 'cz-num', '#' + n), el('strong', '', t(('customize.' + kind + '.' + names[n]) as MessageKey)));
+        btn.addEventListener('click', () => {
+          setSkin(kind === 'pointer' ? { pointer: n } : { trail: n });
+          done();
+        });
+        cells.push(btn);
+        buttons.push(btn);
+      }
+      grid.replaceChildren(...cells);
+      pageLabel.textContent = (page + 1) + ' / ' + pages;
+      prev.disabled = page === 0;
+      next.disabled = page === pages - 1;
+    };
+    const turn = (dir: -1 | 1) => {
+      const to = Math.max(0, Math.min(pages - 1, page + dir));
+      if (to === page) return;
+      page = to;
+      render();
+      buttons[0]?.focus();
+    };
 
     const fit = () => {
       const flat = window.innerWidth < 640;
@@ -265,9 +307,14 @@ export class CustomizeUI {
       if (flat) {
         wrap.style.width = wrap.style.height = '';
         grid.style.transform = '';
-      } else fitRotatedGrid(wrap, grid, Math.min(720, window.innerWidth * 0.9), window.innerHeight - 160, 1);
+      } else fitRotatedGrid(wrap, grid, Math.min(760, window.innerWidth - 330), window.innerHeight - 180, 1);
     };
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'PageUp' || e.key === 'PageDown') {
+        e.preventDefault();
+        turn(e.key === 'PageUp' ? -1 : 1);
+        return;
+      }
       if (e.key !== 'Escape') return;
       // Keep Escape from also leaving the Customize screen
       e.preventDefault();
@@ -281,14 +328,16 @@ export class CustomizeUI {
       opener.focus();
     };
     close.addEventListener('click', done);
+    // No card behind the grid: a press on any empty spot closes the list
     overlay.addEventListener('pointerdown', (e) => {
-      if (e.target === overlay) done();
+      if (e.target === overlay || e.target === stage || e.target === row || e.target === wrap) done();
     });
     window.addEventListener('resize', fit);
     window.addEventListener('keydown', onKey, true);
+    render();
     (this.grid.closest('.screen') ?? document.body).append(overlay);
     fit();
-    (buttons.find((b) => b.getAttribute('aria-pressed') === 'true') ?? buttons[0]).focus();
+    (buttons.find((btn) => btn.getAttribute('aria-pressed') === 'true') ?? buttons[0])?.focus();
   }
 
   show(): void {
