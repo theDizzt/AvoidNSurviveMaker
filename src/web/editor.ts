@@ -30,6 +30,7 @@ import { badgeFor, badgeTitle, chapterMazePresets } from './theme-registry';
 import { badgeImage, drawLevelBadge } from './badge';
 import { DEFAULT_BADGE } from '../core/theme-pack';
 import { fontPicker } from './font-picker';
+import { checkSymmetry, mirrorPoint, SYMMETRY_MODES, type SymmetryMode, type SymmetryReport } from '../core/symmetry';
 import { drawFogAreas } from './fog';
 
 // ───────────────────────── Tools ─────────────────────────
@@ -193,6 +194,8 @@ type Drag =
 
 const STORAGE_KEY = 'avoid-n-survive:editor';
 const GRID_TOP_KEY = 'avoid-n-survive:editor-grid-top';
+const CENTER_KEY = 'avoid-n-survive:editor-center-lines';
+const SYMMETRY_KEY = 'avoid-n-survive:editor-symmetry';
 /** Map sizes offered in the editor, all 16:9 */
 const MAP_SIZES: [number, number][] = [[640, 360], [960, 540], [1280, 720], [1600, 900], [1920, 1080]];
 const GRID = 10;
@@ -224,6 +227,12 @@ export interface EditorElements {
   snap: HTMLInputElement;
   preview: HTMLInputElement;
   gridTop: HTMLInputElement;
+  /** Center lines overlay */
+  center: HTMLInputElement;
+  /** Symmetry check mode */
+  symmetry: HTMLSelectElement;
+  /** Symmetry check result */
+  symmetryStatus: HTMLElement;
   undo: HTMLButtonElement;
   redo: HTMLButtonElement;
   shortcuts: HTMLButtonElement;
@@ -311,6 +320,8 @@ const SHORTCUTS: [string, [string, string][]][] = [
     ['Space+Drag / Middle-drag', tr('ed.scPan')],
     ['N', tr('ed.toggleSnapToGrid')],
     ['P', tr('ed.toggleMotionPreview')],
+    ['C', tr('ed.toggleCenterLines')],
+    ['Y', tr('ed.cycleSymmetry')],
     ['T', tr('ed.testPlay')],
     ['H', tr('ed.hideShowPanels')],
     ['F', tr('common.fullscreen')],
@@ -428,6 +439,37 @@ export class Editor {
       } catch {
         /* storage unavailable */
       }
+    });
+    // Center lines and the symmetry check are per-browser preferences too
+    for (const mode of SYMMETRY_MODES) {
+      const opt = document.createElement('option');
+      opt.value = mode;
+      opt.textContent = tr(`editor.sym.${mode}`);
+      el.symmetry.append(opt);
+    }
+    try {
+      el.center.checked = localStorage.getItem(CENTER_KEY) === '1';
+      const saved = localStorage.getItem(SYMMETRY_KEY) as SymmetryMode | null;
+      if (saved && SYMMETRY_MODES.includes(saved)) el.symmetry.value = saved;
+    } catch {
+      /* storage unavailable */
+    }
+    el.center.addEventListener('change', () => {
+      try {
+        localStorage.setItem(CENTER_KEY, el.center.checked ? '1' : '0');
+      } catch {
+        /* storage unavailable */
+      }
+    });
+    el.symmetry.addEventListener('change', () => {
+      this.symmetryCache = null;
+      el.symmetry.blur();
+      try {
+        localStorage.setItem(SYMMETRY_KEY, el.symmetry.value);
+      } catch {
+        /* storage unavailable */
+      }
+      this.updateHint();
     });
     el.undo.addEventListener('click', () => this.undo());
     el.redo.addEventListener('click', () => this.redo());
@@ -675,6 +717,32 @@ export class Editor {
   }
 
 
+  /** Symmetry check of the current map, recomputed when the map or the mode changes */
+  private symmetryCache: { mode: SymmetryMode; objects: MapObject[]; start: string; goal: string; size: string; report: SymmetryReport } | null = null;
+
+  private get symmetryMode(): SymmetryMode {
+    const v = this.el.symmetry.value as SymmetryMode;
+    return SYMMETRY_MODES.includes(v) ? v : 'off';
+  }
+
+  private get symmetry(): SymmetryReport | null {
+    const mode = this.symmetryMode;
+    if (mode === 'off') return null;
+    const m = this.map;
+    const c = this.symmetryCache;
+    const start = JSON.stringify(m.start);
+    const goal = JSON.stringify(m.goal);
+    const size = `${m.width}x${m.height}`;
+    // Edits replace the objects array or call dirty(); compare the cheap parts too
+    if (c && c.mode === mode && c.objects === m.objects && !this.symmetryStale && c.start === start && c.goal === goal && c.size === size) return c.report;
+    const report = checkSymmetry(m, mode);
+    this.symmetryCache = { mode, objects: m.objects, start, goal, size, report };
+    this.symmetryStale = false;
+    return report;
+  }
+
+  private symmetryStale = true;
+
   private get compiled(): CompiledObject[] {
     if (!this.compiledCache) {
       this.compiledCache = this.map.objects.map(compileObject);
@@ -689,6 +757,7 @@ export class Editor {
   /** Call after any in-place change to map objects */
   private dirty(): void {
     this.compiledCache = null;
+    this.symmetryStale = true;
   }
 
   // ───────────────────────── Palette ─────────────────────────
@@ -1670,6 +1739,14 @@ export class Editor {
       this.el.snap.click();
     } else if (letter === 'p') {
       this.el.preview.click();
+    } else if (letter === 'c') {
+      this.el.center.click();
+    } else if (letter === 'y') {
+      const modes = SYMMETRY_MODES;
+      const next = modes[(modes.indexOf(this.symmetryMode) + (e.shiftKey ? modes.length - 1 : 1)) % modes.length];
+      this.el.symmetry.value = next;
+      this.el.symmetry.dispatchEvent(new Event('change'));
+      this.flash(tr('editor.symmetryNow', { mode: tr(`editor.sym.${next}`) }));
     } else if (letter === 't') {
       this.el.test.click();
     }
@@ -2926,6 +3003,94 @@ export class Editor {
     ctx.fillText(text, lx + padX, ly + h / 2 + 0.5 * u);
   }
 
+  /**
+   * Center lines (the map's middle, for lining things up) and the symmetry check: the mirror image
+   * of every object as a faint outline, objects without a mirrored counterpart marked in red.
+   */
+  private drawSymmetry(u: number): void {
+    const { ctx, map } = this;
+    const mode = this.symmetryMode;
+    const report = this.symmetry;
+    const w = map.width;
+    const h = map.height;
+    const vertical = this.el.center.checked || mode === 'mirrorX' || mode === 'both' || mode === 'rotate';
+    const horizontal = this.el.center.checked || mode === 'mirrorY' || mode === 'both' || mode === 'rotate';
+    if (vertical || horizontal) {
+      ctx.save();
+      ctx.strokeStyle = COLORS.centerLine;
+      ctx.lineWidth = 1.5 * u;
+      ctx.setLineDash([10 * u, 6 * u]);
+      ctx.beginPath();
+      if (vertical) {
+        ctx.moveTo(w / 2, 0);
+        ctx.lineTo(w / 2, h);
+      }
+      if (horizontal) {
+        ctx.moveTo(0, h / 2);
+        ctx.lineTo(w, h / 2);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (mode === 'rotate') {
+        ctx.fillStyle = COLORS.centerLine;
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2, 4 * u, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    if (!report || mode === 'off') return this.setSymmetryStatus('');
+
+    // Mirror images (faint), so you can see where each counterpart should go
+    const steps = mode === 'both' ? (['mirrorX', 'mirrorY'] as const) : [mode];
+    ctx.save();
+    ctx.strokeStyle = COLORS.mirrorGhost;
+    ctx.lineWidth = 1 * u;
+    ctx.setLineDash([3 * u, 3 * u]);
+    ctx.beginPath();
+    const ghost = (poly: ArrayLike<number>) => {
+      for (const step of steps) {
+        for (let i = 0; i < poly.length; i += 2) {
+          const [x, y] = mirrorPoint(step, w, h, poly[i], poly[i + 1]);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+      }
+    };
+    for (const o of this.compiled) ghost(o.poly);
+    for (const z of [map.start, map.goal]) ghost([z.x, z.y, z.x + z.w, z.y, z.x + z.w, z.y + z.h, z.x, z.y + z.h]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Objects that break the symmetry
+    ctx.fillStyle = COLORS.asymmetricFill;
+    ctx.strokeStyle = COLORS.asymmetric;
+    ctx.lineWidth = 2 * u;
+    ctx.beginPath();
+    for (const i of report.objects) {
+      const o = this.compiled[i];
+      if (o) traceObject(ctx, o, IDENTITY);
+    }
+    if (report.start) ctx.rect(map.start.x, map.start.y, map.start.w, map.start.h);
+    if (report.goal) ctx.rect(map.goal.x, map.goal.y, map.goal.w, map.goal.h);
+    ctx.fill('evenodd');
+    ctx.stroke();
+    ctx.restore();
+
+    const broken = report.objects.length + (report.start ? 1 : 0) + (report.goal ? 1 : 0);
+    this.setSymmetryStatus(broken ? tr('editor.symmetryBroken', { n: broken }) : tr('editor.symmetryOk'), broken > 0);
+  }
+
+  /** Result of the symmetry check, next to the mode picker ('' hides it) */
+  private setSymmetryStatus(text: string, bad = false): void {
+    const el = this.el.symmetryStatus;
+    if (el.textContent === text && el.classList.contains('bad') === bad) return;
+    el.textContent = text;
+    el.hidden = !text;
+    el.classList.toggle('bad', bad);
+  }
+
   private draw(): void {
     if (!this.visible) return;
     const { ctx, map } = this;
@@ -3046,6 +3211,8 @@ export class Editor {
       ctx.fill();
       ctx.stroke();
     });
+
+    this.drawSymmetry(u);
 
     // Selection outline
     const zone = this.selectedZone();

@@ -21,6 +21,13 @@ export const COLORS = {
   grid: 'rgba(60,100,160,0.08)',
   /** Grid drawn over walls and obstacles (editor option): stronger so it shows on any surface */
   gridTop: 'rgba(36,52,80,0.28)',
+  /** Editor: center lines / symmetry axes */
+  centerLine: 'rgba(124,92,230,0.85)',
+  /** Editor: mirror images of objects while checking symmetry */
+  mirrorGhost: 'rgba(124,92,230,0.55)',
+  /** Editor: objects that break the symmetry */
+  asymmetric: 'rgba(226,60,80,0.95)',
+  asymmetricFill: 'rgba(226,60,80,0.18)',
   wall: '#8fa3bf',
   wallEdge: '#6a809f',
   /** Safe zone (#48) */
