@@ -37,8 +37,10 @@ export type Shape =
  * fog: fog or sand dust drifting over the area, covering the cursor, obstacles and walls (see `fog`).
  * torch: a harmless light source (#57 / #58, see `torch` and `light`).
  * secret: a secret wall (#55): covers what lies under it like a wall, harmless (see `secret`).
+ * crystal: a crystal star (#56), at most one per map: picked up like a coin, it earns a bonus star
+ *   when the cursor carries it to GOAL.
  */
-export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret';
+export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret' | 'crystal';
 
 /** fog: grey-white fog (#49) · sand: blowing sand dust (#50) */
 export type FogKind = 'fog' | 'sand';

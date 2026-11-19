@@ -15,7 +15,7 @@ import { gameAudio } from './audio';
 import { DeathBurst } from './death-burst';
 import { drawFogAreas } from './fog';
 import {
-  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, drawStopwatch, drawTorchAt, fitCanvas,
+  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawCrystalAt, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, drawStopwatch, drawTorchAt, fitCanvas,
   FONT_MAIN, mapPointer, unitsPerPx,
 } from './render';
 
@@ -41,7 +41,8 @@ export interface PlayElements {
 
 export class PlayController {
   /** Called on clear (used to verify editor test plays) */
-  onClear: ((map: MapData, replay: Replay, time: number) => void) | null = null;
+  /** `crystal`: the run carried the map's crystal star (#56) to GOAL */
+  onClear: ((map: MapData, replay: Replay, time: number, crystal: boolean) => void) | null = null;
   /** Called when the maze ends a run (wall, moving wall, void, bounds, laser) — not for runs the
    *  browser stopped (cursor left the window, focus lost, non-mouse pointer) */
   onDeath: ((map: MapData) => void) | null = null;
@@ -243,7 +244,7 @@ export class PlayController {
       const prev = this.best.get(key);
       const time = recordTime(sim.endTime);
       if (prev === undefined || time < prev) this.best.set(key, time);
-      this.onClear?.(this.map, sim.getReplay(), time);
+      this.onClear?.(this.map, sim.getReplay(), time, sim.crystalHeld);
     }
 
     this.draw(now);
@@ -258,6 +259,12 @@ export class PlayController {
       this.lastDebug = now;
       this.updateText(now);
     }
+  }
+
+  /** The picked-up crystal star has finished flying into the cursor */
+  private crystalFlownIn(t: number): boolean {
+    const i = this.sim.objects.findIndex((o) => o.role === 'crystal');
+    return i < 0 || t - this.sim.collectedAt[i] >= COIN_PULL_MS;
   }
 
   /** Carryable torches (#58) the cursor touches are picked up and carried for the rest of the run */
@@ -291,6 +298,11 @@ export class PlayController {
       // simulation has the cursor, so what you see is what is checked for collisions
       // (pointer skin #0 draws nothing: the system cursor stays visible instead, see .native-cursor)
       drawPointer(ctx, skin, sim.x, sim.y, u, CURSOR_PX);
+      // A held crystal star circles the cursor once it has flown in
+      if (sim.crystalHeld && this.crystalFlownIn(t)) {
+        const a = now / 380;
+        drawCrystalAt(ctx, sim.x + Math.cos(a) * 15 * u, sim.y + Math.sin(a) * 15 * u, 13 * u, now);
+      }
       // Carried torches ride just up and to the right of the cursor
       map.objects.forEach((_, i) => {
         if (!this.carried[i]) return;
@@ -358,7 +370,8 @@ export class PlayController {
           : '',
         this.nextHint ?? tr('play.tryAgain'),
       ].filter(Boolean).join(' — ');
-      drawBanner(ctx, map, `${stars !== null ? `${starText(stars)}  ` : ''}${tr('play.cleared', { time: formatSeconds(recordTime(sim.endTime)) })}`, sub, '#d48f00');
+      const crystal = sim.hasCrystal ? (sim.crystalHeld ? tr('play.crystalGot') : tr('play.crystalMissed')) : '';
+      drawBanner(ctx, map, `${stars !== null ? `${starText(stars)}${sim.crystalHeld ? ' ✦' : ''}  ` : ''}${tr('play.cleared', { time: formatSeconds(recordTime(sim.endTime)) })}`, [crystal, sub].filter(Boolean).join(' — '), '#d48f00');
     }
   }
 

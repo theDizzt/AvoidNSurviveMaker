@@ -1,9 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { averageDifficulty, localizeThemeInfo, themedLevel, validateThemeInfo } from '../core/theme-pack';
+import { averageDifficulty, crystalSlots, localizeThemeInfo, maxStars, themedLevel, validateThemeInfo } from '../core/theme-pack';
 import { OFFICIAL_THEMES, CUSTOM_THEME_PRESETS } from './theme-registry';
 import { readThemeZip, writeThemeZip } from './theme-zip';
 
 describe('theme packs', () => {
+  it('an official theme is worth 66 stars (21 levels x 3 + 3 crystal stars), 1056 in all', () => {
+    for (const t of OFFICIAL_THEMES) {
+      expect(maxStars(t), t.info.id).toBe(66);
+      // No more crystal stars than a theme can count
+      const placed = t.levels.filter((m) => m.objects.some((o) => o.role === 'crystal')).length;
+      expect(placed, t.info.id).toBeLessThanOrEqual(3);
+    }
+    expect(OFFICIAL_THEMES.reduce((s, t) => s + maxStars(t), 0)).toBe(1056);
+  });
+
+  it('a custom pack counts crystal stars only on levels that have one, up to 3', () => {
+    const pack = CUSTOM_THEME_PRESETS[0];
+    expect(crystalSlots(pack)).toBe(Math.min(3, pack.levels.filter((m) => m.objects.some((o) => o.role === 'crystal')).length));
+  });
+
   // These tests check rules, not content: adding, removing or renaming levels and chapters
   // must not break them. Use synthetic maps for exact expectations.
   it('loads the official themes from themes/', () => {

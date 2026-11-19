@@ -30,6 +30,9 @@ export const LIMITS = {
   maxPackLevels: 200,
   /** Coins are always this size (diameter) */
   coinSize: 24,
+  /** Crystal stars (#56) are always this size, and a map has at most this many */
+  crystalSize: 48,
+  maxCrystals: 1,
   /** Global darkness light radius */
   minLight: 0,
   maxLight: 2000,
@@ -200,7 +203,7 @@ function door(v: unknown, name: string): Door {
 function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
   const o = obj(v, name);
   const out: MapObject = {
-    role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret'] as const),
+    role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret', 'crystal'] as const),
     shape: shape(o.shape, `${name}.shape`, W, H),
   };
   if (o.motion !== undefined) out.motion = motion(o.motion, `${name}.motion`, W, H);
@@ -213,6 +216,12 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
     // Coins are always a 24×24 circle, centered where the shape was
     const c = shapeCenter(out.shape);
     out.shape = { type: 'ellipse', cx: c.x, cy: c.y, rx: LIMITS.coinSize / 2, ry: LIMITS.coinSize / 2 };
+  }
+  if (out.role === 'crystal') {
+    // Crystal stars are always 48×48, centered where the shape was
+    const c = shapeCenter(out.shape);
+    const h = LIMITS.crystalSize / 2;
+    out.shape = { type: 'rect', x: c.x - h, y: c.y - h, w: LIMITS.crystalSize, h: LIMITS.crystalSize };
   }
   if (out.role === 'path' && o.pierce === true) out.pierce = true;
   if (out.role === 'trigger') out.trigger = trigger(o.trigger, `${name}.trigger`);
@@ -473,6 +482,8 @@ function overlapsRect(m: MapObject, rect: Rect, t: number): boolean {
 export function mapErrors(map: MapData): string[] {
   const out: string[] = [];
   const colors = new Set(map.objects.filter((o) => o.trigger).map((o) => o.trigger!.color));
+  const crystals = map.objects.filter((o) => o.role === 'crystal').length;
+  if (crystals > LIMITS.maxCrystals) out.push(t('mapError.crystalMany', { n: crystals, max: LIMITS.maxCrystals }));
   map.objects.forEach((o, i) => {
     const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : o.laser?.switchColor);
     if (c !== undefined && !colors.has(c)) {

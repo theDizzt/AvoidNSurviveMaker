@@ -548,7 +548,10 @@ function drawCoin(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): 
  */
 export function drawCoinPulls(
   ctx: CanvasRenderingContext2D,
-  sim: { readonly collected: Uint8Array; readonly collectedAt: Float64Array; readonly collectedPos: Float64Array },
+  sim: {
+    readonly collected: Uint8Array; readonly collectedAt: Float64Array; readonly collectedPos: Float64Array;
+    readonly objects?: readonly { role: string }[];
+  },
   t: number, x: number, y: number, pullMs: number,
 ): void {
   for (let i = 0; i < sim.collected.length; i++) {
@@ -558,6 +561,11 @@ export function drawCoinPulls(
     const k = f * f;
     const cx = sim.collectedPos[i * 2] + (x - sim.collectedPos[i * 2]) * k;
     const cy = sim.collectedPos[i * 2 + 1] + (y - sim.collectedPos[i * 2 + 1]) * k;
+    if (sim.objects?.[i]?.role === 'crystal') {
+      // The crystal star shrinks into the cursor (it stays with it as the small held star)
+      drawCrystalAt(ctx, cx, cy, 48 * (1 - 0.65 * k), t, 1 - 0.3 * k);
+      continue;
+    }
     const r = 12 * (1 - 0.6 * k);
     ctx.save();
     ctx.globalAlpha = 1 - 0.5 * k;
@@ -767,6 +775,10 @@ export function drawMap(
   objects.forEach((o, i) => {
     if (o.role === 'coin' && shown(i)) drawCoin(ctx, o, timeOf(i));
   });
+  // Crystal stars (#56)
+  objects.forEach((o, i) => {
+    if (o.role === 'crystal' && shown(i)) drawCrystal(ctx, o, timeOf(i), opts.now ?? t);
+  });
   // Torches (#57 / #58), unless being carried
   objects.forEach((o, i) => {
     if (o.role === 'torch' && shown(i) && !opts.carried?.[i]) drawTorch(ctx, o, timeOf(i), opts.now ?? t, i);
@@ -856,6 +868,91 @@ function enterPose(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number):
     o.px + tf.dx - tf.cos * o.px + tf.sin * o.py,
     o.py + tf.dy - tf.sin * o.px - tf.cos * o.py,
   );
+}
+
+/** Five-pointed star outline centered at (cx, cy) */
+function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, inner: number, turn = 0): void {
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const a = -Math.PI / 2 + turn + (k * Math.PI) / 5;
+    const rr = k % 2 ? inner : r;
+    if (k === 0) ctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    else ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+}
+
+/**
+ * A crystal star (#56) `size` across at (cx, cy): a faceted ice-blue to violet star with a soft
+ * halo and a slowly travelling glint. `now` animates the glint; `alpha` fades it.
+ */
+export function drawCrystalAt(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, now: number, alpha = 1): void {
+  const r = size / 2;
+  const inner = r * 0.48;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  // Halo
+  const halo = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r * 1.25);
+  halo.addColorStop(0, 'rgba(170,230,255,0.45)');
+  halo.addColorStop(1, 'rgba(170,230,255,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 1.25, 0, Math.PI * 2);
+  ctx.fill();
+  // Body
+  const body = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+  body.addColorStop(0, '#d9fbff');
+  body.addColorStop(0.45, '#6fd6ff');
+  body.addColorStop(1, '#8a6cff');
+  starPath(ctx, cx, cy, r, inner);
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#4b3fb8';
+  ctx.lineWidth = Math.max(0.8, r * 0.07);
+  ctx.stroke();
+  // Facets: a line from the center to every point and notch, lighter on the upper-left
+  ctx.save();
+  starPath(ctx, cx, cy, r, inner);
+  ctx.clip();
+  for (let k = 0; k < 10; k++) {
+    const a = -Math.PI / 2 + (k * Math.PI) / 5;
+    const rr = k % 2 ? inner : r;
+    const next = -Math.PI / 2 + ((k + 1) * Math.PI) / 5;
+    const nr = (k + 1) % 2 ? inner : r;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    ctx.lineTo(cx + Math.cos(next) * nr, cy + Math.sin(next) * nr);
+    ctx.closePath();
+    ctx.fillStyle = k % 2 ? 'rgba(255,255,255,0.22)' : 'rgba(40,20,120,0.12)';
+    ctx.fill();
+  }
+  // Glint sweeping across every few seconds
+  const g = ((now / 1600) % 1.6) - 0.3;
+  const gx = cx - r + g * 2 * r;
+  const glint = ctx.createLinearGradient(gx - r * 0.3, cy - r, gx + r * 0.3, cy + r);
+  glint.addColorStop(0, 'rgba(255,255,255,0)');
+  glint.addColorStop(0.5, 'rgba(255,255,255,0.75)');
+  glint.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = glint;
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  ctx.restore();
+  // Center sparkle
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(cx - r * 0.12, cy - r * 0.14, r * 0.09, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCrystal(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, now: number): void {
+  ctx.save();
+  enterPose(ctx, o, t);
+  // A gentle bob so it reads as a pickup
+  const bob = Math.sin(now / 420) * 2;
+  drawCrystalAt(ctx, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2 + bob, Math.min(o.maxX - o.minX, o.maxY - o.minY), now);
+  ctx.restore();
 }
 
 /**

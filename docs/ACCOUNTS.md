@@ -39,6 +39,7 @@ Supabase Dashboard → **SQL Editor** → 아래 파일을 순서대로 붙여 �
 7. [`supabase/migrations/20261118020000_leaderboard.sql`](../supabase/migrations/20261118020000_leaderboard.sql) — 레벨별 순위표 (검증된 기록만)
 8. [`supabase/migrations/20261118030000_records_always_verified.sql`](../supabase/migrations/20261118030000_records_always_verified.sql) — 임시: 모든 기록을 검증된 것으로 처리
 9. [`supabase/migrations/20261118040000_public_profiles_invoker.sql`](../supabase/migrations/20261118040000_public_profiles_invoker.sql) — 공개 프로필 전용 테이블 및 invoker 뷰로 Security Definer View 경고 해결 (PostgreSQL 15 이상)
+10. [`supabase/migrations/20261120000000_crystal_stars.sql`](../supabase/migrations/20261120000000_crystal_stars.sql) — 크리스탈 별(#56): 레벨 기록에 `crystal` 칸 추가, `submit_level_records` 가 받아서 OR 로 병합
 
 1–8을 이미 적용한 DB는 9번만 실행합니다. SQL은 트랜잭션으로 적용되며 기존 계정·기록은 유지합니다.
 Git push나 Vercel 재배포만으로 DB 마이그레이션이 실행되지는 않습니다.
@@ -106,7 +107,7 @@ publishable(anon) 키는 공개되어도 되는 키이며, 데이터는 row leve
 
 ## 레벨 기록
 
-로그인한 플레이어가 챕터 레벨을 클리어하면 최고 시간(정수 ms)과 별을 `submit_level_records(records)` 로 보냅니다. 보내지 못한 기록은 계정별로 브라우저에 남겨 두고 다음 클리어나 로그인 때 다시 시도합니다. 서버는 병합하므로 기록은 좋아지기만 합니다: `best_ms` 는 가장 낮은 값을, `stars` 는 가장 높은 값을 유지합니다.
+로그인한 플레이어가 챕터 레벨을 클리어하면 최고 시간(정수 ms)과 별을 `submit_level_records(records)` 로 보냅니다. 보내지 못한 기록은 계정별로 브라우저에 남겨 두고 다음 클리어나 로그인 때 다시 시도합니다. 서버는 병합하므로 기록은 좋아지기만 합니다: `best_ms` 는 가장 낮은 값을, `stars` 는 가장 높은 값을 유지합니다. 크리스탈 별을 들고 클리어한 기록은 `crystal: true` 로 함께 보내며, 한 번 얻은 크리스탈 별은 사라지지 않습니다(OR 병합). 크리스탈 별 마이그레이션을 적용하기 전의 서버는 이 값을 무시하고, 브라우저에 저장된 크리스탈 별은 그대로 유지됩니다.
 
 진행 기록은 계정별로 분리됩니다. **Options → Level records → Sync records** 는 현재 계정의 로컬 기록만 올리고 해당 계정의 서버 기록을 내려받습니다. 다른 계정으로 전환하면 표시되는 별과 진행 기록도 전환되며, 진행 중이던 플레이는 초기화됩니다.
 

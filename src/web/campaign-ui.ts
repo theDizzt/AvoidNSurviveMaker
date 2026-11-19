@@ -5,7 +5,7 @@ import { formatTag } from '../core/account';
 import { fetchLeaderboard, type LeaderboardRow } from './auth/leaderboard';
 import { badgeFontCss } from './badge';
 import { renderTag } from './player-tag';
-import { levelKey, levelRecord, themeStars, themeUnlocked, totalStars } from './progress';
+import { levelKey, levelRecord, themeCrystals, themeStars, themeUnlocked, totalStars } from './progress';
 import { customTheme, OFFICIAL_SLOTS, OFFICIAL_THEMES, setCustomTheme } from './theme-registry';
 import { chapterLevelCode } from '../core/level';
 import { readThemeZip } from './theme-zip';
@@ -17,9 +17,12 @@ export function screenData(t: ThemeEntry, level?: number): ScreenData {
   const levels = Array.from({ length: levelSlots(t) }, (_, i) => {
     const map = themedLevel(t, i);
     const rec = levelRecord(t, i);
-    return { available: !!map, stars: rec?.stars ?? 0, cleared: !!rec, difficulty: map?.difficulty ?? 1, title: map?.title ?? '' };
+    const hasCrystal = !!map?.objects.some((o) => o.role === 'crystal');
+    return { available: !!map, stars: rec?.stars ?? 0, cleared: !!rec, difficulty: map?.difficulty ?? 1, title: map?.title ?? '', hasCrystal, crystal: !!rec?.crystal };
   });
   return {
+    maxStars: maxStars(t),
+    crystals: themeCrystals(t),
     info: t.info,
     assets: t.assets,
     fontScope: t.official ? `th-${t.info.id}` : 'th-custom',
@@ -73,9 +76,15 @@ function inner(...children: (HTMLElement | string)[]): HTMLElement {
   return i;
 }
 
-function starRow(n: number): HTMLElement {
+/** ★★★, plus a crystal star (#56) after them on levels that have one: lit once earned */
+function starRow(n: number, crystal?: { earned: boolean }): HTMLElement {
   const s = el('span', 'dstars');
   for (let k = 0; k < 3; k++) s.append(el('span', k < n ? 'on' : 'off', '★'));
+  if (crystal) {
+    const c = el('span', `dcrystal ${crystal.earned ? 'on' : 'off'}`, '✦');
+    c.title = tr(crystal.earned ? 'campaign.crystalEarned' : 'campaign.crystalMissing');
+    s.append(c);
+  }
   return s;
 }
 
@@ -358,7 +367,8 @@ export class CampaignUI {
       applyTextFx(no, t.info.style.badge.numberFx, 24, design.button?.numberColor ?? t.info.style.badge.numberColor);
       const parts: (HTMLElement | string)[] = [no];
       if (map) {
-        parts.push(starRow(rec?.stars ?? 0), el('small', 'dlevel-diff', diff(map.difficulty ?? 1)));
+        const crystal = map.objects.some((o) => o.role === 'crystal') ? { earned: !!rec?.crystal } : undefined;
+        parts.push(starRow(rec?.stars ?? 0, crystal), el('small', 'dlevel-diff', diff(map.difficulty ?? 1)));
         if (rec) parts.push(el('small', 'dlevel-best', formatSeconds(rec.best)));
         const chapterNo = OFFICIAL_THEMES.indexOf(t);
         b.title = tr('campaign.levelTitle', { n: chapterNo >= 0 ? chapterLevelCode(chapterNo + 1, i + 1) : i + 1, title: map.title ?? '', difficulty: (map.difficulty ?? 1).toFixed(2) });

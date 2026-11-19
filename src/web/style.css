@@ -589,6 +589,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .pal-goal .pal-zone { color: #d48f00; background: rgba(255, 196, 60, 0.2); }
 .pal-coin svg { fill: #ffd25e; stroke: #d39a12; }
 .pal-torch svg { stroke: #5b3a1e; stroke-width: 0.6; }
+.pal-crystal svg { fill: #6fd6ff; stroke: #4b3fb8; }
 .pal-dark svg { fill: #1b1f27; stroke: #000; }
 .pal-global-dark svg { fill: #1b1f27; stroke: #000; }
 .pal-global-dark[aria-pressed="true"] { background: #2a2f3a; }
@@ -1632,3 +1633,8 @@ body:has(#play-view.running) .toast { visibility: hidden; }
 /* "Mark new as seen": a small pill in the summary tile, only while something is new */
 .ach-seen { margin-top: 6px; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #fff; border: 1px solid rgba(182, 138, 38, 0.5); color: #8a6410; cursor: pointer; }
 .ach-seen:hover, .ach-seen:focus-visible { background: #fff8dc; outline: none; box-shadow: 0 0 0 2px #b68a26; }
+
+/* Crystal star (#56) after a level's stars: lit once earned */
+.dstars .dcrystal { margin-left: 2px; }
+.dstars .dcrystal.on { color: #6fd6ff; text-shadow: 0 0 6px rgba(111, 214, 255, 0.9), 0 0 1px #4b3fb8; }
+.dstars .dcrystal.off { opacity: 0.35; }

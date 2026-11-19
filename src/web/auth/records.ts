@@ -13,6 +13,8 @@ interface ServerRecord {
   level_key: string;
   best_ms: number;
   stars: number;
+  /** Only once the crystal-star migration (20261120000000) is applied */
+  crystal?: boolean;
 }
 
 /** A level record as stored in the database */
@@ -29,7 +31,7 @@ export type SyncResult = { ok: true; uploaded: number; downloaded: number } | { 
 const toPayload = (records: Record<string, LevelRecord>) =>
   Object.entries(records)
     .filter(([, r]) => Number.isFinite(r.best) && r.best > 0)
-    .map(([key, r]) => ({ key, best_ms: recordTime(r.best), stars: r.stars }));
+    .map(([key, r]) => ({ key, best_ms: recordTime(r.best), stars: r.stars, crystal: !!r.crystal }));
 
 /**
  * Best time (ms) and stars per level, saved to the signed-in player's account.
@@ -49,7 +51,11 @@ export class RecordSync {
     setOnRecord((key, record) => {
       if (!this.userId) return;
       const previous = this.pending[key];
-      this.pending[key] = { best: Math.min(previous?.best ?? Infinity, record.best), stars: Math.max(previous?.stars ?? 0, record.stars) };
+      this.pending[key] = {
+        best: Math.min(previous?.best ?? Infinity, record.best),
+        stars: Math.max(previous?.stars ?? 0, record.stars),
+        ...(previous?.crystal || record.crystal ? { crystal: true } : {}),
+      };
       this.persist();
       void this.flush();
     });
@@ -104,7 +110,11 @@ export class RecordSync {
     const snapshot = { ...allRecords() };
     for (const [key, r] of Object.entries(sent)) {
       const prev = snapshot[key];
-      snapshot[key] = { best: Math.min(prev?.best ?? Infinity, r.best), stars: Math.max(prev?.stars ?? 0, r.stars) };
+      snapshot[key] = {
+        best: Math.min(prev?.best ?? Infinity, r.best),
+        stars: Math.max(prev?.stars ?? 0, r.stars),
+        ...(prev?.crystal || r.crystal ? { crystal: true } : {}),
+      };
     }
     const payload = toPayload(snapshot);
     let rows: ServerRecord[] = [];
@@ -161,7 +171,7 @@ export class RecordSync {
     // Do not overwrite a newer clear that has not reached the server yet.
     const changed = mergeRecords(Object.fromEntries(rows
       .filter((r) => !this.pending[r.level_key])
-      .map((r) => [r.level_key, { best: r.best_ms, stars: r.stars }])), true);
+      .map((r) => [r.level_key, { best: r.best_ms, stars: r.stars, ...(r.crystal ? { crystal: true } : {}) }])), true);
     this.onSaved();
     return changed;
   }

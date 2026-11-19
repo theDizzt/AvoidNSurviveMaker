@@ -2,7 +2,7 @@ import { t as tr } from '../core/i18n';
 import { formatPlayTime } from '../core/account';
 import { formatTime } from '../core/simulation';
 import { formatUtc } from '../core/time';
-import { levelAt, levelSlots, STARS_PER_LEVEL } from '../core/theme-pack';
+import { levelAt, levelSlots, maxStars, STARS_PER_LEVEL } from '../core/theme-pack';
 import type { Account } from './auth/account';
 import type { AccountDeaths, DeathTracker } from './auth/deaths';
 import type { AccountRecord, RecordSync } from './auth/records';
@@ -80,7 +80,7 @@ export class StatsUI {
     const totalStars = rows.reduce((s, r) => s + r.stars, 0);
     const perfect = rows.filter((r) => r.stars >= STARS_PER_LEVEL).length;
     const lastUpdate = rows.reduce<string | undefined>((a, r) => (!a || r.updated_at > a ? r.updated_at : a), undefined);
-    const officialMax = OFFICIAL_THEMES.reduce((s, t) => s + levelSlots(t) * STARS_PER_LEVEL, 0);
+    const officialMax = OFFICIAL_THEMES.reduce((s, t) => s + maxStars(t), 0);
 
     this.message(tr('stats.saved'));
     this.set('stars', String(totalStars));

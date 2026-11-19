@@ -10,6 +10,8 @@ export const PORTAL_PULL_MS = 160;
 export const COIN_MAGNET = 36;
 /** How long a collected coin takes to fly into the cursor (ms, drawing only) */
 export const COIN_PULL_MS = 180;
+/** A crystal star (#56, 48×48) is picked up this close to its center */
+export const CRYSTAL_MAGNET = 48;
 import type { MapData, Point } from './types';
 
 export type SimStatus = 'ready' | 'playing' | 'dead' | 'cleared';
@@ -72,6 +74,10 @@ export class Simulation {
   /** Number of coins on the map */
   readonly coinTotal: number;
   coinsLeft: number;
+  /** The map has a crystal star (#56) */
+  readonly hasCrystal: boolean;
+  /** The cursor has picked up the crystal star this run; a clear with it earns the bonus star */
+  crystalHeld = false;
 
   private readonly hasPaths: boolean;
   /** Objects used for collision: paths and walls + START/GOAL as safe floor when the map has paths */
@@ -80,6 +86,8 @@ export class Simulation {
   private readonly safeCount: number = 0;
   /** Indices (into `objects`) of the coins */
   private readonly coins: readonly number[];
+  /** Indices (into `objects`) of the crystal stars (at most one on a valid map) */
+  private readonly crystals: readonly number[];
 
   // ── Switches ──
   /** Per switch color: 1 while ON */
@@ -191,6 +199,8 @@ export class Simulation {
     this.solidDoor = Int32Array.from(doorOf);
     this.solidSlide = Float64Array.from(slide);
     this.coins = this.objects.flatMap((o, i) => (o.role === 'coin' ? [i] : []));
+    this.crystals = this.objects.flatMap((o, i) => (o.role === 'crystal' ? [i] : []));
+    this.hasCrystal = this.crystals.length > 0;
     this.triggers = this.objects.flatMap((o, i) => (o.role === 'trigger' ? [i] : []));
     this.linked = map.objects.flatMap((o, i) => (o.link ? [i] : []));
     for (const o of map.objects) if (o.trigger?.revert) this.revertColors |= 1 << o.trigger.color;
@@ -238,6 +248,7 @@ export class Simulation {
     this.abortReason = null;
     this.collected.fill(0);
     this.coinsLeft = this.coinTotal;
+    this.crystalHeld = false;
     this.resetSwitches();
     this.offX = 0;
     this.offY = 0;
@@ -530,9 +541,11 @@ export class Simulation {
     // Coins touched before dying are collected; remember when the last one was picked up
     let lastCoinU = -Infinity;
     if (this.coinsLeft > 0) {
-      const hits = this.coinHits(ta, xa, ya, tb, xb, yb, deathU);
+      const hits = this.coinHits(ta, xa, ya, tb, xb, yb, deathU, this.coins, COIN_MAGNET);
       if (this.coinsLeft === 0) lastCoinU = hits;
     }
+    // The crystal star, picked up the same way (it doesn't lock GOAL)
+    if (!this.crystalHeld && this.hasCrystal) this.coinHits(ta, xa, ya, tb, xb, yb, deathU, this.crystals, CRYSTAL_MAGNET);
 
     const g = map.goal;
     let goal = segmentRectEntry(xa, ya, xb, yb, g.x, g.y, g.w, g.h);
@@ -745,6 +758,7 @@ export class Simulation {
       this.hidden[i] = (link.action === 'remove' && this.channels[link.color] === 1) || this.collected[i] === 1 ? 1 : 0;
     }
     for (const i of this.coins) if (this.collected[i]) this.hidden[i] = 1;
+    for (const i of this.crystals) if (this.collected[i]) this.hidden[i] = 1;
     for (const i of this.triggers) {
       const trig = this.map.objects[i].trigger!;
       if (trig.kind === 'timer') {
@@ -760,9 +774,13 @@ export class Simulation {
    * Collect every coin whose magnet range (COIN_MAGNET around its center) the segment enters
    * before `limit`. Returns the fraction at which the latest of them was reached (-Infinity if none).
    */
-  private coinHits(ta: number, xa: number, ya: number, tb: number, xb: number, yb: number, limit: number): number {
+  /** Coins (or the crystal star) in `list` picked up along the segment, up to `limit`; returns the latest pickup */
+  private coinHits(
+    ta: number, xa: number, ya: number, tb: number, xb: number, yb: number, limit: number,
+    list: readonly number[], magnet: number,
+  ): number {
     let latest = -Infinity;
-    for (const i of this.coins) {
+    for (const i of list) {
       if (this.collected[i]) continue;
       const o = this.objects[i];
       let ax = xa;
@@ -785,7 +803,7 @@ export class Simulation {
       const fy = ay - cy;
       const dx = bx - ax;
       const dy = by - ay;
-      const c = fx * fx + fy * fy - COIN_MAGNET * COIN_MAGNET;
+      const c = fx * fx + fy * fy - magnet * magnet;
       let u = -1;
       if (c <= 0) u = 0;
       else {
@@ -799,7 +817,8 @@ export class Simulation {
       }
       if (u < 0 || u > limit) continue;
       this.collected[i] = 1;
-      this.coinsLeft--;
+      if (o.role === 'crystal') this.crystalHeld = true;
+      else this.coinsLeft--;
       this.collectedAt[i] = ta + (tb - ta) * u;
       // Where the coin was at that moment, in map units
       const tf = transformAt(o, o.dynamic ? this.clock[i] : 0, tfA);

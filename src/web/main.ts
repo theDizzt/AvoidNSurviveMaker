@@ -565,11 +565,11 @@ openInEditor.addEventListener('click', () => {
 });
 
 editor.onTest = (map) => showPlay(map, { test: true });
-play.onClear = (map, _replay, time) => {
-  // Campaign stars
+play.onClear = (map, _replay, time, crystal) => {
+  // Campaign stars (and the crystal star, if carried to GOAL)
   const c = campaignOf(currentKey);
   if (c && !testing) {
-    const stars = recordClear(c.theme, c.index, map, time);
+    const stars = recordClear(c.theme, c.index, map, time, crystal);
     if (c.theme.official) achievements.record(levelKey(c.theme, c.index), time, stars);
   }
   // A clear of the same gameplay verifies the editor's map for sharing

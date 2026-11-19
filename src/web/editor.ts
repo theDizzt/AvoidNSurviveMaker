@@ -88,7 +88,7 @@ const ICONS: Record<ShapeKind, string> = {
 const SPECIAL_IDS = {
   sectorPath: 27, sectorWall: 28, spike: 29, boulder: 30, coin: 31, laser: 37, mirror: 38, portal: 39, door: 40, dark: 41, globalDark: 42,
   disc: 43, blade: 44, movingDisc: 45, movingBlade: 46, text: 47, safe: 48, fog: 49, sand: 50,
-  ringPath: 53, ringWall: 54, secret: 55, torch: 57, carryTorch: 58,
+  ringPath: 53, ringWall: 54, secret: 55, crystal: 56, torch: 57, carryTorch: 58,
 } as const;
 const TRIGGER_IDS: Record<TriggerKind, number> = { switch: 32, timer: 33, hold: 34, startZone: 35, stopZone: 36 };
 const TRIGGER_NAMES: Record<TriggerKind, string> = {
@@ -99,7 +99,7 @@ const isButton = (k: TriggerKind | undefined) => k === 'switch' || k === 'timer'
 
 const ROLE_NAMES: Record<Role, string> = {
   path: tr('ed.namePath'), wall: tr('ed.nameWall'), coin: tr('ed.nameCoin'), dark: tr('ed.nameDark'), trigger: tr('ed.nameSwitch'), door: tr('ed.nameDoor'), laser: tr('ed.laser'), mirror: tr('ed.mirror'), portal: tr('ed.namePortal'),
-  text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'), torch: tr('ed.nameTorch'), secret: tr('ed.nameSecret'),
+  text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'), torch: tr('ed.nameTorch'), secret: tr('ed.nameSecret'), crystal: tr('ed.nameCrystal'),
 };
 /** "Fog" / "Sand Dust" */
 const fogName = (kind: FogKind | undefined) => tr(kind === 'sand' ? 'ed.nameSand' : 'ed.nameFog');
@@ -162,6 +162,7 @@ function objectToolId(o: MapObject): number {
   if (o.role === 'fog') return o.fog?.kind === 'sand' ? SPECIAL_IDS.sand : SPECIAL_IDS.fog;
   if (o.role === 'torch') return o.torch?.carry ? SPECIAL_IDS.carryTorch : SPECIAL_IDS.torch;
   if (o.role === 'secret') return SPECIAL_IDS.secret;
+  if (o.role === 'crystal') return SPECIAL_IDS.crystal;
   if (o.role === 'trigger') return TRIGGER_IDS[o.trigger?.kind ?? 'switch'];
   if (o.shape.type === 'sector' && o.shape.inner) return o.role === 'path' ? SPECIAL_IDS.ringPath : SPECIAL_IDS.ringWall;
   if (o.shape.type === 'sector') return o.role === 'path' ? SPECIAL_IDS.sectorPath : SPECIAL_IDS.sectorWall;
@@ -892,6 +893,8 @@ export class Editor {
     addButton(row, ringWall, `${svg(ringIcon)}<span class="pal-num">54</span>`, tr('ed.palRingWall'), 'pal-wall pal-static');
     const secretTool: ObjectTool = { kind: 'object', role: 'secret', behavior: 'static', shape: 'rect' };
     addButton(row, secretTool, `${svg('<rect x="3" y="4" width="18" height="16" rx="1.5"/><circle cx="12" cy="12" r="4.5" fill="#fff" fill-opacity="0.9"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">55</span>`, tr('ed.palSecretWall'), 'pal-wall pal-static');
+    const crystalTool: ObjectTool = { kind: 'object', role: 'crystal', behavior: 'static', shape: 'rect' };
+    addButton(row, crystalTool, `${svg('<path d="M12 2 L14.9 8.6 L22 9.3 L16.6 14 L18.2 21 L12 17.3 L5.8 21 L7.4 14 L2 9.3 L9.1 8.6 Z"/>')}<span class="pal-num">56</span>`, tr('ed.palCrystal'), 'pal-crystal');
     const torchIcon = '<path d="M10 12 L14 12 L13 22 L11 22 Z" fill="#8a5a2b"/><path d="M12 2.5 C15.5 6.5 16 9 14.6 11.5 L9.4 11.5 C8 9 8.5 6.5 12 2.5 Z" fill="#ff8a1f"/><path d="M12 6 C13.6 8 13.8 9.6 13 11 L11 11 C10.2 9.6 10.4 8 12 6 Z" fill="#ffd45e"/>';
     const torchTool = (carry: boolean): ObjectTool => ({ kind: 'object', role: 'torch', behavior: 'static', shape: 'rect', ...(carry ? { carry: true } : {}) });
     addButton(row, torchTool(false), `${svg(torchIcon)}<span class="pal-num">57</span>`, tr('ed.palTorch'), 'pal-torch');
@@ -1071,7 +1074,7 @@ export class Editor {
       const t = this.tool;
       const how = tr(t.special === 'spike' ? 'ed.howSpike'
         : t.special === 'boulder' ? 'ed.howBoulder'
-          : t.role === 'torch' ? 'ed.howTorch'
+          : t.role === 'torch' || t.role === 'crystal' ? 'ed.howTorch'
           : t.role === 'mirror' ? 'ed.howMirror'
             : t.role === 'laser' ? 'ed.howLaser'
               : t.role === 'portal' ? 'ed.howPortal' : t.shape === 'sector' ? 'ed.howSector' : t.role === 'coin' ? 'ed.howCoin' : t.shape === 'poly' || t.shape === 'free' ? 'ed.howPoints' : t.shape === 'ellipse' ? 'ed.howEllipse' : 'ed.howRect');
@@ -1099,7 +1102,7 @@ export class Editor {
     const objs = this.compiled;
     const zoneTrigger = (i: number) => !isButton(this.map.objects[i]?.trigger?.kind);
     // Text boxes are drawn over everything, so they are picked first
-    for (const role of ['text', 'coin', 'torch', 'portal', 'laser', 'trigger', 'wall', 'door', 'mirror'] as const) {
+    for (const role of ['text', 'coin', 'crystal', 'torch', 'portal', 'laser', 'trigger', 'wall', 'door', 'mirror'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
@@ -1198,7 +1201,7 @@ export class Editor {
     if (o.rotation) out.push({ h: { kind: 'pivot' }, p: o.rotation.pivot });
     o.motion?.points.forEach((p, j) => out.push({ h: { kind: 'marker', j }, p }));
     const s = o.shape;
-    if (o.role === 'coin') return out; // fixed size: only route markers / pivot
+    if (o.role === 'coin' || o.role === 'crystal') return out; // fixed size: only route markers / pivot
     if (o.laser) {
       const b = shapeBounds(o.shape);
       const a = (o.laser.angle * Math.PI) / 180;
@@ -1536,6 +1539,11 @@ export class Editor {
     if (tool.role === 'laser' || tool.role === 'portal') {
       const size = tool.role === 'laser' ? 24 : 40;
       r = { x: d.x0 - size / 2, y: d.y0 - size / 2, w: size, h: size };
+    }
+    // Crystal stars are always 48×48, centered on the click, and a map has only one
+    if (tool.role === 'crystal') {
+      if (this.map.objects.some((o) => o.role === 'crystal')) return this.flash(tr('ed.oneCrystal'));
+      r = { x: d.x0 - LIMITS.crystalSize / 2, y: d.y0 - LIMITS.crystalSize / 2, w: LIMITS.crystalSize, h: LIMITS.crystalSize };
     }
     // Torches 24×40, centered on the click
     if (tool.role === 'torch' && r.w < 4 && r.h < 4) r = { x: d.x0 - 12, y: d.y0 - 20, w: 24, h: 40 };
@@ -2365,10 +2373,10 @@ export class Editor {
       parts.push(this.group(
         this.selectField<Role>(tr('ed.type'), o.role, [['path', tr('ed.pathSafeFloor')], ['wall', tr('ed.wallDeadly')]], (v) => (o.role = v), true),
       ));
-    } else if (o.role === 'coin' || o.role === 'dark') {
+    } else if (o.role === 'coin' || o.role === 'dark' || o.role === 'crystal') {
       parts.push(this.note(o.role === 'coin'
         ? tr('ed.coinNote')
-        : tr('ed.darkNote')));
+        : o.role === 'crystal' ? tr('ed.crystalNote') : tr('ed.darkNote')));
     } else if (o.role === 'safe') {
       parts.push(this.note(tr('ed.nothingCanHurtTheCursor')));
     } else if (o.fog) {
@@ -2377,7 +2385,13 @@ export class Editor {
 
     // Shape
     const s = o.shape;
-    if (s.type === 'rect') {
+    if (o.role === 'crystal' && s.type === 'rect') {
+      // Always 48×48: only its position
+      parts.push(this.group(
+        this.numField(tr('ed.centerX'), s.x + s.w / 2, (v) => (s.x = Math.round(v - s.w / 2))),
+        this.numField(tr('ed.centerY'), s.y + s.h / 2, (v) => (s.y = Math.round(v - s.h / 2))),
+      ));
+    } else if (s.type === 'rect') {
       parts.push(this.group(
         this.numField('X', s.x, (v) => (s.x = Math.round(v))),
         this.numField('Y', s.y, (v) => (s.y = Math.round(v))),
