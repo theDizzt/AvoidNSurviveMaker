@@ -11,6 +11,7 @@ import type { Fill, MapData, MapObject, Point, Rect, TextBox } from '../core/typ
 import { libraryFontCss } from './library-fonts';
 import { CompiledMotion } from '../core/motion';
 import { shapeCenter } from '../core/shape';
+import type { LightSource } from '../core/lighting';
 
 export const COLORS = {
   bg: '#f6fbff',
@@ -592,8 +593,10 @@ const darkLayers = new WeakMap<CanvasRenderingContext2D, HTMLCanvasElement>();
  * `alpha` < 1 previews it in the editor.
  */
 export function drawGlobalDark(
-  ctx: CanvasRenderingContext2D, map: MapData, lights: readonly { x: number; y: number; r: number }[], alpha = 1,
+  ctx: CanvasRenderingContext2D, map: MapData, lights: readonly LightSource[], alpha = 1,
 ): void {
+  const opacity = Math.max(0, Math.min(100, map.darkness?.intensity ?? 100)) / 100;
+  if (opacity === 0 || alpha <= 0) return;
   const m = ctx.getTransform();
   const cw = ctx.canvas.width;
   const ch = ctx.canvas.height;
@@ -613,9 +616,12 @@ export function drawGlobalDark(
   // Lights: fully clear in the middle, fading out over the outer third
   g.globalCompositeOperation = 'destination-out';
   for (const l of lights) {
+    if (!Number.isFinite(l.r) || l.r <= 0 || !Number.isFinite(l.x) || !Number.isFinite(l.y)) continue;
+    const strength = Math.max(0, Math.min(100, l.intensity ?? 100)) / 100;
+    if (!Number.isFinite(strength) || strength <= 0) continue;
     const grad = g.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r);
-    grad.addColorStop(0, 'rgba(0,0,0,1)');
-    grad.addColorStop(0.65, 'rgba(0,0,0,1)');
+    grad.addColorStop(0, `rgba(0,0,0,${strength})`);
+    grad.addColorStop(0.65, `rgba(0,0,0,${strength})`);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grad;
     g.beginPath();
@@ -625,7 +631,7 @@ export function drawGlobalDark(
   g.globalCompositeOperation = 'source-over';
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalAlpha = alpha;
+  ctx.globalAlpha = alpha * opacity;
   ctx.drawImage(layer, 0, 0);
   ctx.restore();
 }

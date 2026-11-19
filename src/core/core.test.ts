@@ -52,6 +52,41 @@ describe('geometry', () => {
 
 describe('motion', () => {
   const p = { x: 0, y: 0 };
+  it('curves only the selected leg and retraces it on pingpong', () => {
+    const m = new CompiledMotion(motion({
+      points: [{ x: 100, y: 0 }, { x: 100, y: 100 }, { x: 200, y: 100 }],
+      segmentTypes: ['linear', 'curve', 'linear'],
+    }), { x: 0, y: 0 });
+    expect(Array.from(m.legs[0].pts)).toEqual([0, 0, 100, 0]);
+    expect(Array.from(m.legs[2].pts)).toEqual([100, 100, 200, 100]);
+    expect(Array.from(m.legs[1].pts).filter((_, i) => i % 2 === 0).some(x => Math.abs(x - 100) > 1)).toBe(true);
+    expect(m.offsetAt(m.legs[0].dur + m.legs[1].dur, { x: 0, y: 0 })).toMatchObject({ x: expect.closeTo(100), y: expect.closeTo(100) });
+    const t = m.legs[0].dur + m.legs[1].dur / 3;
+    const forward = m.offsetAt(t, { x: 0, y: 0 });
+    const backward = m.offsetAt(2 * m.pass - t, { x: 0, y: 0 });
+    expect(backward.x).toBeCloseTo(forward.x);
+    expect(backward.y).toBeCloseTo(forward.y);
+  });
+  it('overrides curve defaults and independently curves the loop return', () => {
+    const m = new CompiledMotion(motion({ type: 'curve', repeat: 'loop',
+      points: [{ x: 100, y: 0 }, { x: 100, y: 100 }], segmentTypes: ['linear', 'linear', 'curve'],
+    }), { x: 0, y: 0 });
+    expect(m.legs.map(l => l.pts.length > 4)).toEqual([false, false, true]);
+    const fallback = new CompiledMotion(motion({ type: 'curve',
+      points: [{ x: 100, y: 0 }, { x: 100, y: 100 }], segmentTypes: ['linear'],
+    }), { x: 0, y: 0 });
+    expect(fallback.legs.map(l => l.pts.length > 4)).toEqual([false, true]);
+  });
+  it('preserves segment types through validation and sharing, rejecting invalid types', async () => {
+    const map = baseMap([wall({ x: 20, y: 20, w: 20, h: 20 }, { motion: motion({
+      points: [{ x: 100, y: 50 }, { x: 100, y: 150 }], segmentTypes: ['linear', 'curve', 'linear'],
+    }) })]);
+    expect(validateMap(map).objects[0].motion?.segmentTypes).toEqual(['linear', 'curve', 'linear']);
+    expect((await decodeMap(await encodeMap(map))).objects[0].motion?.segmentTypes).toEqual(['linear', 'curve', 'linear']);
+    const bad = JSON.parse(JSON.stringify(map));
+    bad.objects[0].motion.segmentTypes = ['circle'];
+    expect(() => validateMap(bad)).toThrow();
+  });
   it('linear pingpong goes to the end and comes back', () => {
     const m = new CompiledMotion(motion({ points: [{ x: 100, y: 0 }] }), { x: 0, y: 0 });
     expect(m.offsetAt(500, p).x).toBeCloseTo(50);

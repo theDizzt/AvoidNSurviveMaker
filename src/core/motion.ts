@@ -70,7 +70,7 @@ function buildLegs(m: Motion, anchor: Point): Leg[] {
     const a = nodes[i];
     const b = nodes[(i + 1) % nodes.length];
     const pts: number[] = [];
-    if (m.type === 'linear') {
+    if ((m.segmentTypes?.[i] ?? m.type) === 'linear') {
       pts.push(a.x, a.y, b.x, b.y);
     } else {
       const at = (k: number) => {

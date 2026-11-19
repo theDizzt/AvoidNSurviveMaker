@@ -1,6 +1,7 @@
 import { t as tr } from '../core/i18n';
 import { pointInPoly, pointInRect } from '../core/geometry';
 import { CompiledMotion } from '../core/motion';
+import { objectLights } from '../core/lighting';
 import { compileObject, transformAt, type CompiledObject, type Transform } from '../core/object';
 import {
   alignOffset, distributeOffsets, objectsBounds, reorder, shapeCentroid, translateObject, turnObjects, unionRect,
@@ -873,7 +874,7 @@ export class Editor {
     g.innerHTML = `${svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="#fff"/>')}<span class="pal-num">42</span>`;
     g.addEventListener('click', () => this.edit(() => {
       if (this.map.darkness) delete this.map.darkness;
-      else this.map.darkness = { light: 60 };
+      else this.map.darkness = { light: 0, intensity: 100 };
     }));
     this.globalDarkBtn = g;
     row.append(g);
@@ -1212,7 +1213,14 @@ export class Editor {
       this.edit(() => {
         o.motion ??= { ...DEFAULT_MOTION, points: [] };
         if (o.motion.type === 'circle') o.motion.points = [p];
-        else if (o.motion.points.length < LIMITS.maxMarkers) o.motion.points.push(p);
+        else if (o.motion.points.length < LIMITS.maxMarkers) {
+          if (o.motion.segmentTypes) {
+            o.motion.segmentTypes = Array.from({ length: o.motion.points.length + 1 }, (_, j) =>
+              o.motion!.segmentTypes?.[j] ?? (o.motion!.type === 'curve' ? 'curve' : 'linear'));
+            o.motion.segmentTypes.splice(o.motion.points.length, 0, o.motion.type);
+          }
+          o.motion.points.push(p);
+        }
       });
       if (o.motion?.type === 'circle') this.finishModes();
       return;
@@ -2390,6 +2398,7 @@ export class Editor {
             m.easing = 'none';
           }
           m.type = v;
+          delete m.segmentTypes;
         }),
         this.selectField<Repeat>(tr('ed.repeat'), m.repeat, REPEAT_OPTIONS, (v) => (m.repeat = v)),
         this.numField(tr('ed.speedPxS'), m.speed, (v) => (m.speed = Math.min(LIMITS.maxSpeed, Math.max(0, v))), 10),
@@ -2400,6 +2409,21 @@ export class Editor {
         fields.push(this.selectField(tr('ed.direction'), m.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (m.clockwise = v === 'cw')));
       }
       parts.push(this.group(...fields));
+      if (m.type !== 'circle' && m.points.length) {
+        parts.push(this.heading(tr('ed.routeSegments')), this.note(tr('ed.routeSegmentsHint')));
+        const count = m.points.length + (m.repeat === 'loop' ? 1 : 0);
+        for (let i = 0; i < count; i++) {
+          const from = i === 0 ? tr('ed.routeStart') : String(i);
+          const to = i === m.points.length ? tr('ed.routeStart') : String(i + 1);
+          parts.push(this.selectField<'linear' | 'curve'>(`${from} → ${to}`,
+            m.segmentTypes?.[i] ?? m.type,
+            [['linear', tr('ed.straight')], ['curve', tr('ed.curve')]], (v) => {
+              m.segmentTypes = Array.from({ length: m.points.length + 1 }, (_, j) =>
+                m.segmentTypes?.[j] ?? (m.type === 'curve' ? 'curve' : 'linear'));
+              m.segmentTypes[i] = v;
+            }));
+        }
+      }
       parts.push(this.toggle(tr('ed.showPath'), !!m.showPath, (on) => {
         if (on) m.showPath = true;
         else delete m.showPath;
@@ -2411,8 +2435,14 @@ export class Editor {
       ));
       parts.push(this.actions(
         this.button(m.type === 'circle' ? tr('ed.setOrbit') : tr('ed.placeMarkers'), () => this.startMarkers(idx)),
-        this.button(tr('ed.removeLast'), () => m.points.length && this.edit(() => m.points.pop())),
-        this.button(tr('ed.clear'), () => m.points.length && this.edit(() => (m.points = []))),
+        this.button(tr('ed.removeLast'), () => m.points.length && this.edit(() => {
+          m.segmentTypes?.splice(m.points.length - 1, 1);
+          m.points.pop();
+        })),
+        this.button(tr('ed.clear'), () => m.points.length && this.edit(() => {
+          m.points = [];
+          delete m.segmentTypes;
+        })),
       ));
     }
 
@@ -2920,13 +2950,16 @@ export class Editor {
       );
     }
     parts.push(this.toggle(tr('ed.globalDarkness42'), !!m.darkness, (on) => {
-      if (on) m.darkness = { light: 60 };
+      if (on) m.darkness = { light: 0, intensity: 100 };
       else delete m.darkness;
     }));
     const dk = m.darkness;
     if (dk) {
       parts.push(
-        this.group(this.numField(tr('ed.lightRadius'), dk.light, (v) => (dk.light = Math.round(Math.min(LIMITS.maxLight, Math.max(LIMITS.minLight, v)))), 4)),
+        this.group(
+          this.numField(tr('ed.darknessIntensity'), dk.intensity ?? 100, (v) => (dk.intensity = Math.round(Math.min(100, Math.max(0, v)))), 5),
+          this.numField(tr('ed.lightRadius'), dk.light, (v) => (dk.light = Math.round(Math.min(LIMITS.maxLight, Math.max(LIMITS.minLight, v)))), 4),
+        ),
         this.note(tr('ed.darknessNote', { min: LIMITS.minLight })),
       );
     }
@@ -3148,7 +3181,11 @@ export class Editor {
     ctx.stroke();
     ctx.setLineDash([]);
     // Global darkness: a light preview around the mouse
-    if (map.darkness && this.hover) drawGlobalDark(ctx, map, [{ x: this.hover.x, y: this.hover.y, r: map.darkness.light }], 0.3);
+    if (map.darkness) {
+      const lights = objectLights(objs, t);
+      if (this.hover && map.darkness.light > 0) lights.push({ x: this.hover.x, y: this.hover.y, r: map.darkness.light });
+      drawGlobalDark(ctx, map, lights, 0.3);
+    }
     // Level number and title as they'll appear in game, in the chapter preset's badge design
     const badge = badgeFor(map);
     ctx.save();

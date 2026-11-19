@@ -27,7 +27,7 @@ export const LIMITS = {
   /** Coins are always this size (diameter) */
   coinSize: 24,
   /** Global darkness light radius */
-  minLight: 16,
+  minLight: 0,
   maxLight: 2000,
 } as const;
 
@@ -125,6 +125,10 @@ function motion(v: unknown, name: string, W: number, H: number): Motion {
   return {
     type,
     points: arr(o.points, `${name}.points`, LIMITS.maxMarkers).map((p, i) => point(p, `${name}.points[${i}]`, W, H)),
+    ...(o.segmentTypes !== undefined ? {
+      segmentTypes: arr(o.segmentTypes, `${name}.segmentTypes`, LIMITS.maxMarkers + 1)
+        .map((v, i) => oneOf(v, `${name}.segmentTypes[${i}]`, ['linear', 'curve'] as const)),
+    } : {}),
     speed: num(o.speed, `${name}.speed`, 0, LIMITS.maxSpeed),
     repeat: oneOf(o.repeat, `${name}.repeat`, REPEATS),
     easing: oneOf(o.easing, `${name}.easing`, EASINGS),
@@ -282,6 +286,13 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
     const l = obj(o.link, `${name}.link`);
     out.link = { color: colorIndex(l.color, `${name}.link.color`), action: oneOf(l.action, `${name}.link.action`, ['start', 'stop', 'remove'] as const) };
   }
+  if (o.light !== undefined) {
+    const light = obj(o.light, `${name}.light`);
+    out.light = {
+      radius: num(light.radius, `${name}.light.radius`, 0, LIMITS.maxLight),
+      ...(light.intensity !== undefined ? { intensity: num(light.intensity, `${name}.light.intensity`, 0, 100) } : {}),
+    };
+  }
   return out;
 }
 
@@ -380,7 +391,11 @@ export function validateMap(input: unknown): MapData {
   }
   if (o.difficulty !== undefined) map.difficulty = Math.round(num(o.difficulty, 'difficulty', 1, 10) * 100) / 100;
   if (o.darkness !== undefined) {
-    map.darkness = { light: num(obj(o.darkness, 'darkness').light, 'darkness.light', LIMITS.minLight, LIMITS.maxLight) };
+    const darkness = obj(o.darkness, 'darkness');
+    map.darkness = {
+      light: num(darkness.light, 'darkness.light', LIMITS.minLight, LIMITS.maxLight),
+      ...(darkness.intensity !== undefined ? { intensity: num(darkness.intensity, 'darkness.intensity', 0, 100) } : {}),
+    };
   }
   if (o.stars !== undefined) {
     const s = obj(o.stars, 'stars');
