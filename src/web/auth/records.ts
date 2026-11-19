@@ -47,11 +47,13 @@ export class RecordSync {
   constructor(private readonly account: Account) {
     setOnRecord((key, record) => {
       if (!this.userId) return;
-      this.pending[key] = record;
+      const previous = this.pending[key];
+      this.pending[key] = { best: Math.min(previous?.best ?? Infinity, record.best), stars: Math.max(previous?.stars ?? 0, record.stars) };
       this.persist();
       void this.flush();
     });
     account.onChange(() => this.syncUser());
+    window.addEventListener('online', () => void this.flush());
     this.syncUser();
   }
 
@@ -113,6 +115,8 @@ export class RecordSync {
       /* offline: retried later */
     } finally {
       this.sending = false;
+      // A different account may have queued records while the previous request was in flight.
+      if (this.userId !== userId && this.userId) void this.flush();
     }
   }
 

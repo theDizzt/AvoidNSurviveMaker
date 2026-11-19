@@ -62,7 +62,8 @@ export function recordClear(theme: ThemeEntry, index: number, map: MapData, time
   const next = { stars: Math.max(prev?.stars ?? 0, stars), best: Math.min(prev?.best ?? Infinity, time) };
   records = { ...records, [k]: next };
   save();
-  onRecord(k, next);
+  // Send this run, not a best record potentially belonging to another local player.
+  onRecord(k, { stars, best: time });
   return stars;
 }
 

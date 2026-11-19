@@ -33,6 +33,9 @@ import { IrisTransition } from './iris-transition';
 import { gameAudio } from './audio';
 import { installMenuMusicControls, menuMusicUrl } from './menu-music';
 import { applyI18n } from './i18n-dom';
+import { Achievements } from './achievements';
+import { AchievementsUI } from './achievements-ui';
+import { ACHIEVEMENTS } from '../core/achievements';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -250,7 +253,7 @@ function showImmediately(next: Screen): void {
     void stats.render();
     $('stats-back').focus();
   }
-  if (next === 'achievements') $('achievements-back').focus();
+  if (next === 'achievements') { achievementsUI.open(); $('achievements-back').focus(); }
   if (next === 'customize') $('customize-back').focus();
   if (next === 'licenses') {
     renderFontLicenses($('licenses-list'));
@@ -535,7 +538,10 @@ editor.onTest = (map) => showPlay(map, { test: true });
 play.onClear = (map, _replay, time) => {
   // Campaign stars
   const c = campaignOf(currentKey);
-  if (c) recordClear(c.theme, c.index, map, time);
+  if (c && !testing) {
+    const stars = recordClear(c.theme, c.index, map, time);
+    if (c.theme.official) achievements.record(levelKey(c.theme, c.index), time, stars);
+  }
   // A clear of the same gameplay verifies the editor's map for sharing
   editor.markVerified(map, time);
 };
@@ -546,6 +552,22 @@ play.onExit = leavePlay;
 // ───────────────────────── Accounts ─────────────────────────
 
 const account = new Account();
+const achievements = new Achievements(account);
+const achievementsUI = new AchievementsUI($('achievements-content'), achievements, (def) => {
+  for (const key of def.levels) {
+    const record = achievements.records[key];
+    if (record && (def.kind === 'clear' || record.stars >= 3)) continue;
+    const [id, slot] = key.split('/');
+    const theme = OFFICIAL_THEMES.find(t => t.info.id === id);
+    if (!theme || !themeUnlocked(theme) || !filledSlots(theme).includes(Number(slot))) continue;
+    return () => { campaign.renderLevels(theme); show('levels'); };
+  }
+  return null;
+});
+achievements.onUnlock = (ids) => {
+  const names = ids.slice(0, 3).map(id => t(ACHIEVEMENTS.find(d => d.id === id)!.name)).join(', ');
+  showToast(t('ach.unlocked', { names }) + (ids.length > 3 ? t('ach.more', { n: ids.length - 3 }) : ''), 'ok');
+};
 // Total time the game is open, saved to the player's profile
 const playTime = new PlayTimeTracker(account);
 // Deaths in runs (total and per level), saved to the player's account
@@ -561,6 +583,7 @@ play.onDeath = () => {
 // Best time (ms) and stars per level, saved to the player's account
 const recordSync = new RecordSync(account);
 recordSync.onSaved = () => {
+  void achievements.refresh();
   if (current === 'levels' && campaign.currentTheme) campaign.renderLevels(campaign.currentTheme);
   if (current === 'themes') campaign.renderThemes();
   $('menu-stars').textContent = String(totalStars());
@@ -656,7 +679,10 @@ async function boot(): Promise<void> {
   const setProgress = installDiamondProgress($('preload-dia'), (r) => (percent.textContent = `${Math.round(r * 100)}%`));
   const text = $('preload-text');
   const shared = sharedMapTask() ?? sharedPackTask();
-  const accountTask: PreloadTask = { label: t('common.account'), run: () => account.init() };
+  const accountTask: PreloadTask = { label: t('common.account'), run: async () => {
+    await account.init();
+    achievements.initializeGuest();
+  } };
   const tasks = [...FONT_TASKS, accountTask, ...(shared ? [shared] : [])];
 
   await runPreload(tasks, (done, total, label) => {

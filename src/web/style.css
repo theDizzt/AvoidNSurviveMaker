@@ -1516,3 +1516,26 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 .dia-flat .dtile-deco { display: none; }
 .dia-flat .dvolume { min-height: 190px; }
 .dia-flat .dvolume .dtile-in { position: relative; }
+
+/* Achievements remain a normal scrolling list, including at small viewport sizes. */
+#achievements-screen { overflow-y: auto; align-items: safe center; }
+#achievements-screen .menu-inner { width: min(920px, 100%); margin-block: auto; padding-block: 24px; }
+#achievements-content { width: 100%; text-align: left; }
+.achievement-summary { font-size: 22px; font-weight: 700; text-align: center; }
+.achievement-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 20px 0; }
+.achievement-filters label { display: grid; gap: 6px; }
+.achievement-filters select { min-width: 120px; }
+.achievement-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.achievement-card { display: flex; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface, #fff); overflow-wrap: anywhere; }
+.achievement-card > div { flex: 1; min-width: 0; }
+.achievement-card h3 { margin: 0 0 8px; font-size: 18px; }
+.achievement-card p { margin: 8px 0; font-size: 14px; }
+.achievement-card.is-unlocked { border-color: #b68a26; }
+.achievement-badge { font-size: 30px; color: var(--muted); }
+.is-unlocked .achievement-badge { color: #b68a26; }
+.achievement-card progress { width: 100%; height: 10px; accent-color: #b68a26; }
+.achievement-count, .achievement-date, .achievement-card details { font-size: 12px; }
+.achievement-card details { margin-top: 12px; }
+.achievement-card summary { cursor: pointer; }
+@media (max-width: 640px) { .achievement-list { grid-template-columns: 1fr; } }
+body:has(#play-view.running) .toast { visibility: hidden; }
