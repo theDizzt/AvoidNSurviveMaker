@@ -1,4 +1,9 @@
 {
+  "debug.rawPollingRate": "원본 입력 추정 주파수",
+  "debug.usedPollingRate": "게임에 사용된 입력 추정 주파수",
+  "debug.usedInterval": "사용된 입력 샘플 간격",
+  "debug.usedSamples": "사용된 입력 샘플 수",
+  "debug.usedPending": "플레이 중 움직이면 측정됩니다",
   "pattern.egyptian": "고대 이집트",
   "pattern.sandBrick": "모래 벽돌",
   "pattern.bark": "나무 껍질",

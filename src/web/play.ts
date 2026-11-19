@@ -11,7 +11,7 @@ import { badgeTitle } from './theme-registry';
 import { COIN_PULL_MS, formatSeconds, Simulation, type Replay } from '../core/simulation';
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
-import { options } from './options';
+import { onOptionsChange, options } from './options';
 import { gameAudio } from './audio';
 import { DeathBurst } from './death-burst';
 import { drawFogAreas } from './fog';
@@ -60,6 +60,7 @@ export class PlayController {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly input: HighResPointer;
   private readonly stats = new InputStats();
+  private readonly usedStats = new InputStats();
   private t0 = 0;
   private trail: number[] = [];
   /** Per map object: 1 while the cursor carries that torch (#58); cosmetic, reset every run */
@@ -78,6 +79,13 @@ export class PlayController {
   constructor(private readonly el: PlayElements) {
     this.ctx = el.canvas.getContext('2d')!;
     this.input = new HighResPointer((list) => this.onSamples(list));
+    let measuredRate = options.pollingRate;
+    onOptionsChange(next => {
+      if (next.pollingRate === measuredRate) return;
+      measuredRate = next.pollingRate;
+      this.stats.reset();
+      this.usedStats.reset();
+    });
 
     el.canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     // Cursor left the browser window
@@ -120,6 +128,8 @@ export class PlayController {
   }
 
   reset(recompile = false): void {
+    this.stats.reset();
+    this.usedStats.reset();
     this.burst = null;
     this.deathNotified = false;
     this.sim = new Simulation(this.map, recompile ? undefined : this.sim.objects);
@@ -169,6 +179,8 @@ export class PlayController {
     this.sim = sim;
     this.runPointer = e.pointerId;
     this.lastSampleAt = e.timeStamp;
+    this.stats.reset();
+    this.usedStats.reset();
     this.burst = null;
     this.deathNotified = false;
     this.t0 = e.timeStamp;
@@ -209,7 +221,10 @@ export class PlayController {
       if (gap && ev.timeStamp - this.lastSampleAt < gap * 0.9) continue;
       this.lastSampleAt = ev.timeStamp;
       toMap(ev.clientX, ev.clientY, p);
+      // feed ignores samples already overtaken by idle advancement or click handling.
+      const accepted = ev.timeStamp - this.t0 > sim.time;
       sim.feed(ev.timeStamp - this.t0, p.x, p.y);
+      if (accepted) this.usedStats.recordSample(ev.timeStamp);
       this.breakTrailOnTeleport();
       this.trail.push(sim.x, sim.y);
       if (sim.status !== 'playing') break;
@@ -431,10 +446,15 @@ export class PlayController {
 
     if (!options.showDebug) return;
     const s = this.stats.summary();
+    const used = this.usedStats.summary();
     const rows: [string, string][] = [
       [tr('debug.inputEvent'), `${this.input.source}${this.input.coalesced ? ' + getCoalescedEvents' : tr('debug.noCoalesced')}`],
       [tr('debug.sampleInterval'), s.medianMs !== null ? `${s.medianMs.toFixed(3)} ms` : tr('debug.keepMoving')],
-      [tr('debug.pollingRate'), s.hz !== null ? `${Math.round(s.hz)} Hz` : '-'],
+      [tr('debug.rawPollingRate'), s.hz !== null ? `${Math.round(s.hz)} Hz` : '-'],
+      [tr('options.polling'), options.pollingRate ? `${options.pollingRate} Hz` : tr('options.pollingMax')],
+      [tr('debug.usedPollingRate'), used.hz !== null ? `${Math.round(used.hz)} Hz` : tr('debug.usedPending')],
+      [tr('debug.usedInterval'), used.medianMs !== null ? `${used.medianMs.toFixed(3)} ms` : '-'],
+      [tr('debug.usedSamples'), String(used.total)],
       [tr('debug.minInterval'), s.minMs !== null ? `${s.minMs.toFixed(3)} ms` : '-'],
       [tr('debug.samplesPerEvent'), `${s.avgPerEvent.toFixed(1)} / ${s.maxPerEvent}`],
       [tr('debug.totalSamples'), String(s.total)],

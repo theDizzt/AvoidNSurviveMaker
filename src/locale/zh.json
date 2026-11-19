@@ -1,4 +1,9 @@
 {
+  "debug.rawPollingRate": "原始输入估计频率",
+  "debug.usedPollingRate": "游戏采用的输入估计频率",
+  "debug.usedInterval": "采用的输入采样间隔",
+  "debug.usedSamples": "采用的输入采样数",
+  "debug.usedPending": "游戏中移动后测量",
   "pattern.egyptian": "古埃及",
   "pattern.sandBrick": "砂岩砖",
   "pattern.bark": "树皮",

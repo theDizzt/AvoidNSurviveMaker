@@ -1,4 +1,9 @@
 {
+  "debug.rawPollingRate": "Estimated raw input rate",
+  "debug.usedPollingRate": "Estimated input rate used in play",
+  "debug.usedInterval": "Used input sample interval",
+  "debug.usedSamples": "Used input samples",
+  "debug.usedPending": "Move during play to measure",
   "pattern.egyptian": "Ancient Egyptian",
   "pattern.sandBrick": "Sandstone bricks",
   "pattern.bark": "Tree bark",
