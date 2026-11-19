@@ -590,11 +590,14 @@ recordSync.onSaved = () => {
   if (current === 'levels' && campaign.currentTheme) campaign.renderLevels(campaign.currentTheme);
   if (current === 'themes') campaign.renderThemes();
   $('menu-stars').textContent = String(totalStars());
+  renderLevelOptions();
 };
 const recordsButton = $<HTMLButtonElement>('records-sync');
+const importGuestButton = $<HTMLButtonElement>('records-import-guest');
 const recordsStatus = $('records-status');
 const signedOutRecords = t('records.signedOut');
 function renderRecordsOption(): void {
+  importGuestButton.disabled = !recordSync.canImportGuest || !!recordsButton.dataset.busy;
   if (recordsButton.dataset.busy) return;
   recordsButton.disabled = !recordSync.available;
   if (recordSync.available) {
@@ -611,9 +614,23 @@ account.onChange(() => current === 'stats' && void stats.render());
 account.onChange(renderRecordsOption);
 account.onChange(clearLeaderboardCache); // so the player's own row is marked after signing in
 renderRecordsOption();
+let progressUser = account.user?.id ?? null;
+account.onChange(() => {
+  const next = account.user?.id ?? null;
+  if (next === progressUser) return;
+  progressUser = next;
+  // A run started by the previous player must not be recorded for the next one.
+  if (current === 'play') play.load(currentMap);
+});
+importGuestButton.addEventListener('click', () => {
+  recordSync.importGuest();
+  showToast(t('records.guestImported'), 'ok');
+  renderRecordsOption();
+});
 recordsButton.addEventListener('click', async () => {
   recordsButton.dataset.busy = '1';
   recordsButton.disabled = true;
+  importGuestButton.disabled = true;
   recordsStatus.textContent = t('records.syncing');
   const result = await recordSync.syncAll();
   delete recordsButton.dataset.busy;

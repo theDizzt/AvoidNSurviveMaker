@@ -138,7 +138,7 @@ stateDiagram-v2
 |---|---|---|
 | 옵션 (볼륨, 잔상, 타이머 등) | localStorage | `options.ts` |
 | 메뉴 음악 교체 | IndexedDB (Blob) | `menu-music.ts` |
-| 레벨 키별 캠페인 진행 (최고 ms, 별) | localStorage `avoid-n-survive:progress` | `progress.ts` |
+| 레벨 키별 캠페인 진행 (최고 ms, 별) | localStorage `avoid-n-survive:progress:account:<user id>`; 게스트·이전 공용 기록은 `avoid-n-survive:progress` | `progress.ts` |
 | 에디터 초안 + 검증 상태 | localStorage | `editor.ts` |
 | 커스텀 테마 팩 | localStorage (data URL) | `theme-registry.ts` |
 | 계정별 미전송 플레이 시간 / 기록 | localStorage, 나중에 재시도 | `auth/playtime.ts`, `auth/records.ts` |
@@ -173,7 +173,7 @@ erDiagram
 - **레벨 기록**:
   - 클리어할 때마다 `submit_level_records(jsonb)` 로 올립니다.
   - 서버는 병합하여 가장 낮은 `best_ms` 와 가장 높은 `stars` 를 유지합니다.
-  - **Options → Sync records** 는 로컬 기록을 모두 올리고 계정의 기록을 내려받습니다.
+  - **Options → Sync records** 는 현재 계정의 로컬 기록만 올리고 같은 계정의 기록을 내려받습니다. 게스트·이전 공용 기록은 **Import guest records** 로 명시적으로 가져옵니다.
   - Row level security: 플레이어는 자신의 행만 읽습니다.
 - 클라이언트는 테이블에 직접 쓰지 않습니다. 모든 쓰기는 `auth.uid()` 를 확인하는 `security definer` 함수를 거칩니다.
 - `.env.local`(Supabase 키)이 없으면 게임은 완전히 오프라인으로 동작하며, 계정 기능만 사용할 수 없습니다.

@@ -8,7 +8,11 @@ import { OFFICIAL_THEMES } from './theme-registry';
  * Campaign progress (stars and best times per level), kept in this browser, keyed by theme id.
  * A level without star times earns all 3 stars when cleared.
  */
+// Keep legacy browser-wide records as guest data; their original owner is unknown.
 const STORAGE_KEY = 'avoid-n-survive:progress';
+let activeUser: string | null = null;
+const storageKey = (user: string | null) => user ? `${STORAGE_KEY}:account:${user}` : STORAGE_KEY;
+const sessionRecords = new Map<string, Record<string, LevelRecord>>();
 
 export interface LevelRecord {
   stars: number;
@@ -18,9 +22,11 @@ export interface LevelRecord {
 
 let records: Record<string, LevelRecord> = load();
 
-function load(): Record<string, LevelRecord> {
+function load(user: string | null = activeUser): Record<string, LevelRecord> {
+  const cached = sessionRecords.get(storageKey(user));
+  if (cached) return cached;
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, Partial<LevelRecord>>;
+    const raw = JSON.parse(localStorage.getItem(storageKey(user)) ?? '{}') as Record<string, Partial<LevelRecord>>;
     const out: Record<string, LevelRecord> = {};
     for (const [k, v] of Object.entries(raw)) {
       if (typeof v?.stars === 'number' && typeof v.best === 'number' && Number.isFinite(v.best) && v.best > 0) {
@@ -38,11 +44,24 @@ function load(): Record<string, LevelRecord> {
 }
 
 function save(): void {
+  sessionRecords.set(storageKey(activeUser), records);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    localStorage.setItem(storageKey(activeUser), JSON.stringify(records));
   } catch {
     /* storage unavailable: progress lasts for this session only */
   }
+}
+
+/** Switch the visible progress without copying records between players. */
+export function setProgressUser(user: string | null): void {
+  if (user === activeUser) return;
+  sessionRecords.set(storageKey(activeUser), records);
+  activeUser = user;
+  records = load();
+}
+
+export function guestRecords(): Readonly<Record<string, LevelRecord>> {
+  return activeUser === null ? records : load(null);
 }
 
 /** Progress key of a level: '<theme id>/<index>', or 'custom:<theme id>/<index>' for custom packs */
@@ -62,18 +81,18 @@ export function recordClear(theme: ThemeEntry, index: number, map: MapData, time
   const next = { stars: Math.max(prev?.stars ?? 0, stars), best: Math.min(prev?.best ?? Infinity, time) };
   records = { ...records, [k]: next };
   save();
-  // Send this run, not a best record potentially belonging to another local player.
+  // Queue this run independently of any previously uploaded best.
   onRecord(k, { stars, best: time });
   return stars;
 }
 
-/** Called after every clear with the level's updated record (e.g. to upload it) */
+/** Called after every clear with this run's record (e.g. to upload it) */
 let onRecord: (key: string, record: LevelRecord) => void = () => {};
 export function setOnRecord(fn: (key: string, record: LevelRecord) => void): void {
   onRecord = fn;
 }
 
-/** Every record kept in this browser, by level key */
+/** Records for the active account (or guest), by level key */
 export function allRecords(): Readonly<Record<string, LevelRecord>> {
   return records;
 }

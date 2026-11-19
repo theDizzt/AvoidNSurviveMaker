@@ -1,5 +1,5 @@
 import { t } from '../../core/i18n';
-import { allRecords, mergeRecords, setOnRecord, type LevelRecord } from '../progress';
+import { allRecords, guestRecords, mergeRecords, setOnRecord, setProgressUser, type LevelRecord } from '../progress';
 import type { Account } from './account';
 import { supabase } from './supabase';
 import { recordTime } from '../../core/time';
@@ -35,7 +35,7 @@ const toPayload = (records: Record<string, LevelRecord>) =>
  * Best time (ms) and stars per level, saved to the signed-in player's account.
  *
  * Every clear is uploaded right away (kept in localStorage per account until the server accepts it).
- * "Sync records" in Options merges both ways: records kept in this browser go up, and the account's
+ * "Sync records" in Options merges both ways: this account's local records go up, and its server
  * records come down. Both sides keep the best time and the most stars.
  */
 export class RecordSync {
@@ -43,6 +43,7 @@ export class RecordSync {
   private userId: string | null = null;
   private pending: Record<string, LevelRecord> = {};
   private sending = false;
+  private generation = 0;
 
   constructor(private readonly account: Account) {
     setOnRecord((key, record) => {
@@ -61,35 +62,67 @@ export class RecordSync {
     return !!supabase && !!this.userId;
   }
 
+  get canImportGuest(): boolean {
+    return this.available && Object.keys(guestRecords()).length > 0;
+  }
+
+  /** Explicitly copy guest/legacy records into this account, preserving both bests. */
+  importGuest(): void {
+    if (!this.available) return;
+    mergeRecords(guestRecords());
+    for (const key of Object.keys(guestRecords())) this.pending[key] = allRecords()[key];
+    this.persist();
+    this.onSaved();
+    void this.flush();
+  }
+
+  /** Pin requests to the snapshot's session, even if auth changes before fetch starts. */
+  private async token(userId: string, generation: number): Promise<string> {
+    const session = (await supabase!.auth.getSession()).data.session;
+    if (generation !== this.generation || session?.user.id !== userId) throw new Error('ACCOUNT_CHANGED');
+    return session.access_token;
+  }
+
   /** The signed-in player's records straight from the database (null when it can't be read) */
   async fetchAccountRecords(): Promise<AccountRecord[] | null> {
     if (!supabase || !this.userId) return null;
+    const generation = this.generation;
     const { data, error } = await supabase
       .from('level_records')
       .select('level_key, best_ms, stars, created_at, updated_at')
       .eq('user_id', this.userId)
       .order('level_key');
-    return error ? null : ((data as AccountRecord[] | null) ?? []);
+    return error || generation !== this.generation ? null : ((data as AccountRecord[] | null) ?? []);
   }
 
-  /** Upload every local record, then bring the account's records into this browser */
+  /** Sync only the active account's records; guest records require explicit import. */
   async syncAll(): Promise<SyncResult> {
     if (!supabase || !this.userId) return { ok: false, message: t('records.signIn') };
     const userId = this.userId;
-    const snapshot = { ...allRecords(), ...this.pending };
+    const generation = this.generation;
+    const sent = { ...this.pending };
+    const snapshot = { ...allRecords() };
+    for (const [key, r] of Object.entries(sent)) {
+      const prev = snapshot[key];
+      snapshot[key] = { best: Math.min(prev?.best ?? Infinity, r.best), stars: Math.max(prev?.stars ?? 0, r.stars) };
+    }
     const payload = toPayload(snapshot);
     let rows: ServerRecord[] = [];
     try {
       for (let i = 0; i === 0 || i < payload.length; i += BATCH) {
-        const { data, error } = await supabase.rpc('submit_level_records', { p_records: payload.slice(i, i + BATCH) });
+        const token = await this.token(userId, generation);
+        const { data, error } = await supabase.rpc('submit_level_records', { p_records: payload.slice(i, i + BATCH) })
+          .setHeader('Authorization', `Bearer ${token}`);
+        if (generation !== this.generation) return { ok: false, message: t('records.accountChanged') };
         if (error) return { ok: false, message: /failed to fetch|network/i.test(error.message) ? t('net.unreachable') : t('records.syncFailed') };
         rows = (data as ServerRecord[] | null) ?? [];
       }
-    } catch {
+    } catch (err) {
+      if (generation !== this.generation || (err as Error).message === 'ACCOUNT_CHANGED') return { ok: false, message: t('records.accountChanged') };
       return { ok: false, message: t('net.unreachable') };
     }
     if (this.userId !== userId) return { ok: false, message: t('records.accountChanged') };
-    for (const [k, r] of Object.entries(snapshot)) if (this.pending[k] === r) delete this.pending[k];
+    for (const [k, r] of Object.entries(sent)) if (this.pending[k] === r) delete this.pending[k];
     this.persist();
     const downloaded = this.acceptServerRecords(rows);
     return { ok: true, uploaded: payload.length, downloaded };
@@ -100,12 +133,15 @@ export class RecordSync {
     const payload = toPayload(this.pending);
     if (!supabase || !this.userId || this.sending || payload.length === 0) return;
     const userId = this.userId;
+    const generation = this.generation;
     const batch = payload.slice(0, BATCH);
     const sent = Object.fromEntries(batch.map((r) => [r.key, this.pending[r.key]]));
     this.sending = true;
     try {
-      const { data, error } = await supabase.rpc('submit_level_records', { p_records: batch });
-      if (error || this.userId !== userId) return; // keep them, retry on the next clear or sign-in
+      const token = await this.token(userId, generation);
+      const { data, error } = await supabase.rpc('submit_level_records', { p_records: batch })
+        .setHeader('Authorization', `Bearer ${token}`);
+      if (error || generation !== this.generation) return; // keep them, retry on the next clear or sign-in
       for (const [k, r] of Object.entries(sent)) if (this.pending[k] === r) delete this.pending[k];
       this.persist();
       this.acceptServerRecords((data as ServerRecord[] | null) ?? []);
@@ -116,7 +152,7 @@ export class RecordSync {
     } finally {
       this.sending = false;
       // A different account may have queued records while the previous request was in flight.
-      if (this.userId !== userId && this.userId) void this.flush();
+      if (generation !== this.generation && this.userId) void this.flush();
     }
   }
 
@@ -131,17 +167,24 @@ export class RecordSync {
   }
 
   private syncUser(): void {
-    const id = this.account.profile ? (this.account.user?.id ?? null) : null;
+    const id = this.account.user?.id ?? null;
     if (id === this.userId) return;
     this.userId = id;
+    this.generation++;
+    setProgressUser(id);
     this.pending = {};
-    if (!id) return;
+    if (!id) {
+      this.onSaved();
+      return;
+    }
     try {
       const saved = JSON.parse(localStorage.getItem(PENDING_PREFIX + id) ?? '{}') as Record<string, LevelRecord>;
       if (saved && typeof saved === 'object') this.pending = saved;
     } catch {
       /* storage unavailable or unreadable */
     }
+    mergeRecords(this.pending);
+    this.onSaved();
     void this.flush();
   }
 
