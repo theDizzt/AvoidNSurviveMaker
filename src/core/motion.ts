@@ -157,10 +157,12 @@ export class CompiledMotion {
   readonly legs: Leg[];
   /** ms for one pass through all legs */
   readonly pass: number;
+  private readonly totalLength: number;
 
   constructor(readonly src: Motion, readonly anchor: Point) {
     this.legs = buildLegs(src, anchor);
     this.pass = this.legs.reduce((s, l) => s + l.dur, 0);
+    this.totalLength = this.legs.reduce((s, l) => s + l.len, 0);
   }
 
   get moves(): boolean {
@@ -210,7 +212,7 @@ export class CompiledMotion {
     let tt = t - this.src.delay;
     if (tt <= 0) return 0;
     const { pass } = this;
-    const total = this.legs.reduce((s, l) => s + l.len, 0);
+    const total = this.totalLength;
     let laps = 0;
     if (this.src.repeat === 'once') {
       tt = Math.min(tt, pass);

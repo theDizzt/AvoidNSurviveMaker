@@ -417,23 +417,34 @@ function drawWallMass(s: CanvasRenderingContext2D, walls: HTMLCanvasElement, the
  * Add an object's posed outline (world coordinates) to the current path. `hole` winds it opposite
  * to `rect()`, so with a 'nonzero' fill or clip it cuts out of an enclosing rect.
  */
-function tracePosed(g: CanvasRenderingContext2D, o: CompiledObject, t: number, hole = false): void {
-  transformAt(o, t, tf);
-  const { poly } = o;
-  const n = poly.length;
-  let area = 0;
-  if (hole) for (let i = 0; i < n; i += 2) area += poly[i] * poly[(i + 3) % n] - poly[(i + 2) % n] * poly[i + 1];
-  const reverse = hole && area > 0;
-  for (let k = 0; k < n; k += 2) {
-    const i = reverse ? n - 2 - k : k;
-    const lx = poly[i] - o.px;
-    const ly = poly[i + 1] - o.py;
-    const x = tf.cos * lx - tf.sin * ly + o.px + tf.dx;
-    const y = tf.sin * lx + tf.cos * ly + o.py + tf.dy;
-    if (k === 0) g.moveTo(x, y);
-    else g.lineTo(x, y);
+const outlineCache = new WeakMap<CompiledObject, [Path2D, Path2D]>();
+
+function tracePosed(g: Path2D, o: CompiledObject, t: number, hole = false): void {
+  let paths = outlineCache.get(o);
+  if (!paths) {
+    const { poly } = o;
+    const n = poly.length;
+    let area = 0;
+    for (let i = 0; i < n; i += 2) area += poly[i] * poly[(i + 3) % n] - poly[(i + 2) % n] * poly[i + 1];
+    const build = (reverse: boolean) => {
+      const path = new Path2D();
+      for (let k = 0; k < n; k += 2) {
+        const i = reverse ? n - 2 - k : k;
+        if (k === 0) path.moveTo(poly[i], poly[i + 1]);
+        else path.lineTo(poly[i], poly[i + 1]);
+      }
+      path.closePath();
+      return path;
+    };
+    paths = [build(false), build(area > 0)];
+    outlineCache.set(o, paths);
   }
-  g.closePath();
+  transformAt(o, t, tf);
+  g.addPath(paths[hole ? 1 : 0], {
+    a: tf.cos, b: tf.sin, c: -tf.sin, d: tf.cos,
+    e: o.px + tf.dx - tf.cos * o.px + tf.sin * o.py,
+    f: o.py + tf.dy - tf.sin * o.px - tf.cos * o.py,
+  });
 }
 
 const layerCache = new WeakMap<readonly CompiledObject[], { key: string; layer: StaticLayer }>();
@@ -675,17 +686,17 @@ export function drawMap(
     // Moving paths open up the area outside the floor; only wall-piercing ones cut the wall pieces
     const cut = (pierce: boolean) => {
       g.setTransform(scale, 0, 0, scale, 0, 0);
-      g.beginPath();
+      const path = new Path2D();
       let any = false;
       objects.forEach((o, i) => {
         if (o.dynamic && o.role === 'path' && !!o.src?.pierce === pierce && shown(i)) {
-          tracePosed(g, o, timeOf(i));
+          tracePosed(path, o, timeOf(i));
           any = true;
         }
       });
       if (any) {
         g.globalCompositeOperation = 'destination-out';
-        g.fill('nonzero');
+        g.fill(path, 'nonzero');
         g.globalCompositeOperation = 'source-over';
       }
       g.setTransform(1, 0, 0, 1, 0, 0);
@@ -695,19 +706,19 @@ export function drawMap(
     g.drawImage(st.wallPieces, 0, 0);
     cut(true);
     g.setTransform(scale, 0, 0, scale, 0, 0);
-    g.beginPath();
+    const walls = new Path2D();
     objects.forEach((o, i) => {
-      if (o.dynamic && o.role === 'wall' && !isSaw(i) && shown(i)) tracePosed(g, o, timeOf(i));
+      if (o.dynamic && o.role === 'wall' && !isSaw(i) && shown(i)) tracePosed(walls, o, timeOf(i));
     });
     map.objects.forEach((m, i) => {
       if (!isDoor(m) || !shown(i)) return;
       const open = doorOpenAt(m, i);
       for (const half of doorPanels(m.shape as { x: number; y: number; w: number; h: number })) {
-        g.rect(half.rect.x + half.slide.x * open, half.rect.y + half.slide.y * open, half.rect.w, half.rect.h);
+        walls.rect(half.rect.x + half.slide.x * open, half.rect.y + half.slide.y * open, half.rect.w, half.rect.h);
       }
     });
     g.fillStyle = theme ? fillStyle(g, theme.wall.fill, { minX: 0, minY: 0, maxX: map.width, maxY: map.height }) : COLORS.wall;
-    g.fill('nonzero');
+    g.fill(walls, 'nonzero');
     // Compose at layer resolution, then place it on the map (zoom and letterbox included)
     const c = st.composite.getContext('2d')!;
     c.setTransform(1, 0, 0, 1, 0, 0);
@@ -735,12 +746,12 @@ export function drawMap(
   // behind every moving path and wall (later layers like coins and switches cover them anyway)
   if (objects.some((o, i) => o.src?.motion?.showPath && shown(i))) {
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, map.width, map.height);
+    const clip = new Path2D();
+    clip.rect(0, 0, map.width, map.height);
     objects.forEach((o, i) => {
-      if (o.dynamic && (o.role === 'path' || o.role === 'wall') && shown(i)) tracePosed(ctx, o, timeOf(i), true);
+      if (o.dynamic && (o.role === 'path' || o.role === 'wall') && shown(i)) tracePosed(clip, o, timeOf(i), true);
     });
-    ctx.clip('nonzero');
+    ctx.clip(clip, 'nonzero');
     objects.forEach((o, i) => {
       if (o.src?.motion?.showPath && shown(i)) drawRoute(ctx, o, COLORS.ink);
     });

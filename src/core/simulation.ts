@@ -168,6 +168,9 @@ export class Simulation {
   private readonly relevant: Int32Array;
   private relevantCount = 0;
   private readonly crossings: number[] = [];
+  /** Last endpoint pose per solid; reused as the next segment's start pose. */
+  private readonly solidPoseTime: Float64Array;
+  private readonly solidPose: Transform[];
 
   private tick = 0;
   private samples: ReplaySample[] = [];
@@ -266,6 +269,8 @@ export class Simulation {
     this.resetSwitches();
     this.local = new Float64Array(this.solids.length * 4);
     this.relevant = new Int32Array(this.solids.length);
+    this.solidPoseTime = new Float64Array(this.solids.length).fill(NaN);
+    this.solidPose = this.solids.map(() => ({ dx: 0, dy: 0, cos: 1, sin: 0 }));
   }
 
   /** Number of 1 ms ticks processed */
@@ -440,6 +445,8 @@ export class Simulation {
     const { solids, local, relevant, crossings } = this;
     crossings.length = 0;
     this.relevantCount = 0;
+    const minX = Math.min(xa, xb), maxX = Math.max(xa, xb);
+    const minY = Math.min(ya, yb), maxY = Math.max(ya, yb);
     for (let i = 0; i < solids.length; i++) {
       const o = solids[i];
       const srcIdx = this.solidSrc[i];
@@ -449,6 +456,10 @@ export class Simulation {
       let bx = xb;
       let by = yb;
       const door = this.solidDoor[i];
+      const bounds = o.travelBounds;
+      // Doors slide independently of their compiled shape. Rotating objects retain the
+      // original local-frame sweep, including its interpolation semantics.
+      if (door < 0 && bounds && (maxX < bounds.minX || minX > bounds.maxX || maxY < bounds.minY || minY > bounds.maxY)) continue;
       if (door >= 0) {
         // Door half: its local frame is its closed position
         const sx = this.solidSlide[i * 2];
@@ -458,8 +469,14 @@ export class Simulation {
         bx -= sx * this.openB[door];
         by -= sy * this.openB[door];
       } else if (o.dynamic) {
-        toLocal(o, transformAt(o, this.clock[srcIdx] ?? ta, tfA), xa, ya, pA);
-        toLocal(o, transformAt(o, this.clockB[srcIdx] ?? tb, tfB), xb, yb, pB);
+        const at = this.clock[srcIdx] ?? ta;
+        const bt = this.clockB[srcIdx] ?? tb;
+        const pose = this.solidPose[i];
+        if (this.solidPoseTime[i] !== at) transformAt(o, at, pose);
+        toLocal(o, pose, xa, ya, pA);
+        if (bt !== at) transformAt(o, bt, pose);
+        this.solidPoseTime[i] = bt;
+        toLocal(o, pose, xb, yb, pB);
         ax = pA.x;
         ay = pA.y;
         bx = pB.x;

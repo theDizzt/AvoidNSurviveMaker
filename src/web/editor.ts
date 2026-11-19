@@ -45,6 +45,7 @@ export class Editor {
     return this.map.theme;
   }
   private compiledCache: CompiledObject[] | null = null;
+  private readonly routeCache = new WeakMap<CompiledObject, number[]>();
   /** gameplayKey() of the map as last cleared in test play (sharing needs a verified clear) */
   private get verifiedJson(): string | null { return this.model.verifiedJson; }
   private set verifiedJson(value: string | null) { this.model.verifiedJson = value; }
@@ -2184,7 +2185,12 @@ export class Editor {
     map.objects.forEach((o, i) => {
       const selected = selIds.has(i);
       if (o.motion) {
-        const route = new CompiledMotion(o.motion, shapeCenter(o.shape)).route();
+        const compiled = objs[i];
+        let route = this.routeCache.get(compiled);
+        if (!route) {
+          route = new CompiledMotion(o.motion, shapeCenter(o.shape)).route();
+          this.routeCache.set(compiled, route);
+        }
         if (route.length >= 4) {
           ctx.strokeStyle = selected ? COLORS.routeSelected : COLORS.route;
           ctx.lineWidth = (selected ? 2 : 1.2) * u;
