@@ -176,9 +176,9 @@ export class Simulation {
   private samples: ReplaySample[] = [];
   private abortReason: AbortReason | null = null;
 
-  constructor(map: MapData) {
+  constructor(map: MapData, objects: readonly CompiledObject[] = compileMap(map)) {
     this.map = map;
-    this.objects = compileMap(map);
+    this.objects = objects;
     this.hasPaths = this.objects.some((o) => o.role === 'path');
     // Coins, triggers, darkness areas and text don't block or support the cursor. A door is two
     // sliding wall halves. Safe zones come first: inside one, nothing else matters.

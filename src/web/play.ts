@@ -1,6 +1,7 @@
 import { t as tr } from './i18n';
 import { levelLabel, starGoals, starsFor, starText } from './localized/level';
 import { recordTime } from '../core/time';
+import { pointInRect } from '../core/geometry';
 import { objectLights } from '../core/lighting';
 import { toWorld, transformAt, type Transform } from '../core/object';
 import { DEFAULT_BADGE, type BadgeStyle } from './localized/theme-pack';
@@ -54,6 +55,7 @@ export class PlayController {
   nextHint: string | null = null;
 
   private map!: MapData;
+  private mapKey = '';
   private sim!: Simulation;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly input: HighResPointer;
@@ -112,14 +114,15 @@ export class PlayController {
 
   load(map: MapData): void {
     this.map = map;
-    this.reset();
+    this.mapKey = JSON.stringify(map);
+    this.reset(true);
     fitCanvas(this.el.canvas, map);
   }
 
-  reset(): void {
+  reset(recompile = false): void {
     this.burst = null;
     this.deathNotified = false;
-    this.sim = new Simulation(this.map);
+    this.sim = new Simulation(this.map, recompile ? undefined : this.sim.objects);
     this.trail = [];
     this.carried = new Uint8Array(this.map.objects.length);
     this.notified = false;
@@ -159,7 +162,8 @@ export class PlayController {
       return;
     }
     const p = clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
-    const sim = new Simulation(this.map);
+    if (!pointInRect(p.x, p.y, this.map.start)) return;
+    const sim = new Simulation(this.map, this.sim.objects);
     if (!sim.start(p.x, p.y)) return;
     e.preventDefault();
     this.sim = sim;
@@ -248,7 +252,7 @@ export class PlayController {
     if (sim.status === 'cleared' && !this.notified) {
       this.notified = true;
       gameAudio.play('finish');
-      const key = JSON.stringify(this.map);
+      const key = this.mapKey;
       const prev = this.best.get(key);
       const time = recordTime(sim.endTime);
       if (prev === undefined || time < prev) this.best.set(key, time);
@@ -369,7 +373,7 @@ export class PlayController {
       ctx.stroke();
       drawBanner(ctx, map, tr('play.failedBanner', { time: formatSeconds(sim.endTime) }), tr('play.failedSub'), '#e2486c');
     } else {
-      const best = this.best.get(JSON.stringify(map));
+      const best = this.best.get(this.mapKey);
       const stars = starsFor(map, recordTime(sim.endTime));
       const bestStars = best !== undefined ? starsFor(map, best) : null;
       const sub = [
@@ -417,6 +421,7 @@ export class PlayController {
             : tr('play.statusFailed');
     this.el.status.textContent = `${levelLabel(this.map)}${this.map.author ? tr('play.byAuthor', { author: this.map.author }) : ''} — ${state}`;
 
+    if (!options.showDebug) return;
     const s = this.stats.summary();
     const rows: [string, string][] = [
       [tr('debug.inputEvent'), `${this.input.source}${this.input.coalesced ? ' + getCoalescedEvents' : tr('debug.noCoalesced')}`],

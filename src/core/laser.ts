@@ -32,9 +32,16 @@ export class BeamCaster {
   private readonly lasers: number[];
   /** Static rings never move, so they're built once */
   private readonly staticRings = new Map<number, Float64Array>();
+  private readonly dynamicRings = new Map<number, Float64Array>();
+  private readonly relevant: number[];
+  private readonly previousState: Float64Array;
+  private cachedBeams: Beam[] | null = null;
 
   constructor(private readonly map: MapData, private readonly objects: readonly CompiledObject[]) {
     this.lasers = objects.flatMap((o, i) => (o.role === 'laser' ? [i] : []));
+    this.relevant = objects.flatMap((o, i) =>
+      o.role === 'wall' || o.role === 'mirror' || o.role === 'laser' || o.role === 'door' ? [i] : []);
+    this.previousState = new Float64Array(this.relevant.length * 3 + 16).fill(NaN);
     objects.forEach((o, i) => {
       if (!o.dynamic && (o.role === 'wall' || o.role === 'mirror' || o.role === 'laser')) this.staticRings.set(i, o.poly);
     });
@@ -49,7 +56,8 @@ export class BeamCaster {
     if (hit) return hit;
     const o = this.objects[i];
     transformAt(o, t, tf);
-    const out = new Float64Array(o.poly.length);
+    let out = this.dynamicRings.get(i);
+    if (!out) this.dynamicRings.set(i, out = new Float64Array(o.poly.length));
     for (let k = 0; k < o.poly.length; k += 2) {
       toWorld(o, tf, o.poly[k], o.poly[k + 1], tmp);
       out[k] = tmp.x;
@@ -60,26 +68,50 @@ export class BeamCaster {
 
   beams(st: BeamState): Beam[] {
     if (!this.lasers.length) return [];
+    // Copy scalar values: the caller mutates its typed arrays in place each tick.
+    // Time matters only for objects with actual motion/rotation, not static links.
+    let changed = this.cachedBeams === null;
+    let k = 0;
+    const check = (value: number) => {
+      if (this.previousState[k] !== value) changed = true;
+      this.previousState[k++] = value;
+    };
+    for (const i of this.relevant) {
+      const o = this.objects[i];
+      const hidden = st.hidden?.[i] ?? 0;
+      check(hidden);
+      check(!hidden && (o.motion || o.rotation) ? st.timeOf(i) : 0);
+      check(o.role === 'door' ? st.doorOpen?.[i] ?? 0 : 0);
+    }
+    for (let c = 0; c < 16; c++) check(st.channels[c]);
+    if (!changed) return this.cachedBeams!;
+    const active = this.lasers.filter(i => {
+      const l = this.map.objects[i].laser;
+      return !st.hidden?.[i] && l && l.on !== (l.switchColor !== undefined && st.channels[l.switchColor] === 1);
+    });
+    if (!active.length) return this.cachedBeams = [];
     const blockers: { ring: Float64Array; owner: number }[] = [];
     const mirrors: Float64Array[] = [];
-    this.objects.forEach((o, i) => {
-      if (st.hidden?.[i]) return;
+    for (const i of this.relevant) {
+      const o = this.objects[i];
+      if (st.hidden?.[i]) continue;
       if (o.role === 'wall' || o.role === 'laser') blockers.push({ ring: this.ring(i, st.timeOf(i)), owner: i });
       else if (o.role === 'mirror') mirrors.push(this.ring(i, st.timeOf(i)));
-    });
+    }
     // Doors: both halves where they currently are
-    this.map.objects.forEach((m, i) => {
-      if (m.role !== 'door' || m.shape.type !== 'rect') return;
+    for (const i of this.relevant) {
+      const m = this.map.objects[i];
+      if (m.role !== 'door' || m.shape.type !== 'rect') continue;
       const open = st.doorOpen?.[i] ?? 0;
       for (const h of doorPanels(m.shape)) {
         const x = h.rect.x + h.slide.x * open;
         const y = h.rect.y + h.slide.y * open;
         blockers.push({ ring: new Float64Array([x, y, x + h.rect.w, y, x + h.rect.w, y + h.rect.h, x, y + h.rect.h]), owner: -1 });
       }
-    });
+    }
 
     const out: Beam[] = [];
-    for (const i of this.lasers) {
+    for (const i of active) {
       if (st.hidden?.[i]) continue;
       const l = this.map.objects[i].laser;
       if (!l) continue;
@@ -91,6 +123,7 @@ export class BeamCaster {
       const a = (l.angle * Math.PI) / 180 + Math.atan2(tf.sin, tf.cos);
       out.push({ color: l.color, pts: this.cast(tmp.x, tmp.y, Math.cos(a), Math.sin(a), blockers, mirrors, i) });
     }
+    this.cachedBeams = out;
     return out;
   }
 
@@ -199,7 +232,7 @@ export function beamHit(beams: readonly Beam[], before: readonly Beam[], ax: num
     }
     // Swept area since the start of the tick
     const q = before[bi]?.pts;
-    if (q && q.length === p.length) {
+    if (q && q !== p && q.length === p.length) {
       for (let k = 0; k + 3 < p.length; k += 2) {
         if (pointInQuad(bx, by, [q[k], q[k + 1], q[k + 2], q[k + 3], p[k + 2], p[k + 3], p[k], p[k + 1]])) best = Math.min(best, 1);
       }

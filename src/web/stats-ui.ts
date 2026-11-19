@@ -2,7 +2,7 @@ import { t as tr } from './i18n';
 import { formatPlayTime } from './localized/account';
 import { formatTime } from '../core/simulation';
 import { formatUtc } from '../core/time';
-import { levelAt, levelSlots, maxStars, STARS_PER_LEVEL } from './localized/theme-pack';
+import { CRYSTALS_PER_THEME, levelAt, levelSlots, maxStars, STARS_PER_LEVEL } from './localized/theme-pack';
 import type { Account } from './auth/account';
 import type { AccountDeaths, DeathTracker } from './auth/deaths';
 import type { AccountRecord, RecordSync } from './auth/records';
@@ -20,6 +20,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
 
 const date = formatUtc;
 const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(Math.max(0, STARS_PER_LEVEL - n));
+const starTotal = (records: readonly AccountRecord[]) => records.reduce((sum, r) => sum + r.stars, 0)
+  + Math.min(CRYSTALS_PER_THEME, records.filter(r => r.crystal).length);
 
 /** Short name of a level key: '1-04' for chapters, 'Custom 4' for custom packs */
 function levelName(key: string): string {
@@ -84,10 +86,13 @@ export class StatsUI {
     if (!rows) return this.message(tr('stats.loadFailed'));
 
     const byKey = new Map(rows.map((r) => [r.level_key, r]));
-    const activeKeys = new Set([...OFFICIAL_THEMES, ...(customTheme() ? [customTheme()!] : [])]
+    const themes = [...OFFICIAL_THEMES, ...(customTheme() ? [customTheme()!] : [])];
+    const activeKeys = new Set(themes
       .flatMap(theme => Array.from({ length: levelSlots(theme) }, (_, i) => levelKey(theme, i))));
     const currentRows = rows.filter(r => activeKeys.has(r.level_key));
-    const totalStars = currentRows.reduce((s, r) => s + r.stars, 0);
+    const totalStars = themes.reduce((sum, theme) => sum + starTotal(
+      Array.from({ length: levelSlots(theme) }, (_, i) => byKey.get(levelKey(theme, i)))
+        .filter((r): r is AccountRecord => !!r)), 0);
     const perfect = currentRows.filter((r) => r.stars >= STARS_PER_LEVEL).length;
     const lastUpdate = rows.reduce<string | undefined>((a, r) => (!a || r.updated_at > a ? r.updated_at : a), undefined);
     const officialMax = OFFICIAL_THEMES.reduce((s, t) => s + maxStars(t), 0);
@@ -113,7 +118,6 @@ export class StatsUI {
     const levelDeaths = deaths?.levels ?? {};
 
     const sections: HTMLElement[] = [];
-    const themes = [...OFFICIAL_THEMES, ...(customTheme() ? [customTheme()!] : [])];
     for (const [ti, t] of themes.entries()) {
       const slots = levelSlots(t);
       const recs = Array.from({ length: slots }, (_, i) => byKey.get(levelKey(t, i)));
@@ -121,7 +125,7 @@ export class StatsUI {
       for (let i = 0; i < slots; i++) byKey.delete(levelKey(t, i));
       const cleared = recs.filter(Boolean) as AccountRecord[];
       const title = t.official ? tr('themeRegistry.chapterPreset', { n: String(ti + 1).padStart(2, '0'), name: t.info.name }) : tr('stats.customPack', { name: t.info.name });
-      sections.push(this.section(title, tr('stats.sectionSummary', { cleared: cleared.length, slots, stars: cleared.reduce((s, r) => s + r.stars, 0), max: slots * STARS_PER_LEVEL }),
+      sections.push(this.section(title, tr('stats.sectionSummary', { cleared: cleared.length, slots, stars: starTotal(cleared), max: maxStars(t) }),
         recs.map((r, i) => [`${i + 1}. ${levelAt(t, i)?.title ?? levelAt(t, i)?.name.replace(/^\d+\.\s*/, '') ?? ''}`, r, levelDeaths[levelKey(t, i)] ?? 0])));
     }
     // Records for levels this build doesn't know (older or other custom packs)
