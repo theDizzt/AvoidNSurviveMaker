@@ -1,4 +1,5 @@
 {
+  "options.pollingAuto": "Auto",
   "debug.rawPollingRate": "Estimated raw input rate",
   "debug.usedPollingRate": "Estimated input rate used in play",
   "debug.usedInterval": "Used input sample interval",

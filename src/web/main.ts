@@ -451,7 +451,7 @@ onOptionsChange(syncOptions);
 syncOptions();
 
 // Polling rate (play input samples per second) and graphics quality
-// Both tiles are toggles: each click steps to the next value (Max → 1000 → … → 125 → Max)
+// Each click steps to the next value (Auto → Max → 1000 → … → 125 → Auto).
 const pollingTile = $<HTMLButtonElement>('opt-polling');
 pollingTile.addEventListener('click', () => {
   setOption('pollingRate', POLLING_RATES[(POLLING_RATES.indexOf(options.pollingRate) + 1) % POLLING_RATES.length]);
@@ -464,7 +464,8 @@ graphicsTile.addEventListener('click', () => {
 let appliedGraphics = options.graphics;
 const syncPerformance = () => {
   pollingTile.dataset.level = options.pollingRate ? 'capped' : 'max';
-  $('opt-polling-value').textContent = options.pollingRate ? `${options.pollingRate} Hz` : t('options.pollingMax');
+  $('opt-polling-value').textContent = options.pollingRate === -1 ? t('options.pollingAuto')
+    : options.pollingRate ? `${options.pollingRate} Hz` : t('options.pollingMax');
   graphicsTile.dataset.level = options.graphics;
   $('opt-graphics-value').textContent = t(`options.graphics.${options.graphics}`);
   // A new resolution: every canvas refits on resize

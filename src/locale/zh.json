@@ -1,4 +1,5 @@
 {
+  "options.pollingAuto": "自动",
   "debug.rawPollingRate": "原始输入估计频率",
   "debug.usedPollingRate": "游戏采用的输入估计频率",
   "debug.usedInterval": "采用的输入采样间隔",

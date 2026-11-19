@@ -1,4 +1,5 @@
 {
+  "options.pollingAuto": "자동",
   "debug.rawPollingRate": "원본 입력 추정 주파수",
   "debug.usedPollingRate": "게임에 사용된 입력 추정 주파수",
   "debug.usedInterval": "사용된 입력 샘플 간격",

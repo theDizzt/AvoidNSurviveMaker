@@ -11,6 +11,7 @@ import { badgeTitle } from './theme-registry';
 import { COIN_PULL_MS, formatSeconds, Simulation, type Replay } from '../core/simulation';
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
+import { AutoPolling } from './auto-polling';
 import { onOptionsChange, options } from './options';
 import { gameAudio } from './audio';
 import { DeathBurst } from './death-burst';
@@ -61,6 +62,7 @@ export class PlayController {
   private readonly input: HighResPointer;
   private readonly stats = new InputStats();
   private readonly usedStats = new InputStats();
+  private readonly autoPolling = new AutoPolling();
   private t0 = 0;
   private trail: number[] = [];
   /** Per map object: 1 while the cursor carries that torch (#58); cosmetic, reset every run */
@@ -83,6 +85,7 @@ export class PlayController {
     onOptionsChange(next => {
       if (next.pollingRate === measuredRate) return;
       measuredRate = next.pollingRate;
+      this.autoPolling.resetMeasurement();
       this.stats.reset();
       this.usedStats.reset();
     });
@@ -128,6 +131,7 @@ export class PlayController {
   }
 
   reset(recompile = false): void {
+    this.autoPolling.resetMeasurement();
     this.stats.reset();
     this.usedStats.reset();
     this.burst = null;
@@ -179,6 +183,7 @@ export class PlayController {
     this.sim = sim;
     this.runPointer = e.pointerId;
     this.lastSampleAt = e.timeStamp;
+    this.autoPolling.resetMeasurement();
     this.stats.reset();
     this.usedStats.reset();
     this.burst = null;
@@ -209,11 +214,14 @@ export class PlayController {
     this.stats.record(list);
     const sim = this.sim;
     if (!sim || sim.status !== 'playing') return;
+    const automatic = options.pollingRate === -1;
+    const workStarted = automatic ? performance.now() : 0;
     const toMap = mapPointer(this.el.canvas, this.map);
     const p = this.point;
     // Polling rate option: use at most this many samples per second. The simulation still runs in
     // 1 ms steps on each sample's own timestamp, so records keep their 1 ms precision.
-    const gap = options.pollingRate > 0 ? 1000 / options.pollingRate : 0;
+    const rate = automatic ? this.autoPolling.rate : options.pollingRate;
+    const gap = rate > 0 ? 1000 / rate : 0;
     for (const ev of list) {
       // Only the pointer (finger) that started the run moves the cursor
       if (ev.pointerId !== this.runPointer) continue;
@@ -230,6 +238,7 @@ export class PlayController {
       if (sim.status !== 'playing') break;
     }
     if (this.trail.length > TRAIL_POINTS * 2) this.trail.splice(0, this.trail.length - TRAIL_POINTS * 2);
+    if (automatic) this.autoPolling.addInputWork(performance.now() - workStarted);
   }
 
   /** The run whose coin count `coinsLeft` was last seen in (for the coin sound) */
@@ -242,6 +251,7 @@ export class PlayController {
     if (!this.visible || !this.map) return;
     const now = performance.now();
     const sim = this.sim;
+    const measure = options.pollingRate === -1 && sim.status === 'playing';
 
     if (sim.status === 'playing') {
       const target = now - this.t0 - IDLE_MARGIN_MS;
@@ -284,6 +294,9 @@ export class PlayController {
     }
 
     this.draw(now);
+    if (measure && sim.status === 'playing' && this.autoPolling.frame(now, performance.now() - now)) {
+      this.usedStats.reset();
+    }
 
     this.frames++;
     if (now - this.fpsAt >= 1000) {
@@ -451,7 +464,9 @@ export class PlayController {
       [tr('debug.inputEvent'), `${this.input.source}${this.input.coalesced ? ' + getCoalescedEvents' : tr('debug.noCoalesced')}`],
       [tr('debug.sampleInterval'), s.medianMs !== null ? `${s.medianMs.toFixed(3)} ms` : tr('debug.keepMoving')],
       [tr('debug.rawPollingRate'), s.hz !== null ? `${Math.round(s.hz)} Hz` : '-'],
-      [tr('options.polling'), options.pollingRate ? `${options.pollingRate} Hz` : tr('options.pollingMax')],
+      [tr('options.polling'), options.pollingRate === -1
+        ? `${tr('options.pollingAuto')} (${this.autoPolling.rate} Hz)`
+        : options.pollingRate ? `${options.pollingRate} Hz` : tr('options.pollingMax')],
       [tr('debug.usedPollingRate'), used.hz !== null ? `${Math.round(used.hz)} Hz` : tr('debug.usedPending')],
       [tr('debug.usedInterval'), used.medianMs !== null ? `${used.medianMs.toFixed(3)} ms` : '-'],
       [tr('debug.usedSamples'), String(used.total)],
