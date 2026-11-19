@@ -1,15 +1,15 @@
-import { t as tr } from '../core/i18n';
+import { t as tr } from './i18n';
 import { formatSeconds } from '../core/simulation';
-import { averageDifficulty, levelSlots, maxStars, themedLevel, type ThemeEntry } from '../core/theme-pack';
-import { formatTag } from '../core/account';
+import { averageDifficulty, levelSlots, maxStars, themedLevel, type ThemeEntry } from './localized/theme-pack';
+import { formatTag } from './localized/account';
 import { fetchLeaderboard, type LeaderboardRow } from './auth/leaderboard';
 import { badgeFontCss } from './badge';
 import { renderTag } from './player-tag';
 import { levelKey, levelRecord, themeCrystals, themeStars, themeUnlocked, totalStars } from './progress';
 import { customTheme, OFFICIAL_SLOTS, OFFICIAL_THEMES, setCustomTheme } from './theme-registry';
-import { chapterLevelCode } from '../core/level';
+import { chapterLevelCode } from './localized/level';
 import { readThemeZip } from './theme-zip';
-import type { LayoutElement, LevelButtonStyle } from '../core/screen-layout';
+import type { LayoutElement, LevelButtonStyle } from './localized/screen-layout';
 import { applyTextFx, type ScreenData } from './screen-render';
 
 /** Theme screen data, including progress and optional level details */

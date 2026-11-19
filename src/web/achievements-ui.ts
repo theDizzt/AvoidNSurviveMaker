@@ -1,5 +1,5 @@
 import { ACHIEVEMENTS, achievementProgress, type AchievementDefinition } from '../core/achievements';
-import { t, type MessageKey } from '../core/i18n';
+import { t, type MessageKey } from './i18n';
 import type { Achievements } from './achievements';
 import { installDiamondProgress } from './diamond-dial';
 

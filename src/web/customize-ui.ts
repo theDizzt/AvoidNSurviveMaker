@@ -1,4 +1,4 @@
-import { t, type MessageKey } from '../core/i18n';
+import { t, type MessageKey } from './i18n';
 import {
   drawPointer, drawSkinTrail, onSkinChange, PALETTE, PALETTE_COLUMNS, POINTER_SKINS, resetSkin, setSkin, skin, TRAIL_SKINS, type Skin,
 } from './skin';

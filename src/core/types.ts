@@ -335,6 +335,8 @@ export interface StarTimes {
 }
 
 export interface MapData {
+  /** Stable within its theme. Retain when moving slots; change when replacing a level. */
+  id?: string;
   v: typeof MAP_VERSION;
   /** File name (used for exports); the in-game title is `title` */
   name: string;

@@ -1,6 +1,7 @@
-import { starsFor } from '../core/level';
+import { gameplayKey, starsFor } from './localized/level';
 import { recordTime } from '../core/time';
-import { CRYSTALS_PER_THEME, filledSlots, STARS_PER_LEVEL, type ThemeEntry } from '../core/theme-pack';
+import { CRYSTALS_PER_THEME, filledSlots, levelAt, STARS_PER_LEVEL, type ThemeEntry } from './localized/theme-pack';
+import { recordIdentity } from '../core/record-identity';
 import type { MapData } from '../core/types';
 import { OFFICIAL_THEMES } from './theme-registry';
 
@@ -66,8 +67,19 @@ export function guestRecords(): Readonly<Record<string, LevelRecord>> {
   return activeUser === null ? records : load(null);
 }
 
-/** Progress key of a level: '<theme id>/<index>', or 'custom:<theme id>/<index>' for custom packs */
-export const levelKey = (theme: ThemeEntry, index: number) => `${theme.official ? '' : 'custom:'}${theme.info.id}/${index}`;
+const identityCache = new WeakMap<MapData, { signature: string; keys: Map<string, string> }>();
+/** Cache hashing, but also detect maps edited in place by the theme editor. */
+export function levelKey(theme: ThemeEntry, index: number): string {
+  const map = levelAt(theme, index);
+  if (!map) return `empty:${theme.info.id}/${index}`;
+  const scope = `${theme.official}:${theme.info.id}`;
+  const signature = `${map.id ?? ''}:${gameplayKey(map)}:${JSON.stringify(map.stars ?? null)}`;
+  let cached = identityCache.get(map);
+  if (!cached || cached.signature !== signature) identityCache.set(map, cached = { signature, keys: new Map() });
+  let key = cached.keys.get(scope);
+  if (!key) cached.keys.set(scope, key = recordIdentity(theme.info.id, map, theme.official));
+  return key;
+}
 const key = levelKey;
 
 export function levelRecord(theme: ThemeEntry, index: number): LevelRecord | null {

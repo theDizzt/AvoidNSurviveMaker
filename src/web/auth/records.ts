@@ -1,9 +1,10 @@
-import { t } from '../../core/i18n';
+import { t } from '../i18n';
 import { allRecords, guestRecords, mergeRecords, setOnRecord, setProgressUser, type LevelRecord } from '../progress';
 import type { Account } from './account';
 import { supabase } from './supabase';
 import { recordTime } from '../../core/time';
 import { clearLeaderboardCache } from './leaderboard';
+import type { Replay } from '../../core/simulation';
 
 const PENDING_PREFIX = 'avoid-n-survive:pending-records:';
 /** The server accepts at most this many records per call */
@@ -66,6 +67,24 @@ export class RecordSync {
 
   get available(): boolean {
     return !!supabase && !!this.userId;
+  }
+
+  /** Public rankings are a separate server-replayed submission, never a backup promotion. */
+  async submitReplay(key: string, replay: Replay): Promise<'saved' | 'failed' | 'skipped'> {
+    if (!supabase || !this.userId) return 'skipped';
+    const userId = this.userId, generation = this.generation;
+    try {
+      const token = await this.token(userId, generation);
+      const { data, error } = await supabase.functions.invoke('verify-replay', {
+        body: { key, replay }, headers: { Authorization: `Bearer ${token}` },
+      });
+      if (generation !== this.generation) return 'skipped';
+      if (error || data?.ok !== true) return 'failed';
+      clearLeaderboardCache();
+      return 'saved';
+    } catch {
+      return generation !== this.generation ? 'skipped' : 'failed';
+    }
   }
 
   get canImportGuest(): boolean {

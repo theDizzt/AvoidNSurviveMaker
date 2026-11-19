@@ -1,6 +1,6 @@
-import { t as tr } from '../core/i18n';
-import type { LayoutElement, LevelButtonStyle, ScreenLayout, ThemeScreens } from '../core/screen-layout';
-import { DEFAULT_BUTTON } from '../core/screen-layout';
+import { t as tr } from './i18n';
+import type { LayoutElement, LevelButtonStyle, ScreenLayout, ThemeScreens } from './localized/screen-layout';
+import { DEFAULT_BUTTON } from './localized/screen-layout';
 
 /**
  * Starting layouts for custom screens, drawn only with shapes and built-in fonts: swap in your own

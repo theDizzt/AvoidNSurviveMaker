@@ -246,6 +246,7 @@
   "captcha.loadFailed": "Couldn't load the security check. Check your connection and try again.",
   "records.signIn": "Sign in to sync your records.",
   "records.syncFailed": "Couldn't sync records. Please try again.",
+  "records.verificationFailed": "Your local record was saved, but leaderboard verification failed. Clear the level again to retry.",
   "records.accountChanged": "The signed-in account changed. Please try again.",
   "stats.customLevel": "Custom {n}",
   "stats.notConfigured": "Accounts are not set up, so there is nothing stored in the database.",

@@ -27,7 +27,8 @@ npm run build     # dist/ 에 정적 사이트 생성 — GitHub Pages, Vercel �
 ### 게임 문구 (locale)
 
 - 플레이어에게 보이는 문구(게임 제목 제외)는 코드에 직접 쓰지 않고 `src/locale/<언어>.json`에 둡니다. 키는 `"영역.이름"` 형태의 평평한 키입니다.
-- `en.json`이 기준 파일입니다. 코드에서는 `t('key', { 변수 })`(`src/core/i18n.ts`)로 가져오고, 문구 안의 `{변수}`가 채워집니다. 키 타입은 `en.json`에서 만들어지므로 없는 키를 쓰면 타입 오류가 납니다.
+- `en.json`이 기준 파일입니다. 웹 UI는 `t('key', { 변수 })`(`src/web/i18n.ts`)를 사용합니다. 코어에서는 `createTranslator(language)` 또는 `translate(language, key, vars)`로 언어를 명시합니다. 키 타입은 `en.json`에서 만들어지므로 없는 키를 쓰면 타입 오류가 납니다.
+- `core`의 기본 API는 항상 영어이며 저장소를 읽지 않습니다. 번역된 검증 메시지·색 이름·프리셋이 필요한 웹 코드는 `web/localized/*` 어댑터를 사용합니다. Node/서버에서는 `createValidateApi(createTranslator('ko'))`처럼 독립된 API를 만들 수 있고, 다른 호출자의 언어에 영향을 주지 않습니다.
 - `index.html`의 고정 문구는 `data-i18n="key"`(텍스트), `data-i18n-title` / `-aria-label` / `-placeholder`(속성)로 지정하고, 시작할 때 `applyI18n()`이 채웁니다.
 - 다른 언어 파일(`ko.json`, `zh.json` 등)에 없는 키는 영어로 표시됩니다. `zh.json`(중국어 간체)은 아직 영어 문구로 채워져 있어, 값만 번역하면 됩니다. 새 언어는 json 파일을 추가하고 `LANGUAGES`(`src/core/i18n.ts`)에 등록합니다.
 - 테마 팩의 문구(이름, 설명, 크레딧, 배지 캡션)는 `theme.json` 의 `i18n` 블록으로 언어별로 둡니다(`themes/README.md` 참고). 게임에는 `localizeThemeInfo()` 로 바뀐 `ThemeEntry.info` 가 쓰이고, Theme Editor 는 모든 언어가 담긴 `ThemeEntry.source` 를 편집합니다.
@@ -54,7 +55,9 @@ src/
   web/
     input.ts       # 고정밀 입력 (pointerrawupdate + getCoalescedEvents), 폴링 레이트 측정
     play.ts        # 플레이 화면
-    editor.ts      # 맵 에디터
+    editor.ts      # 맵 에디터 입력·캔버스 조정
+    editor-properties.ts # 속성 패널 DOM과 편집 콜백
+    editor-storage.ts # 초안 및 편집기 표시 설정 저장
     render.ts      # 캔버스 렌더링
     preload.ts     # 로딩 화면 작업 (폰트, 계정, 공유 맵), 진행률과 타임아웃
     backdrop.ts    # 메뉴 배경: 자동 시연, 그리드, 테마 색상

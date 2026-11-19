@@ -1,12 +1,12 @@
-import { t as tr } from '../core/i18n';
+import { t as tr } from './i18n';
 import {
   BUILTIN_FONTS, DEFAULT_BUTTON, difficultyLabel, STAGE_H, STAGE_W,
   type BuiltinFont, type LayoutElement, type LevelButtonStyle, type ScreenLayout, type Visibility,
-} from '../core/screen-layout';
-import { isLibraryFont } from '../core/font-catalog';
+} from './localized/screen-layout';
+import { isLibraryFont } from './localized/font-catalog';
 import { formatSeconds } from '../core/simulation';
 import { ensureLibraryFont, libraryFontCss } from './library-fonts';
-import { STARS_PER_LEVEL, type ThemeInfo } from '../core/theme-pack';
+import { STARS_PER_LEVEL, type ThemeInfo } from './localized/theme-pack';
 import type { TextEffects } from '../core/text-effects';
 import { FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
 

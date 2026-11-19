@@ -1,4 +1,4 @@
-import { t } from '../core/i18n';
+import { t } from './i18n';
 /** Menu music override stored as a Blob, outside localStorage's small quota. */
 const bundled = import.meta.glob<string>('../assets/music/main-menu.{mp3,ogg,wav,m4a,aac,flac}', { eager: true, query: '?url', import: 'default' });
 const defaultUrl = Object.values(bundled)[0] ?? null;

@@ -1,4 +1,4 @@
-import { FONT_CATALOG, libraryFont, type CatalogFont } from '../core/font-catalog';
+import { FONT_CATALOG, libraryFont, type CatalogFont } from './localized/font-catalog';
 import { FONT_MAIN } from './render';
 
 /** URLs of the bundled font files, by folder/file name */

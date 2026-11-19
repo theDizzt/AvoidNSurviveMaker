@@ -1,4 +1,4 @@
-import { t } from '../core/i18n';
+import { t } from './i18n';
 import { onOptionsChange, options } from './options';
 import clickUrl from '../sfx/click.mp3';
 import coinUrl from '../sfx/coin.mp3';

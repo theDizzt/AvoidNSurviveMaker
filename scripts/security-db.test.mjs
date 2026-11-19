@@ -14,7 +14,7 @@ const asUser = async (id) => {
 };
 try {
   await db.exec(`
-    create role anon; create role authenticated;
+    create role anon; create role authenticated; create role service_role;
     create schema auth;
     create table auth.users (id uuid primary key, raw_user_meta_data jsonb,
       created_at timestamptz not null default now());
@@ -217,6 +217,33 @@ try {
   await db.exec('set role anon');
   assert.equal(Number(await scalar('select count(*) from public.public_profiles')), 2);
   console.log('PASS: public UUID access blocked through view and table; tags, lifecycle, own profile and leaderboard preserved');
+  await db.exec('reset role; grant usage on schema public to service_role');
+  for (const migration of ['20261119010000_achievements.sql', '20261120000000_crystal_stars.sql', '20261120010000_verified_replays.sql']) {
+    await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`, import.meta.url), 'utf8'));
+  }
+  const versionedKey = `workshop/0@${'a'.repeat(64)}`;
+  await asUser(b);
+  await submit([{ key: versionedKey, best_ms: 1, stars: 3, verified: true }]);
+  assert.equal(await scalar('select verified from public.level_records where level_key = $1', [versionedKey]), false);
+  assert.equal((await board(versionedKey)).length, 0);
+  assert.equal((await board('workshop/0')).length, 0);
+  for (const role of ['anon', 'authenticated']) {
+    await db.exec(`reset role; set role ${role}`);
+    await assert.rejects(db.query('select * from public.verified_level_records'), /permission denied/);
+    await assert.rejects(db.query('select public.store_verified_record($1,$2,500,2::smallint,false)', [b, versionedKey]), /permission denied/);
+    await assert.rejects(db.query('select public.claim_replay_verification($1)', [b]), /permission denied/);
+  }
+  await db.exec('reset role; set role service_role');
+  assert.equal(await scalar('select public.claim_replay_verification($1)', [b]), true);
+  assert.equal(await scalar('select public.claim_replay_verification($1)', [b]), false);
+  await db.query('select public.store_verified_record($1,$2,500,2::smallint,false)', [b, versionedKey]);
+  await asUser(b);
+  await submit([{ key: versionedKey, best_ms: 1, stars: 3 }]);
+  assert.equal((await board(versionedKey))[0].best_ms, 500);
+  assert.equal((await board(`workshop/0@${'b'.repeat(64)}`)).length, 0);
+  await addDeaths(1, [{ key: versionedKey, count: 1 }]);
+  assert.equal(Number(await scalar('select deaths from public.level_deaths where level_key = $1', [versionedKey])), 1);
+  console.log('PASS: backups cannot enter rankings; trusted results, content revisions and verification rate limits are isolated');
 } finally {
   await db.close();
 }

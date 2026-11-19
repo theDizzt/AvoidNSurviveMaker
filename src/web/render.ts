@@ -1,12 +1,12 @@
-import { language, t as tr } from '../core/i18n';
+import { language, t as tr } from './i18n';
 import { createPatternTile, PATTERN_RES } from './theme-pattern';
 import { displayTime } from '../core/time';
 import { toWorld, transformAt, type CompiledObject, type Transform } from '../core/object';
-import { primaryColor, secondaryColor, shade } from '../core/theme';
-import { switchColor } from '../core/colors';
+import { primaryColor, secondaryColor, shade } from './localized/theme';
+import { switchColor } from './localized/colors';
 import type { Beam } from '../core/laser';
 import { autoDoorOpen, doorPanels, initialChannels } from '../core/switches';
-import { isLibraryFont } from '../core/font-catalog';
+import { isLibraryFont } from './localized/font-catalog';
 import type { Fall, Fill, MapData, MapObject, Point, Pulley, Rect, TextBox } from '../core/types';
 import { fallState } from '../core/hazards';
 import { libraryFontCss } from './library-fonts';

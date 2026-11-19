@@ -1,4 +1,4 @@
-import { t } from '../../core/i18n';
+import { t } from '../i18n';
 /**
  * Cloudflare Turnstile CAPTCHA. Supabase Auth verifies the token server-side
  * (Dashboard → Authentication → Attack Protection), so the client only renders the widget

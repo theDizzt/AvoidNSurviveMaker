@@ -1,8 +1,8 @@
-import { t as tr } from '../core/i18n';
-import { gameplayKey, levelLabel } from '../core/level';
-import { encodePack } from '../core/share';
+import { t as tr } from './i18n';
+import { gameplayKey, levelLabel } from './localized/level';
+import { encodePack } from './localized/share';
 import { PACK_VERSION, type MapData, type MapPack } from '../core/types';
-import { LIMITS, validatePack } from '../core/validate';
+import { LIMITS, validatePack } from './localized/validate';
 
 /**
  * Map pack builder in the editor: collect levels, order them, open one to edit, save the edits

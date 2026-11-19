@@ -1,6 +1,6 @@
-import { t } from '../core/i18n';
+import { t } from './i18n';
 import { createPatternTile } from './theme-pattern';
-import { BASE_THEME, primaryColor, secondaryColor, shade, THEME_PRESETS } from '../core/theme';
+import { BASE_THEME, primaryColor, secondaryColor, shade, THEME_PRESETS } from './localized/theme';
 import type { Fill, PatternKind, SurfaceStyle, Theme } from '../core/types';
 
 const FILL_TYPES: [Fill['type'], string][] = [['solid', t('fill.solid')], ['gradient', t('fill.gradient')], ['pattern', t('common.pattern')]];

@@ -1,6 +1,6 @@
-import { t } from '../../core/i18n';
+import { t } from '../i18n';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
-import { formatTag } from '../../core/account';
+import { formatTag } from '../localized/account';
 import { supabase } from './supabase';
 
 export interface Profile {

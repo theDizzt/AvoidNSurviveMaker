@@ -937,18 +937,25 @@ export class Simulation {
 }
 
 /** Re-run a replay from scratch (for server-side record verification) */
-export function runReplay(map: MapData, replay: Replay): Simulation {
+export function runReplay(map: MapData, replay: Replay, checkBudget: () => void = () => {}): Simulation {
   const sim = new Simulation(map);
   const [first, ...rest] = replay.samples;
   if (!first || first.t !== 0 || !sim.start(first.x, first.y)) return sim;
   const clicks = replay.clicks ?? [];
   let k = 0;
   for (const s of rest) {
+    checkBudget();
     // Clicks happen after the samples up to their time
-    while (k < clicks.length && clicks[k].t < s.t) sim.click(clicks[k].t, clicks[k].x, clicks[k].y), k++;
+    while (k < clicks.length && clicks[k].t < s.t) {
+      checkBudget();
+      sim.click(clicks[k].t, clicks[k].x, clicks[k].y); k++;
+    }
     sim.feed(s.t, s.x, s.y);
   }
-  while (k < clicks.length) sim.click(clicks[k].t, clicks[k].x, clicks[k].y), k++;
+  while (k < clicks.length) {
+    checkBudget();
+    sim.click(clicks[k].t, clicks[k].x, clicks[k].y); k++;
+  }
   if (replay.abort) sim.abort(replay.abort.reason);
   return sim;
 }

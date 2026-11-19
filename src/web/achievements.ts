@@ -62,7 +62,9 @@ export class Achievements {
   private emit(): void { this.listeners.forEach(fn => fn()); }
 
   private merge(records: Readonly<Record<string, AchievementRecord>>): void {
-    for (const [key, r] of Object.entries(records)) {
+    for (const [versionedKey, r] of Object.entries(records)) {
+      // Personal lifetime achievements count a stable level once, across content revisions.
+      const key = versionedKey.split('@')[0];
       if (!r || !Number.isFinite(r.best) || r.best <= 0 || !Number.isFinite(r.stars)) continue;
       const prev = this.state.records[key];
       this.state.records[key] = { best: Math.min(prev?.best ?? Infinity, r.best), stars: Math.max(prev?.stars ?? 0, Math.min(3, Math.max(0, Math.floor(r.stars)))) };

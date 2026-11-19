@@ -1,4 +1,4 @@
-import { language, t, type MessageKey } from '../core/i18n';
+import { language, t, type MessageKey } from './i18n';
 
 /** data-i18n-* attribute → the element attribute it fills */
 const ATTRS: [string, string][] = [

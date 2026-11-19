@@ -1,4 +1,4 @@
-import { t } from '../core/i18n';
+import { t } from './i18n';
 /**
  * Floating editor panel: drag it by its title bar, collapse/expand it with the toggle button
  * (or a double-click on the title bar). With `resizable`, its left, right and bottom edges and

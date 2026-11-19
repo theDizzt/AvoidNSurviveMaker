@@ -1,9 +1,9 @@
-import { t as tr } from '../core/i18n';
-import { levelLabel, starGoals, starsFor, starText } from '../core/level';
+import { t as tr } from './i18n';
+import { levelLabel, starGoals, starsFor, starText } from './localized/level';
 import { recordTime } from '../core/time';
 import { objectLights } from '../core/lighting';
 import { toWorld, transformAt, type Transform } from '../core/object';
-import { DEFAULT_BADGE, type BadgeStyle } from '../core/theme-pack';
+import { DEFAULT_BADGE, type BadgeStyle } from './localized/theme-pack';
 import { drawPointer, drawSkinTrail, skin } from './skin';
 import { badgeImage, drawLevelBadge } from './badge';
 import { badgeTitle } from './theme-registry';

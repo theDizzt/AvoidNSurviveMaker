@@ -1,11 +1,11 @@
-import { language, LANGUAGES, saveLanguage, t, type Language } from '../core/i18n';
+import { language, LANGUAGES, saveLanguage, t, type Language } from './i18n';
 import { renderFontLicenses } from './font-licenses';
 import './style.css';
 // Game version, e.g. "Update 20" — edit the VERSION file at the repo root
 import versionFile from '../../VERSION?raw';
 import { BUILTIN_LEVELS } from '../core/levels';
-import { chapterLevelCode, levelLabel } from '../core/level';
-import { decodeMap, decodePack } from '../core/share';
+import { chapterLevelCode, levelLabel } from './localized/level';
+import { decodeMap, decodePack } from './localized/share';
 import type { MapData, MapPack } from '../core/types';
 import { Editor } from './editor';
 import { ThemeEditor } from './theme-editor';
@@ -13,7 +13,7 @@ import { customTheme } from './theme-registry';
 import { installTooltips } from './tooltip';
 import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-ui';
 import { levelKey, recordClear, themeUnlocked, totalStars } from './progress';
-import { filledSlots, themedLevel, type ThemeEntry } from '../core/theme-pack';
+import { filledSlots, themedLevel, type ThemeEntry } from './localized/theme-pack';
 import { OFFICIAL_THEMES, allThemes, badgeFor, chapterMusicFor } from './theme-registry';
 import { onOptionsChange, options, resetOptions, setOption } from './options';
 import { onSkinChange, setTrailShown, skin } from './skin';
@@ -565,12 +565,18 @@ openInEditor.addEventListener('click', () => {
 });
 
 editor.onTest = (map) => showPlay(map, { test: true });
-play.onClear = (map, _replay, time, crystal) => {
+play.onClear = (map, replay, time, crystal) => {
   // Campaign stars (and the crystal star, if carried to GOAL)
   const c = campaignOf(currentKey);
   if (c && !testing) {
     const stars = recordClear(c.theme, c.index, map, time, crystal);
-    if (c.theme.official) achievements.record(levelKey(c.theme, c.index), time, stars);
+    if (c.theme.official) {
+      const key = levelKey(c.theme, c.index);
+      achievements.record(key, time, stars);
+      void recordSync.submitReplay(key, replay).then(result => {
+        if (result === 'failed') showToast(t('records.verificationFailed'), 'error');
+      });
+    }
   }
   // A clear of the same gameplay verifies the editor's map for sharing
   editor.markVerified(map, time);

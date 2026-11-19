@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { averageDifficulty, crystalSlots, localizeThemeInfo, maxStars, themedLevel, validateThemeInfo } from '../core/theme-pack';
+import { averageDifficulty, crystalSlots, localizeThemeInfo, maxStars, themedLevel, validateThemeInfo } from './localized/theme-pack';
 import { OFFICIAL_THEMES, CUSTOM_THEME_PRESETS } from './theme-registry';
 import { readThemeZip, writeThemeZip } from './theme-zip';
 
@@ -40,15 +40,15 @@ describe('theme packs', () => {
   });
 
   it('averages difficulty, counting levels without one as 1.00', async () => {
-    const { createEmptyMap } = await import('../core/validate');
+    const { createEmptyMap } = await import('./localized/validate');
     const { difficulty: _difficulty, ...withoutDifficulty } = createEmptyMap();
     expect(averageDifficulty([])).toBe(1);
     expect(averageDifficulty([{ ...createEmptyMap(), difficulty: 5 }, withoutDifficulty])).toBe(3);
   });
 
   it('places official levels by their level number', async () => {
-    const { assignSlots, levelAt } = await import('../core/theme-pack');
-    const { createEmptyMap } = await import('../core/validate');
+    const { assignSlots, levelAt } = await import('./localized/theme-pack');
+    const { createEmptyMap } = await import('./localized/validate');
     const at = (level?: number, name = 'm') => ({ ...createEmptyMap(), name, ...(level !== undefined ? { level } : {}) });
     // Levels 1, 2, 3, 9: level 9 goes to slot 8, not slot 3
     expect(assignSlots([at(1), at(2), at(3), at(9)])).toEqual([0, 1, 2, 8]);
@@ -111,7 +111,7 @@ describe('theme packs', () => {
 describe('font catalog', () => {
   it('lists only font files that exist, with unique ids', async () => {
     const files = new Set(Object.keys(import.meta.glob('../assets/fonts/*/*.{ttf,otf}')));
-    const { FONT_CATALOG } = await import('../core/font-catalog');
+    const { FONT_CATALOG } = await import('./localized/font-catalog');
     const ids = new Set<string>();
     for (const f of FONT_CATALOG) {
       expect(files.has(`../assets/fonts/${f.folder}/${f.file}`), f.file).toBe(true);
@@ -122,7 +122,7 @@ describe('font catalog', () => {
   });
 
   it('accepts library fonts for the level badge', async () => {
-    const { validateThemeInfo, blankThemeInfo } = await import('../core/theme-pack');
+    const { validateThemeInfo, blankThemeInfo } = await import('./localized/theme-pack');
     const base = blankThemeInfo();
     const withFont = (font: string) => validateThemeInfo({ ...base, style: { ...base.style, badge: { ...base.style.badge, font } } }).style.badge.font;
     expect(withFont('paperlogy-bold')).toBe('paperlogy-bold');

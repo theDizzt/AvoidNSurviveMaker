@@ -246,6 +246,7 @@
   "captcha.loadFailed": "보안 확인을 불러오지 못했습니다. 연결을 확인하고 다시 시도하세요.",
   "records.signIn": "기록을 동기화하려면 로그인하세요.",
   "records.syncFailed": "기록을 동기화하지 못했습니다. 다시 시도해 주세요.",
+  "records.verificationFailed": "로컬 기록은 저장했지만 순위표 검증에 실패했습니다. 다시 클리어하면 재시도합니다.",
   "records.accountChanged": "로그인한 계정이 바뀌었습니다. 다시 시도해 주세요.",
   "stats.customLevel": "커스텀 {n}",
   "stats.notConfigured": "계정 기능이 설정되지 않아 데이터베이스에 저장된 내용이 없습니다.",

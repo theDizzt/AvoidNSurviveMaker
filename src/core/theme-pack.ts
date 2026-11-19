@@ -1,31 +1,10 @@
-import { t } from './i18n';
+import { t as defaultTranslate, type Translator } from './i18n';
 import { todayUtc } from './time';
-import { isLibraryFont } from './font-catalog';
-import { readFonts, readScreens, type ThemeFont, type ThemeScreens } from './screen-layout';
+import { createFontCatalogApi } from './font-catalog';
+import { createScreenLayoutApi, type ThemeFont, type ThemeScreens } from './screen-layout';
 import type { MapData, Theme } from './types';
 import { readTextEffects, type TextEffects } from './text-effects';
-import { validateMap } from './validate';
-
-/**
- * Theme packs: a world of up to 21 levels with its own look. Official themes live in the repo's
- * `themes/` folder; custom ones are loaded from (and saved as) zip files with the same layout:
- *
- *   theme.json          ThemeInfo (this file's format)
- *   cover.png|svg|…     representative image (optional; named by `cover`)
- *   badge.png|…         custom level badge image (optional; named by `style.badge.image`)
- *   levels/01.json …    the levels, in file-name order (MapData, as exported by the map editor)
- */
-export const THEME_FORMAT = 1;
-/** Official themes have exactly this many level slots; custom packs can hold any number */
-export const LEVELS_PER_THEME = 21;
-/** Practical cap for custom packs */
-export const MAX_PACK_LEVELS = 999;
-export const STARS_PER_LEVEL = 3;
-/** Crystal stars (#59) that count per theme */
-export const CRYSTALS_PER_THEME = 3;
-export const STARS_PER_THEME = LEVELS_PER_THEME * STARS_PER_LEVEL;
-export const MIN_DIFFICULTY = 1;
-export const MAX_DIFFICULTY = 10;
+import { createValidateApi } from './validate';
 
 /** In-game level badge (top-left): the level number and title */
 export type BadgeKind = 'pill' | 'disc' | 'emblem' | 'plate' | 'slant' | 'ring' | 'image';
@@ -105,31 +84,6 @@ export interface ThemeInfo {
   i18n?: Record<string, ThemeText>;
 }
 
-export const DEFAULT_BADGE: Readonly<BadgeStyle> = {
-  kind: 'pill',
-  primary: '#ffffff',
-  secondary: '#3a9ff0',
-  numberColor: '#2b86e0',
-  titleColor: '#243450',
-  font: 'title',
-  pad: 0,
-  showTitle: true,
-};
-
-export function blankThemeInfo(): ThemeInfo {
-  return {
-    format: THEME_FORMAT,
-    id: 'my-theme',
-    name: t('themePack.defaultName'),
-    description: '',
-    author: '',
-    released: todayUtc(),
-    unlockStars: 0,
-    colors: ['#9fe2ff', '#c3b5ff'],
-    style: { badge: { ...DEFAULT_BADGE } },
-  };
-}
-
 /** A loaded theme: info, levels and its files as URLs */
 export interface ThemeEntry {
   /** As shown: translated to the game's language (see localizeThemeInfo) */
@@ -149,175 +103,232 @@ export interface ThemeEntry {
   slots?: number[];
 }
 
-const HEX = /^#[0-9a-fA-F]{6}$/;
-const KINDS: BadgeKind[] = ['pill', 'disc', 'emblem', 'plate', 'slant', 'ring', 'image'];
-const FONTS: BadgeFont[] = ['title', 'main', 'serif', 'heavy', 'timer'];
+/** Independent localized API; no process-wide locale or browser dependencies. */
+export function createThemePackApi(t: Translator = defaultTranslate) {
+  const { isLibraryFont } = createFontCatalogApi(t);
+  const { readFonts, readScreens } = createScreenLayoutApi(t);
+  const { validateMap } = createValidateApi(t);
 
-function str(v: unknown, max = 400): string {
-  return typeof v === 'string' ? v.slice(0, max) : '';
-}
 
-function hex(v: unknown, fallback: string): string {
-  return typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : fallback;
-}
+  /**
+   * Theme packs: a world of up to 21 levels with its own look. Official themes live in the repo's
+   * `themes/` folder; custom ones are loaded from (and saved as) zip files with the same layout:
+   *
+   *   theme.json          ThemeInfo (this file's format)
+   *   cover.png|svg|…     representative image (optional; named by `cover`)
+   *   badge.png|…         custom level badge image (optional; named by `style.badge.image`)
+   *   levels/01.json …    the levels, in file-name order (MapData, as exported by the map editor)
+   */
+  const THEME_FORMAT = 1;
+  /** Official themes have exactly this many level slots; custom packs can hold any number */
+  const LEVELS_PER_THEME = 21;
+  /** Practical cap for custom packs */
+  const MAX_PACK_LEVELS = 999;
+  const STARS_PER_LEVEL = 3;
+  /** Crystal stars (#59) that count per theme */
+  const CRYSTALS_PER_THEME = 3;
+  const STARS_PER_THEME = LEVELS_PER_THEME * STARS_PER_LEVEL;
+  const MIN_DIFFICULTY = 1;
+  const MAX_DIFFICULTY = 10;
 
-/**
- * Read a theme.json leniently: unknown fields are dropped, bad values fall back to defaults,
- * so a hand-edited file still loads. Throws only when it isn't a theme at all.
- */
-export function validateThemeInfo(input: unknown): ThemeInfo {
-  if (typeof input !== 'object' || input === null) throw new Error(t('themePack.notTheme'));
-  const o = input as Record<string, unknown>;
-  if (o.format !== THEME_FORMAT) throw new Error(t('themePack.format', { format: String(o.format) }));
-  const base = blankThemeInfo();
-  const style = (typeof o.style === 'object' && o.style ? o.style : {}) as Record<string, unknown>;
-  const b = (typeof style.badge === 'object' && style.badge ? style.badge : {}) as Record<string, unknown>;
-  const badge: BadgeStyle = {
-    kind: KINDS.includes(b.kind as BadgeKind) ? (b.kind as BadgeKind) : DEFAULT_BADGE.kind,
-    primary: hex(b.primary, DEFAULT_BADGE.primary),
-    secondary: hex(b.secondary, DEFAULT_BADGE.secondary),
-    numberColor: hex(b.numberColor, DEFAULT_BADGE.numberColor),
-    titleColor: hex(b.titleColor, DEFAULT_BADGE.titleColor),
-    font: FONTS.includes(b.font as BadgeFont) || isLibraryFont(b.font as string) ? (b.font as BadgeFont) : DEFAULT_BADGE.font,
-    pad: typeof b.pad === 'number' ? Math.max(0, Math.min(4, Math.round(b.pad))) : 0,
-    showTitle: b.showTitle !== false,
+  const DEFAULT_BADGE: Readonly<BadgeStyle> = {
+    kind: 'pill',
+    primary: '#ffffff',
+    secondary: '#3a9ff0',
+    numberColor: '#2b86e0',
+    titleColor: '#243450',
+    font: 'title',
+    pad: 0,
+    showTitle: true,
   };
-  if (FONTS.includes(b.titleFont as BadgeFont) || isLibraryFont(b.titleFont as string)) badge.titleFont = b.titleFont as BadgeFont;
-  const numberFx = readTextEffects(b.numberFx);
-  if (numberFx) badge.numberFx = numberFx;
-  const titleFx = readTextEffects(b.titleFx);
-  if (titleFx) badge.titleFx = titleFx;
-  if (str(b.caption)) badge.caption = str(b.caption, 40);
-  if (str(b.image)) badge.image = str(b.image, 120);
-  const info: ThemeInfo = {
-    format: THEME_FORMAT,
-    id: str(o.id, 60).replace(/[^a-zA-Z0-9_-]/g, '') || base.id,
-    name: str(o.name, 60) || t('themePack.untitled'),
-    description: str(o.description, 1000),
-    author: str(o.author, 60),
-    released: /^\d{4}-\d{2}-\d{2}$/.test(str(o.released)) ? str(o.released) : base.released,
-    unlockStars: typeof o.unlockStars === 'number' ? Math.max(0, Math.round(o.unlockStars)) : 0,
-    colors: Array.isArray(o.colors) ? [hex(o.colors[0], base.colors[0]), hex(o.colors[1], base.colors[1])] : base.colors,
-    style: { badge },
-  };
-  if (str(o.authorUrl)) info.authorUrl = str(o.authorUrl, 300);
-  if (str(o.cover)) info.cover = str(o.cover, 120);
-  const music = str(o.music, 200);
-  if (music && !music.startsWith('/') && !music.includes('\\') && !music.includes(':')
-    && !music.split('/').includes('..') && /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(music)) info.music = music;
-  if (str(o.credits)) info.credits = str(o.credits, 2000);
-  const fonts = readFonts(o.fonts);
-  if (fonts) info.fonts = fonts;
-  const screens = readScreens(o.screens);
-  if (screens) info.screens = screens;
-  const i18n = readThemeI18n(o.i18n);
-  if (i18n) info.i18n = i18n;
-  if (style.maze !== undefined) {
-    // Reuse the map validator for the maze colors
-    const probe = validateMap({ v: 2, width: 960, height: 540, start: { x: 0, y: 0, w: 10, h: 10 }, goal: { x: 20, y: 0, w: 10, h: 10 }, objects: [], theme: style.maze });
-    if (probe.theme) info.style.maze = probe.theme;
+
+  function blankThemeInfo(): ThemeInfo {
+    return {
+      format: THEME_FORMAT,
+      id: 'my-theme',
+      name: t('themePack.defaultName'),
+      description: '',
+      author: '',
+      released: todayUtc(),
+      unlockStars: 0,
+      colors: ['#9fe2ff', '#c3b5ff'],
+      style: { badge: { ...DEFAULT_BADGE } },
+    };
   }
-  return info;
-}
 
-/** The "i18n" block of theme.json: language id → translated text (same limits as the default text) */
-function readThemeI18n(v: unknown): Record<string, ThemeText> | undefined {
-  if (typeof v !== 'object' || v === null || Array.isArray(v)) return undefined;
-  const out: Record<string, ThemeText> = {};
-  for (const [lang, raw] of Object.entries(v).slice(0, 20)) {
-    if (!/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(lang) || typeof raw !== 'object' || raw === null) continue;
-    const r = raw as Record<string, unknown>;
-    const text: ThemeText = {};
-    if (str(r.name).trim()) text.name = str(r.name, 60);
-    if (str(r.description).trim()) text.description = str(r.description, 1000);
-    if (str(r.credits).trim()) text.credits = str(r.credits, 2000);
-    if (str(r.caption).trim()) text.caption = str(r.caption, 40);
-    if (Object.keys(text).length) out[lang] = text;
+  const HEX = /^#[0-9a-fA-F]{6}$/;
+  const KINDS: BadgeKind[] = ['pill', 'disc', 'emblem', 'plate', 'slant', 'ring', 'image'];
+  const FONTS: BadgeFont[] = ['title', 'main', 'serif', 'heavy', 'timer'];
+
+  function str(v: unknown, max = 400): string {
+    return typeof v === 'string' ? v.slice(0, max) : '';
   }
-  return Object.keys(out).length ? out : undefined;
-}
 
-/** The theme as shown in `lang`: its translated text where there is one, the default text elsewhere */
-export function localizeThemeInfo(info: ThemeInfo, lang: string): ThemeInfo {
-  const tx = info.i18n?.[lang];
-  if (!tx) return info;
-  return {
-    ...info,
-    name: tx.name ?? info.name,
-    description: tx.description ?? info.description,
-    ...(tx.credits ?? info.credits ? { credits: tx.credits ?? info.credits } : {}),
-    style: tx.caption ? { ...info.style, badge: { ...info.style.badge, caption: tx.caption } } : info.style,
-  };
-}
+  function hex(v: unknown, fallback: string): string {
+    return typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : fallback;
+  }
 
-/** Average difficulty of a theme's levels (levels without one count as 1.00); 1.00 when it has none */
-export function averageDifficulty(levels: readonly MapData[]): number {
-  if (!levels.length) return MIN_DIFFICULTY;
-  return levels.reduce((s, m) => s + (m.difficulty ?? MIN_DIFFICULTY), 0) / levels.length;
-}
-
-/** Level slots of a theme: 21 for official themes (empty ones show as "Soon"), every level of a custom pack */
-export function levelSlots(entry: ThemeEntry): number {
-  return entry.official ? LEVELS_PER_THEME : Math.min(entry.levels.length, MAX_PACK_LEVELS);
-}
-
-/**
- * Crystal stars (#59) a theme can give: an official theme always counts 3 (its total is
- * 21 × 3 + 3 = 66, 1056 over the 16 official themes, even while some of its crystals aren't built
- * yet); a custom pack counts the levels that have one, up to 3.
- */
-export function crystalSlots(entry: ThemeEntry): number {
-  if (entry.official) return CRYSTALS_PER_THEME;
-  let n = 0;
-  for (let i = 0; i < levelSlots(entry); i++) if (levelAt(entry, i)?.objects.some((o) => o.role === 'crystal')) n++;
-  return Math.min(CRYSTALS_PER_THEME, n);
-}
-
-/** Stars a theme can give: 3 per level plus its crystal stars */
-export function maxStars(entry: ThemeEntry): number {
-  return levelSlots(entry) * STARS_PER_LEVEL + crystalSlots(entry);
-}
-
-/**
- * Slot of each level of an official theme: its level number (1-based) when that slot is free,
- * otherwise the first free slot. Levels are taken in the given (file name) order.
- */
-export function assignSlots(levels: readonly MapData[], total = LEVELS_PER_THEME): number[] {
-  const used = new Set<number>();
-  const slots = levels.map((m) => {
-    const want = m.level !== undefined ? m.level - 1 : -1;
-    if (want >= 0 && want < total && !used.has(want)) {
-      used.add(want);
-      return want;
+  /**
+   * Read a theme.json leniently: unknown fields are dropped, bad values fall back to defaults,
+   * so a hand-edited file still loads. Throws only when it isn't a theme at all.
+   */
+  function validateThemeInfo(input: unknown): ThemeInfo {
+    if (typeof input !== 'object' || input === null) throw new Error(t('themePack.notTheme'));
+    const o = input as Record<string, unknown>;
+    if (o.format !== THEME_FORMAT) throw new Error(t('themePack.format', { format: String(o.format) }));
+    const base = blankThemeInfo();
+    const style = (typeof o.style === 'object' && o.style ? o.style : {}) as Record<string, unknown>;
+    const b = (typeof style.badge === 'object' && style.badge ? style.badge : {}) as Record<string, unknown>;
+    const badge: BadgeStyle = {
+      kind: KINDS.includes(b.kind as BadgeKind) ? (b.kind as BadgeKind) : DEFAULT_BADGE.kind,
+      primary: hex(b.primary, DEFAULT_BADGE.primary),
+      secondary: hex(b.secondary, DEFAULT_BADGE.secondary),
+      numberColor: hex(b.numberColor, DEFAULT_BADGE.numberColor),
+      titleColor: hex(b.titleColor, DEFAULT_BADGE.titleColor),
+      font: FONTS.includes(b.font as BadgeFont) || isLibraryFont(b.font as string) ? (b.font as BadgeFont) : DEFAULT_BADGE.font,
+      pad: typeof b.pad === 'number' ? Math.max(0, Math.min(4, Math.round(b.pad))) : 0,
+      showTitle: b.showTitle !== false,
+    };
+    if (FONTS.includes(b.titleFont as BadgeFont) || isLibraryFont(b.titleFont as string)) badge.titleFont = b.titleFont as BadgeFont;
+    const numberFx = readTextEffects(b.numberFx);
+    if (numberFx) badge.numberFx = numberFx;
+    const titleFx = readTextEffects(b.titleFx);
+    if (titleFx) badge.titleFx = titleFx;
+    if (str(b.caption)) badge.caption = str(b.caption, 40);
+    if (str(b.image)) badge.image = str(b.image, 120);
+    const info: ThemeInfo = {
+      format: THEME_FORMAT,
+      id: str(o.id, 60).replace(/[^a-zA-Z0-9_-]/g, '') || base.id,
+      name: str(o.name, 60) || t('themePack.untitled'),
+      description: str(o.description, 1000),
+      author: str(o.author, 60),
+      released: /^\d{4}-\d{2}-\d{2}$/.test(str(o.released)) ? str(o.released) : base.released,
+      unlockStars: typeof o.unlockStars === 'number' ? Math.max(0, Math.round(o.unlockStars)) : 0,
+      colors: Array.isArray(o.colors) ? [hex(o.colors[0], base.colors[0]), hex(o.colors[1], base.colors[1])] : base.colors,
+      style: { badge },
+    };
+    if (str(o.authorUrl)) info.authorUrl = str(o.authorUrl, 300);
+    if (str(o.cover)) info.cover = str(o.cover, 120);
+    const music = str(o.music, 200);
+    if (music && !music.startsWith('/') && !music.includes('\\') && !music.includes(':')
+      && !music.split('/').includes('..') && /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(music)) info.music = music;
+    if (str(o.credits)) info.credits = str(o.credits, 2000);
+    const fonts = readFonts(o.fonts);
+    if (fonts) info.fonts = fonts;
+    const screens = readScreens(o.screens);
+    if (screens) info.screens = screens;
+    const i18n = readThemeI18n(o.i18n);
+    if (i18n) info.i18n = i18n;
+    if (style.maze !== undefined) {
+      // Reuse the map validator for the maze colors
+      const probe = validateMap({ v: 2, width: 960, height: 540, start: { x: 0, y: 0, w: 10, h: 10 }, goal: { x: 20, y: 0, w: 10, h: 10 }, objects: [], theme: style.maze });
+      if (probe.theme) info.style.maze = probe.theme;
     }
-    return -1;
-  });
-  return slots.map((s) => {
-    if (s >= 0) return s;
-    let free = 0;
-    while (used.has(free)) free++;
-    used.add(free);
-    return free;
-  });
+    return info;
+  }
+
+  /** The "i18n" block of theme.json: language id → translated text (same limits as the default text) */
+  function readThemeI18n(v: unknown): Record<string, ThemeText> | undefined {
+    if (typeof v !== 'object' || v === null || Array.isArray(v)) return undefined;
+    const out: Record<string, ThemeText> = {};
+    for (const [lang, raw] of Object.entries(v).slice(0, 20)) {
+      if (!/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(lang) || typeof raw !== 'object' || raw === null) continue;
+      const r = raw as Record<string, unknown>;
+      const text: ThemeText = {};
+      if (str(r.name).trim()) text.name = str(r.name, 60);
+      if (str(r.description).trim()) text.description = str(r.description, 1000);
+      if (str(r.credits).trim()) text.credits = str(r.credits, 2000);
+      if (str(r.caption).trim()) text.caption = str(r.caption, 40);
+      if (Object.keys(text).length) out[lang] = text;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+
+  /** The theme as shown in `lang`: its translated text where there is one, the default text elsewhere */
+  function localizeThemeInfo(info: ThemeInfo, lang: string): ThemeInfo {
+    const tx = info.i18n?.[lang];
+    if (!tx) return info;
+    return {
+      ...info,
+      name: tx.name ?? info.name,
+      description: tx.description ?? info.description,
+      ...(tx.credits ?? info.credits ? { credits: tx.credits ?? info.credits } : {}),
+      style: tx.caption ? { ...info.style, badge: { ...info.style.badge, caption: tx.caption } } : info.style,
+    };
+  }
+
+  /** Average difficulty of a theme's levels (levels without one count as 1.00); 1.00 when it has none */
+  function averageDifficulty(levels: readonly MapData[]): number {
+    if (!levels.length) return MIN_DIFFICULTY;
+    return levels.reduce((s, m) => s + (m.difficulty ?? MIN_DIFFICULTY), 0) / levels.length;
+  }
+
+  /** Level slots of a theme: 21 for official themes (empty ones show as "Soon"), every level of a custom pack */
+  function levelSlots(entry: ThemeEntry): number {
+    return entry.official ? LEVELS_PER_THEME : Math.min(entry.levels.length, MAX_PACK_LEVELS);
+  }
+
+  /**
+   * Crystal stars (#59) a theme can give: an official theme always counts 3 (its total is
+   * 21 × 3 + 3 = 66, 1056 over the 16 official themes, even while some of its crystals aren't built
+   * yet); a custom pack counts the levels that have one, up to 3.
+   */
+  function crystalSlots(entry: ThemeEntry): number {
+    if (entry.official) return CRYSTALS_PER_THEME;
+    let n = 0;
+    for (let i = 0; i < levelSlots(entry); i++) if (levelAt(entry, i)?.objects.some((o) => o.role === 'crystal')) n++;
+    return Math.min(CRYSTALS_PER_THEME, n);
+  }
+
+  /** Stars a theme can give: 3 per level plus its crystal stars */
+  function maxStars(entry: ThemeEntry): number {
+    return levelSlots(entry) * STARS_PER_LEVEL + crystalSlots(entry);
+  }
+
+  /**
+   * Slot of each level of an official theme: its level number (1-based) when that slot is free,
+   * otherwise the first free slot. Levels are taken in the given (file name) order.
+   */
+  function assignSlots(levels: readonly MapData[], total = LEVELS_PER_THEME): number[] {
+    const used = new Set<number>();
+    const slots = levels.map((m) => {
+      const want = m.level !== undefined ? m.level - 1 : -1;
+      if (want >= 0 && want < total && !used.has(want)) {
+        used.add(want);
+        return want;
+      }
+      return -1;
+    });
+    return slots.map((s) => {
+      if (s >= 0) return s;
+      let free = 0;
+      while (used.has(free)) free++;
+      used.add(free);
+      return free;
+    });
+  }
+
+  /** The level in slot `index` (undefined for an empty slot) */
+  function levelAt(entry: ThemeEntry, index: number): MapData | undefined {
+    if (!entry.slots) return entry.levels[index];
+    const k = entry.slots.indexOf(index);
+    return k >= 0 ? entry.levels[k] : undefined;
+  }
+
+  /** Slots that hold a level, in order */
+  function filledSlots(entry: ThemeEntry): number[] {
+    return entry.slots ? [...entry.slots].sort((a, b) => a - b) : entry.levels.map((_, i) => i);
+  }
+
+  /** A level ready to play: the theme's maze colors applied where the level has none */
+  function themedLevel(entry: ThemeEntry, index: number): MapData | null {
+    const m = levelAt(entry, index);
+    if (!m || index >= levelSlots(entry)) return null;
+    const out: MapData = { ...m, level: m.level ?? index + 1, title: m.title ?? m.name.replace(/^\d+\.\s*/, '') };
+    if (!out.theme && entry.info.style.maze) out.theme = entry.info.style.maze;
+    return out;
+  }
+  return { THEME_FORMAT, LEVELS_PER_THEME, MAX_PACK_LEVELS, STARS_PER_LEVEL, CRYSTALS_PER_THEME, STARS_PER_THEME, MIN_DIFFICULTY, MAX_DIFFICULTY, DEFAULT_BADGE, blankThemeInfo, validateThemeInfo, localizeThemeInfo, averageDifficulty, levelSlots, crystalSlots, maxStars, assignSlots, levelAt, filledSlots, themedLevel };
 }
 
-/** The level in slot `index` (undefined for an empty slot) */
-export function levelAt(entry: ThemeEntry, index: number): MapData | undefined {
-  if (!entry.slots) return entry.levels[index];
-  const k = entry.slots.indexOf(index);
-  return k >= 0 ? entry.levels[k] : undefined;
-}
-
-/** Slots that hold a level, in order */
-export function filledSlots(entry: ThemeEntry): number[] {
-  return entry.slots ? [...entry.slots].sort((a, b) => a - b) : entry.levels.map((_, i) => i);
-}
-
-/** A level ready to play: the theme's maze colors applied where the level has none */
-export function themedLevel(entry: ThemeEntry, index: number): MapData | null {
-  const m = levelAt(entry, index);
-  if (!m || index >= levelSlots(entry)) return null;
-  const out: MapData = { ...m, level: m.level ?? index + 1, title: m.title ?? m.name.replace(/^\d+\.\s*/, '') };
-  if (!out.theme && entry.info.style.maze) out.theme = entry.info.style.maze;
-  return out;
-}
+export const { THEME_FORMAT, LEVELS_PER_THEME, MAX_PACK_LEVELS, STARS_PER_LEVEL, CRYSTALS_PER_THEME, STARS_PER_THEME, MIN_DIFFICULTY, MAX_DIFFICULTY, DEFAULT_BADGE, blankThemeInfo, validateThemeInfo, localizeThemeInfo, averageDifficulty, levelSlots, crystalSlots, maxStars, assignSlots, levelAt, filledSlots, themedLevel } = createThemePackApi();
