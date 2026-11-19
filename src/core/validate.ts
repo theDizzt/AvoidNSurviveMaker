@@ -6,7 +6,7 @@ import { shapeBounds, shapeCenter } from './shape';
 import {
   MAP_VERSION, PACK_VERSION,
   type Door, type Easing, type Fill, type MapData, type MapPack, type Trigger, type TriggerKind, type MapObject, type Motion, type PatternKind, type Point, type PolyPoint, type Rect,
-  type Repeat, type Rotation, type Shape, type SurfaceStyle, type Theme,
+  type Repeat, type Rotation, type Shape, type SurfaceStyle, type Theme, type Wave,
 } from './types';
 
 export const LIMITS = {
@@ -16,6 +16,10 @@ export const LIMITS = {
   maxPolyPoints: 256,
   maxMarkers: 64,
   maxSpeed: 5000,
+  /** Wavy routes (#30 boulder) */
+  maxWaveAmplitude: 500,
+  minWavelength: 16,
+  maxWavelength: 4000,
   maxRotSpeed: 3600,
   maxAngle: 36000,
   maxDelay: 600_000,
@@ -93,13 +97,15 @@ function shape(v: unknown, name: string, W: number, H: number): Shape {
   const type = oneOf(o.type, `${name}.type`, ['rect', 'ellipse', 'poly', 'sector'] as const);
   if (type === 'rect') return { type, ...rect(o, name, W, H) };
   if (type === 'sector') {
+    const r = num(o.r, `${name}.r`, 1, Math.max(W, H));
     return {
       type,
       cx: num(o.cx, `${name}.cx`, -W, W * 2),
       cy: num(o.cy, `${name}.cy`, -H, H * 2),
-      r: num(o.r, `${name}.r`, 1, Math.max(W, H)),
+      r,
       start: num(o.start, `${name}.start`, -720, 720),
       sweep: num(o.sweep, `${name}.sweep`, 1, 360),
+      ...(o.inner !== undefined ? { inner: num(o.inner, `${name}.inner`, 0.5, Math.max(0.5, r - 0.5)) } : {}),
     };
   }
   if (type === 'ellipse') {
@@ -135,6 +141,15 @@ function motion(v: unknown, name: string, W: number, H: number): Motion {
     delay: num(o.delay, `${name}.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
     clockwise: bool(o.clockwise, `${name}.clockwise`),
     ...(o.showPath === true ? { showPath: true } : {}),
+    ...(o.wave !== undefined ? { wave: wave(o.wave, `${name}.wave`) } : {}),
+  };
+}
+
+function wave(v: unknown, name: string): Wave {
+  const o = obj(v, name);
+  return {
+    amplitude: num(o.amplitude, `${name}.amplitude`, 0, LIMITS.maxWaveAmplitude),
+    wavelength: num(o.wavelength, `${name}.wavelength`, LIMITS.minWavelength, LIMITS.maxWavelength),
   };
 }
 
@@ -185,7 +200,7 @@ function door(v: unknown, name: string): Door {
 function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
   const o = obj(v, name);
   const out: MapObject = {
-    role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog'] as const),
+    role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret'] as const),
     shape: shape(o.shape, `${name}.shape`, W, H),
   };
   if (o.motion !== undefined) out.motion = motion(o.motion, `${name}.motion`, W, H);
@@ -292,6 +307,15 @@ function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
       radius: num(light.radius, `${name}.light.radius`, 0, LIMITS.maxLight),
       ...(light.intensity !== undefined ? { intensity: num(light.intensity, `${name}.light.intensity`, 0, 100) } : {}),
     };
+  }
+  if (out.role === 'torch') {
+    if (o.torch !== undefined && obj(o.torch, `${name}.torch`).carry === true) out.torch = { carry: true };
+    // A torch always gives light
+    out.light ??= { radius: DEFAULT_TORCH_LIGHT };
+  }
+  if (out.role === 'secret') {
+    const sw = o.secret === undefined ? {} : obj(o.secret, `${name}.secret`);
+    out.secret = { radius: sw.radius === undefined ? DEFAULT_SECRET_RADIUS : num(sw.radius, `${name}.secret.radius`, 1, LIMITS.maxLight) };
   }
   return out;
 }
@@ -515,6 +539,13 @@ export const DEFAULT_MOTION: Readonly<Motion> = {
   delay: 0,
   clockwise: true,
 };
+
+/** A new #30 boulder's route weaves like this (the size of the default 26 px boulder) */
+export const DEFAULT_BOULDER_WAVE: Readonly<Wave> = { amplitude: 14, wavelength: 120 };
+/** Light radius of a new torch (#57 / #58) */
+export const DEFAULT_TORCH_LIGHT = 120;
+/** How far around the cursor a secret wall (#55) shows what lies under it */
+export const DEFAULT_SECRET_RADIUS = 60;
 
 export function defaultRotation(o: MapObject): Rotation {
   return {

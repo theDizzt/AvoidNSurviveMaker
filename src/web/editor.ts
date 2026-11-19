@@ -20,9 +20,11 @@ import type {
 import { SWITCH_COLORS, switchColor } from '../core/colors';
 import { boulderShape, spikeShape } from '../core/hazards';
 import { BeamCaster } from '../core/laser';
-import { createEmptyMap, DEFAULT_MOTION, defaultRotation, LIMITS, mapErrors, mapWarnings, validateMap } from '../core/validate';
 import {
-  beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, fittedView, FONT_MAIN, fitCanvas, setCamera, staticPicture,
+  createEmptyMap, DEFAULT_BOULDER_WAVE, DEFAULT_MOTION, DEFAULT_SECRET_RADIUS, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS, mapErrors, mapWarnings, validateMap,
+} from '../core/validate';
+import {
+  beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, fittedView, FONT_MAIN, fitCanvas, setCamera, staticPicture,
   TEXT_BASE_FONTS, traceObject, unitsPerPx,
 } from './render';
 import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
@@ -49,6 +51,10 @@ interface ObjectTool {
   special?: 'spike' | 'boulder' | 'disc' | 'blade';
   /** role 'fog': fog or sand dust */
   fog?: FogKind;
+  /** shape 'sector': a ring sector (#53/#54) */
+  ring?: boolean;
+  /** role 'torch': the carryable kind (#58) */
+  carry?: boolean;
 }
 type Tool = { kind: 'select' } | { kind: 'zone'; zone: 'start' | 'goal' } | ObjectTool;
 
@@ -82,6 +88,7 @@ const ICONS: Record<ShapeKind, string> = {
 const SPECIAL_IDS = {
   sectorPath: 27, sectorWall: 28, spike: 29, boulder: 30, coin: 31, laser: 37, mirror: 38, portal: 39, door: 40, dark: 41, globalDark: 42,
   disc: 43, blade: 44, movingDisc: 45, movingBlade: 46, text: 47, safe: 48, fog: 49, sand: 50,
+  ringPath: 53, ringWall: 54, secret: 55, torch: 57, carryTorch: 58,
 } as const;
 const TRIGGER_IDS: Record<TriggerKind, number> = { switch: 32, timer: 33, hold: 34, startZone: 35, stopZone: 36 };
 const TRIGGER_NAMES: Record<TriggerKind, string> = {
@@ -92,7 +99,7 @@ const isButton = (k: TriggerKind | undefined) => k === 'switch' || k === 'timer'
 
 const ROLE_NAMES: Record<Role, string> = {
   path: tr('ed.namePath'), wall: tr('ed.nameWall'), coin: tr('ed.nameCoin'), dark: tr('ed.nameDark'), trigger: tr('ed.nameSwitch'), door: tr('ed.nameDoor'), laser: tr('ed.laser'), mirror: tr('ed.mirror'), portal: tr('ed.namePortal'),
-  text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'),
+  text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'), torch: tr('ed.nameTorch'), secret: tr('ed.nameSecret'),
 };
 /** "Fog" / "Sand Dust" */
 const fogName = (kind: FogKind | undefined) => tr(kind === 'sand' ? 'ed.nameSand' : 'ed.nameFog');
@@ -109,9 +116,10 @@ function toolLabel(t: ObjectTool): string {
   if (t.special === 'spike') return tr('ed.nameSpike');
   if (t.special === 'boulder') return tr('ed.nameBoulder');
   if (t.role === 'fog') return fogName(t.fog);
+  if (t.role === 'torch') return tr(t.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch');
   if (t.special === 'disc' || t.special === 'blade') return withBehavior(t.behavior === 'moving' ? 'moving' : 'static', tr(t.special === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (t.role !== 'path' && t.role !== 'wall') return ROLE_NAMES[t.role];
-  const shape = t.shape === 'sector' ? tr('ed.shapeSector') : SHAPES.find(([k]) => k === t.shape)![1];
+  const shape = t.shape === 'sector' ? tr(t.ring ? 'ed.shapeRing' : 'ed.shapeSector') : SHAPES.find(([k]) => k === t.shape)![1];
   return withBehavior(t.behavior, tr('ed.shapeRole', { shape, role: ROLE_NAMES[t.role] }));
 }
 
@@ -124,13 +132,14 @@ function describeObject(o: MapObject): string {
   const shape = tr(
     o.shape.type === 'rect' ? 'ed.rectangle'
       : o.shape.type === 'ellipse' ? 'common.circle'
-        : o.shape.type === 'sector' ? 'ed.shapeSector'
+        : o.shape.type === 'sector' ? (o.shape.inner ? 'ed.shapeRing' : 'ed.shapeSector')
           : isFreeform(o.shape) ? 'ed.freeform' : 'ed.polygon');
   const beh: Behavior = o.rotation ? 'rotating' : o.motion ? 'moving' : 'static';
   if (o.role === 'trigger') return withBehavior(beh, tr('ed.colorName', { color: switchColor(o.trigger?.color ?? 0).name, name: TRIGGER_NAMES[o.trigger?.kind ?? 'switch'] }));
   if (o.spike) return tr('ed.nameSpike');
   if (o.boulder) return tr('ed.nameBoulder');
   if (o.role === 'fog') return withBehavior(beh, fogName(o.fog?.kind));
+  if (o.role === 'torch') return withBehavior(beh, tr(o.torch?.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch'));
   if (o.saw) return withBehavior(o.motion ? 'moving' : 'static', tr(o.saw.kind === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (o.role === 'laser' || o.role === 'portal') return withBehavior(beh, tr('ed.colorName', { color: switchColor((o.laser ?? o.portal)!.color).name, name: ROLE_NAMES[o.role] }));
   if (o.role !== 'path' && o.role !== 'wall') return withBehavior(beh, ROLE_NAMES[o.role]);
@@ -151,7 +160,10 @@ function objectToolId(o: MapObject): number {
   if (o.role === 'text') return SPECIAL_IDS.text;
   if (o.role === 'safe') return SPECIAL_IDS.safe;
   if (o.role === 'fog') return o.fog?.kind === 'sand' ? SPECIAL_IDS.sand : SPECIAL_IDS.fog;
+  if (o.role === 'torch') return o.torch?.carry ? SPECIAL_IDS.carryTorch : SPECIAL_IDS.torch;
+  if (o.role === 'secret') return SPECIAL_IDS.secret;
   if (o.role === 'trigger') return TRIGGER_IDS[o.trigger?.kind ?? 'switch'];
+  if (o.shape.type === 'sector' && o.shape.inner) return o.role === 'path' ? SPECIAL_IDS.ringPath : SPECIAL_IDS.ringWall;
   if (o.shape.type === 'sector') return o.role === 'path' ? SPECIAL_IDS.sectorPath : SPECIAL_IDS.sectorWall;
   const shape = o.shape.type === 'rect' ? 0 : o.shape.type === 'ellipse' ? 1 : isFreeform(o.shape) ? 3 : 2;
   const group = GROUPS.find(
@@ -178,7 +190,7 @@ type Handle =
   | { kind: 'marker'; j: number }
   | { kind: 'pivot' }
   /** Sector: the two arc ends (angles) and the arc middle (radius) */
-  | { kind: 'arc'; part: 'start' | 'end' | 'radius' }
+  | { kind: 'arc'; part: 'start' | 'end' | 'radius' | 'inner' }
   /** Laser: beam direction */
   | { kind: 'aim' };
 type Drag =
@@ -217,6 +229,11 @@ const REPEAT_OPTIONS: [Repeat, string][] = [['loop', tr('ed.loop')], ['pingpong'
 const EASING_OPTIONS: [Easing, string][] = [['none', tr('common.none')], ['in', tr('ed.easeIn')], ['out', tr('ed.easeOut')], ['inOut', tr('ed.easeInOut')]];
 const ROUTE_OPTIONS: [MotionType, string][] = [['linear', tr('ed.straight')], ['curve', tr('ed.curve')], ['circle', tr('ed.circleOrbit')]];
 const DIRECTION_OPTIONS: [string, string][] = [['cw', tr('ed.clockwise')], ['ccw', tr('ed.counterClockwise')]];
+
+/** A fresh route for `o`: #30 boulders weave along it by default */
+function newMotion(o: MapObject): Motion {
+  return o.boulder ? { ...DEFAULT_MOTION, points: [], wave: { ...DEFAULT_BOULDER_WAVE } } : { ...DEFAULT_MOTION, points: [] };
+}
 
 export interface EditorElements {
   canvas: HTMLCanvasElement;
@@ -844,7 +861,9 @@ export class Editor {
     const mirror: ObjectTool = { kind: 'object', role: 'mirror', behavior: 'static', shape: 'poly' };
     const portal: ObjectTool = { kind: 'object', role: 'portal', behavior: 'static', shape: 'rect' };
     addButton(row, spike, `${svg('<path d="M3 21 L18 6 L21 3 L17 7 Z" stroke-linejoin="round"/><path d="M5 19 L8 22 M2 16 L5 19" />')}<span class="pal-num">29</span>`, tr('ed.palSpikeStake'), 'pal-wall pal-moving');
-    addButton(row, boulder, `${svg('<polygon points="12,3 14.6,7.6 19.8,6.2 18.4,11.4 21,14 16.4,16.6 17.8,21.8 12.6,20.4 10,23 7.4,18.4 2.2,19.8 3.6,14.6 1,12 5.6,9.4 4.2,4.2 9.4,5.6" transform="scale(0.9) translate(1.3 0)"/>')}<span class="pal-num">30</span>`, tr('ed.palRollingBoulder'), 'pal-wall pal-moving');
+    // Same rock outline as a placed boulder
+    const rock = boulderShape(12, 12, 9.5).map((p) => `${p.x},${p.y}`).join(' ');
+    addButton(row, boulder, `${svg(`<polygon points="${rock}"/>`)}<span class="pal-num">30</span>`, tr('ed.palRollingBoulder'), 'pal-wall pal-moving');
     addButton(row, laser, `${svg('<rect x="3" y="8" width="8" height="8" rx="1.5"/><path d="M11 12 L22 12" stroke="#e2486c" stroke-width="2.4"/>')}<span class="pal-num">37</span>`, tr('ed.palLaser'), 'pal-laser');
     addButton(row, mirror, `${svg('<path d="M4 20 L20 4" stroke-width="4" stroke="#8fa3bf"/><path d="M4 20 L20 4" stroke-width="1.4" stroke="#fff"/>')}<span class="pal-num">38</span>`, tr('ed.palMirror'), 'pal-mirror');
     addButton(row, portal, `${svg('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="5" fill="none"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">39</span>`, tr('ed.palTeleportPortal'), 'pal-portal');
@@ -865,6 +884,18 @@ export class Editor {
     const cloudIcon = '<path d="M6 17 C2.5 17 2.5 12 6 12 C6 8 11 7 12.5 10 C14 7 19.5 8 18.5 12 C22 12 22 17 18 17 Z"/>';
     addButton(row, fogTool('fog'), `${svg(`${cloudIcon}<path d="M4 20 L20 20" stroke-width="1.6" fill="none" stroke-linecap="round"/>`)}<span class="pal-num">49</span>`, tr('ed.palFog'), 'pal-fog');
     addButton(row, fogTool('sand'), `${svg(`${cloudIcon}<circle cx="5" cy="20.5" r="1"/><circle cx="10" cy="21" r="1"/><circle cx="15" cy="20.5" r="1"/><circle cx="20" cy="21" r="1"/>`)}<span class="pal-num">50</span>`, tr('ed.palSandDust'), 'pal-sand');
+    // Ring sectors (#53/#54), secret wall (#55), torches (#57/#58)
+    const ringIcon = '<path d="M4 20 L4 4 A16 16 0 0 1 20 20 L13 20 A9 9 0 0 0 4 11 Z"/>';
+    const ringPath: ObjectTool = { kind: 'object', role: 'path', behavior: 'static', shape: 'sector', ring: true };
+    const ringWall: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'sector', ring: true };
+    addButton(row, ringPath, `${svg(ringIcon)}<span class="pal-num">53</span>`, tr('ed.palRingPath'), 'pal-path pal-static');
+    addButton(row, ringWall, `${svg(ringIcon)}<span class="pal-num">54</span>`, tr('ed.palRingWall'), 'pal-wall pal-static');
+    const secretTool: ObjectTool = { kind: 'object', role: 'secret', behavior: 'static', shape: 'rect' };
+    addButton(row, secretTool, `${svg('<rect x="3" y="4" width="18" height="16" rx="1.5"/><circle cx="12" cy="12" r="4.5" fill="#fff" fill-opacity="0.9"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">55</span>`, tr('ed.palSecretWall'), 'pal-wall pal-static');
+    const torchIcon = '<path d="M10 12 L14 12 L13 22 L11 22 Z" fill="#8a5a2b"/><path d="M12 2.5 C15.5 6.5 16 9 14.6 11.5 L9.4 11.5 C8 9 8.5 6.5 12 2.5 Z" fill="#ff8a1f"/><path d="M12 6 C13.6 8 13.8 9.6 13 11 L11 11 C10.2 9.6 10.4 8 12 6 Z" fill="#ffd45e"/>';
+    const torchTool = (carry: boolean): ObjectTool => ({ kind: 'object', role: 'torch', behavior: 'static', shape: 'rect', ...(carry ? { carry: true } : {}) });
+    addButton(row, torchTool(false), `${svg(torchIcon)}<span class="pal-num">57</span>`, tr('ed.palTorch'), 'pal-torch');
+    addButton(row, torchTool(true), `${svg(`${torchIcon}<path d="M16 14 L22.5 17 L19.4 18 L18.4 21.2 Z" fill="#2b86e0"/>`)}<span class="pal-num">58</span>`, tr('ed.palCarryTorch'), 'pal-torch');
     // #42 is a map setting, not an object: the button toggles it
     const g = document.createElement('button');
     g.type = 'button';
@@ -1040,6 +1071,7 @@ export class Editor {
       const t = this.tool;
       const how = tr(t.special === 'spike' ? 'ed.howSpike'
         : t.special === 'boulder' ? 'ed.howBoulder'
+          : t.role === 'torch' ? 'ed.howTorch'
           : t.role === 'mirror' ? 'ed.howMirror'
             : t.role === 'laser' ? 'ed.howLaser'
               : t.role === 'portal' ? 'ed.howPortal' : t.shape === 'sector' ? 'ed.howSector' : t.role === 'coin' ? 'ed.howCoin' : t.shape === 'poly' || t.shape === 'free' ? 'ed.howPoints' : t.shape === 'ellipse' ? 'ed.howEllipse' : 'ed.howRect');
@@ -1067,7 +1099,7 @@ export class Editor {
     const objs = this.compiled;
     const zoneTrigger = (i: number) => !isButton(this.map.objects[i]?.trigger?.kind);
     // Text boxes are drawn over everything, so they are picked first
-    for (const role of ['text', 'coin', 'portal', 'laser', 'trigger', 'wall', 'door', 'mirror'] as const) {
+    for (const role of ['text', 'coin', 'torch', 'portal', 'laser', 'trigger', 'wall', 'door', 'mirror'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
@@ -1076,7 +1108,7 @@ export class Editor {
     if (pointInRect(p.x, p.y, this.map.goal)) return { kind: 'goal' };
     if (pointInRect(p.x, p.y, this.map.start)) return { kind: 'start' };
     // Darkness and fog areas last, so whatever lies under one can still be clicked
-    for (const role of ['safe', 'path', 'trigger', 'dark', 'fog'] as const) {
+    for (const role of ['safe', 'path', 'trigger', 'dark', 'fog', 'secret'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && !zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
@@ -1177,6 +1209,10 @@ export class Editor {
     else if (s.type === 'sector') {
       const at = (deg: number) => ({ x: s.cx + Math.cos((deg * Math.PI) / 180) * s.r, y: s.cy + Math.sin((deg * Math.PI) / 180) * s.r });
       out.push({ h: { kind: 'arc', part: 'radius' }, p: at(s.start + s.sweep / 2) });
+      if (s.inner) {
+        const mid = ((s.start + s.sweep / 2) * Math.PI) / 180;
+        out.push({ h: { kind: 'arc', part: 'inner' }, p: { x: s.cx + Math.cos(mid) * s.inner, y: s.cy + Math.sin(mid) * s.inner } });
+      }
       if (s.sweep < 360) {
         out.push({ h: { kind: 'arc', part: 'start' }, p: at(s.start) });
         out.push({ h: { kind: 'arc', part: 'end' }, p: at(s.start + s.sweep) });
@@ -1211,7 +1247,7 @@ export class Editor {
       const o = this.map.objects[this.markerMode];
       if (!o) return this.finishModes();
       this.edit(() => {
-        o.motion ??= { ...DEFAULT_MOTION, points: [] };
+        o.motion ??= newMotion(o);
         if (o.motion.type === 'circle') o.motion.points = [p];
         else if (o.motion.points.length < LIMITS.maxMarkers) {
           if (o.motion.segmentTypes) {
@@ -1407,7 +1443,10 @@ export class Editor {
       // Angles snap to 15° steps while Snap is on
       const ang = this.el.snap.checked ? Math.round(deg / 15) * 15 : Math.round(deg);
       const norm = (a: number) => ((a % 360) + 360) % 360;
-      if (h.part === 'radius') s.r = Math.max(4, this.snapv(Math.hypot(raw.x - s.cx, raw.y - s.cy)));
+      if (h.part === 'radius') {
+        s.r = Math.max(4, this.snapv(Math.hypot(raw.x - s.cx, raw.y - s.cy)));
+        if (s.inner && s.inner >= s.r) s.inner = Math.max(1, s.r - 2);
+      } else if (h.part === 'inner') s.inner = Math.min(s.r - 2, Math.max(1, this.snapv(Math.hypot(raw.x - s.cx, raw.y - s.cy))));
       else if (h.part === 'start') {
         const end = s.start + s.sweep;
         s.sweep = norm(end - ang) || 360;
@@ -1490,7 +1529,7 @@ export class Editor {
     }
     if (tool.kind !== 'object') return;
 
-    if (tool.shape === 'sector') return this.addObject(tool, this.sectorFromDrag(d));
+    if (tool.shape === 'sector') return this.addObject(tool, this.sectorFromDrag(d, tool.ring));
     if (tool.special === 'spike' || tool.role === 'mirror') return this.addObject(tool, this.lineShapeFromDrag(tool, d));
     if (tool.special === 'boulder') return this.addObject(tool, { type: 'poly', points: boulderShape(d.x0, d.y0, 26) });
     // Lasers 24×24 and portals 40×40, square, centered on the click
@@ -1498,6 +1537,8 @@ export class Editor {
       const size = tool.role === 'laser' ? 24 : 40;
       r = { x: d.x0 - size / 2, y: d.y0 - size / 2, w: size, h: size };
     }
+    // Torches 24×40, centered on the click
+    if (tool.role === 'torch' && r.w < 4 && r.h < 4) r = { x: d.x0 - 12, y: d.y0 - 20, w: 24, h: 40 };
     // Coins are always 24×24, centered on the click
     if (tool.role === 'coin') r = { x: d.x0 - LIMITS.coinSize / 2, y: d.y0 - LIMITS.coinSize / 2, w: LIMITS.coinSize, h: LIMITS.coinSize };
     // A plain click drops a switch 40×40, an event zone 80×80, a door 120×20
@@ -1506,7 +1547,7 @@ export class Editor {
       r = { x: d.x0 - w / 2, y: d.y0 - h / 2, w, h };
     }
     // Grinders 48×48, saw blades 120×20, text boxes 200×50, safe zones 100×100
-    if (r.w < 4 && r.h < 4 && (tool.special === 'disc' || tool.special === 'blade' || tool.role === 'text' || tool.role === 'safe')) {
+    if (r.w < 4 && r.h < 4 && (tool.special === 'disc' || tool.special === 'blade' || tool.role === 'text' || tool.role === 'safe' || tool.role === 'secret')) {
       const [w, h] = tool.special === 'disc' ? [48, 48] : tool.special === 'blade' ? [120, 20] : tool.role === 'text' ? [200, 50] : [100, 100];
       r = { x: d.x0 - w / 2, y: d.y0 - h / 2, w, h };
     }
@@ -1544,8 +1585,11 @@ export class Editor {
     };
   }
 
-  /** Sector tool: drag from the apex outward; the drag direction is the middle of a 90° slice */
-  private sectorFromDrag(d: { x0: number; y0: number; x1: number; y1: number }): Shape {
+  /**
+   * Sector tool: drag from the apex outward; the drag direction is the middle of a 90° slice.
+   * A ring sector (#53/#54) starts with its inner radius at half the outer one.
+   */
+  private sectorFromDrag(d: { x0: number; y0: number; x1: number; y1: number }, ring = false): Shape {
     let r = Math.hypot(d.x1 - d.x0, d.y1 - d.y0);
     let dir = (Math.atan2(d.y1 - d.y0, d.x1 - d.x0) * 180) / Math.PI;
     if (r < 4) {
@@ -1553,7 +1597,9 @@ export class Editor {
       dir = -90; // a plain click: a slice pointing up
     }
     if (this.el.snap.checked) dir = Math.round(dir / 15) * 15;
-    return { type: 'sector', cx: d.x0, cy: d.y0, r: Math.round(r), start: (((dir - 45) % 360) + 360) % 360, sweep: 90 };
+    const out: Shape = { type: 'sector', cx: d.x0, cy: d.y0, r: Math.round(r), start: (((dir - 45) % 360) + 360) % 360, sweep: 90 };
+    if (ring) out.inner = Math.max(1, Math.round(r * 0.5));
+    return out;
   }
 
   private closeDraft(): void {
@@ -1570,7 +1616,8 @@ export class Editor {
     if (this.map.objects.length >= LIMITS.maxObjects) return;
     const o: MapObject = { role: tool.role, shape };
     if (tool.behavior === 'rotating') o.rotation = defaultRotation(o);
-    if (tool.behavior === 'moving') o.motion = { ...DEFAULT_MOTION, points: [] };
+    if (tool.special === 'boulder') o.boulder = true;
+    if (tool.behavior === 'moving') o.motion = newMotion(o);
     if (tool.role === 'trigger') {
       const kind = tool.trigger ?? 'switch';
       o.trigger = { kind, color: this.lastColor };
@@ -1578,7 +1625,6 @@ export class Editor {
       if (kind === 'hold') o.trigger.duration = 1000;
     }
     if (tool.role === 'door') o.door = { mode: 'auto', color: this.lastColor, moveMs: 600, waitMs: 1000 };
-    if (tool.special === 'boulder') o.boulder = true;
     if (tool.special === 'disc') o.saw = { kind: 'disc', clockwise: true, spin: 720, stroke: 0, strokeMs: 0 };
     if (tool.special === 'blade') o.saw = { kind: 'blade', clockwise: true, spin: 0, stroke: 24, strokeMs: 400 };
     if (tool.role === 'text') o.text = { text: tr('common.text'), color: '#243450', font: 'main', size: 24, bold: true, align: 'center', outlineWidth: 3, background: '#ffffffb3' };
@@ -1589,6 +1635,11 @@ export class Editor {
       o.spike = { angle: Math.round((Math.atan2(tip.y - base.y, tip.x - base.x) * 180) / Math.PI), reach, thrustMs: 120, returnMs: 900, waitMs: 900, delay: 0 };
     }
     if (tool.role === 'fog') o.fog = { kind: tool.fog ?? 'fog', density: 70 };
+    if (tool.role === 'torch') {
+      o.light = { radius: DEFAULT_TORCH_LIGHT };
+      if (tool.carry) o.torch = { carry: true };
+    }
+    if (tool.role === 'secret') o.secret = { radius: DEFAULT_SECRET_RADIUS };
     if (tool.role === 'laser') o.laser = { color: this.lastColor, angle: 0, on: true };
     if (tool.role === 'portal') {
       const same = this.map.objects.filter((m) => m.portal?.color === this.lastColor).length;
@@ -2349,7 +2400,11 @@ export class Editor {
       parts.push(this.group(
         this.numField(tr('ed.apexX'), s.cx, (v) => (s.cx = Math.round(v))),
         this.numField(tr('ed.apexY'), s.cy, (v) => (s.cy = Math.round(v))),
-        this.numField(tr('ed.radius'), s.r, (v) => (s.r = Math.max(1, Math.round(v)))),
+        this.numField(tr('ed.radius'), s.r, (v) => {
+          s.r = Math.max(1, Math.round(v));
+          if (s.inner && s.inner >= s.r) s.inner = Math.max(1, s.r - 2);
+        }),
+        ...(s.inner !== undefined ? [this.numField(tr('ed.innerRadius'), s.inner, (v) => (s.inner = Math.min(s.r - 1, Math.max(1, Math.round(v)))))] : []),
         this.numField(tr('ed.startAngle'), s.start, (v) => (s.start = ((Math.round(v) % 360) + 360) % 360), 15),
         this.numField(tr('ed.sweep'), s.sweep, (v) => (s.sweep = Math.min(360, Math.max(1, Math.round(v)))), 15),
       ));
@@ -2364,7 +2419,52 @@ export class Editor {
     if (o.spike) parts.push(...this.spikeProps(o));
     if (o.saw) parts.push(...this.sawProps(o));
     if (o.text) parts.push(...this.textProps(o));
-    if (o.boulder) parts.push(this.heading(tr('ed.rollingBoulder')), this.note(o.motion ? tr('ed.boulderRolls') : tr('ed.boulderNoRoute')));
+    if (o.boulder) {
+      parts.push(this.heading(tr('ed.rollingBoulder')), this.note(o.motion ? tr('ed.boulderRolls') : tr('ed.boulderNoRoute')));
+      const m = o.motion;
+      if (m) {
+        // Wavy route: the boulder weaves across its route as it rolls (height 0 = straight)
+        const w = m.wave ?? { amplitude: 0, wavelength: DEFAULT_BOULDER_WAVE.wavelength };
+        const setWave = (next: { amplitude: number; wavelength: number }) => {
+          if (next.amplitude > 0) m.wave = next;
+          else delete m.wave;
+        };
+        parts.push(
+          this.group(
+            this.numField(tr('ed.waveAmplitude'), w.amplitude, (v) => setWave({ ...w, amplitude: Math.round(Math.min(LIMITS.maxWaveAmplitude, Math.max(0, v))) }), 2),
+            this.numField(tr('ed.waveLength'), w.wavelength, (v) => setWave({ ...w, wavelength: Math.round(Math.min(LIMITS.maxWavelength, Math.max(LIMITS.minWavelength, v))) }), 10),
+          ),
+          this.note(tr('ed.waveNote')),
+        );
+      }
+    }
+    if (o.role === 'torch') {
+      const light = o.light ?? (o.light = { radius: DEFAULT_TORCH_LIGHT });
+      parts.push(
+        this.heading(tr(o.torch?.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch')),
+        this.group(
+          this.numField(tr('ed.torchRadius'), light.radius, (v) => (light.radius = Math.round(Math.min(LIMITS.maxLight, Math.max(0, v)))), 10),
+          this.numField(tr('ed.torchIntensity'), light.intensity ?? 100, (v) => {
+            const k = Math.round(Math.min(100, Math.max(0, v)));
+            if (k === 100) delete light.intensity;
+            else light.intensity = k;
+          }, 5),
+        ),
+        this.toggle(tr('ed.torchCarry'), !!o.torch?.carry, (on) => {
+          if (on) o.torch = { carry: true };
+          else delete o.torch;
+        }),
+        this.note(tr('ed.torchNote')),
+      );
+    }
+    if (o.role === 'secret') {
+      const sw = o.secret ?? (o.secret = { radius: DEFAULT_SECRET_RADIUS });
+      parts.push(
+        this.heading(tr('ed.nameSecret')),
+        this.group(this.numField(tr('ed.secretRadius'), sw.radius, (v) => (sw.radius = Math.round(Math.min(LIMITS.maxLight, Math.max(1, v)))), 10)),
+        this.note(tr('ed.secretNote')),
+      );
+    }
     if (o.laser) parts.push(...this.laserProps(o));
     if (o.portal) parts.push(...this.portalProps(o));
     if (o.role === 'mirror') parts.push(this.heading(tr('ed.mirror')), this.note(tr('ed.laserBeamsBounceOffEvery')));
@@ -2381,7 +2481,7 @@ export class Editor {
     // Movement
     parts.push(this.heading(tr('ed.movement')), this.toggle(tr('ed.movesAlongARoute'), !!o.motion, (on) => {
       if (on) {
-        o.motion = { ...DEFAULT_MOTION, points: [] };
+        o.motion = newMotion(o);
         queueMicrotask(() => this.startMarkers(idx));
       } else {
         delete o.motion;
@@ -3165,6 +3265,14 @@ export class Editor {
     }
     ctx.setLineDash([]);
 
+    // Secret walls see-through (the reveal follows the mouse), outlined like the other areas
+    drawSecretWalls(ctx, map, objs, t, this.hover, 0.5);
+    ctx.setLineDash([5 * u, 4 * u]);
+    ctx.strokeStyle = COLORS.outlineWall;
+    ctx.beginPath();
+    for (const o of objs) if (o.role === 'secret') traceObject(ctx, o, transformAt(o, t, pose));
+    ctx.stroke();
+    ctx.setLineDash([]);
     // Fog / sand dust and darkness areas see-through, so what's under them stays editable
     drawFogAreas(ctx, map, objs, t, performance.now(), 0.6);
     ctx.setLineDash([5 * u, 4 * u]);
@@ -3452,7 +3560,7 @@ export class Editor {
           label = `${Math.round(Math.hypot(d.x1 - d.x0, d.y1 - d.y0))}`;
         }
       } else if (this.tool.kind === 'object' && this.tool.shape === 'sector') {
-        const s = this.sectorFromDrag(d);
+        const s = this.sectorFromDrag(d, this.tool.ring);
         if (s.type === 'sector') {
           const ring = flattenShape(s).poly;
           ctx.moveTo(ring[0], ring[1]);

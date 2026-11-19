@@ -24,7 +24,7 @@ export type Shape =
    * Pie slice: apex (cx, cy), radius r, from angle `start` sweeping `sweep` degrees clockwise on
    * screen (0° = right, 90° = down). sweep 360 = a full circle.
    */
-  | { type: 'sector'; cx: number; cy: number; r: number; start: number; sweep: number };
+  | { type: 'sector'; cx: number; cy: number; r: number; start: number; sweep: number; /** Ring sector (#53/#54): inner radius, 0 < inner < r */ inner?: number };
 
 /**
  * path: safe floor (once a map has any path, everything outside paths is deadly). wall: deadly.
@@ -35,8 +35,10 @@ export type Shape =
  * text: words drawn on the map, no effect on play (see `text`).
  * safe: a safe zone — nothing can kill the cursor while it is inside (it also counts as floor).
  * fog: fog or sand dust drifting over the area, covering the cursor, obstacles and walls (see `fog`).
+ * torch: a harmless light source (#57 / #58, see `torch` and `light`).
+ * secret: a secret wall (#55): covers what lies under it like a wall, harmless (see `secret`).
  */
-export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog';
+export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret';
 
 /** fog: grey-white fog (#49) · sand: blowing sand dust (#50) */
 export type FogKind = 'fog' | 'sand';
@@ -203,6 +205,17 @@ export interface Motion {
   clockwise: boolean;
   /** Draw the route as a dotted line in game */
   showPath?: boolean;
+  /**
+   * Wavy route (#30 rolling boulder): the object weaves side to side across the route like a
+   * sine wave. `amplitude` px to each side, `wavelength` px per full wave (adjusted a little per
+   * leg so every leg holds whole half-waves and the wave is 0 at each marker).
+   */
+  wave?: Wave;
+}
+
+export interface Wave {
+  amplitude: number;
+  wavelength: number;
 }
 
 /** Rotation around `pivot` (rest position; the pivot travels with the object's motion). */
@@ -250,6 +263,10 @@ export interface MapObject {
   text?: TextBox;
   /** role 'fog' */
   fog?: Fog;
+  /** role 'torch' (#57): a harmless light source (see `light`); `carry` (#58): the cursor picks it up and carries it */
+  torch?: { carry?: boolean };
+  /** role 'secret' (#55): looks like a wall, harmless; only `radius` px around the cursor shows what lies under it */
+  secret?: { radius: number };
   /** Future light-source objects: clear global darkness around the moving shape center. */
   light?: { radius: number; intensity?: number };
 }

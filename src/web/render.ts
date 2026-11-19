@@ -499,6 +499,8 @@ export interface DrawMapOptions {
   now?: number;
   /** Coins still needed: GOAL turns dark gray and shows collected / total, e.g. "3/10" */
   coinsLeft?: number;
+  /** Per object index: 1 while the cursor carries that torch (#58): not drawn in place */
+  carried?: ArrayLike<number>;
 }
 
 /** A coin: gold disc with a rim and a highlight, in the object's own (posed) frame */
@@ -765,6 +767,10 @@ export function drawMap(
   objects.forEach((o, i) => {
     if (o.role === 'coin' && shown(i)) drawCoin(ctx, o, timeOf(i));
   });
+  // Torches (#57 / #58), unless being carried
+  objects.forEach((o, i) => {
+    if (o.role === 'torch' && shown(i) && !opts.carried?.[i]) drawTorch(ctx, o, timeOf(i), opts.now ?? t, i);
+  });
   objects.forEach((o, i) => {
     if (!shown(i)) return;
     const m = map.objects[i];
@@ -850,6 +856,132 @@ function enterPose(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number):
     o.px + tf.dx - tf.cos * o.px + tf.sin * o.py,
     o.py + tf.dy - tf.sin * o.px - tf.cos * o.py,
   );
+}
+
+/**
+ * A torch standing at (cx, cy) in a w×h box (map units): a wooden handle, a wrapped head and a
+ * flickering flame with a warm glow. `now` animates the flame; `seed` keeps torches out of step.
+ */
+export function drawTorchAt(ctx: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number, now: number, seed = 0): void {
+  const top = cy - h / 2;
+  const flameH = h * 0.46;
+  const flameW = w * 0.62;
+  const flicker = 1 + 0.08 * Math.sin(now / 95 + seed * 1.7) + 0.05 * Math.sin(now / 37 + seed);
+  const sway = Math.sin(now / 140 + seed) * w * 0.05;
+  const fy = top + flameH; // flame base
+  ctx.save();
+  // Glow
+  const glowR = Math.max(w, h) * 0.9;
+  const glow = ctx.createRadialGradient(cx, fy - flameH * 0.4, 0, cx, fy - flameH * 0.4, glowR);
+  glow.addColorStop(0, 'rgba(255,190,90,0.38)');
+  glow.addColorStop(1, 'rgba(255,190,90,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, fy - flameH * 0.4, glowR, 0, Math.PI * 2);
+  ctx.fill();
+  // Handle: tapers toward the bottom
+  ctx.fillStyle = '#8a5a2b';
+  ctx.strokeStyle = '#5b3a1e';
+  ctx.lineWidth = Math.max(0.8, w * 0.05);
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.17, fy);
+  ctx.lineTo(cx + w * 0.17, fy);
+  ctx.lineTo(cx + w * 0.1, cy + h / 2);
+  ctx.lineTo(cx - w * 0.1, cy + h / 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Wrapped head
+  ctx.fillStyle = '#5b3a1e';
+  ctx.beginPath();
+  ctx.roundRect(cx - w * 0.24, fy - h * 0.02, w * 0.48, h * 0.12, w * 0.06);
+  ctx.fill();
+  // Flame: outer orange, inner yellow
+  const flame = (scale: number, color: string) => {
+    const fh = flameH * flicker * scale;
+    const fw = flameW * scale;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(cx + sway * scale, fy - fh);
+    ctx.bezierCurveTo(cx + fw * 0.55, fy - fh * 0.55, cx + fw * 0.5, fy, cx, fy);
+    ctx.bezierCurveTo(cx - fw * 0.5, fy, cx - fw * 0.55, fy - fh * 0.55, cx + sway * scale, fy - fh);
+    ctx.fill();
+  };
+  flame(1, '#ff8a1f');
+  flame(0.62, '#ffd45e');
+  flame(0.3, '#fff6c8');
+  ctx.restore();
+}
+
+function drawTorch(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, now: number, seed: number): void {
+  ctx.save();
+  enterPose(ctx, o, t);
+  drawTorchAt(ctx, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, o.maxX - o.minX, o.maxY - o.minY, now, seed);
+  ctx.restore();
+}
+
+const secretLayers = new WeakMap<CanvasRenderingContext2D, HTMLCanvasElement>();
+
+/**
+ * Secret walls (#55): drawn like the wall mass over everything under them. Around `cursor`, each
+ * one fades away within its reveal radius so the player sees what lies beneath. `alpha` < 1 is the
+ * see-through editor view.
+ */
+export function drawSecretWalls(
+  ctx: CanvasRenderingContext2D, map: MapData, objects: readonly CompiledObject[], t: number,
+  cursor: Point | null, alpha = 1, state: { hidden?: ArrayLike<number>; clock?: ArrayLike<number> } = {},
+): void {
+  const secrets = objects.flatMap((o, i) => (o.role === 'secret' && !state.hidden?.[i] ? [i] : []));
+  if (!secrets.length || alpha <= 0) return;
+  const m = ctx.getTransform();
+  const cw = ctx.canvas.width;
+  const ch = ctx.canvas.height;
+  let layer = secretLayers.get(ctx);
+  if (!layer) secretLayers.set(ctx, (layer = document.createElement('canvas')));
+  if (layer.width !== cw || layer.height !== ch) {
+    layer.width = cw;
+    layer.height = ch;
+  }
+  const g = layer.getContext('2d')!;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, cw, ch);
+  g.setTransform(m);
+  const theme = map.theme;
+  const whole: Bounds = { minX: 0, minY: 0, maxX: map.width, maxY: map.height };
+  const fill = theme ? fillStyle(g, theme.wall.fill, whole) : COLORS.wall;
+  const edge = theme ? theme.wall.edge : COLORS.wallEdge;
+  for (const i of secrets) {
+    const o = objects[i];
+    const pose = transformAt(o, state.clock?.[i] ?? t, tf);
+    g.beginPath();
+    traceObject(g, o, pose);
+    g.fillStyle = fill;
+    g.fill();
+    g.strokeStyle = edge;
+    g.lineWidth = 2;
+    g.stroke();
+    if (cursor) {
+      // Reveal: clear within the radius, fading out over the outer third
+      const r = o.src?.secret?.radius ?? 60;
+      g.save();
+      g.beginPath();
+      traceObject(g, o, pose);
+      g.clip();
+      g.globalCompositeOperation = 'destination-out';
+      const grad = g.createRadialGradient(cursor.x, cursor.y, 0, cursor.x, cursor.y, r);
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(0.65, 'rgba(0,0,0,1)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad;
+      g.fillRect(cursor.x - r, cursor.y - r, r * 2, r * 2);
+      g.restore();
+    }
+  }
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(layer, 0, 0);
+  ctx.restore();
 }
 
 /** Safe zone (#48): see-through grey */

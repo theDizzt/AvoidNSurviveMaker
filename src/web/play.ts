@@ -2,6 +2,7 @@ import { t as tr } from '../core/i18n';
 import { levelLabel, starGoals, starsFor, starText } from '../core/level';
 import { recordTime } from '../core/time';
 import { objectLights } from '../core/lighting';
+import { toWorld, transformAt, type Transform } from '../core/object';
 import { DEFAULT_BADGE, type BadgeStyle } from '../core/theme-pack';
 import { drawPointer, drawSkinTrail, skin } from './skin';
 import { badgeImage, drawLevelBadge } from './badge';
@@ -14,7 +15,7 @@ import { gameAudio } from './audio';
 import { DeathBurst } from './death-burst';
 import { drawFogAreas } from './fog';
 import {
-  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawDarkAreas, drawGlobalDark, drawMap, drawStopwatch, fitCanvas,
+  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, drawStopwatch, drawTorchAt, fitCanvas,
   FONT_MAIN, mapPointer, unitsPerPx,
 } from './render';
 
@@ -26,6 +27,9 @@ const IDLE_MARGIN_MS = 40;
 const TRAIL_POINTS = 800;
 /** On-screen size (CSS px) of the virtual cursor that replaces the system cursor during a run */
 const CURSOR_PX = 8;
+/** A carryable torch (#58) is picked up when the cursor comes this close to its edge (map units) */
+const TORCH_PICKUP = 6;
+const poseTmp: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
 
 export interface PlayElements {
   /** The play screen; gets the `running` class while a run is in progress */
@@ -55,6 +59,8 @@ export class PlayController {
   private readonly stats = new InputStats();
   private t0 = 0;
   private trail: number[] = [];
+  /** Per map object: 1 while the cursor carries that torch (#58); cosmetic, reset every run */
+  private carried = new Uint8Array(0);
   private readonly point = { x: 0, y: 0 };
   private notified = false;
   private deathNotified = false;
@@ -114,6 +120,7 @@ export class PlayController {
     this.deathNotified = false;
     this.sim = new Simulation(this.map);
     this.trail = [];
+    this.carried = new Uint8Array(this.map.objects.length);
     this.notified = false;
   }
 
@@ -160,6 +167,7 @@ export class PlayController {
     this.deathNotified = false;
     this.t0 = e.timeStamp;
     this.trail = [p.x, p.y];
+    this.carried = new Uint8Array(this.map.objects.length);
     this.trailTeleports = 0;
     this.notified = false;
     // Hide the system cursor right away instead of on the next frame
@@ -208,6 +216,7 @@ export class PlayController {
       const target = now - this.t0 - IDLE_MARGIN_MS;
       if (target > sim.time) sim.advanceTo(target);
       this.breakTrailOnTeleport();
+      this.pickUpTorches();
     }
     // Coins are collected both here and in the pointer handler, so compare with the last frame
     if (this.coinSim !== sim) {
@@ -251,20 +260,45 @@ export class PlayController {
     }
   }
 
+  /** Carryable torches (#58) the cursor touches are picked up and carried for the rest of the run */
+  private pickUpTorches(): void {
+    const { sim, map, carried } = this;
+    map.objects.forEach((m, i) => {
+      if (!m.torch?.carry || carried[i] || sim.hidden[i]) return;
+      const o = sim.objects[i];
+      const c = toWorld(o, transformAt(o, sim.clock[i], poseTmp), (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, { x: 0, y: 0 });
+      const reach = Math.max(o.maxX - o.minX, o.maxY - o.minY) / 2 + TORCH_PICKUP;
+      if (Math.hypot(sim.x - c.x, sim.y - c.y) <= reach) carried[i] = 1;
+    });
+  }
+
   private draw(now: number): void {
     const { ctx, map, sim } = this;
     const t = sim.status === 'ready' ? 0 : sim.time;
     beginFrame(ctx, map);
     const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress };
-    drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now });
+    const playing = sim.status === 'playing';
+    const carried = playing ? this.carried : undefined;
+    drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried });
     drawSkinTrail(ctx, skin, this.trail, unitsPerPx(this.el.canvas, map));
     if (sim.status !== 'ready') drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
+    // Secret walls cover the floor, obstacles and trail under them, except right around the cursor
+    drawSecretWalls(ctx, map, sim.objects, t, playing ? { x: sim.x, y: sim.y } : null, 1, state);
 
-    if (sim.status === 'playing') {
+    if (playing) {
+      const u = unitsPerPx(this.el.canvas, map);
       // The system cursor is hidden during a run (CSS .running); this dot is exactly where the
       // simulation has the cursor, so what you see is what is checked for collisions
       // (pointer skin #0 draws nothing: the system cursor stays visible instead, see .native-cursor)
-      drawPointer(ctx, skin, sim.x, sim.y, unitsPerPx(this.el.canvas, map), CURSOR_PX);
+      drawPointer(ctx, skin, sim.x, sim.y, u, CURSOR_PX);
+      // Carried torches ride just up and to the right of the cursor
+      map.objects.forEach((_, i) => {
+        if (!this.carried[i]) return;
+        const o = sim.objects[i];
+        const w = o.maxX - o.minX;
+        const h = o.maxY - o.minY;
+        drawTorchAt(ctx, sim.x + w * 0.5 + 6 * u, sim.y - h * 0.35, w, h, now, i);
+      });
     }
 
     // Fog, sand dust and darkness go over the cursor and trail; the timer and messages stay readable on top
@@ -273,7 +307,7 @@ export class PlayController {
     if (map.darkness && (sim.status === 'playing' || sim.status === 'ready')) {
       const light = map.darkness.light;
       const s = map.start;
-      const lights = objectLights(sim.objects, t, state);
+      const lights = objectLights(sim.objects, t, playing ? { ...state, carried: this.carried, cursor: { x: sim.x, y: sim.y } } : state);
       if (light > 0) lights.push(sim.status === 'playing'
         ? { x: sim.x, y: sim.y, r: light }
         : { x: s.x + s.w / 2, y: s.y + s.h / 2, r: Math.max(light, Math.hypot(s.w, s.h) / 2 + 12) });

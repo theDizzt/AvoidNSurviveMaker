@@ -102,14 +102,18 @@ export class BladeMotion {
 
 /** A fat eight-pointed star (rolling boulder) of outer radius r */
 export function boulderShape(cx: number, cy: number, r: number): PolyPoint[] {
+  // A chunky rock: 10 short knobs around a round body. Each knob has a small flat tip at the full
+  // radius; between knobs the outline dips to a notch at 0.8 r (all corners, no curves).
+  const KNOBS = 10;
   const pts: PolyPoint[] = [];
-  for (let i = 0; i < 16; i++) {
-    const a = (i * Math.PI) / 8 - Math.PI / 2;
-    const rr = i % 2 === 0 ? r : r * 0.74;
-    const p: PolyPoint = { x: Math.round((cx + Math.cos(a) * rr) * 100) / 100, y: Math.round((cy + Math.sin(a) * rr) * 100) / 100 };
-    // Rounded dents between the points keep it chunky
-    if (i % 2 === 1) p.smooth = true;
-    pts.push(p);
+  const round = (v: number) => Math.round(v * 100) / 100;
+  const at = (a: number, rr: number) => pts.push({ x: round(cx + Math.cos(a) * rr), y: round(cy + Math.sin(a) * rr) });
+  const step = (Math.PI * 2) / KNOBS;
+  for (let i = 0; i < KNOBS; i++) {
+    const a = i * step - Math.PI / 2;
+    at(a - step * 0.07, r);
+    at(a + step * 0.07, r);
+    at(a + step * 0.5, r * 0.8);
   }
   return pts;
 }

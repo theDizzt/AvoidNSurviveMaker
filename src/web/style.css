@@ -588,6 +588,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .pal-start .pal-zone { color: #1fa889; background: rgba(63, 196, 166, 0.16); }
 .pal-goal .pal-zone { color: #d48f00; background: rgba(255, 196, 60, 0.2); }
 .pal-coin svg { fill: #ffd25e; stroke: #d39a12; }
+.pal-torch svg { stroke: #5b3a1e; stroke-width: 0.6; }
 .pal-dark svg { fill: #1b1f27; stroke: #000; }
 .pal-global-dark svg { fill: #1b1f27; stroke: #000; }
 .pal-global-dark[aria-pressed="true"] { background: #2a2f3a; }
