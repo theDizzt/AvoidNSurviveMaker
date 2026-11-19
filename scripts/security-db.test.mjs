@@ -189,6 +189,34 @@ try {
   await db.exec('set role anon');
   assert.equal(Number(await scalar('select count(*) from public.public_profiles')), 2);
   console.log('PASS: invoker public profiles preserve privacy, reject writes, and sync identity lifecycle');
+  await db.exec('reset role');
+  await db.exec(await readFile(new URL('../supabase/migrations/20261119000000_hide_public_profile_ids.sql', import.meta.url), 'utf8'));
+  await db.query('insert into auth.users (id, raw_user_meta_data) values ($1, $2)', [c, { nickname: 'Security C' }]);
+  await db.query('update public.profiles set nickname = $1 where id = $2', ['Renamed C', c]);
+  for (const role of ['anon', 'authenticated']) {
+    await db.exec(`reset role; set role ${role}`);
+    const tags = (await db.query('select * from public.public_profiles')).rows;
+    assert.equal(tags.length, 3);
+    assert.deepEqual(Object.keys(tags[0]).sort(), ['discriminator', 'nickname']);
+    assert.ok(tags.some((r) => r.nickname === 'Renamed C'));
+    assert.equal((await db.query('select nickname, discriminator from public.profile_directory')).rows.length, 3);
+    await assert.rejects(db.query('select id from public.public_profiles'), /does not exist/);
+    await assert.rejects(db.query('select id from public.profile_directory'), /permission denied/);
+    await assert.rejects(db.query('select * from public.profile_directory'), /permission denied/);
+    await assert.rejects(db.query('select nickname from public.profile_directory where id = $1', [c]), /permission denied/);
+    await assert.rejects(db.query("update public.public_profiles set nickname = 'Forged'"), /permission denied/);
+    await assert.rejects(db.query('delete from public.profile_directory'), /permission denied/);
+    const leaderboard = await board('workshop/0');
+    assert.equal(leaderboard.length, 2);
+    assert.ok(leaderboard.every((r) => !('id' in r) && !('user_id' in r)));
+  }
+  await asUser(a);
+  assert.equal(await scalar('select id from public.profiles'), a);
+  await db.exec('reset role');
+  await db.query('delete from auth.users where id = $1', [c]);
+  await db.exec('set role anon');
+  assert.equal(Number(await scalar('select count(*) from public.public_profiles')), 2);
+  console.log('PASS: public UUID access blocked through view and table; tags, lifecycle, own profile and leaderboard preserved');
 } finally {
   await db.close();
 }

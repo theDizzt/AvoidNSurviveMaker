@@ -12,6 +12,11 @@
 [`20261118000000_security_hardening.sql`](../supabase/migrations/20261118000000_security_hardening.sql) 을 적용합니다.
 저장소의 변경만으로는 배포된 Supabase 데이터베이스가 바뀌지 않습니다.
 
+UUID 공개 제거는 기존 마이그레이션을 순서대로 적용한 뒤
+[`20261119000000_hide_public_profile_ids.sql`](../supabase/migrations/20261119000000_hide_public_profile_ids.sql)을 Supabase SQL Editor에서 실행합니다.
+이후 `public_profiles`는 `nickname`, `discriminator`만 반환하며, `profile_directory`도 익명·로그인 사용자에게 이 두 컬럼의 조회만 허용합니다. UUID 선택 및 UUID를 조건으로 한 조회는 거부됩니다. 내부 UUID, 계정 데이터, 프로필 동기화 트리거는 유지됩니다. 관리자 Table Editor에서는 내부 테이블의 UUID가 계속 보일 수 있습니다. 이는 일반 사용자 API 권한과 다릅니다.
+뷰의 컬럼 제거를 위해 트랜잭션 안에서 뷰를 재생성하며, 예상하지 못한 의존 객체가 있으면 `CASCADE`로 삭제하지 않고 적용을 중단합니다.
+
 - 전체 프로필은 본인만 읽을 수 있습니다. 마이그레이션 `20261118040000_public_profiles_invoker.sql` 적용 후 `public_profiles`는 `security_invoker = true` 뷰로 조회자의 권한과 RLS를 따릅니다. 공개 전용 `profile_directory`에는 `id`, `nickname`, `discriminator`만 보관합니다. 기존 프로필을 복사하고 이후 생성·이름 변경은 전용 트리거, 삭제는 외래 키 cascade로 동기화합니다. 클라이언트는 공개 테이블/뷰에 쓸 수 없으며 동기화 함수를 RPC로 실행할 수 없습니다. 활동 시각과 플레이 시간은 공개되지 않습니다.
 - 클라이언트가 profiles 와 records 에 직접 쓰는 권한은 회수되어 있습니다. RPC 는 호출자를 인증하고 search path 를 고정합니다.
 - 플레이 시간 갱신은 프로필 행을 잠그고 서버 시간 기준 예산을 소모하며, 반복해서 받을 수 있는 유예 보너스는 없습니다. 청구되지 않은 시간은 최대 1시간까지만 쓸 수 있습니다. 이는 부풀리기의 상한을 정할 뿐이며, 브라우저가 실제로 화면에 보였거나 플레이 중이었음을 증명할 수는 없습니다. 이미 부풀려진 합계는 자동으로 고쳐지지 않습니다.
