@@ -1,5 +1,4 @@
 {
-  "id": "8",
   "v": 2,
   "name": "workshop09",
   "author": "Dizzt",
@@ -215,8 +214,52 @@
         "w": 480,
         "h": 120
       }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1490,
+        "y": 760,
+        "w": 250,
+        "h": 40
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1740,
+        "y": 720,
+        "w": 120,
+        "h": 120
+      }
+    },
+    {
+      "role": "crystal",
+      "shape": {
+        "type": "rect",
+        "x": 1776,
+        "y": 756,
+        "w": 48,
+        "h": 48
+      }
+    },
+    {
+      "role": "secret",
+      "shape": {
+        "type": "rect",
+        "x": 1500,
+        "y": 720,
+        "w": 360,
+        "h": 120
+      },
+      "secret": {
+        "radius": 60
+      }
     }
   ],
+  "id": "8",
   "title": "Rotate 2",
   "level": 9,
   "difficulty": 1.25,

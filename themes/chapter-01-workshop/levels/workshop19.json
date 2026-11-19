@@ -1,5 +1,4 @@
 {
-  "id": "18",
   "v": 2,
   "name": "workshop19",
   "author": "Dizzt",
@@ -665,8 +664,239 @@
         "delay": 0,
         "clockwise": true
       }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 540,
+        "y": 540,
+        "w": 60,
+        "h": 300
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 300,
+        "y": 540,
+        "w": 240,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 420,
+        "y": 660,
+        "w": 120,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 720,
+        "w": 300,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 600,
+        "w": 120,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 120,
+        "y": 480,
+        "w": 240,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 300,
+        "y": 300,
+        "w": 60,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 300,
+        "w": 120,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 360,
+        "w": 180,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 120,
+        "w": 60,
+        "h": 240
+      }
+    },
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": 70,
+        "y": 130,
+        "w": 40,
+        "h": 40
+      },
+      "trigger": {
+        "kind": "switch",
+        "color": 13
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 540,
+        "w": 120,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 780,
+        "w": 60,
+        "h": 240
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 960,
+        "w": 120,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 660,
+        "w": 60,
+        "h": 300
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 730,
+        "w": 60,
+        "h": 40
+      },
+      "link": {
+        "color": 13,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "crystal",
+      "shape": {
+        "type": "rect",
+        "x": 66,
+        "y": 666,
+        "w": 48,
+        "h": 48
+      }
+    },
+    {
+      "role": "secret",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 30,
+            "y": 80
+          },
+          {
+            "x": 30,
+            "y": 1040
+          },
+          {
+            "x": 270,
+            "y": 1040
+          },
+          {
+            "x": 270,
+            "y": 840
+          },
+          {
+            "x": 630,
+            "y": 840
+          },
+          {
+            "x": 630,
+            "y": 510
+          },
+          {
+            "x": 390,
+            "y": 510
+          },
+          {
+            "x": 390,
+            "y": 270
+          },
+          {
+            "x": 150,
+            "y": 270
+          },
+          {
+            "x": 150,
+            "y": 80
+          }
+        ],
+        "free": true
+      },
+      "secret": {
+        "radius": 60
+      }
     }
   ],
+  "id": "18",
   "title": "Corridor",
   "level": 19,
   "difficulty": 3,

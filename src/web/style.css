@@ -1536,7 +1536,7 @@ body:has(#play-view.running) .toast { visibility: hidden; }
 .ach-tile .ach-amount { font-size: 11px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ach-tile.is-unlocked .ach-amount { color: #8a6410; }
 .ach-tile .dtile-in strong { font-size: 14px !important; line-height: 1.2; overflow-wrap: anywhere; }
-.ach-badge { font-size: 22px; line-height: 1; color: var(--muted); }
+.ach-badge { font-family: var(--font-title); font-size: 16px; font-weight: 700; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ach-tile.is-unlocked { background: linear-gradient(135deg, #fff8dc, #ffe08a); border-color: rgba(182, 138, 38, 0.6); }
 .ach-tile.is-unlocked .ach-badge, .ach-detail .ach-badge { color: #b68a26; }
 .ach-tile.is-dimmed { opacity: 0.32; filter: grayscale(0.6); }

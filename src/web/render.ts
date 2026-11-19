@@ -1180,9 +1180,13 @@ export function drawSecretWalls(
     traceObject(g, o, pose);
     g.fillStyle = fill;
     g.fill();
-    g.strokeStyle = edge;
-    g.lineWidth = 2;
-    g.stroke();
+    // In play there is no outline: the secret wall must look exactly like the wall mass around it.
+    // The see-through editor view keeps it so the object can be found.
+    if (alpha < 1) {
+      g.strokeStyle = edge;
+      g.lineWidth = 2;
+      g.stroke();
+    }
     if (cursor) {
       // Reveal: clear within the radius, fading out over the outer third
       const r = o.src?.secret?.radius ?? 60;

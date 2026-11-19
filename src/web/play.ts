@@ -207,6 +207,8 @@ export class PlayController {
   /** The run whose coin count `coinsLeft` was last seen in (for the coin sound) */
   private coinSim: Simulation | null = null;
   private coinsLeft = 0;
+  /** Whether that run already held its crystal star (for the star sound) */
+  private crystalHeld = false;
 
   private frame(): void {
     if (!this.visible || !this.map) return;
@@ -223,9 +225,15 @@ export class PlayController {
     if (this.coinSim !== sim) {
       this.coinSim = sim;
       this.coinsLeft = sim.coinsLeft;
-    } else if (sim.coinsLeft < this.coinsLeft) {
-      this.coinsLeft = sim.coinsLeft;
-      gameAudio.play('coin');
+      this.crystalHeld = sim.crystalHeld;
+    } else {
+      if (sim.coinsLeft < this.coinsLeft) {
+        this.coinsLeft = sim.coinsLeft;
+        gameAudio.play('coin');
+      }
+      // The crystal star (#59) was just picked up
+      if (sim.crystalHeld && !this.crystalHeld) gameAudio.play('star');
+      this.crystalHeld = sim.crystalHeld;
     }
     const running = sim.status === 'playing';
     if (sim.status === 'dead' && !this.deathNotified) {

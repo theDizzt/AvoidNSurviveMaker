@@ -197,7 +197,7 @@ export class AchievementsUI {
     node.classList.toggle('is-unlocked', !!unlock);
     node.classList.toggle('is-selected', this.selected === def);
     node.setAttribute('aria-label', `${t(def.name)} · ${value} / ${def.target}`);
-    inner.append(el('span', unlock ? '★' : '◇', 'ach-badge'), el('strong', t(def.name)), el('small', `${value} / ${def.target}`, 'ach-amount'));
+    inner.append(el('span', `#${def.id}`, 'ach-badge'), el('strong', t(def.name)), el('small', `${value} / ${def.target}`, 'ach-amount'));
     if (unlock && !unlock.seen) inner.prepend(el('span', t('ach.new'), 'ach-new'));
     // Progress like the loading screen: the diamond track fills clockwise, the percentage sits in the gap
     const count = el('span', `${Math.floor((value / def.target) * 100)}%`, 'ach-count');
@@ -224,7 +224,6 @@ export class AchievementsUI {
     if (!def) {
       const count = ACHIEVEMENTS.filter((d) => model.unlocks[d.id]).length;
       this.detail.replaceChildren(
-        el('span', '★', 'dtotal-star'),
         el('strong', `${count} / ${ACHIEVEMENTS.length}`),
         el('small', t('menu.achievements')),
       );
@@ -244,7 +243,7 @@ export class AchievementsUI {
       ? t('ach.reward', { reward: t(def.reward.kind === 'pointer' ? 'ach.rewardPointer' : 'ach.rewardTrail', { n: def.reward.skin }) })
       : t('ach.rewardTbd');
     const parts: HTMLElement[] = [
-      el('span', unlock ? '★' : '◇', 'ach-badge'),
+      el('span', `#${def.id}`, 'ach-badge'),
       el('strong', t(def.name), 'ach-detail-name'),
       el('p', description, 'ach-desc'),
       el('small', def.kind === 'time' ? bestTime(def, model.records) : `${value} / ${def.target}`),
