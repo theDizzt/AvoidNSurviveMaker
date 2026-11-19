@@ -874,7 +874,7 @@ export class Editor {
     g.innerHTML = `${svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="#fff"/>')}<span class="pal-num">42</span>`;
     g.addEventListener('click', () => this.edit(() => {
       if (this.map.darkness) delete this.map.darkness;
-      else this.map.darkness = { light: 0, intensity: 100 };
+      else this.map.darkness = { light: 60, intensity: 100 };
     }));
     this.globalDarkBtn = g;
     row.append(g);
@@ -2950,7 +2950,7 @@ export class Editor {
       );
     }
     parts.push(this.toggle(tr('ed.globalDarkness42'), !!m.darkness, (on) => {
-      if (on) m.darkness = { light: 0, intensity: 100 };
+      if (on) m.darkness = { light: 60, intensity: 100 };
       else delete m.darkness;
     }));
     const dk = m.darkness;
