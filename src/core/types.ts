@@ -250,6 +250,8 @@ export interface MapObject {
   text?: TextBox;
   /** role 'fog' */
   fog?: Fog;
+  /** Future light-source objects: clear global darkness around the moving shape center. */
+  light?: { radius: number; intensity?: number };
 }
 
 export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal';
@@ -298,8 +300,8 @@ export interface MapData {
   /** Level number shown in game, 1–9999 */
   level?: number;
   stars?: StarTimes;
-  /** Global darkness: the whole map is dark during a run except a light around the cursor */
-  darkness?: { light: number };
+  /** Global darkness (#42). `light` is the optional cursor light radius (0 disables it). */
+  darkness?: { light: number; /** 0 = visible, 100 = black outside light sources; legacy default 100 */ intensity?: number };
   /** Difficulty rating 1.00–10.00 shown on level select */
   difficulty?: number;
 }

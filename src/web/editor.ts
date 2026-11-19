@@ -1,6 +1,7 @@
 import { t as tr } from '../core/i18n';
 import { pointInPoly, pointInRect } from '../core/geometry';
 import { CompiledMotion } from '../core/motion';
+import { objectLights } from '../core/lighting';
 import { compileObject, transformAt, type CompiledObject, type Transform } from '../core/object';
 import {
   alignOffset, distributeOffsets, objectsBounds, reorder, shapeCentroid, translateObject, turnObjects, unionRect,
@@ -804,7 +805,7 @@ export class Editor {
     g.innerHTML = `${svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="#fff"/>')}<span class="pal-num">42</span>`;
     g.addEventListener('click', () => this.edit(() => {
       if (this.map.darkness) delete this.map.darkness;
-      else this.map.darkness = { light: 60 };
+      else this.map.darkness = { light: 0, intensity: 100 };
     }));
     this.globalDarkBtn = g;
     row.append(g);
@@ -2872,13 +2873,16 @@ export class Editor {
       );
     }
     parts.push(this.toggle(tr('ed.globalDarkness42'), !!m.darkness, (on) => {
-      if (on) m.darkness = { light: 60 };
+      if (on) m.darkness = { light: 0, intensity: 100 };
       else delete m.darkness;
     }));
     const dk = m.darkness;
     if (dk) {
       parts.push(
-        this.group(this.numField(tr('ed.lightRadius'), dk.light, (v) => (dk.light = Math.round(Math.min(LIMITS.maxLight, Math.max(LIMITS.minLight, v)))), 4)),
+        this.group(
+          this.numField(tr('ed.darknessIntensity'), dk.intensity ?? 100, (v) => (dk.intensity = Math.round(Math.min(100, Math.max(0, v)))), 5),
+          this.numField(tr('ed.lightRadius'), dk.light, (v) => (dk.light = Math.round(Math.min(LIMITS.maxLight, Math.max(LIMITS.minLight, v)))), 4),
+        ),
         this.note(tr('ed.darknessNote', { min: LIMITS.minLight })),
       );
     }
@@ -3012,7 +3016,11 @@ export class Editor {
     ctx.stroke();
     ctx.setLineDash([]);
     // Global darkness: a light preview around the mouse
-    if (map.darkness && this.hover) drawGlobalDark(ctx, map, [{ x: this.hover.x, y: this.hover.y, r: map.darkness.light }], 0.3);
+    if (map.darkness) {
+      const lights = objectLights(objs, t);
+      if (this.hover && map.darkness.light > 0) lights.push({ x: this.hover.x, y: this.hover.y, r: map.darkness.light });
+      drawGlobalDark(ctx, map, lights, 0.3);
+    }
     // Level number and title as they'll appear in game, in the chapter preset's badge design
     const badge = badgeFor(map);
     ctx.save();

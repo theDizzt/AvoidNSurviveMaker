@@ -1,6 +1,7 @@
 import { t as tr } from '../core/i18n';
 import { levelLabel, starGoals, starsFor, starText } from '../core/level';
 import { recordTime } from '../core/time';
+import { objectLights } from '../core/lighting';
 import { DEFAULT_BADGE, type BadgeStyle } from '../core/theme-pack';
 import { badgeImage, drawLevelBadge } from './badge';
 import { badgeTitle } from './theme-registry';
@@ -279,9 +280,11 @@ export class PlayController {
     if (map.darkness && (sim.status === 'playing' || sim.status === 'ready')) {
       const light = map.darkness.light;
       const s = map.start;
-      drawGlobalDark(ctx, map, sim.status === 'playing'
-        ? [{ x: sim.x, y: sim.y, r: light }]
-        : [{ x: s.x + s.w / 2, y: s.y + s.h / 2, r: Math.max(light, Math.hypot(s.w, s.h) / 2 + 12) }]);
+      const lights = objectLights(sim.objects, t, state);
+      if (light > 0) lights.push(sim.status === 'playing'
+        ? { x: sim.x, y: sim.y, r: light }
+        : { x: s.x + s.w / 2, y: s.y + s.h / 2, r: Math.max(light, Math.hypot(s.w, s.h) / 2 + 12) });
+      drawGlobalDark(ctx, map, lights);
     }
 
     if (this.burst && !this.burst.draw(ctx, now, unitsPerPx(this.el.canvas, map))) this.burst = null;
