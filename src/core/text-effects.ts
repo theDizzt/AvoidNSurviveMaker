@@ -28,7 +28,7 @@ export interface TextEffects {
 
 const finite = (v: unknown, min: number, max: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : undefined);
 
-const hex6 = (v: unknown) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : undefined);
+const hex6 = (v: unknown) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(v) ? v.toLowerCase() : undefined);
 
 /** Keep the valid effects (a bad value just drops that effect); undefined when none are left */
 export function readTextEffects(v: unknown): TextEffects | undefined {

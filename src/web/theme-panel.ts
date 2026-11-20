@@ -1,4 +1,5 @@
 import { t } from './i18n';
+import { colorPicker } from './color-picker';
 import { createPatternTile } from './theme-pattern';
 import { BASE_THEME, primaryColor, secondaryColor, shade, THEME_PRESETS } from './localized/theme';
 import type { Fill, PatternKind, SurfaceStyle, Theme } from '../core/types';
@@ -53,13 +54,9 @@ function select<T extends string>(value: T, options: [T, string][], onChange: (v
   return s;
 }
 
-function colorInput(value: string, onChange: (v: string) => void): HTMLInputElement {
-  const i = document.createElement('input');
-  i.type = 'color';
-  i.value = value;
-  // 'change' fires once the picker closes → one undo step per color pick
-  i.addEventListener('change', () => onChange(i.value));
-  return i;
+function colorInput(value: string, onChange: (v: string) => void): HTMLElement {
+  // Reported once a pick is finished → one undo step per color pick
+  return colorPicker(value, (v) => v && onChange(v));
 }
 
 function numberInput(value: number, min: number, max: number, step: number, onChange: (v: number) => void): HTMLInputElement {

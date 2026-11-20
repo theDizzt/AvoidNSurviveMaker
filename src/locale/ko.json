@@ -1268,5 +1268,11 @@
   "te.selectDefaultNote": "끄면 기본 밝은 화면에 테마의 타일 색을 배경으로 씁니다.",
   "te.selectButtons": "레벨 버튼",
   "te.selectText": "글자",
-  "te.selectTextNote": "옆 패널의 글자 색입니다. 별 타일과 강조 색은 레벨 버튼 색을 따릅니다."
+  "te.selectTextNote": "옆 패널의 글자 색입니다. 별 타일과 강조 색은 레벨 버튼 색을 따릅니다.",
+  "cp.previous": "이전 색 (클릭하면 되돌림)",
+  "cp.opacity": "불투명도",
+  "te.mazeTab": "미로",
+  "te.mazeOwn": "전용 미로 색 사용",
+  "te.mazeMain": "{name} (기본 테마)",
+  "te.mazeInherited": "{name}의 미로 색을 그대로 씁니다. 다르게 하려면 \"전용 미로 색 사용\"을 켜세요."
 }

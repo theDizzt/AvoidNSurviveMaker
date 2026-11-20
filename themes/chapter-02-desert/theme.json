@@ -55,28 +55,6 @@
         "i18n": {
           "ko": "사막",
           "zh": "沙漠"
-        },
-        "maze": {
-          "wall": {
-            "fill": {
-              "type": "pattern",
-              "pattern": "sand",
-              "color": "#574a24",
-              "background": "#cabd93",
-              "size": 40
-            },
-            "edge": "#000000"
-          },
-          "path": {
-            "fill": {
-              "type": "gradient",
-              "style": "linear",
-              "from": "#fae8b4",
-              "to": "#ffe180",
-              "angle": 90
-            },
-            "edge": "#000000"
-          }
         }
       },
       {

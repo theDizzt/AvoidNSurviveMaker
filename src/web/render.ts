@@ -2241,7 +2241,7 @@ function polyPath(ctx: CanvasRenderingContext2D, o: { poly: Float64Array }): voi
 
 /** Darker shade of a #rrggbb color for outlines */
 function darker(hex: string, k = 0.62): string {
-  const n = parseInt(hex.slice(1), 16);
+  const n = parseInt(hex.slice(1, 7), 16);
   const c = (v: number) => Math.round(v * k).toString(16).padStart(2, '0');
   return `#${c((n >> 16) & 255)}${c((n >> 8) & 255)}${c(n & 255)}`;
 }
@@ -2417,7 +2417,7 @@ const DEFAULT_TIMER_COLOR = '#3a9ff0';
 const NEUTRAL_TIMER_COLOR = '#5b5f66';
 
 function hexToRgb(hex: string): [number, number, number] {
-  const n = parseInt(hex.slice(1), 16);
+  const n = parseInt(hex.slice(1, 7), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 

@@ -36,10 +36,19 @@ describe('theme packs', () => {
     expect(() => validateThemeInfo({ format: 1, style: { designs: [{ id: 'default' }] } })).toThrow();
   });
 
+  it('colors may carry opacity (#rrggbbaa)', () => {
+    const info = validateThemeInfo({ format: 1, colors: ['#11223380', '#445566'], style: { badge: { primary: '#ffffff80', titleFx: { glow: '#00ff0040' } } } });
+    expect(info.colors[0]).toBe('#11223380');
+    expect(info.style.badge.primary).toBe('#ffffff80');
+    expect(info.style.badge.titleFx?.glow).toBe('#00ff0040');
+  });
+
   it('chapter 2: levels 1-13 wear the desert sub-theme, 14-21 the ruins', () => {
     const desert = OFFICIAL_THEMES[1];
     expect(desert.info.id).toBe('desert');
     for (let n = 1; n <= 21; n++) expect(levelDesign(desert.info.style, { level: n })?.id, `level ${n}`).toBe(n <= 13 ? 'desert' : 'ruins');
+    // The desert sub-theme has no maze of its own: it wears the chapter's
+    expect(themedLevel({ ...desert, levels: [{ ...desert.levels[0], level: 3, theme: undefined }], slots: [2] }, 2)!.theme).toEqual(desert.info.style.maze);
     const ruins = desert.info.style.designs!.find((d) => d.id === 'ruins')!;
     expect(themedLevel({ ...desert, levels: [{ ...desert.levels[0], level: 14 }], slots: [13] }, 13)!.theme).toEqual(ruins.maze);
   });

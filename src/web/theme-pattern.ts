@@ -17,8 +17,8 @@ function wrapped(s: number, fn: (dx: number, dy: number) => void): void {
 
 /** Mix of two #rrggbb colors, k = 0 → a, 1 → b */
 function mix(a: string, b: string, k: number): string {
-  const pa = parseInt(a.slice(1), 16);
-  const pb = parseInt(b.slice(1), 16);
+  const pa = parseInt(a.slice(1, 7), 16);
+  const pb = parseInt(b.slice(1, 7), 16);
   const ch = (shift: number) => Math.round(((pa >> shift) & 255) * (1 - k) + ((pb >> shift) & 255) * k).toString(16).padStart(2, '0');
   return `#${ch(16)}${ch(8)}${ch(0)}`;
 }

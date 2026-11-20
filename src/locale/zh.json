@@ -1268,5 +1268,11 @@
   "te.selectDefaultNote": "关闭时使用默认的明亮外观，并以主题的图块颜色作为背景。",
   "te.selectButtons": "关卡按钮",
   "te.selectText": "文字",
-  "te.selectTextNote": "侧边面板的文字颜色；星星图块和强调色跟随关卡按钮。"
+  "te.selectTextNote": "侧边面板的文字颜色；星星图块和强调色跟随关卡按钮。",
+  "cp.previous": "之前的颜色（点击恢复）",
+  "cp.opacity": "不透明度",
+  "te.mazeTab": "迷宫",
+  "te.mazeOwn": "使用专属迷宫颜色",
+  "te.mazeMain": "{name}（主主题）",
+  "te.mazeInherited": "使用 {name} 的迷宫颜色。如需不同颜色，请开启\"使用专属迷宫颜色\"。"
 }

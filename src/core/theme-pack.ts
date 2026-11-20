@@ -70,9 +70,9 @@ export interface BadgeStyle {
 
 /**
  * A sub-theme: a named look inside a theme. Levels wear it when they pick it (`themeDesign`) or
- * when their number falls in its `levels` range. It has its own maze colors (none = the game's
- * default look) and may have its own badge and music; without them it wears the linked bundled
- * theme's (`themeId`), else the parent theme's.
+ * when their number falls in its `levels` range. It may have its own maze colors, badge and music;
+ * without its own maze it wears the parent theme's, and without its own badge or music it wears
+ * the linked bundled theme's (`themeId`), else the parent theme's.
  */
 export interface ThemeDesign {
   id: string;
@@ -131,7 +131,7 @@ export function levelDesign(style: ThemeStyle, map: Pick<MapData, 'themeDesign' 
 /** Maze colors of a level: its sub-theme's, else its own (unless it picks the parent's look), else the theme's */
 export function levelMaze(style: ThemeStyle, map: MapData): Theme | undefined {
   const design = levelDesign(style, map);
-  if (design) return design.maze;
+  if (design) return design.maze ?? style.maze;
   return map.themeDesign === DEFAULT_DESIGN ? style.maze : map.theme ?? style.maze;
 }
 
@@ -237,7 +237,7 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
     };
   }
 
-  const HEX = /^#[0-9a-fA-F]{6}$/;
+  const HEX = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/;
   const KINDS: BadgeKind[] = ['pill', 'disc', 'emblem', 'plate', 'slant', 'ring', 'image'];
   const FONTS: BadgeFont[] = ['title', 'main', 'serif', 'heavy', 'timer'];
 

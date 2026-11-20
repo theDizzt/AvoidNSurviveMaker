@@ -1268,5 +1268,11 @@
   "te.selectDefaultNote": "Off: the default light look, with the theme's tile colors as the background.",
   "te.selectButtons": "Level buttons",
   "te.selectText": "Text",
-  "te.selectTextNote": "Colors the side panel's text; the stars tile and accents follow the level buttons."
+  "te.selectTextNote": "Colors the side panel's text; the stars tile and accents follow the level buttons.",
+  "cp.previous": "Previous color (click to restore)",
+  "cp.opacity": "Opacity",
+  "te.mazeTab": "Maze",
+  "te.mazeOwn": "Own maze colors",
+  "te.mazeMain": "{name} (main theme)",
+  "te.mazeInherited": "Uses the maze colors of {name}. Turn on \"Own maze colors\" to give this sub-theme its own."
 }

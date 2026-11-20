@@ -412,7 +412,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
   }
 
   function color(v: unknown, name: string): string {
-    if (typeof v !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(v)) fail(t('validate.color', { name }));
+    if (typeof v !== 'string' || !/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(v)) fail(t('validate.color', { name }));
     return v.toLowerCase();
   }
 

@@ -2013,7 +2013,7 @@ export class Editor {
       } else sel.append(new Option(name, id));
       if (picked === entry) {
         const design = (m.themeDesign ? designs.find((d) => d.id === m.themeDesign) : undefined)
-          ?? designs.find((d) => same(d.maze, m.theme) && !same(style.maze, m.theme));
+          ?? designs.find((d) => d.maze && same(d.maze, m.theme) && !same(style.maze, m.theme));
         current = design ? `${id}#${design.id}` : id;
       }
     }
@@ -2032,7 +2032,7 @@ export class Editor {
       if (design) m.themeDesign = design.id;
       else if (entry.info.style.designs?.length) m.themeDesign = DEFAULT_DESIGN;
       else delete m.themeDesign;
-      const maze = design ? design.maze : entry.info.style.maze;
+      const maze = design?.maze ?? entry.info.style.maze;
       if (maze) m.theme = clone(maze);
       else delete m.theme;
     }));

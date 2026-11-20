@@ -5,6 +5,7 @@ import { gameAudio } from './audio';
 import { levelLabel } from './localized/level';
 import { compileMap } from '../core/object';
 import { DEFAULT_DESIGN, levelDesign, levelMaze, type ThemeDesign } from '../core/theme-pack';
+import { BASE_THEME } from './localized/theme';
 import {
   averageDifficulty, blankThemeInfo, DEFAULT_BADGE, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo,
   type BadgeFont, type BadgeKind, type BadgePart, type BadgePartId, type BadgeStyle, type BadgeTextFormat, type ThemeEntry, type ThemeInfo, type ThemeText,
@@ -18,6 +19,7 @@ import { floatingPanel, type FloatingPanel } from './float-panel';
 import { renderThemePanel } from './theme-panel';
 import { CampaignUI } from './campaign-ui';
 import { setIcon } from './icons';
+import { colorPicker } from './color-picker';
 import { DEFAULT_BUTTON, type LayoutElement, type LevelButtonStyle, type ScreenLayout } from './localized/screen-layout';
 import { newElement } from './screen-templates';
 
@@ -40,7 +42,7 @@ const DRAFT_KEY = 'avoid-n-survive:theme-draft';
 /** Which form sections are open (remembered per browser) */
 const OPEN_KEY = 'avoid-n-survive:theme-editor-open';
 /** Sections open the first time */
-const OPEN_DEFAULT = ['info', 'sub', 'sub-maze', 'badge-design', 'badge-layout'];
+const OPEN_DEFAULT = ['info', 'sub', 'badge-design', 'badge-layout'];
 const HISTORY_MAX = 100;
 
 const PARTS: BadgePartId[] = ['graphic', 'number', 'title'];
@@ -134,6 +136,8 @@ export class ThemeEditor {
   private opened: Set<string>;
   /** The sub-theme being edited (its design id), null = the theme itself */
   private node: string | null = null;
+  /** Theme panel tab: the theme's info, or the maze colors of the theme and its sub-themes */
+  private formTab: 'info' | 'maze' = 'info';
   private readonly badgeBody: HTMLElement;
   private readonly badgeTitle: HTMLElement;
   private readonly center: HTMLElement;
@@ -388,31 +392,12 @@ export class ThemeEditor {
 
   /** Color with a "none" box (keeps a #rrggbbaa value's opacity) */
   private optColor(value: string | undefined, apply: (v: string | undefined) => void, allowNone = true): HTMLElement {
-    const row = el('div', 'sd-color');
-    const c = el('input');
-    c.type = 'color';
-    c.value = (value ?? '#ffffff').slice(0, 7);
-    const alpha = value && value.length === 9 ? value.slice(7) : '';
-    const none = el('input');
-    none.type = 'checkbox';
-    none.checked = !value;
-    const emit = () => {
-      apply(allowNone && none.checked ? undefined : `${c.value.toLowerCase()}${alpha}`);
+    return colorPicker(value, (v) => {
+      if (!v && !allowNone) return;
+      apply(v);
       this.save();
       this.renderSelect();
-    };
-    c.addEventListener('change', () => {
-      none.checked = false;
-      emit();
-    });
-    none.addEventListener('change', emit);
-    row.append(c);
-    if (allowNone) {
-      const l = el('label', 'sd-none');
-      l.append(none, el('span', '', tr('sd.noneLower')));
-      row.append(l);
-    }
-    return row;
+    }, { none: allowNone });
   }
 
   private selectNum(value: number, min: number, max: number, step: number, apply: (v: number) => void): HTMLInputElement {
@@ -696,9 +681,13 @@ export class ThemeEditor {
       const on = el('input');
       on.type = 'checkbox';
       on.checked = key === 'depthColor' ? !!fx.depth : !!fx[key];
-      const c = el('input');
-      c.type = 'color';
-      c.value = fx[key] ?? def;
+      let picked = fx[key] ?? def;
+      const c = colorPicker(picked, (v) => {
+        if (!v) return;
+        picked = v;
+        on.checked = true;
+        sync();
+      });
       const nums = extras.map((x) => {
         const n = el('input');
         n.type = 'number';
@@ -713,7 +702,7 @@ export class ThemeEditor {
       });
       const sync = () => {
         if (on.checked) {
-          fx[key] = c.value.toLowerCase();
+          fx[key] = picked;
           extras.forEach((x, i) => {
             const raw = nums[i].value.trim();
             if (x.optional && raw === '') {
@@ -728,15 +717,14 @@ export class ThemeEditor {
           delete fx[key];
           for (const x of extras) delete fx[x.key];
         }
-        c.disabled = !on.checked;
+        c.classList.toggle('cp-off', !on.checked);
         for (const n of nums) n.disabled = !on.checked;
         apply(Object.keys(fx).length ? { ...fx } : undefined);
         this.save();
       };
-      c.disabled = !on.checked;
+      c.classList.toggle('cp-off', !on.checked);
       for (const n of nums) n.disabled = !on.checked;
       on.addEventListener('change', sync);
-      c.addEventListener('input', () => on.checked && sync());
       for (const n of nums) n.addEventListener('change', () => on.checked && sync());
       const wrap = el('div', 'te-fx-row');
       wrap.append(on, c, ...nums.flatMap((n, i) => {
@@ -799,15 +787,12 @@ export class ThemeEditor {
     ];
   }
 
-  private color(value: string, apply: (v: string) => void): HTMLInputElement {
-    const input = el('input');
-    input.type = 'color';
-    input.value = value;
-    input.addEventListener('input', () => {
-      apply(input.value.toLowerCase());
+  private color(value: string, apply: (v: string) => void): HTMLElement {
+    return colorPicker(value, (v) => {
+      if (!v) return;
+      apply(v);
       this.save();
     });
-    return input;
   }
 
   private select<T extends string>(value: T, options: [T, string][], apply: (v: T) => void): HTMLSelectElement {
@@ -1078,12 +1063,26 @@ export class ThemeEditor {
       b.addEventListener('click', fn);
       files.append(b);
     }
+    const tabs = el('div', 'te-panel-tabs');
+    tabs.setAttribute('role', 'tablist');
+    for (const [k, label] of [['info', tr('te.panelTheme')], ['maze', tr('te.mazeTab')]] as const) {
+      const b = el('button', '', label);
+      b.type = 'button';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(this.formTab === k));
+      b.addEventListener('click', () => {
+        this.formTab = k;
+        this.renderForm();
+      });
+      tabs.append(b);
+    }
     this.form.replaceChildren(
-      this.group(this.field(tr('te.load'), source, true)),
-      files,
+      tabs,
+      ...(this.formTab === 'info' ? [this.group(this.field(tr('te.load'), source, true)), files] : []),
       this.themeTree(),
-      this.foldButtons(this.form),
-      ...(design ? this.subThemeSections(design) : this.mainSections(info)),
+      ...(this.formTab === 'maze'
+        ? this.mazeSections(design)
+        : [this.foldButtons(this.form), ...(design ? this.subThemeSections(design) : this.mainSections(info))]),
     );
     this.renderBadgePanel();
     this.renderTile();
@@ -1121,7 +1120,7 @@ export class ThemeEditor {
       let n = 1;
       while (list.some((d) => d.id === `design-${n}`)) n++;
       const id = `design-${n}`;
-      list.push({ id, name: tr('te.designNumber', { n }), ...(info.style.maze ? { maze: structuredClone(info.style.maze) } : {}) });
+      list.push({ id, name: tr('te.designNumber', { n }) });
       this.save();
       this.node = null;
       this.selectNode(id);
@@ -1132,14 +1131,6 @@ export class ThemeEditor {
 
   /** Sections of the theme itself */
   private mainSections(info: ThemeInfo): HTMLElement[] {
-    const maze = el('div', 'te-maze');
-    const renderMaze = () => renderThemePanel(maze, info.style.maze, (next) => {
-      if (next) info.style.maze = next;
-      else delete info.style.maze;
-      this.save();
-      renderMaze();
-    }, themeFileMazePresets(), false);
-    renderMaze();
     const section = (id: string, title: string, ...children: HTMLElement[]) => this.section(id, title, ...children);
     const group = (...children: HTMLElement[]) => this.group(...children);
     return [
@@ -1174,7 +1165,6 @@ export class ThemeEditor {
         if (v) info.music = v;
         else delete info.music;
       }, 'background')),
-      section('maze', tr('te.mazeColors'), maze),
     ];
   }
 
@@ -1234,15 +1224,6 @@ export class ThemeEditor {
 
     const linked = design.themeId ? bundledThemeById(design.themeId) : null;
     const inherited = linked?.info.music ?? info.music;
-    const maze = el('div', 'te-maze');
-    const renderMaze = () => renderThemePanel(maze, design.maze, (next) => {
-      if (next) design.maze = next;
-      else delete design.maze;
-      this.save();
-      renderMaze();
-    }, themeFileMazePresets(), false);
-    renderMaze();
-
     const remove = el('button', 'danger', tr('te.removeSubTheme'));
     remove.type = 'button';
     remove.addEventListener('click', () => {
@@ -1278,8 +1259,50 @@ export class ThemeEditor {
         if (v) design.music = v;
         else delete design.music;
       }, `background-${design.id}`, inherited ? tr('te.inheritedMusic', { file: inherited }) : undefined)),
-      this.section('sub-maze', tr('te.mazeColors'), maze),
     ];
+  }
+
+  /**
+   * The maze tab: the maze colors of the theme, or of the selected sub-theme — which wears the
+   * theme's own until it gets colors of its own, so a shared look is set once.
+   */
+  private mazeSections(design: ThemeDesign | undefined): HTMLElement[] {
+    const info = this.draft.info;
+    const box = el('div', 'te-maze');
+    const render = () => {
+      if (design && !design.maze) {
+        box.replaceChildren(el('p', 'muted', tr('te.mazeInherited', { name: info.name })));
+        return;
+      }
+      renderThemePanel(box, design ? design.maze : info.style.maze, (next) => {
+        // A sub-theme's "default look" stays its own (no maze would mean the theme's)
+        if (design) design.maze = next ?? structuredClone(BASE_THEME);
+        else if (next) info.style.maze = next;
+        else delete info.style.maze;
+        this.save();
+        this.compiledFor = null;
+        render();
+      }, themeFileMazePresets(), false);
+    };
+    render();
+    const out: HTMLElement[] = [];
+    if (design) {
+      const own = el('label', 'toggle');
+      const cb = el('input');
+      cb.type = 'checkbox';
+      cb.checked = !!design.maze;
+      cb.addEventListener('change', () => {
+        if (cb.checked) design.maze = structuredClone(info.style.maze ?? BASE_THEME);
+        else delete design.maze;
+        this.save();
+        this.compiledFor = null;
+        render();
+      });
+      own.append(cb, el('span', '', tr('te.mazeOwn')));
+      out.push(own);
+    }
+    out.push(el('h4', 'te-maze-head', design ? design.name : tr('te.mazeMain', { name: info.name })), box);
+    return out;
   }
 
   /** Whether a pack file is still used by the theme or a sub-theme other than `except` */
