@@ -1836,4 +1836,7 @@ button.cz-list-item.is-locked:hover, button.cz-list-item.is-locked:focus-visible
 .te-panel-tabs button { flex: 1; padding: 5px 12px; border: 0; border-radius: 999px; background: none; font-weight: 700; font-size: 13px; }
 .te-panel-tabs button[aria-selected="true"] { background: var(--gradient); color: #fff; }
 .te-maze-head { margin: 4px 0 0; }
-
+/* Badge animation rows */
+.te-anim { display: flex; flex-direction: column; gap: 8px; }
+.te-anim-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 6px; align-items: end; }
+.te-anim-row .field input { width: 100%; }

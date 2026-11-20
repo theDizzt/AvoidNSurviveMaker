@@ -8,7 +8,7 @@ import { DEFAULT_DESIGN, levelDesign, levelMaze, type ThemeDesign } from '../cor
 import { BASE_THEME } from './localized/theme';
 import {
   averageDifficulty, blankThemeInfo, DEFAULT_BADGE, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo,
-  type BadgeFont, type BadgeKind, type BadgePart, type BadgePartId, type BadgeStyle, type BadgeTextFormat, type ThemeEntry, type ThemeInfo, type ThemeText,
+  type BadgeAnim, type BadgeAnimType, type BadgeFont, type BadgeKind, type BadgePart, type BadgePartId, type BadgeStyle, type BadgeTextFormat, type ThemeEntry, type ThemeInfo, type ThemeText,
 } from './localized/theme-pack';
 import type { MapData } from '../core/types';
 import type { TextEffects } from '../core/text-effects';
@@ -674,7 +674,7 @@ export class ThemeEditor {
    */
   private fxFields(current: TextEffects | undefined, apply: (fx: TextEffects | undefined) => void): HTMLElement[] {
     const fx: TextEffects = { ...current };
-    type ColorKey = 'outline' | 'shadow' | 'glow' | 'gradient' | 'depthColor';
+    type ColorKey = 'outline' | 'shadow' | 'glow' | 'gradient' | 'depthColor' | 'vine';
     type NumKey = 'outlineWidth' | 'depth' | 'shadowX' | 'shadowY' | 'shadowBlur' | 'glowSize';
     interface Extra { key: NumKey; def: number; min: number; max: number; step: number; title: string; optional?: boolean }
     const row = (label: string, key: ColorKey, def: string, extras: Extra[] = []) => {
@@ -744,6 +744,7 @@ export class ThemeEditor {
       row(tr('fx.glow'), 'glow', '#3ae8ff', [{ key: 'glowSize', def: 1, min: 0.2, max: 4, step: 0.1, title: tr('fx.glowSize'), optional: true }]),
       row(tr('fx.gradient'), 'gradient', '#ff7a3a'),
       row(tr('fx.depth'), 'depthColor', '#1a2233', [{ key: 'depth', def: 4, min: 1, max: 30, step: 1, title: tr('fx.depthSize') }]),
+      row(tr('fx.vine'), 'vine', '#3f8f2f'),
     ];
   }
 
@@ -1305,6 +1306,60 @@ export class ThemeEditor {
     return out;
   }
 
+  /** Animation of each badge part: kind, speed, strength and (color fade) target color */
+  private animFields(badge: BadgeStyle): HTMLElement {
+    const box = el('div', 'te-anim');
+    for (const id of PARTS) {
+      const a = badge.anim?.[id];
+      const set = (next: BadgeAnim | undefined) => {
+        const all = { ...badge.anim };
+        if (next) all[id] = next;
+        else delete all[id];
+        if (Object.keys(all).length) badge.anim = all;
+        else delete badge.anim;
+        this.save();
+        this.renderBadgePanel();
+      };
+      const kinds: BadgeAnimType[] = ['spin', 'sway', 'bob', 'pulse', 'blink', 'color', ...(id === 'graphic' ? [] : ['wave' as const])];
+      const type = el('select');
+      type.append(new Option(tr('te.animNone'), ''), ...kinds.map((k) => new Option(tr(`te.anim.${k}` as 'te.anim.spin'), k, false, a?.type === k)));
+      type.addEventListener('change', () => {
+        const k = type.value as BadgeAnimType | '';
+        set(k ? { type: k, speed: a?.speed ?? (k === 'spin' ? 0.25 : 0.6), amount: a?.amount ?? (k === 'color' ? 1 : 0.5), ...(k === 'color' ? { color: a?.color ?? '#ffd23f' } : {}) } : undefined);
+      });
+      const row = el('div', 'te-anim-row');
+      row.append(this.field(PART_NAMES[id], type));
+      if (a) {
+        const num = (label: string, value: number, min: number, max: number, step: number, apply: (v: number) => void) => {
+          const i = el('input');
+          i.type = 'number';
+          i.min = String(min);
+          i.max = String(max);
+          i.step = String(step);
+          i.value = String(value);
+          i.addEventListener('change', () => {
+            const v = Number(i.value);
+            if (!Number.isFinite(v)) return;
+            apply(Math.min(max, Math.max(min, v)));
+            this.save();
+          });
+          return this.field(label, i);
+        };
+        row.append(
+          num(a.type === 'spin' ? tr('te.animTurns') : tr('te.animSpeed'), a.speed, -5, 5, 0.05, (v) => (a.speed = v)),
+          ...(a.type === 'spin' ? [] : [num(tr('te.animAmount'), Math.round(a.amount * 100), 0, 100, 5, (v) => (a.amount = v / 100))]),
+          ...(a.type === 'color' ? [this.field(tr('common.color'), colorPicker(a.color ?? '#ffd23f', (v) => {
+            if (!v) return;
+            a.color = v;
+            this.save();
+          }))] : []),
+        );
+      }
+      box.append(row);
+    }
+    return box;
+  }
+
   /** Whether a pack file is still used by the theme or a sub-theme other than `except` */
   private fileInUse(file: string, except?: ThemeDesign): boolean {
     const info = this.draft.info;
@@ -1375,6 +1430,7 @@ export class ThemeEditor {
         }), true),
       ), reset),
       section('badge-layout', tr('te.secBadgeLayout'), this.partChips, this.placementBox),
+      section('badge-anim', tr('te.secBadgeAnim'), this.animFields(badge)),
       section('badge-sample', tr('te.secPreviewSample'), this.sampleBox),
       section('badge-number', tr('te.secBadgeNumber'), group(
         this.field(tr('te.numberFont'), fontPicker(this.select(badge.font, BADGE_FONTS, (v) => b({ font: v })), badge.font)),

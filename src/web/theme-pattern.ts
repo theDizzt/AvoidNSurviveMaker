@@ -296,6 +296,203 @@ export function createPatternTile(f: Extract<Fill, { type: 'pattern' }>): HTMLCa
       }
       break;
     }
+    case 'soil': {
+      // Fine, fertile soil (chapter 4 paths): a mottled ground full of tiny crumbly clods, each lit
+      // from the top left with a shadow below, and fine grit between them.
+      // `background` is the soil; `color` the deep shadow between the clods.
+      const random = seeded(4417);
+      const TAU = Math.PI * 2;
+      const light = mix(f.background, '#ffffff', 0.22);
+      // Mottling: broad, faint patches of darker and lighter earth
+      for (let i = 0; i < 16; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.12 + random() * 0.18);
+        const ry = r * (0.6 + random() * 0.4), rot = random() * Math.PI;
+        g.fillStyle = random() < 0.55 ? f.color : light;
+        g.globalAlpha = 0.04 + random() * 0.05;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.ellipse(x + dx, y + dy, r, ry, rot, 0, TAU);
+          g.fill();
+        });
+      }
+      // Grit: a dense speckle of dark and light specks
+      for (let i = 0; i < 420; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.003 + random() * 0.006);
+        g.fillStyle = random() < 0.6 ? f.color : light;
+        g.globalAlpha = 0.3 + random() * 0.4;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.arc(x + dx, y + dy, r, 0, TAU);
+          g.fill();
+        });
+      }
+      // Clods: irregular lumps, shadow first, then the lump, then a highlight on its top left
+      const clod = (cx: number, cy: number, r: number, pts: number[]) => {
+        g.beginPath();
+        pts.forEach((k, j) => {
+          const a = (j / pts.length) * TAU;
+          const px = cx + Math.cos(a) * r * k, py = cy + Math.sin(a) * r * k;
+          if (j) g.lineTo(px, py);
+          else g.moveTo(px, py);
+        });
+        g.closePath();
+        g.fill();
+      };
+      for (let i = 0; i < 150; i++) {
+        const x = random() * s, y = random() * s;
+        const r = s * (random() < 0.85 ? 0.006 + random() * 0.012 : 0.02 + random() * 0.014);
+        const pts = Array.from({ length: 7 }, () => 0.7 + random() * 0.45);
+        const body = mix(f.background, '#ffffff', 0.04 + random() * 0.14);
+        wrapped(s, (dx, dy) => {
+          g.fillStyle = f.color;
+          g.globalAlpha = 0.55;
+          clod(x + dx + r * 0.3, y + dy + r * 0.38, r, pts);
+          g.fillStyle = body;
+          g.globalAlpha = 1;
+          clod(x + dx, y + dy, r, pts);
+          g.fillStyle = light;
+          g.globalAlpha = 0.45;
+          clod(x + dx - r * 0.28, y + dy - r * 0.3, r * 0.42, pts);
+        });
+      }
+      break;
+    }
+    case 'snowPile': {
+      // Freshly piled snow (chapter 5 paths): a soft, lumpy blanket of mounds, each lit from the
+      // top left with a bluish shadow on its lower right, plus fine flakes and a few glints.
+      // `background` is the snow; `color` its shadow.
+      const random = seeded(7373);
+      const TAU = Math.PI * 2;
+      const n = 5;
+      const mounds: [number, number, number][] = [];
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          // A jittered grid (rows offset), so the lumps cover the tile evenly but not in lines
+          const x = ((i + 0.5 + (j % 2) * 0.5 + (random() - 0.5) * 0.6) / n) * s;
+          const y = ((j + 0.5 + (random() - 0.5) * 0.6) / n) * s;
+          mounds.push([x, y, s * (0.12 + random() * 0.08)]);
+        }
+      }
+      const blob = (x: number, y: number, r: number, inner: string, alpha: number) => {
+        wrapped(s, (dx, dy) => {
+          const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+          gr.addColorStop(0, inner);
+          gr.addColorStop(1, 'rgba(255,255,255,0)');
+          g.fillStyle = gr;
+          g.globalAlpha = alpha;
+          g.beginPath();
+          g.arc(x + dx, y + dy, r, 0, TAU);
+          g.fill();
+        });
+      };
+      // Shadows in the hollows between the lumps first, then the lit tops over them
+      for (const [x, y, r] of mounds) blob(x + r * 0.3, y + r * 0.4, r * 1.15, f.color, 0.5);
+      for (const [x, y, r] of mounds) blob(x - r * 0.15, y - r * 0.2, r * 0.95, '#ffffff', 0.95);
+      // Fine flakes, some in the snow's shadow color
+      for (let i = 0; i < 120; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.003 + random() * 0.005);
+        g.fillStyle = random() < 0.7 ? '#ffffff' : f.color;
+        g.globalAlpha = 0.6 + random() * 0.4;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.arc(x + dx, y + dy, r, 0, TAU);
+          g.fill();
+        });
+      }
+      // Glints: tiny four-pointed sparkles
+      g.strokeStyle = '#ffffff';
+      g.lineCap = 'round';
+      for (let i = 0; i < 6; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.012 + random() * 0.012);
+        g.globalAlpha = 0.9;
+        g.lineWidth = s * 0.006;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.moveTo(x + dx - r, y + dy);
+          g.lineTo(x + dx + r, y + dy);
+          g.moveTo(x + dx, y + dy - r);
+          g.lineTo(x + dx, y + dy + r);
+          g.stroke();
+        });
+      }
+      break;
+    }
+    case 'snowDirt': {
+      // Snowy dirt road (chapter 5 paths): a snow-covered track, the brown earth showing in two
+      // wheel ruts and a few bare patches. `background` is the earth; `color` the snow.
+      const random = seeded(6262);
+      const TAU = Math.PI * 2;
+      const darkEarth = mix(f.background, '#000000', 0.3);
+      const lightEarth = mix(f.background, '#ffffff', 0.18);
+      const snowShade = mix(f.color, '#6f8fb3', 0.3);
+      const snowDeep = mix(f.color, '#6f8fb3', 0.12);
+      // Trodden snow over everything (a little of the earth's color in it), faintly uneven
+      const trodden = mix(f.color, f.background, 0.16);
+      g.fillStyle = trodden;
+      g.globalAlpha = 1;
+      g.fillRect(0, 0, s, s);
+      for (let i = 0; i < 18; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.1 + random() * 0.16);
+        g.fillStyle = random() < 0.5 ? snowDeep : '#ffffff';
+        g.globalAlpha = 0.35;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.ellipse(x + dx, y + dy, r, r * 0.55, 0, 0, TAU);
+          g.fill();
+        });
+      }
+      // Ruts: lanes whose period fits the tile; the edge wobbles a little
+      const lanes: [number, number][] = [[0.3, 0.4], [0.72, 2.3]];
+      const laneY = (k: number, [y0, ph]: [number, number]) => s * (y0 + 0.025 * Math.sin(TAU * k + ph));
+      const edge = (k: number, side: number, ph: number) => s * (0.085 + 0.016 * Math.sin(TAU * 3 * k + ph + side) + 0.008 * Math.sin(TAU * 7 * k + ph * 2 + side));
+      const lane = (r: [number, number], grow: number) => {
+        const p = new Path2D();
+        for (const dx of [-s, 0, s]) {
+          p.moveTo(dx, laneY(0, r) - edge(0, -1, r[1]) - grow);
+          for (let j = 1; j <= 48; j++) p.lineTo(s * (j / 48) + dx, laneY(j / 48, r) - edge(j / 48, -1, r[1]) - grow);
+          for (let j = 48; j >= 0; j--) p.lineTo(s * (j / 48) + dx, laneY(j / 48, r) + edge(j / 48, 1, r[1]) + grow);
+          p.closePath();
+        }
+        return p;
+      };
+      for (const r of lanes) {
+        // Packed, shaded snow banks along the rut
+        g.fillStyle = snowShade;
+        g.globalAlpha = 0.5;
+        g.fill(lane(r, s * 0.018));
+        // The earth in the rut
+        g.fillStyle = f.background;
+        g.globalAlpha = 1;
+        g.fill(lane(r, 0));
+      }
+      // Grit in the earth (only where it shows), then snow dust over it and glints on the snow
+      g.save();
+      const bare = new Path2D();
+      for (const r of lanes) bare.addPath(lane(r, 0));
+      g.clip(bare);
+      for (let i = 0; i < 220; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.004 + random() * 0.006);
+        g.fillStyle = random() < 0.6 ? darkEarth : lightEarth;
+        g.globalAlpha = 0.6;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.arc(x + dx, y + dy, r, 0, TAU);
+          g.fill();
+        });
+      }
+      g.restore();
+      for (let i = 0; i < 160; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.003 + random() * 0.005);
+        g.fillStyle = random() < 0.85 ? f.color : snowShade;
+        g.globalAlpha = 0.55 + random() * 0.4;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.arc(x + dx, y + dy, r, 0, TAU);
+          g.fill();
+        });
+      }
+      break;
+    }
     case 'snow': {
       // Snowfield (chapter 5 walls): soft drifts shaded in `color` on the white `background`, with
       // fine flakes and a few glints.

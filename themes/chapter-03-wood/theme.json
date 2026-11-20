@@ -55,7 +55,7 @@
       }
     }
   },
-  "cover": "cover.svg",
+  "cover": "cover.png",
   "music": "audio/bgm.mp3",
   "screens": {
     "select": {

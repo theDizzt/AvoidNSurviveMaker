@@ -346,6 +346,8 @@ interface StaticLayer {
   composite: HTMLCanvasElement;
   /** Layer pixels per map unit */
   scale: number;
+  /** Scratch canvas for animated surfaces (theme `anim`) */
+  anim?: HTMLCanvasElement;
   /** Secret-wall overlay at exactly the same resolution as the wall mass. */
   secret?: HTMLCanvasElement;
   secretReady?: boolean;
@@ -441,6 +443,59 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   s.drawImage(floor, 0, 0);
   drawWallMass(s, wallCanvas, theme, scale);
   return { layer, floor, walls: wallCanvas, outside, wallPieces, frame: offscreen(w, h)[0], composite: offscreen(w, h)[0], scale };
+}
+
+/** 0 → 1 → 0 once per cycle (`speed` cycles per second) */
+export function animCycle(t: number, speed: number): number {
+  return (1 - Math.cos((t / 1000) * speed * Math.PI * 2)) / 2;
+}
+
+const scrollTiles = new Map<string, HTMLCanvasElement>();
+
+/**
+ * Surface animations (theme wall / path `anim`): a pulse or color fade laid over the surface, or
+ * its pattern scrolling, cut to the floor (paths) or the wall mass (walls) of this frame.
+ */
+function drawSurfaceAnims(ctx: CanvasRenderingContext2D, map: MapData, st: StaticLayer, walls: HTMLCanvasElement, t: number): void {
+  const theme = map.theme!;
+  const canvas = st.anim ??= offscreen(st.layer.width, st.layer.height)[0];
+  const g = canvas.getContext('2d')!;
+  for (const key of ['path', 'wall'] as const) {
+    const a = theme[key].anim;
+    if (!a) continue;
+    const f = theme[key].fill;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1;
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    if (a.type === 'scroll') {
+      if (f.type !== 'pattern') continue;
+      const tileKey = `${f.pattern}|${f.color}|${f.background}|${f.size}`;
+      let tile = scrollTiles.get(tileKey);
+      if (!tile) scrollTiles.set(tileKey, (tile = createPatternTile(f)));
+      const pat = g.createPattern(tile, 'repeat');
+      if (!pat) continue;
+      const d = (t / 1000) * a.speed;
+      const rad = ((a.angle ?? 0) * Math.PI) / 180;
+      pat.setTransform(new DOMMatrix().translate((Math.cos(rad) * d) % f.size, (Math.sin(rad) * d) % f.size).scale(1 / PATTERN_RES));
+      g.setTransform(st.scale, 0, 0, st.scale, 0, 0);
+      g.fillStyle = pat;
+      g.fillRect(0, 0, map.width, map.height);
+      if (key === 'path') drawGrid(g, map, COLORS.grid);
+    } else {
+      const k = animCycle(t, a.speed) * a.amount;
+      if (k <= 0.002) continue;
+      g.globalAlpha = a.type === 'pulse' ? k * 0.6 : k;
+      g.fillStyle = a.color ?? (a.type === 'pulse' ? '#ffffff' : '#000000');
+      g.fillRect(0, 0, canvas.width, canvas.height);
+      g.globalAlpha = 1;
+    }
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = key === 'path' ? 'destination-out' : 'destination-in';
+    g.drawImage(walls, 0, 0);
+    g.globalCompositeOperation = 'source-over';
+    ctx.drawImage(canvas, 0, 0, map.width, map.height);
+  }
 }
 
 /**
@@ -851,6 +906,8 @@ export function drawMap(
     drawWallMass(c, st.frame, theme, scale);
     ctx.drawImage(st.composite, 0, 0, map.width, map.height);
   }
+  // Animated floor / walls: drawn over the surfaces, masked by this frame's wall mass
+  if (theme?.path.anim || theme?.wall.anim) drawSurfaceAnims(ctx, map, st, !moving && !conceal ? st.walls : st.frame, opts.now ?? t);
 
   zone(ctx, map.start, COLORS.start, COLORS.startEdge, tr('zone.start'), true, map.startShape);
   // Locked GOAL (coins still to collect): dark gray, with the coins collected so far, e.g. "3/10"
@@ -1595,6 +1652,7 @@ export interface TextFx {
   shadowY?: number;
   shadowBlur?: number;
   glowSize?: number;
+  vine?: string;
 }
 
 /** One line of text with its effects, centered on `y` (needs textBaseline 'middle') */
@@ -1648,6 +1706,8 @@ export function fillTextFx(ctx: CanvasRenderingContext2D, line: string, x: numbe
   }
   // 3D: stacked copies 1px apart toward the bottom right, the farthest first
   for (let k = depth; k >= 1; k--) solid(k * 0.6, k * 0.8, fx.depthColor ?? '#000000');
+  // Vine: the stretches behind the letters first
+  if (fx.vine) drawVine(ctx, line, x, y, size, fx.vine, false);
   if (fx.glow) {
     // shadowBlur is in screen pixels, so scale it with the current zoom
     const m = ctx.getTransform();
@@ -1674,6 +1734,106 @@ export function fillTextFx(ctx: CanvasRenderingContext2D, line: string, x: numbe
     ctx.fillStyle = fx.color;
   }
   ctx.fillText(line, x, y);
+  // …and the stretches in front, so it seems wound around them
+  if (fx.vine) drawVine(ctx, line, x, y, size, fx.vine, true);
+  ctx.restore();
+}
+
+/** Lighter (k > 0) or darker (k < 0) shade of a #rrggbb color */
+function tint(hex: string, k: number): string {
+  const n = parseInt(hex.slice(1, 7), 16);
+  const ch = (v: number) => Math.round(k >= 0 ? v + (255 - v) * k : v * (1 + k)).toString(16).padStart(2, '0');
+  return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
+}
+
+/**
+ * A vine winding through a line of text (textBaseline 'middle'): a wavy stem across the letters
+ * with leaves at its crests and a few curling tendrils. Every other half wave passes in front of
+ * the letters (`front`), the rest behind them, so it reads as wound around the text.
+ */
+function drawVine(ctx: CanvasRenderingContext2D, line: string, x: number, y: number, size: number, color: string, front: boolean): void {
+  const w = ctx.measureText(line).width;
+  if (!w) return;
+  const align = ctx.textAlign;
+  const x0 = align === 'center' ? x - w / 2 : align === 'right' || align === 'end' ? x - w : x;
+  const pad = size * 0.18;
+  const from = x0 - pad, to = x0 + w + pad;
+  const half = size * 0.6; // half a wave
+  const dark = tint(color, -0.45);
+  const leafColor = tint(color, 0.28);
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // Two strands braided around each other: where one passes in front, the other is behind
+  const strands = [
+    { phase: -0.6, amp: size * 0.36, stem: Math.max(1.2, size * 0.07), odd: 1 },
+    { phase: -0.6 + Math.PI * 0.85, amp: size * 0.3, stem: Math.max(1, size * 0.045), odd: 0 },
+  ];
+  for (const [si, st] of strands.entries()) {
+    const at = (u: number) => y + Math.sin((u / half) * Math.PI + st.phase) * st.amp;
+    const slope = (u: number) => Math.atan(Math.cos((u / half) * Math.PI + st.phase) * st.amp * Math.PI / half);
+    const halves = Math.ceil((to - from) / half);
+    for (let k = 0; k < halves; k++) {
+      if ((k % 2 === st.odd) !== front) continue;
+      const a = from + k * half, b = Math.min(to, a + half);
+      const path = new Path2D();
+      for (let u = a; u <= b + 0.01; u += Math.max(0.5, size * 0.04)) {
+        if (u === a) path.moveTo(u, at(u - from));
+        else path.lineTo(u, at(u - from));
+      }
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = st.stem + Math.max(1, size * 0.035);
+      ctx.stroke(path);
+      // Behind the letters it is a little darker
+      ctx.strokeStyle = front ? color : tint(color, -0.2);
+      ctx.lineWidth = st.stem;
+      ctx.stroke(path);
+      // Leaves along this stretch, on alternate sides, following the stem
+      for (const [f, side] of [[0.3, -1], [0.75, 1]] as const) {
+        if ((k + si) % 2 === 1 && f === 0.75) continue;
+        const u = a + half * f;
+        if (u > to) continue;
+        const ly = at(u - from);
+        const dir = slope(u - from);
+        ctx.save();
+        ctx.translate(u, ly);
+        ctx.rotate(dir + side * 0.95);
+        ctx.translate(size * 0.12, 0);
+        ctx.fillStyle = front ? leafColor : tint(leafColor, -0.25);
+        ctx.strokeStyle = dark;
+        ctx.lineWidth = Math.max(0.8, size * 0.022);
+        const L = size * (si ? 0.1 : 0.13), W = L * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(-L, 0);
+        ctx.quadraticCurveTo(0, -W * 1.4, L, 0);
+        ctx.quadraticCurveTo(0, W * 1.4, -L, 0);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-L, 0);
+        ctx.lineTo(L * 0.7, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+      // A tendril curling off now and then (in front)
+      if (front && si === 0 && k % 4 === 1) {
+        const tx = a + half * 0.5;
+        const ty = at(tx - from);
+        const down = ty < y ? -1 : 1;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(0.8, st.stem * 0.45);
+        ctx.beginPath();
+        for (let t = 0; t <= 1.0001; t += 0.05) {
+          const ang = t * Math.PI * 3;
+          const r = size * 0.13 * (1 - t * 0.75);
+          const px = tx + Math.sin(ang) * r, py = ty + down * (size * 0.13 - Math.cos(ang) * r);
+          if (t === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+    }
+  }
   ctx.restore();
 }
 

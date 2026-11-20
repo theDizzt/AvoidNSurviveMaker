@@ -34,6 +34,9 @@
 | `sankofa-display` | Sankofa Display | `SankofaDisplay-Regular.ttf` | © 2024 The Sankofa Display Project Authors (Batsirai Madzonga) | OFL |
 | `stick` | Stick | `Stick-Regular.ttf` | © 2020 The Stick Project Authors (Fontworks Inc.) | OFL |
 | `unifraktur-cook` | UnifrakturCook | `UnifrakturCook-Bold.ttf` | © 2010 j. 'mach' wust, RFN UnifrakturCook; © 2009 Peter Wiegel | OFL |
+| `glf-murca` `glf-murca-ultrabold` `glf-murca-black` | GLF Murca | `GLF-Murca-*.ttf` | © 2026 Gliftype Foundry (Sidiq Kamal Nurmawan) | OFL |
+| `levelup` `levelup-italic` `levelup-semibold` `levelup-semibold-italic` `levelup-bold` `levelup-bold-italic` | LevelUp | `LevelUp-*.ttf` | © 2026 Hada Type Foundry; © 2023 Kil Hyung-jin; © 2014-2021 Adobe | OFL |
+| `lt-stopwatch` `lt-stopwatch-italic` | LT Stopwatch | `LTStopwatch-v2.ttf`, `LTStopwatchItalic-v2.ttf` | © 2024 LyonsType (Daniel Lyons), RFN LT Stopwatch | OFL |
 | `paradox-210` | 210 Paradox | `4ff025ed0f2f7ff08551ac3a0368c3b3.otf` | © 2017 Design210 | Check |
 | `sogeumjaengi-210` | 210 Sogeumjaengi Bold | `ef5c24bc9a642d8e0431abf54af3ff9b.otf` | © 2018 Design210 | Check |
 | `ggoltong-robot` | Korean KTLBR (꼴통로봇) | `a꼴통로봇.otf` | © 1992-2014 AsiaSoft Inc. | Check |
@@ -44,6 +47,13 @@
 | `stellar-serif` | Stellar Serif Bold Condensed | `Stellar_Serif_Bold_Condensed.ttf` | © 2026 DONGSEO UNIVERSITY | Check |
 | `napjak-block` | Gabia Napjak Block | `gabia_napjakBlock.ttf` | © 2015 Gabia | Check |
 | `gunhami` | GFC Gunhami Talks | `gunham.ttf` | © Gyeongnam Football Club (YoonDesign Inc.) | Check |
+| `busan-dandi-light` `busan-dandi-medium` `busan-dandi-bold` | Busan Dandi Myeongjo | `BusanDandiMyeongjo*.ttf` | © Busan Metropolitan City (YoonDesign Inc.) — busan.go.kr | Check |
+| `chai-hwaljjak` `chai-hwaljjak-medium` `chai-hwaljjak-bold` `chai-hwaljjak-heavy` | Chai Hwaljjak | `ChaiHwaljjak-*.ttf` | © 2025 CHAI (Cosmope Type) — artistchai.co.kr | Check |
+| `bing-boss` | Bing Boss | `Bing Boss.otf` | © 2026 Khurasan — khurasanstudio.com | Check |
+| `hexadecimal` | Hexadecimal | `Hexadecimal.otf` | 파일에 저작권 정보 없음 | Check |
+| `led-dot-matrix` | LED Dot-Matrix | `LED Dot-Matrix.ttf` | 저작권 표기 없음 (Onur Cem Tan, Krafti Lab) | Check |
+| `minicomputer-light` `minicomputer-light-italic` | Minicomputer Light | `Minicomputer Lt.otf`, `Minicomputer Lt It.otf` | © 2017-2024 Typodermic Fonts Inc. (Raymond Larabie) | Check |
+| `pumpkin-haunt` | Pumpkin Haunt (Demo) | `Pumpkin Haunt Demo.otf` | © 2025 Lettersweet — **데모판: 보통 개인 사용 전용이므로 공개 출시 전 확인 필수** | Check |
 | `aa-mingxinpian` | Aa ShiGe MingXinPian (중국어 본문 fallback 겸용) | `main/AaShiGeMingXinPian-2.ttf` | © 2023 HanMeiHutong (XiaMen) Technology Co. Ltd. | Check |
 | `aa-yuanheiti` | Aa YuanHeiTi (중국어 제목 fallback 겸용) | `title/AaYuanHeiTi-2.ttf` | © 2022 HanMeiHutong (XiaMen) Technology Co. Ltd. | Check |
 

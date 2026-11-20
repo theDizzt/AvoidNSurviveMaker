@@ -36,6 +36,24 @@ describe('theme packs', () => {
     expect(() => validateThemeInfo({ format: 1, style: { designs: [{ id: 'default' }] } })).toThrow();
   });
 
+  it('reads badge and maze animations leniently', () => {
+    const info = validateThemeInfo({
+      format: 1,
+      style: {
+        badge: { anim: { graphic: { type: 'spin', speed: 9, amount: 2 }, number: { type: 'color', color: '#ff000080' }, title: { type: 'dance' } } },
+        maze: {
+          wall: { fill: { type: 'solid', color: '#111111' }, edge: '#000000', anim: { type: 'pulse', speed: 0.5, amount: 0.4 } },
+          path: { fill: { type: 'pattern', pattern: 'soil', color: '#160e08', background: '#3b2a1d', size: 64 }, edge: '#000000', anim: { type: 'scroll', speed: 40, angle: 45 } },
+        },
+      },
+    });
+    expect(info.style.badge.anim).toEqual({ graphic: { type: 'spin', speed: 5, amount: 1 }, number: { type: 'color', speed: 0.5, amount: 0.5, color: '#ff000080' } });
+    expect(info.style.maze?.wall.anim).toEqual({ type: 'pulse', speed: 0.5, amount: 0.4 });
+    expect(info.style.maze?.path.anim).toEqual({ type: 'scroll', speed: 40, amount: 0.5, angle: 45 });
+    // A wave is for letters only
+    expect(validateThemeInfo({ format: 1, style: { badge: { anim: { graphic: { type: 'wave' } } } } }).style.badge.anim).toBeUndefined();
+  });
+
   it('colors may carry opacity (#rrggbbaa)', () => {
     const info = validateThemeInfo({ format: 1, colors: ['#11223380', '#445566'], style: { badge: { primary: '#ffffff80', titleFx: { glow: '#00ff0040' } } } });
     expect(info.colors[0]).toBe('#11223380');
@@ -190,6 +208,9 @@ describe('font catalog', () => {
       expect(f.id).toMatch(/^[\w -]{1,40}$/);
       ids.add(f.id);
     }
+    // A font file added to the library folder needs a catalog entry (license, picker)
+    const listed = new Set(FONT_CATALOG.map((f) => `../assets/fonts/${f.folder}/${f.file}`));
+    for (const file of files) if (file.startsWith('../assets/fonts/etc/')) expect(listed.has(file), file).toBe(true);
   });
 
   it('accepts library fonts for the level badge', async () => {

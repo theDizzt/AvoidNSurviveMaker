@@ -1,8 +1,8 @@
-import { DEFAULT_BADGE, type BadgeFont, type BadgePartId, type BadgeStyle, type BadgeTextFormat } from './localized/theme-pack';
+import { DEFAULT_BADGE, type BadgeAnim, type BadgeFont, type BadgePartId, type BadgeStyle, type BadgeTextFormat } from './localized/theme-pack';
 import type { MapData } from '../core/types';
 import { isLibraryFont } from './localized/font-catalog';
 import { libraryFontCss } from './library-fonts';
-import { fillTextFx, FONT_MAIN, FONT_TIMER, FONT_TITLE, ZH_HANZI } from './render';
+import { animCycle, fillTextFx, FONT_MAIN, FONT_TIMER, FONT_TITLE, ZH_HANZI, type TextFx } from './render';
 
 /**
  * The in-game level badge at the top-left: the level number in a theme-specific design, with
@@ -70,6 +70,73 @@ function spaced(ctx: CanvasRenderingContext2D, spacing: number | undefined): voi
 
 interface Box { x: number; y: number; w: number; h: number }
 
+/** Time of the badge being drawn (animations) */
+let frameNow = 0;
+
+/** -1 … 1 over each cycle */
+function swing(a: BadgeAnim): number {
+  return Math.sin((frameNow / 1000) * a.speed * Math.PI * 2);
+}
+
+/** Mix of two colors (#rrggbb or #rrggbbaa), k = 0 → a, 1 → b */
+function mixColor(a: string, b: string, k: number): string {
+  const parse = (h: string) => [1, 3, 5, 7].map((i) => (i < h.length ? parseInt(h.slice(i, i + 2), 16) : 255));
+  const pa = parse(a), pb = parse(b);
+  const out = pa.map((v, i) => Math.round(v + (pb[i] - v) * k).toString(16).padStart(2, '0'));
+  return `#${out[0]}${out[1]}${out[2]}${out[3] === 'ff' ? '' : out[3]}`;
+}
+
+/** The style with this frame's color fades applied */
+function animatedColors(b: BadgeStyle): BadgeStyle {
+  const a = b.anim;
+  if (!a) return b;
+  const fade = (c: string, an: BadgeAnim | undefined) => (an?.type === 'color' && an.color ? mixColor(c, an.color, animCycle(frameNow, Math.abs(an.speed)) * an.amount) : c);
+  return { ...b, primary: fade(b.primary, a.graphic), numberColor: fade(b.numberColor, a.number), titleColor: fade(b.titleColor, a.title) };
+}
+
+/** A part's motion, applied around its pivot (already translated there) */
+function applyMotion(ctx: CanvasRenderingContext2D, a: BadgeAnim): void {
+  switch (a.type) {
+    case 'spin':
+      ctx.rotate((frameNow / 1000) * a.speed * Math.PI * 2);
+      break;
+    case 'sway':
+      ctx.rotate(swing(a) * a.amount * 0.35);
+      break;
+    case 'bob':
+      ctx.translate(0, swing(a) * a.amount * 8);
+      break;
+    case 'pulse': {
+      const s = 1 + swing(a) * a.amount * 0.18;
+      ctx.scale(s, s);
+      break;
+    }
+    case 'blink':
+      ctx.globalAlpha *= 1 - a.amount * animCycle(frameNow, Math.abs(a.speed));
+      break;
+  }
+}
+
+/**
+ * Text with its effects, the letters bobbing one after another (a 'wave' animation); keeps the
+ * current textAlign. textBaseline must be 'middle'.
+ */
+function waveText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, fx: TextFx, a: BadgeAnim): void {
+  const chars = [...text];
+  const widths = chars.map((c) => ctx.measureText(c).width);
+  const w = widths.reduce((s, v) => s + v, 0);
+  const align = ctx.textAlign;
+  let cx = align === 'center' ? x - w / 2 : align === 'right' || align === 'end' ? x - w : x;
+  ctx.save();
+  ctx.textAlign = 'left';
+  chars.forEach((c, i) => {
+    const dy = Math.sin((frameNow / 1000) * a.speed * Math.PI * 2 - i * 0.55) * a.amount * size * 0.25;
+    fillTextFx(ctx, c, cx, y + dy, size, fx);
+    cx += widths[i];
+  });
+  ctx.restore();
+}
+
 /** Where a badge part was drawn this frame, in map units (the theme editor picks and drags them) */
 export interface BadgeHit {
   part: BadgePartId;
@@ -87,8 +154,13 @@ class Rec {
   private readonly inv: DOMMatrix;
   /** Offset the title shares with the graphic (it moves along with the badge) */
   follow = { x: 0, y: 0 };
-  /** While drawing a hidden graphic: the alpha its number is drawn at (the shape itself is invisible) */
-  private ghost: number | null = null;
+  /**
+   * While drawing the graphic: the alpha its number is drawn at (the graphic may be hidden or
+   * blinking), and the transform that undoes the graphic's animation for it — the number sits on
+   * the badge but moves only with its own animation.
+   */
+  private numberAlpha: number | null = null;
+  private unAnim: DOMMatrix | null = null;
   constructor(readonly ctx: CanvasRenderingContext2D, readonly b: BadgeStyle) {
     this.inv = ctx.getTransform().inverse();
   }
@@ -105,22 +177,34 @@ class Rec {
     // A hidden graphic still carries (and moves) its number
     if (p?.hidden && id !== 'graphic') return;
     const extra = id === 'title' ? this.follow : { x: 0, y: 0 };
+    ctx.save();
+    if (id === 'number') {
+      if (this.unAnim) ctx.setTransform(this.unAnim.multiply(ctx.getTransform()));
+      if (this.numberAlpha !== null) ctx.globalAlpha = this.numberAlpha;
+    }
     const parent = this.local();
     const px = ax + (p?.x ?? 0) + extra.x;
     const py = ay + (p?.y ?? 0) + extra.y;
-    ctx.save();
     ctx.translate(px, py);
     if (p?.rotate) ctx.rotate((p.rotate * Math.PI) / 180);
     if (p?.scale && p.scale !== 1) ctx.scale(p.scale, p.scale);
-    ctx.translate(-ax, -ay);
-    if (id === 'number' && this.ghost !== null) ctx.globalAlpha = this.ghost;
-    const ghosted = id === 'graphic' && !!p?.hidden;
-    if (ghosted) {
-      this.ghost = ctx.globalAlpha;
-      ctx.globalAlpha = 0;
+    const anim = this.b.anim?.[id];
+    const still = ctx.getTransform();
+    const alpha = ctx.globalAlpha;
+    if (anim) applyMotion(ctx, anim);
+    const isGraphic = id === 'graphic';
+    if (isGraphic) {
+      this.unAnim = anim ? still.multiply(ctx.getTransform().inverse()) : null;
+      this.numberAlpha = anim || p?.hidden ? alpha : null;
+      // A hidden graphic is drawn invisibly: it still carries (and places) its number
+      if (p?.hidden) ctx.globalAlpha = 0;
     }
+    ctx.translate(-ax, -ay);
     const box = draw();
-    if (ghosted) this.ghost = null;
+    if (isGraphic) {
+      this.unAnim = null;
+      this.numberAlpha = null;
+    }
     if (box) {
       const m = this.local();
       const pt = (x: number, y: number) => {
@@ -158,12 +242,15 @@ function bigNumber(r: Rec, text: string, x: number, y: number, size: number, max
     ctx.textBaseline = 'middle';
     // The theme's own effects; its outline replaces the design's
     const fx = b.numberFx;
-    fillTextFx(ctx, shown, x, y, s, {
+    const style: TextFx = {
       ...fx,
       color: b.numberColor,
       outline: fx?.outline ?? opts.outline,
       outlineWidth: fx?.outline ? fx.outlineWidth : Math.max(3, s * 0.12) / 2,
-    });
+    };
+    const wave = b.anim?.number;
+    if (wave?.type === 'wave') waveText(ctx, shown, x, y, s, style, wave);
+    else fillTextFx(ctx, shown, x, y, s, style);
     const w = ctx.measureText(shown).width;
     return { x: align === 'left' ? x : align === 'right' ? x - w : x - w / 2, y: y - s * 0.55, w, h: s * 1.1 };
   });
@@ -176,7 +263,9 @@ function titleOf(map: MapData, b: BadgeStyle): string {
 
 /** A level title line with the theme's title effects (textBaseline must be 'middle') */
 function titleText(ctx: CanvasRenderingContext2D, b: BadgeStyle, text: string, x: number, y: number, size: number, maxWidth?: number): void {
-  fillTextFx(ctx, text, x, y, size, { ...b.titleFx, color: b.titleColor }, maxWidth);
+  const wave = b.anim?.title;
+  if (wave?.type === 'wave') waveText(ctx, text, x, y, size, { ...b.titleFx, color: b.titleColor }, wave);
+  else fillTextFx(ctx, text, x, y, size, { ...b.titleFx, color: b.titleColor }, maxWidth);
 }
 
 interface TitleSizes { title: number; caption: number; weight: number }
@@ -264,7 +353,8 @@ function gear(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, 
  * where each part landed.
  */
 export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, style: BadgeStyle | undefined, image: HTMLImageElement | null, now: number, hits?: BadgeHit[]): number {
-  const b = style ?? DEFAULT_BADGE;
+  frameNow = now;
+  const b = animatedColors(style ?? DEFAULT_BADGE);
   if (map.level === undefined && !map.title) return 12;
   const num = numberText(map, b);
   ctx.save();

@@ -24,6 +24,8 @@ export interface TextEffects {
   shadowBlur?: number;
   /** Glow spread, × the default (0.2–4) */
   glowSize?: number;
+  /** Vine color: a leafy stem winding through the letters, in front of some and behind others */
+  vine?: string;
 }
 
 const finite = (v: unknown, min: number, max: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : undefined);
@@ -35,7 +37,7 @@ export function readTextEffects(v: unknown): TextEffects | undefined {
   if (typeof v !== 'object' || v === null) return undefined;
   const o = v as Record<string, unknown>;
   const out: TextEffects = {};
-  for (const k of ['outline', 'shadow', 'glow', 'gradient', 'depthColor'] as const) {
+  for (const k of ['outline', 'shadow', 'glow', 'gradient', 'depthColor', 'vine'] as const) {
     const c = hex6(o[k]);
     if (c) out[k] = c;
   }

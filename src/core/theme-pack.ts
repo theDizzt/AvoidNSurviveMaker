@@ -28,6 +28,23 @@ export interface BadgePart {
 export type BadgePartId = 'graphic' | 'number' | 'title';
 export type BadgeLayout = Partial<Record<BadgePartId, BadgePart>>;
 
+/**
+ * A badge part's animation: 'spin' turns it round and round, 'sway' rocks it, 'bob' moves it up and
+ * down, 'pulse' grows and shrinks it, 'blink' fades it, 'color' fades its color to `color` and back;
+ * 'wave' (number and title) bobs the letters one after another.
+ */
+export type BadgeAnimType = 'spin' | 'sway' | 'bob' | 'pulse' | 'blink' | 'color' | 'wave';
+export interface BadgeAnim {
+  type: BadgeAnimType;
+  /** Cycles (spin: turns) per second; negative spins the other way */
+  speed: number;
+  /** Strength 0–1 */
+  amount: number;
+  /** Target color of 'color' */
+  color?: string;
+}
+export const BADGE_ANIM_TYPES: readonly BadgeAnimType[] = ['spin', 'sway', 'bob', 'pulse', 'blink', 'color', 'wave'];
+
 /** Lettering of the number or title; unset fields keep the design's own */
 export interface BadgeTextFormat {
   /** Font weight 100–900 */
@@ -66,6 +83,8 @@ export interface BadgeStyle {
   titleFormat?: BadgeTextFormat;
   /** Soft plate behind the title (each design has its own default) */
   titlePlate?: boolean;
+  /** Animation of each part */
+  anim?: Partial<Record<BadgePartId, BadgeAnim>>;
 }
 
 /**
@@ -349,7 +368,26 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
     const titleFormat = readBadgeTextFormat(b.titleFormat);
     if (titleFormat) badge.titleFormat = titleFormat;
     if (typeof b.titlePlate === 'boolean') badge.titlePlate = b.titlePlate;
+    const anim = readBadgeAnim(b.anim);
+    if (anim) badge.anim = anim;
     return badge;
+  }
+
+  /** Part animations; unknown types are dropped, numbers clamped */
+  function readBadgeAnim(v: unknown): BadgeStyle['anim'] {
+    const o = obj(v);
+    if (!o) return undefined;
+    const out: NonNullable<BadgeStyle['anim']> = {};
+    for (const id of ['graphic', 'number', 'title'] as const) {
+      const a = obj(o[id]);
+      if (!a || !BADGE_ANIM_TYPES.includes(a.type as BadgeAnimType)) continue;
+      const type = a.type as BadgeAnimType;
+      if (type === 'wave' && id === 'graphic') continue;
+      const anim: BadgeAnim = { type, speed: fin(a.speed, -5, 5) ?? 0.5, amount: fin(a.amount, 0, 1) ?? 0.5 };
+      if (typeof a.color === 'string' && HEX.test(a.color)) anim.color = a.color.toLowerCase();
+      out[id] = anim;
+    }
+    return Object.keys(out).length ? out : undefined;
   }
 
   /** A pack-relative audio path, or '' */

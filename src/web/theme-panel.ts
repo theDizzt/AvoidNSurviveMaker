@@ -21,6 +21,9 @@ const PATTERNS: [PatternKind, string][] = [
   ['woodGrain', t('pattern.woodGrain')],
   ['thicket', t('pattern.thicket')],
   ['mud', t('pattern.mud')],
+  ['soil', t('pattern.soil')],
+  ['snowDirt', t('pattern.snowDirt')],
+  ['snowPile', t('pattern.snowPile')],
   ['snow', t('pattern.snow')],
   ['ice', t('pattern.ice')],
   ['iceCrystal', t('pattern.iceCrystal')],
@@ -158,6 +161,32 @@ export function renderThemePanel(
         label(t('common.color'), colorInput(f.color, (color) => set({ color }))),
         label(t('common.background'), colorInput(f.background, (background) => set({ background }))),
       );
+    }
+    // Animation: pulse / color fade over the surface, or its pattern scrolling
+    const an = style.anim;
+    const setAnim = (patch: Partial<NonNullable<SurfaceStyle['anim']>>) => update(key, (s) => {
+      if (s.anim) Object.assign(s.anim, patch);
+    });
+    fields.push(label(t('themePanel.anim'), select(an?.type ?? 'none', [
+      ['none', t('themePanel.animNone')], ['pulse', t('themePanel.animPulse')], ['color', t('themePanel.animColor')],
+      ...(f.type === 'pattern' ? [['scroll', t('themePanel.animScroll')] as ['scroll', string]] : []),
+    ], (type) => update(key, (s) => {
+      if (type === 'none') delete s.anim;
+      else s.anim = type === 'scroll' ? { type, speed: 30, amount: 1, angle: 0 } : { type, speed: 0.5, amount: type === 'color' ? 0.6 : 0.5, color: type === 'color' ? '#ffd23f' : '#ffffff' };
+    })), !an));
+    if (an) {
+      if (an.type === 'scroll') {
+        fields.push(
+          label(t('themePanel.animScrollSpeed'), numberInput(an.speed, 1, 400, 5, (speed) => setAnim({ speed }))),
+          label(t('common.angle'), numberInput(an.angle ?? 0, -360, 360, 15, (angle) => setAnim({ angle }))),
+        );
+      } else {
+        fields.push(
+          label(t('themePanel.animSpeed'), numberInput(an.speed, 0.05, 5, 0.05, (speed) => setAnim({ speed }))),
+          label(t('themePanel.animAmount'), numberInput(Math.round(an.amount * 100), 0, 100, 5, (v) => setAnim({ amount: v / 100 }))),
+          label(t('common.color'), colorInput(an.color ?? '#ffffff', (color) => setAnim({ color }))),
+        );
+      }
     }
     const grid = document.createElement('div');
     grid.className = 'fields';

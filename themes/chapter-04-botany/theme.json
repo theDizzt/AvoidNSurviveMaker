@@ -1,185 +1,207 @@
 {
-    "format":  1,
-    "id":  "botany",
-    "name":  "Realm of the Wicked Bulbs",
-    "description":  "A moonlit greenhouse of luminous bulbs, curling roots and poisonous blooms.",
-    "author":  "Avoid N Survive",
-    "released":  "2026-11-17",
-    "unlockStars":  0,
-    "colors":  [
-                   "#b5e965",
-                   "#b759b8"
-               ],
-    "cover":  "cover.svg",
-    "style":  {
-                  "maze":  {
-                      "wall": {
-                          "fill": {
-                              "type": "pattern",
-                              "pattern": "thicket",
-                              "color": "#4f8f3a",
-                              "background": "#1b3620",
-                              "size": 56
-                          },
-                          "edge": "#b5e965"
-                      },
-                      "path": {
-                          "fill": {
-                              "type": "pattern",
-                              "pattern": "mud",
-                              "color": "#3a2919",
-                              "background": "#6a4f36",
-                              "size": 64
-                          },
-                          "edge": "#a07a52"
-                      }
-                  },
-                  "badge":  {
-                                "caption":  "CHAPTER 04 / BOTANY",
-                                "kind":  "ring",
-                                "pad":  2,
-                                "primary":  "#142c27",
-                                "titleColor":  "#b5e965",
-                                "showTitle":  true,
-                                "secondary":  "#b759b8",
-                                "font":  "title",
-                                "numberColor":  "#b5e965"
-                            }
-              },
-    "screens":  {
-                    "select":  {
-                                   "background":  {
-                                                      "color2":  "#142c27",
-                                                      "color":  "#142c27"
-                                                  },
-                                   "elements":  [
-                                                    {
-                                                        "id":  "art",
-                                                        "w":  440,
-                                                        "opacity":  0.5,
-                                                        "y":  0,
-                                                        "x":  0,
-                                                        "kind":  "image",
-                                                        "src":  "cover.svg",
-                                                        "h":  720
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "chapter",
-                                                        "kind":  "text",
-                                                        "size":  19,
-                                                        "y":  54,
-                                                        "w":  330,
-                                                        "h":  32,
-                                                        "color":  "#b5e965",
-                                                        "text":  "CHAPTER 04 / BOTANY",
-                                                        "font":  "main"
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "title",
-                                                        "kind":  "text",
-                                                        "size":  42,
-                                                        "y":  105,
-                                                        "w":  340,
-                                                        "h":  160,
-                                                        "color":  "#b5e965",
-                                                        "text":  "{theme}",
-                                                        "font":  "title"
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "description",
-                                                        "kind":  "text",
-                                                        "size":  19,
-                                                        "y":  290,
-                                                        "w":  320,
-                                                        "h":  140,
-                                                        "color":  "#b5e965",
-                                                        "text":  "{description}",
-                                                        "font":  "main"
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "progress",
-                                                        "kind":  "text",
-                                                        "size":  21,
-                                                        "y":  485,
-                                                        "w":  320,
-                                                        "h":  46,
-                                                        "color":  "#b5e965",
-                                                        "text":  "{cleared} / {total} CLEARED",
-                                                        "font":  "main"
-                                                    },
-                                                    {
-                                                        "x":  470,
-                                                        "id":  "grid",
-                                                        "kind":  "levelGrid",
-                                                        "gap":  14,
-                                                        "y":  140,
-                                                        "w":  750,
-                                                        "button":  {
-                                                                       "borderWidth":  2,
-                                                                       "showStars":  true,
-                                                                       "showDifficulty":  true,
-                                                                       "shape":  "leaf",
-                                                                       "clearedFill":  "#b759b8",
-                                                                       "border":  "#b5e965",
-                                                                       "fill":  "#142c27",
-                                                                       "fill2":  "#b759b8",
-                                                                       "pad":  2,
-                                                                       "numberColor":  "#b5e965",
-                                                                       "font":  "title",
-                                                                       "numberSize":  30
-                                                                   },
-                                                        "h":  420,
-                                                        "rows":  3,
-                                                        "cols":  7
-                                                    },
-                                                    {
-                                                        "size":  23,
-                                                        "id":  "back",
-                                                        "y":  610,
-                                                        "color":  "#b5e965",
-                                                        "border":  "#b759b8",
-                                                        "fill":  "#142c27",
-                                                        "borderWidth":  2,
-                                                        "kind":  "back",
-                                                        "x":  52,
-                                                        "w":  190,
-                                                        "radius":  10,
-                                                        "text":  "BACK",
-                                                        "font":  "title",
-                                                        "h":  54
-                                                    },
-                                                    {
-                                                        "x":  470,
-                                                        "id":  "footer",
-                                                        "kind":  "text",
-                                                        "size":  18,
-                                                        "y":  600,
-                                                        "w":  750,
-                                                        "h":  38,
-                                                        "color":  "#b5e965",
-                                                        "text":  "SELECT A LEVEL",
-                                                        "font":  "main",
-                                                        "opacity":  0.6
-                                                    }
-                                                ]
-                               }
-                },
-    "i18n":  {
-        "ko":  {
-            "name":  "사악한 구근의 왕국",
-            "description":  "빛나는 구근과 휘감긴 뿌리, 독을 품은 꽃이 가득한 달빛 온실."
-        },
-        "zh":  {
-            "name":  "Realm of the Wicked Bulbs",
-            "description":  "A moonlit greenhouse of luminous bulbs, curling roots and poisonous blooms."
+  "format": 1,
+  "id": "botany",
+  "name": "Realm of the Wicked Bulbs",
+  "description": "A moonlit greenhouse of luminous bulbs, curling roots and poisonous blooms.",
+  "author": "Avoid N Survive",
+  "released": "2026-11-17",
+  "unlockStars": 0,
+  "colors": [
+    "#b5e965",
+    "#b759b8"
+  ],
+  "style": {
+    "badge": {
+      "kind": "image",
+      "primary": "#ffffff",
+      "secondary": "#32ff00",
+      "numberColor": "#b5e965",
+      "titleColor": "#b5e965",
+      "font": "stellar-serif",
+      "pad": 2,
+      "showTitle": true,
+      "numberFx": {
+        "outline": "#142c27",
+        "outlineWidth": 2,
+        "depthColor": "#1a2233",
+        "depth": 4,
+        "gradient": "#226001",
+        "vine": "#3f8f2f"
+      },
+      "titleFx": {
+        "outline": "#142c27",
+        "outlineWidth": 1.5,
+        "depthColor": "#1a2233",
+        "depth": 4
+      },
+      "image": "badge.png",
+      "layout": {
+        "number": {
+          "x": 4,
+          "scale": 1.7
         }
+      },
+      "titlePlate": false
+    },
+    "maze": {
+      "wall": {
+        "fill": {
+          "type": "gradient",
+          "style": "linear",
+          "from": "#3f9a3c",
+          "to": "#0d3b1f",
+          "angle": 90
+        },
+        "edge": "#0a2a14"
+      },
+      "path": {
+        "fill": {
+          "type": "pattern",
+          "pattern": "soil",
+          "color": "#160e08",
+          "background": "#3b2a1d",
+          "size": 64
+        },
+        "edge": "#6e4f36"
+      }
     }
+  },
+  "cover": "cover.png",
+  "music": "audio/bgm.mp3",
+  "screens": {
+    "select": {
+      "background": {
+        "color": "#142c27",
+        "color2": "#142c27"
+      },
+      "elements": [
+        {
+          "id": "art",
+          "kind": "image",
+          "x": 0,
+          "y": 0,
+          "w": 440,
+          "h": 720,
+          "opacity": 0.5,
+          "src": "cover.svg"
+        },
+        {
+          "id": "chapter",
+          "kind": "text",
+          "x": 52,
+          "y": 54,
+          "w": 330,
+          "h": 32,
+          "text": "CHAPTER 04 / BOTANY",
+          "font": "main",
+          "size": 19,
+          "color": "#b5e965",
+          "align": "left"
+        },
+        {
+          "id": "title",
+          "kind": "text",
+          "x": 52,
+          "y": 105,
+          "w": 340,
+          "h": 160,
+          "text": "{theme}",
+          "font": "title",
+          "size": 42,
+          "color": "#b5e965",
+          "align": "left"
+        },
+        {
+          "id": "description",
+          "kind": "text",
+          "x": 52,
+          "y": 290,
+          "w": 320,
+          "h": 140,
+          "text": "{description}",
+          "font": "main",
+          "size": 19,
+          "color": "#b5e965",
+          "align": "left"
+        },
+        {
+          "id": "progress",
+          "kind": "text",
+          "x": 52,
+          "y": 485,
+          "w": 320,
+          "h": 46,
+          "text": "{cleared} / {total} CLEARED",
+          "font": "main",
+          "size": 21,
+          "color": "#b5e965",
+          "align": "left"
+        },
+        {
+          "id": "grid",
+          "kind": "levelGrid",
+          "x": 470,
+          "y": 140,
+          "w": 750,
+          "h": 420,
+          "cols": 7,
+          "rows": 3,
+          "gap": 14,
+          "button": {
+            "shape": "leaf",
+            "fill": "#142c27",
+            "fill2": "#b759b8",
+            "clearedFill": "#b759b8",
+            "border": "#b5e965",
+            "borderWidth": 2,
+            "font": "title",
+            "numberSize": 30,
+            "numberColor": "#b5e965",
+            "pad": 2,
+            "showStars": true,
+            "showDifficulty": true
+          }
+        },
+        {
+          "id": "back",
+          "kind": "back",
+          "x": 52,
+          "y": 610,
+          "w": 190,
+          "h": 54,
+          "text": "BACK",
+          "font": "title",
+          "size": 23,
+          "color": "#b5e965",
+          "fill": "#142c27",
+          "border": "#b759b8",
+          "borderWidth": 2,
+          "radius": 10
+        },
+        {
+          "id": "footer",
+          "kind": "text",
+          "x": 470,
+          "y": 600,
+          "w": 750,
+          "h": 38,
+          "opacity": 0.6,
+          "text": "SELECT A LEVEL",
+          "font": "main",
+          "size": 18,
+          "color": "#b5e965"
+        }
+      ]
+    }
+  },
+  "i18n": {
+    "ko": {
+      "name": "사악한 구근의 왕국",
+      "description": "빛나는 구근과 휘감긴 뿌리, 독을 품은 꽃이 가득한 달빛 온실."
+    },
+    "zh": {
+      "name": "Realm of the Wicked Bulbs",
+      "description": "A moonlit greenhouse of luminous bulbs, curling roots and poisonous blooms."
+    }
+  }
 }

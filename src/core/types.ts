@@ -373,7 +373,7 @@ export interface MapObject {
   light?: { radius: number; intensity?: number };
 }
 
-export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal' | 'egyptian' | 'sandBrick' | 'bark' | 'woodGrain' | 'thicket' | 'mud' | 'snow' | 'ice' | 'iceCrystal';
+export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal' | 'egyptian' | 'sandBrick' | 'bark' | 'woodGrain' | 'thicket' | 'mud' | 'soil' | 'snow' | 'snowDirt' | 'snowPile' | 'ice' | 'iceCrystal';
 
 /** Colors are '#rrggbb'. Gradients and patterns are laid out in the object's own frame, so they move and rotate with it. */
 export type Fill =
@@ -385,6 +385,22 @@ export interface SurfaceStyle {
   fill: Fill;
   /** Outline color */
   edge: string;
+  /** Animated look (drawn over the surface every frame) */
+  anim?: SurfaceAnim;
+}
+
+/**
+ * Surface animation: 'pulse' brightens and dims (toward `color`, white by default), 'color' fades
+ * to `color` and back, 'scroll' slides a pattern fill along `angle` (degrees).
+ */
+export interface SurfaceAnim {
+  type: 'pulse' | 'color' | 'scroll';
+  /** Cycles per second (pulse, color) or px per second (scroll) */
+  speed: number;
+  /** Strength 0–1 (pulse, color) */
+  amount: number;
+  color?: string;
+  angle?: number;
 }
 
 /** Per-map look. `wall` covers walls and all moving/rotating walls (obstacles); `path` covers all paths. */

@@ -11,6 +11,8 @@
                    "#6e92dd"
                ],
     "cover":  "cover.svg",
+    "music":  "audio/winter-solstice.mp3",
+    "credits":  "Music: - Winter Solstice by pftq & Waterflame (produced by Autodidactic). https://www.newgrounds.com/audio/listen/1098278 - CC BY 3.0: https://creativecommons.org/licenses/by/3.0/ . Original audio, unmodified.",
     "style":  {
                   "maze":  {
                       "wall": {
@@ -26,12 +28,12 @@
                       "path": {
                           "fill": {
                               "type": "pattern",
-                              "pattern": "ice",
-                              "color": "#e8f8ff",
-                              "background": "#5f9fcf",
+                              "pattern": "snowPile",
+                              "color": "#a9c3df",
+                              "background": "#f7fafd",
                               "size": 64
                           },
-                          "edge": "#b6ecff"
+                          "edge": "#8fb0d2"
                       }
                   },
                   "designs":  [

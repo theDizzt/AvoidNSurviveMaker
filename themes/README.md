@@ -91,7 +91,7 @@ Theme Editor 의 **레벨** 패널에서 레벨마다 **자동**(범위에 따�
 
 ### 미로 패턴
 
-미로 표면 채우기는 다음 패턴 id 를 지원합니다: `stripes`, `diagonal`, `dots`, `grid`, `checker`, `wood`(엇갈린 판자와 나뭇결), `grass`(풀잎), `sand`(모래알과 물결), `metal`(브러시드 패널과 리벳), `egyptian`(고대 이집트 문양), `sandBrick`(모래 벽돌), `bark`(갈라진 나무 껍질), `woodGrain`(옹이를 감싸 흐르는 나무 속 결). 에디터에서 채우기 종류로 **Pattern** 을 고른 뒤 재질을 선택하세요. 모든 패턴은 벽과 길 모두에서 선택한 `color`, `background`, 타일 `size`(4–64 픽셀)를 사용합니다.
+미로 표면 채우기는 다음 패턴 id 를 지원합니다: `stripes`, `diagonal`, `dots`, `grid`, `checker`, `wood`(엇갈린 판자와 나뭇결), `grass`(풀잎), `sand`(모래알과 물결), `metal`(브러시드 패널과 리벳), `egyptian`(고대 이집트 문양), `sandBrick`(모래 벽돌), `bark`(갈라진 나무 껍질), `woodGrain`(옹이를 감싸 흐르는 나무 속 결), `soil`(고운 흙: 작은 흙덩이와 알갱이), `snowDirt`(눈 쌓인 흙길: 눈 덮인 길에 흙이 드러난 바퀴 자국), `snowPile`(소복한 눈: 부드럽게 쌓인 눈 덩이). 에디터에서 채우기 종류로 **Pattern** 을 고른 뒤 재질을 선택하세요. 모든 패턴은 벽과 길 모두에서 선택한 `color`, `background`, 타일 `size`(4–64 픽셀)를 사용합니다.
 
 ### style.badge
 

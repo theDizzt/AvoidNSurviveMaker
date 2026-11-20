@@ -7,7 +7,7 @@ import { normalizeTilt, shapeBounds, shapeCenter } from './shape';
 import {
   MAP_VERSION, PACK_VERSION,
   type Door, type Easing, type Fill, type MapData, type MapPack, type Trigger, type TriggerKind, type MapObject, type Motion, type PatternKind, type Point, type PolyPoint, type Rect,
-  type Repeat, type Rotation, type Shape, type SurfaceStyle, type Theme, type Wave, type Fall, type Pulley, type Turret, type Blink, type ZoneShape,
+  type Repeat, type Rotation, type Shape, type SurfaceAnim, type SurfaceStyle, type Theme, type Wave, type Fall, type Pulley, type Turret, type Blink, type ZoneShape,
 } from './types';
 
 export class MapValidationError extends Error {}
@@ -416,7 +416,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     return v.toLowerCase();
   }
 
-  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'snow', 'ice', 'iceCrystal'] as const satisfies readonly PatternKind[];
+  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'soil', 'snow', 'snowDirt', 'snowPile', 'ice', 'iceCrystal'] as const satisfies readonly PatternKind[];
 
   function fill(v: unknown, name: string): Fill {
     const o = obj(v, name);
@@ -442,7 +442,26 @@ export function createValidateApi(t: Translator = defaultTranslate) {
 
   function surface(v: unknown, name: string): SurfaceStyle {
     const o = obj(v, name);
-    return { fill: fill(o.fill, `${name}.fill`), edge: color(o.edge, `${name}.edge`) };
+    const out: SurfaceStyle = { fill: fill(o.fill, `${name}.fill`), edge: color(o.edge, `${name}.edge`) };
+    const anim = surfaceAnim(o.anim);
+    if (anim) out.anim = anim;
+    return out;
+  }
+
+  /** A surface animation, read leniently (unknown = none) */
+  function surfaceAnim(v: unknown): SurfaceAnim | undefined {
+    if (typeof v !== 'object' || v === null) return undefined;
+    const a = v as Record<string, unknown>;
+    if (a.type !== 'pulse' && a.type !== 'color' && a.type !== 'scroll') return undefined;
+    const n = (x: unknown, min: number, max: number, d: number) => (typeof x === 'number' && Number.isFinite(x) ? Math.min(max, Math.max(min, x)) : d);
+    const out: SurfaceAnim = {
+      type: a.type,
+      speed: a.type === 'scroll' ? n(a.speed, 1, 400, 30) : n(a.speed, 0.05, 5, 0.5),
+      amount: n(a.amount, 0, 1, 0.5),
+    };
+    if (typeof a.color === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(a.color)) out.color = a.color.toLowerCase();
+    if (a.type === 'scroll') out.angle = n(a.angle, -360, 360, 0);
+    return out;
   }
 
   function theme(v: unknown, name: string): Theme {
