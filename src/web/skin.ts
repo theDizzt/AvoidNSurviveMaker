@@ -226,10 +226,10 @@ export function drawPointer(ctx: CanvasRenderingContext2D, skin: Skin, x: number
 }
 
 /** Calls `fn` for each unbroken run of the trail (NaN entries break it at teleports) */
-function eachRun(pts: readonly number[], fn: (from: number, to: number) => void): void {
+function eachRun(pts: readonly number[], fn: (from: number, to: number) => void, begin = 0, end = pts.length): void {
   let start = -1;
-  for (let i = 0; i <= pts.length; i += 2) {
-    const gap = i === pts.length || Number.isNaN(pts[i]);
+  for (let i = begin; i <= end; i += 2) {
+    const gap = i === end || Number.isNaN(pts[i]);
     if (gap) {
       if (start >= 0 && i - start >= 4) fn(start, i);
       start = -1;
@@ -275,12 +275,13 @@ function taperedRibbon(path: Path2D, pts: readonly number[], from: number, to: n
   path.closePath();
 }
 
-function tracePath(ctx: CanvasRenderingContext2D, pts: readonly number[]): void {
+/** The trail as one path (points `start`..`end`, gaps at NaN), without copying the points */
+function tracePath(ctx: CanvasRenderingContext2D, pts: readonly number[], start = 0, end = pts.length): void {
   ctx.beginPath();
   eachRun(pts, (from, to) => {
     ctx.moveTo(pts[from], pts[from + 1]);
     for (let i = from + 2; i < to; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
-  });
+  }, start, end);
 }
 
 /**
@@ -366,7 +367,8 @@ export function drawSkinTrail(ctx: CanvasRenderingContext2D, skin: Skin, pts: re
       // Tapers and fades toward the tail; the color blends smoothly from the accent at the tail
       // to the primary color at the head
       const total = pts.length / 2;
-      const STEPS = 32;
+      // 16 color steps (each a separate stroke): smooth enough, half the draws of 32
+      const STEPS = 16;
       const per = Math.max(2, Math.ceil(total / STEPS));
       // Butt ends: neighboring pieces meet without overlapping, so the blend has no darker joins
       ctx.lineCap = 'butt';
@@ -375,7 +377,7 @@ export function drawSkinTrail(ctx: CanvasRenderingContext2D, skin: Skin, pts: re
         const b = Math.min(pts.length, (s + 1) * per * 2 + 2);
         if (b - a < 4) continue;
         const k = (s + 1) / STEPS;
-        tracePath(ctx, pts.slice(a, b));
+        tracePath(ctx, pts, a, b);
         ctx.strokeStyle = mix(skin.accent, skin.primary, k, 0.15 + 0.75 * k);
         ctx.lineWidth = (0.6 + 3.4 * k) * u;
         ctx.stroke();

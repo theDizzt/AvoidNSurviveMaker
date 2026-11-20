@@ -11,6 +11,18 @@ import type { TextEffects } from '../core/text-effects';
 import { FONT_MAIN, FONT_TIMER, FONT_TITLE, ZH_HANZI } from './render';
 
 /**
+ * A glow without blur: crisp copies of the text 1 px out in the four directions in the glow color,
+ * then 2 px out half as strong. Blurred text shadows repaint slowly on integrated graphics.
+ */
+function glowRing(color: string): string[] {
+  const soft = `color-mix(in srgb, ${color} 50%, transparent)`;
+  return [
+    `1px 0 0 ${color}`, `-1px 0 0 ${color}`, `0 1px 0 ${color}`, `0 -1px 0 ${color}`,
+    `2px 0 0 ${soft}`, `-2px 0 0 ${soft}`, `0 2px 0 ${soft}`, `0 -2px 0 ${soft}`,
+  ];
+}
+
+/**
  * Builds a theme's custom screen (level select) as DOM on a 1280×720 stage that
  * scales to its host. The same renderer powers the game and the theme editor (edit mode adds
  * selection, dragging and resizing).
@@ -122,7 +134,7 @@ function visible(when: Visibility | undefined, d: ScreenData): boolean {
 
 function textShadow(e: { glow?: string; shadow?: boolean }): string {
   const parts: string[] = [];
-  if (e.glow) parts.push(`0 0 6px ${e.glow}`, `0 0 16px ${e.glow}`, `0 0 28px ${e.glow}`);
+  if (e.glow) parts.push(...glowRing(e.glow));
   if (e.shadow) parts.push('2px 3px 0 rgba(0,0,0,0.45)');
   return parts.join(', ');
 }
@@ -169,12 +181,12 @@ function textEffects(span: HTMLElement, e: LayoutElement, size: number, color: s
     const f: string[] = [];
     for (let k = 0; k < depth; k++) f.push(`drop-shadow(0.6px 0.8px 0 ${side})`);
     if (e.shadow) f.push(`drop-shadow(${(off - depth * 0.8) * 0.75}px ${off - depth * 0.8}px 0 ${shadow})`);
-    if (e.glow) f.push(`drop-shadow(0 0 4px ${e.glow})`, `drop-shadow(0 0 12px ${e.glow})`);
+    if (e.glow) f.push(...glowRing(e.glow).slice(0, 4).map((r) => `drop-shadow(${r})`));
     if (f.length) span.style.filter = f.join(' ');
     return;
   }
   const parts: string[] = [];
-  if (e.glow) parts.push(`0 0 6px ${e.glow}`, `0 0 16px ${e.glow}`, `0 0 28px ${e.glow}`);
+  if (e.glow) parts.push(...glowRing(e.glow));
   for (let k = 1; k <= depth; k++) parts.push(`${k * 0.6}px ${k * 0.8}px 0 ${side}`);
   if (e.shadow) parts.push(`${off * 0.75}px ${off}px 0 ${shadow}`);
   if (parts.length) span.style.textShadow = parts.join(', ');

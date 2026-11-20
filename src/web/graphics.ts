@@ -6,7 +6,7 @@ import { options, type GraphicsLevel } from './options';
  * - high: full device resolution (sharpest on HiDPI / 4K screens)
  * - medium: at most 1.5 device px per CSS px and about 2560×1440 pixels per canvas
  * - low: at most 1 device px per CSS px and about 960×540 pixels; menu background at 15 fps;
- *   canvas shadows drawn without blur (see below)
+ *   (canvas shadows are never blurred, see below)
  */
 const LEVELS: Record<GraphicsLevel, { maxDpr: number; maxPixels: number; backdropFps: number }> = {
   high: { maxDpr: Infinity, maxPixels: Infinity, backdropFps: 30 },
@@ -50,10 +50,10 @@ export function backdropFps(): number {
 }
 
 /**
- * Low quality: every canvas shadow is drawn without blur. A blurred shadow is by far the most
- * expensive 2D canvas operation without GPU acceleration (software rendering, virtual machines),
- * and coins, saws, bullets, glows and the wall mass set one every frame. Hooking the setter once
- * covers every drawing site; offsets and colors stay, so shadows keep their shape, only sharp.
+ * No canvas shadow is ever blurred, at any quality. A blurred shadow is by far the most expensive
+ * 2D canvas operation without GPU acceleration (integrated graphics, software rendering), and
+ * many things are redrawn every frame. Hooking the setter once covers every drawing site, even
+ * ones added later; offsets and colors stay, so shadows keep their shape, only sharp.
  */
 function installShadowPolicy(proto: object | undefined): void {
   const d = proto && Object.getOwnPropertyDescriptor(proto, 'shadowBlur');
@@ -64,7 +64,8 @@ function installShadowPolicy(proto: object | undefined): void {
     enumerable: d.enumerable,
     get,
     set(this: CanvasRenderingContext2D, v: number) {
-      set.call(this, options.graphics === 'low' ? 0 : v);
+      void v;
+      set.call(this, 0);
     },
   });
 }

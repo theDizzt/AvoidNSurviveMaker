@@ -29,6 +29,8 @@ import {
  */
 const IDLE_MARGIN_MS = 40;
 const TRAIL_POINTS = 800;
+/** Smallest gap between trail points, in screen pixels (closer samples only move the head) */
+const TRAIL_STEP_PX = 1.5;
 /** On-screen size (CSS px) of the virtual cursor that replaces the system cursor during a run */
 const CURSOR_PX = 8;
 /** Room for the arrow/sword extending from the hotspot, including antialiasing padding. */
@@ -311,6 +313,19 @@ export class PlayController {
   /** Timestamp of the last pointer sample used, for the polling rate option */
   private lastSampleAt = -Infinity;
 
+  private addTrailPoint(x: number, y: number, step: number): void {
+    const t = this.trail;
+    const n = t.length;
+    // Keep the point before the head: the head moves until it is a step away from it
+    if (n >= 4 && !Number.isNaN(t[n - 4]) && !Number.isNaN(t[n - 2])
+      && Math.abs(x - t[n - 4]) < step && Math.abs(y - t[n - 3]) < step) {
+      t[n - 2] = x;
+      t[n - 1] = y;
+      return;
+    }
+    t.push(x, y);
+  }
+
   /** No trail line across a teleport */
   private breakTrailOnTeleport(): void {
     if (this.sim.teleports === this.trailTeleports) return;
@@ -330,6 +345,10 @@ export class PlayController {
     // 1 ms steps on each sample's own timestamp, so records keep their 1 ms precision.
     const rate = automatic ? this.autoPolling.rate : options.pollingRate;
     const gap = rate > 0 ? 1000 / rate : 0;
+    // Trail points closer than this (about 1.5 screen px) only move the trail's head: a 1000 Hz+
+    // mouse otherwise piles up points the eye can't see, and the trail skins redraw every point
+    // every frame
+    const trailStep = options.cursorTrail ? TRAIL_STEP_PX * unitsPerPx(this.el.canvas, this.map) : 0;
     for (const ev of list) {
       // Only the pointer (finger) that started the run moves the cursor
       if (ev.pointerId !== this.runPointer) continue;
@@ -355,7 +374,7 @@ export class PlayController {
       this.addSimTime(performance.now() - simStart);
       if (accepted) this.usedStats.recordSample(ev.timeStamp);
       this.breakTrailOnTeleport();
-      if (options.cursorTrail) this.trail.push(sim.x, sim.y);
+      if (options.cursorTrail) this.addTrailPoint(sim.x, sim.y, trailStep);
       if (sim.status !== 'playing') break;
     }
     if (this.trail.length > TRAIL_POINTS * 2) this.trail.splice(0, this.trail.length - TRAIL_POINTS * 2);
