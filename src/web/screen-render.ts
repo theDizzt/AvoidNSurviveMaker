@@ -8,7 +8,7 @@ import { formatSeconds } from '../core/simulation';
 import { ensureLibraryFont, libraryFontCss } from './library-fonts';
 import { STARS_PER_LEVEL, type ThemeInfo } from './localized/theme-pack';
 import type { TextEffects } from '../core/text-effects';
-import { FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
+import { FONT_MAIN, FONT_TIMER, FONT_TITLE, ZH_HANZI } from './render';
 
 /**
  * Builds a theme's custom screen (level select) as DOM on a 1280×720 stage that
@@ -19,13 +19,13 @@ import { FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
 const BUILTIN: Record<BuiltinFont, string> = {
   title: FONT_TITLE,
   main: FONT_MAIN,
-  serif: "Georgia, 'Times New Roman', serif",
-  heavy: "'Arial Black', Impact, 'Segoe UI Black', sans-serif",
-  condensed: "'Bahnschrift Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif",
+  serif: `${ZH_HANZI}Georgia, 'Times New Roman', serif`,
+  heavy: `${ZH_HANZI}'Arial Black', Impact, 'Segoe UI Black', sans-serif`,
+  condensed: `${ZH_HANZI}'Bahnschrift Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif`,
   digital: FONT_TIMER,
-  hand: "'Segoe Print', 'Comic Sans MS', 'Bradley Hand', cursive",
-  blackletter: "'anf-unifraktur-cook', 'Old English Text MT', 'UnifrakturMaguntia', serif",
-  mono: "Consolas, 'Courier New', monospace",
+  hand: `${ZH_HANZI}'Segoe Print', 'Comic Sans MS', 'Bradley Hand', cursive`,
+  blackletter: `${ZH_HANZI}'anf-unifraktur-cook', 'Old English Text MT', 'UnifrakturMaguntia', serif`,
+  mono: `${ZH_HANZI}Consolas, 'Courier New', monospace`,
 };
 
 /** What a screen shows: the theme, its files, its levels and optional level details */
@@ -78,7 +78,7 @@ export function fontCss(font: string | undefined, scope: string): string {
   if (font === 'blackletter') void ensureLibraryFont('unifraktur-cook');
   if ((BUILTIN_FONTS as readonly string[]).includes(font)) return BUILTIN[font as BuiltinFont];
   if (isLibraryFont(font)) return libraryFontCss(font);
-  return `'${scope}-${font}', ${FONT_MAIN}`;
+  return `${ZH_HANZI}'${scope}-${font}', ${FONT_MAIN}`;
 }
 
 /** Fill in {placeholders} */

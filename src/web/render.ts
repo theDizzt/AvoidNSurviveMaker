@@ -62,12 +62,17 @@ export const COLORS = {
   dark: '#000000',
 };
 
-/** Chinese text falls back to its own fonts (see ZhMain / ZhTitle in style.css) */
+/**
+ * In Chinese, every hanzi comes from the Chinese fonts (ZhMain / ZhTitle in style.css, limited to
+ * hanzi and CJK punctuation), listed first: the Korean UI fonts carry some hanja and would mix two
+ * fonts within one word. Put this in front of any other font list too (theme / library fonts).
+ */
 const zh = language === 'zh';
+export const ZH_HANZI = zh ? "'ZhMain', " : '';
 /** Same families as --font-main / --font-title in style.css */
-export const FONT_MAIN = `'MangoDdobak', ${zh ? "'ZhMain', " : ''}system-ui, sans-serif`;
-export const FONT_TITLE = `'GSHyejaroun', 'MangoDdobak', ${zh ? "'ZhTitle', 'ZhMain', " : ''}system-ui, sans-serif`;
-export const FONT_TIMER = `'GameTimer', 'MangoDdobak', ${zh ? "'ZhMain', " : ''}system-ui, sans-serif`;
+export const FONT_MAIN = `${ZH_HANZI}'MangoDdobak', system-ui, sans-serif`;
+export const FONT_TITLE = `${zh ? "'ZhTitle', 'ZhMain', " : ''}'GSHyejaroun', 'MangoDdobak', system-ui, sans-serif`;
+export const FONT_TIMER = `${ZH_HANZI}'GameTimer', 'MangoDdobak', system-ui, sans-serif`;
 
 const tmp: Point = { x: 0, y: 0 };
 const tf: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
@@ -1498,10 +1503,10 @@ const TEXT_FONTS: Record<string, string> = {
   title: FONT_TITLE,
   main: FONT_MAIN,
   timer: FONT_TIMER,
-  serif: "Georgia, 'Times New Roman', serif",
-  heavy: "'Arial Black', Impact, 'Segoe UI Black', sans-serif",
-  mono: "Consolas, 'Courier New', monospace",
-  hand: "'Segoe Print', 'Comic Sans MS', 'Bradley Hand', cursive",
+  serif: `${ZH_HANZI}Georgia, 'Times New Roman', serif`,
+  heavy: `${ZH_HANZI}'Arial Black', Impact, 'Segoe UI Black', sans-serif`,
+  mono: `${ZH_HANZI}Consolas, 'Courier New', monospace`,
+  hand: `${ZH_HANZI}'Segoe Print', 'Comic Sans MS', 'Bradley Hand', cursive`,
 };
 
 /** Text box fonts: the base names, or a library font id */

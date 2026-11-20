@@ -2,7 +2,7 @@ import { DEFAULT_BADGE, type BadgeFont, type BadgeStyle } from './localized/them
 import type { MapData } from '../core/types';
 import { isLibraryFont } from './localized/font-catalog';
 import { libraryFontCss } from './library-fonts';
-import { fillTextFx, FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
+import { fillTextFx, FONT_MAIN, FONT_TIMER, FONT_TITLE, ZH_HANZI } from './render';
 
 /**
  * The in-game level badge at the top-left: the level number in a theme-specific design, with
@@ -12,8 +12,8 @@ import { fillTextFx, FONT_MAIN, FONT_TIMER, FONT_TITLE } from './render';
 const BASE: Record<string, string> = {
   title: FONT_TITLE,
   main: FONT_MAIN,
-  serif: "Georgia, 'Times New Roman', serif",
-  heavy: "'Arial Black', Impact, 'Segoe UI Black', sans-serif",
+  serif: `${ZH_HANZI}Georgia, 'Times New Roman', serif`,
+  heavy: `${ZH_HANZI}'Arial Black', Impact, 'Segoe UI Black', sans-serif`,
   timer: FONT_TIMER,
 };
 

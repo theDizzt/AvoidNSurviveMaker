@@ -38,8 +38,11 @@
   font-display: swap;
 }
 
-/* Chinese fallbacks: only in the font stacks while the game is in Chinese (:root:lang(zh) below).
-   The UI fonts have no Chinese characters, so these draw only the Chinese text. */
+/* Chinese fonts: only in the font stacks while the game is in Chinese (:root:lang(zh) below).
+   They come FIRST there: the Korean UI fonts carry some hanja (mostly traditional forms), so with
+   them first a word mixed two fonts (器 from the Korean font, 编 from the Chinese one). The
+   unicode-range keeps these to hanzi and CJK punctuation; Latin, digits and Hangul still use the
+   UI fonts. */
 @font-face {
   font-family: 'ZhMain';
   src: url('../assets/fonts/main/AaShiGeMingXinPian-2.ttf') format('truetype');
@@ -91,10 +94,10 @@
   --glass: blur(14px) saturate(1.2);
   color-scheme: light;
 }
-/* Chinese: its fallback fonts after the UI fonts (main text → ZhMain, titles → ZhTitle) */
+/* Chinese: every hanzi from the Chinese fonts (main text → ZhMain, titles → ZhTitle), the rest from the UI fonts */
 :root:lang(zh) {
-  --font-main: 'MangoDdobak', 'ZhMain', system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-  --font-title: 'GSHyejaroun', 'MangoDdobak', 'ZhTitle', 'ZhMain', system-ui, sans-serif;
+  --font-main: 'ZhMain', 'MangoDdobak', system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-title: 'ZhTitle', 'ZhMain', 'GSHyejaroun', 'MangoDdobak', system-ui, sans-serif;
 }
 
 
