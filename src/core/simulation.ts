@@ -573,9 +573,11 @@ export class Simulation {
         const at = this.clock[srcIdx] ?? ta;
         const bt = this.clockB[srcIdx] ?? tb;
         const pose = this.solidPose[i];
-        if (this.solidPoseTime[i] !== at) transformAt(o, at, pose);
+        // An object jumping back to its start ('restart') is simply where it lands
+        const from = o.jumps?.(at, bt) ? bt : at;
+        if (this.solidPoseTime[i] !== from) transformAt(o, from, pose);
         toLocal(o, pose, xa, ya, pA);
-        if (bt !== at) transformAt(o, bt, pose);
+        if (bt !== from) transformAt(o, bt, pose);
         this.solidPoseTime[i] = bt;
         toLocal(o, pose, xb, yb, pB);
         ax = pA.x;
@@ -1017,7 +1019,8 @@ export class Simulation {
       let by = yb;
       if (this.hidden[i] && !this.collected[i]) continue; // removed by a switch
       if (o.dynamic) {
-        toLocal(o, transformAt(o, this.clock[i], tfA), xa, ya, pA);
+        const from = o.jumps?.(this.clock[i], this.clockB[i]) ? this.clockB[i] : this.clock[i];
+        toLocal(o, transformAt(o, from, tfA), xa, ya, pA);
         toLocal(o, transformAt(o, this.clockB[i], tfB), xb, yb, pB);
         ax = pA.x;
         ay = pA.y;

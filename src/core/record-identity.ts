@@ -62,3 +62,41 @@ export function recordIdentity(themeId: string, map: MapData, official: boolean)
   // Older custom maps have no stable ID; their content identity avoids index collisions.
   return `${official ? '' : 'custom:'}${themeId}/${map.id ?? contentHash(map).slice(0, 32)}`;
 }
+
+/**
+ * Record keys several official levels shared by mistake (level files copied with the same id),
+ * moved once to the level they mostly belong to. Chapter 3 had only level 1 under "wood/5" until
+ * levels 2–7 were added with the same id; chapter 2 levels 11–13 shared one id from the start, so
+ * their records go to level 11. Those levels now have ids "level − 1" like the other chapters
+ * ("wood/0"…"wood/6", "desert/10"…"desert/12"). The server moves them too: migration
+ * 20261121050000_split_shared_level_keys.sql. Applied only once per save, because "wood/5" is now
+ * level 6's own key.
+ */
+export const SHARED_LEVEL_KEYS: ReadonlyMap<string, string> = new Map([
+  ['wood/5', 'wood/0'],
+  ['desert/74030fc3f293a41f1025f88e725018ff', 'desert/10'],
+]);
+
+/**
+ * Give every level of one theme / pack its own id. A level's id is the key its records are saved
+ * under, so two levels sharing one (a map copied into the next level keeps the id of the first)
+ * would share their records and leaderboard. The first level keeps a repeated id; each later one
+ * gets a fresh id from its content and position. Returns the same array when nothing repeats.
+ */
+export function uniqueLevelIds<T extends MapData>(levels: readonly T[], taken: Iterable<string> = []): T[] {
+  const seen = new Set<string>(taken);
+  let changed = false;
+  const out = levels.map((m, i) => {
+    let id = m.id ?? '';
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      return m;
+    }
+    // Fresh and stable for the same level at the same position
+    for (let n = 0; !id || seen.has(id); n++) id = sha256(`${contentHash(m)}:${i}:${n}`).slice(0, 32);
+    seen.add(id);
+    changed = true;
+    return { ...m, id };
+  });
+  return changed ? out : (levels as T[]);
+}

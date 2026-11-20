@@ -1,0 +1,266 @@
+{
+  "v": 2,
+  "name": "wood02",
+  "author": "Kukui",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 780,
+    "w": 60,
+    "h": 180
+  },
+  "goal": {
+    "x": 1740,
+    "y": 120,
+    "w": 60,
+    "h": 180
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 780,
+        "w": 450,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1290,
+        "y": 120,
+        "w": 450,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 630,
+        "cy": 540,
+        "r": 420,
+        "start": 0,
+        "sweep": 90,
+        "inner": 240
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 1290,
+        "cy": 540,
+        "r": 420,
+        "start": 180,
+        "sweep": 90,
+        "inner": 240
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 635,
+        "cy": 825,
+        "rx": 75,
+        "ry": 75
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 775,
+        "cy": 755,
+        "rx": 75,
+        "ry": 75
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 885,
+        "cy": 645,
+        "rx": 75,
+        "ry": 75
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1035,
+        "cy": 445,
+        "rx": 75,
+        "ry": 75
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1295,
+        "cy": 265,
+        "rx": 75,
+        "ry": 75
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1145,
+        "cy": 335,
+        "rx": 75,
+        "ry": 75
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1035,
+        "cy": 195,
+        "rx": 75,
+        "ry": 75
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 875,
+        "cy": 895,
+        "rx": 75,
+        "ry": 75
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1065,
+        "cy": 615,
+        "rx": 75,
+        "ry": 75
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 855,
+        "cy": 465,
+        "rx": 75,
+        "ry": 75
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "bark",
+        "color": "#24180f",
+        "background": "#5e4229",
+        "size": 64
+      },
+      "edge": "#1a120b"
+    },
+    "path": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "woodGrain",
+        "color": "#a8743f",
+        "background": "#e6c592",
+        "size": 64
+      },
+      "edge": "#7a5230"
+    }
+  },
+  "id": "1",
+  "title": "Grinder Tunnel",
+  "level": 2,
+  "difficulty": 2,
+  "stars": {
+    "three": 2000,
+    "two": 2500,
+    "one": 3300
+  }
+}

@@ -1,3 +1,4 @@
+import { uniqueLevelIds } from '../core/record-identity';
 import { DEFAULT_LANGUAGE, language, LANGUAGES, t as tr } from './i18n';
 import { fontPicker } from './font-picker';
 import { gameAudio } from './audio';
@@ -305,7 +306,7 @@ export class ThemeEditor {
       delete out.themeId;
       return out;
     });
-    this.draft.levels.push(...added);
+    this.draft.levels.push(...uniqueLevelIds(added, this.draft.levels.flatMap((m) => (m.id ? [m.id] : []))));
     this.save();
     this.renderLevels();
   }

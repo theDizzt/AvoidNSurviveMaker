@@ -1,0 +1,342 @@
+{
+  "v": 2,
+  "name": "wood07",
+  "author": "Dizzt, Matchoi",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 180,
+    "y": 180,
+    "w": 60,
+    "h": 120
+  },
+  "goal": {
+    "x": 180,
+    "y": 780,
+    "w": 60,
+    "h": 120
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 180,
+        "w": 1140,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 1380,
+        "cy": 420,
+        "r": 240,
+        "start": 270,
+        "sweep": 90,
+        "inner": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 780,
+        "w": 1140,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 1380,
+        "cy": 660,
+        "r": 240,
+        "start": 0,
+        "sweep": 90,
+        "inner": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1560,
+        "cy": 540,
+        "rx": 180,
+        "ry": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 360,
+            "y": 300
+          },
+          {
+            "x": 420,
+            "y": 420
+          },
+          {
+            "x": 1200,
+            "y": 420
+          },
+          {
+            "x": 1260,
+            "y": 300
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1350,
+        "y": 480,
+        "w": 420,
+        "h": 120
+      },
+      "rotation": {
+        "pivot": {
+          "x": 1560,
+          "y": 540
+        },
+        "speed": 150,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0,
+        "showPivot": true
+      },
+      "saw": {
+        "kind": "blade",
+        "clockwise": true,
+        "spin": 0,
+        "stroke": 24,
+        "strokeMs": 400
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 420,
+            "y": 360
+          },
+          {
+            "x": 370,
+            "y": 420
+          },
+          {
+            "x": 1260,
+            "y": 420
+          },
+          {
+            "x": 1200,
+            "y": 360
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 300,
+            "y": 180
+          },
+          {
+            "x": 370,
+            "y": 240
+          },
+          {
+            "x": 1260,
+            "y": 240
+          },
+          {
+            "x": 1320,
+            "y": 180
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 360,
+        "y": 50,
+        "w": 900,
+        "h": 190
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 810,
+            "y": 300
+          }
+        ],
+        "speed": 150,
+        "repeat": "slam",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "saw": {
+        "kind": "blade",
+        "clockwise": true,
+        "spin": 0,
+        "stroke": 24,
+        "strokeMs": 400
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 360,
+            "y": 900
+          },
+          {
+            "x": 420,
+            "y": 1020
+          },
+          {
+            "x": 1200,
+            "y": 1020
+          },
+          {
+            "x": 1260,
+            "y": 900
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 420,
+            "y": 960
+          },
+          {
+            "x": 370,
+            "y": 1020
+          },
+          {
+            "x": 1260,
+            "y": 1020
+          },
+          {
+            "x": 1200,
+            "y": 960
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 300,
+            "y": 780
+          },
+          {
+            "x": 370,
+            "y": 840
+          },
+          {
+            "x": 1260,
+            "y": 840
+          },
+          {
+            "x": 1320,
+            "y": 780
+          }
+        ]
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 360,
+        "y": 650,
+        "w": 900,
+        "h": 190
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 810,
+            "y": 900
+          }
+        ],
+        "speed": 150,
+        "repeat": "slam",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "saw": {
+        "kind": "blade",
+        "clockwise": true,
+        "spin": 0,
+        "stroke": 24,
+        "strokeMs": 400
+      }
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "bark",
+        "color": "#24180f",
+        "background": "#5e4229",
+        "size": 64
+      },
+      "edge": "#1a120b"
+    },
+    "path": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "woodGrain",
+        "color": "#a8743f",
+        "background": "#e6c592",
+        "size": 64
+      },
+      "edge": "#7a5230"
+    }
+  },
+  "id": "6",
+  "title": "Zzz-zzz",
+  "level": 7,
+  "difficulty": 3,
+  "stars": {
+    "three": 4000,
+    "two": 4800,
+    "one": 8400
+  }
+}

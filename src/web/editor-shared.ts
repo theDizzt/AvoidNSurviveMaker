@@ -74,7 +74,7 @@ export const ICONS: Record<ShapeKind, string> = {
 export const SPECIAL_IDS = {
   sectorPath: 27, sectorWall: 28, spike: 29, boulder: 30, coin: 31, laser: 37, mirror: 38, portal: 39, door: 40, dark: 41, globalDark: 42,
   disc: 43, blade: 44, movingDisc: 45, movingBlade: 46, text: 47, safe: 48, fog: 49, sand: 50,
-  fall: 51, pulley: 52, ringPath: 53, ringWall: 54, secret: 55, secretFree: 56, torch: 57, carryTorch: 58, crystal: 59, turret: 60, missile: 61,
+  fall: 51, pulley: 52, ringPath: 53, ringWall: 54, secret: 55, secretFree: 56, torch: 57, carryTorch: 58, crystal: 59, turret: 60, missile: 61, rotatingSaw: 62,
 } as const;
 
 export const TRIGGER_IDS: Record<TriggerKind, number> = { switch: 32, timer: 33, hold: 34, startZone: 35, stopZone: 36 };
@@ -106,7 +106,7 @@ export function toolLabel(t: ObjectTool): string {
   if (t.role === 'fog') return fogName(t.fog);
   if (t.role === 'torch') return tr(t.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch');
   if (t.role === 'turret') return tr(t.turret === 'missile' ? 'ed.nameMissile' : 'ed.nameTurret');
-  if (t.special === 'disc' || t.special === 'blade') return withBehavior(t.behavior === 'moving' ? 'moving' : 'static', tr(t.special === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
+  if (t.special === 'disc' || t.special === 'blade') return withBehavior(t.behavior === 'moving' || t.behavior === 'rotating' ? t.behavior : 'static', tr(t.special === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (t.role !== 'path' && t.role !== 'wall') return ROLE_NAMES[t.role];
   if (t.ice) return tr('ed.shapeRole', { shape: SHAPES.find(([k]) => k === t.shape)![1], role: tr('ed.nameIce') });
   const shape = t.shape === 'sector' ? tr(t.ring ? 'ed.shapeRing' : 'ed.shapeSector') : SHAPES.find(([k]) => k === t.shape)![1];
@@ -132,7 +132,7 @@ export function describeObject(o: MapObject): string {
   if (o.role === 'fog') return withBehavior(beh, fogName(o.fog?.kind));
   if (o.role === 'turret') return withBehavior(beh, tr(o.turret?.kind === 'missile' ? 'ed.nameMissile' : 'ed.nameTurret'));
   if (o.role === 'torch') return withBehavior(beh, tr(o.torch?.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch'));
-  if (o.saw) return withBehavior(o.motion ? 'moving' : 'static', tr(o.saw.kind === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
+  if (o.saw) return withBehavior(o.rotation ? 'rotating' : o.motion ? 'moving' : 'static', tr(o.saw.kind === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (o.role === 'laser' || o.role === 'portal') return withBehavior(beh, tr('ed.colorName', { color: switchColor((o.laser ?? o.portal)!.color).name, name: ROLE_NAMES[o.role] }));
   if (o.role !== 'path' && o.role !== 'wall') return withBehavior(beh, ROLE_NAMES[o.role]);
   return withBehavior(beh, tr('ed.shapeRole', { shape, role: o.ice ? tr('ed.nameIce') : ROLE_NAMES[o.role] }));
@@ -147,6 +147,7 @@ export function objectToolId(o: MapObject): number {
   if (o.role === 'portal') return SPECIAL_IDS.portal;
   if (o.spike) return SPECIAL_IDS.spike;
   if (o.boulder) return SPECIAL_IDS.boulder;
+  if (o.saw && o.rotation) return SPECIAL_IDS.rotatingSaw;
   if (o.saw) return o.saw.kind === 'disc' ? (o.motion ? SPECIAL_IDS.movingDisc : SPECIAL_IDS.disc) : o.motion ? SPECIAL_IDS.movingBlade : SPECIAL_IDS.blade;
   if (o.role === 'text') return SPECIAL_IDS.text;
   if (o.role === 'safe') return SPECIAL_IDS.safe;
@@ -233,7 +234,10 @@ export const ZOOM_STEP = 1.25;
 
 export const IDENTITY: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
 
-export const REPEAT_OPTIONS: [Repeat, string][] = [['loop', tr('ed.loop')], ['pingpong', tr('ed.pingPong')], ['once', tr('ed.once')]];
+/** Repeat modes of a rotation */
+export const REPEAT_OPTIONS: [Repeat, string][] = [['loop', tr('ed.loop')], ['pingpong', tr('ed.pingPong')], ['restart', tr('ed.restart')], ['once', tr('ed.once')]];
+/** Repeat modes of a route: those of a rotation, plus slamming into the end */
+export const ROUTE_REPEAT_OPTIONS: [Repeat, string][] = [...REPEAT_OPTIONS.slice(0, 3), ['slam', tr('ed.slam')], REPEAT_OPTIONS[3]];
 
 export const EASING_OPTIONS: [Easing, string][] = [['none', tr('common.none')], ['in', tr('ed.easeIn')], ['out', tr('ed.easeOut')], ['inOut', tr('ed.easeInOut')]];
 

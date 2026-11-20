@@ -149,6 +149,9 @@ function pointOnLeg(leg: Leg, d: number, out: Point): void {
   out.y = pts[lo * 2 - 1] + (pts[lo * 2 + 1] - pts[lo * 2 - 1]) * f;
 }
 
+/** repeat 'slam': how long it rests at the end after the hit (ms) */
+export const SLAM_HOLD_MS = 150;
+
 /**
  * Time → displacement of the anchor from its rest position.
  * Closed-form in t (no accumulated state), so it is deterministic and can be evaluated at any time.
@@ -159,10 +162,49 @@ export class CompiledMotion {
   readonly pass: number;
   private readonly totalLength: number;
 
+  /** repeat 'slam': the slow way back (ms) */
+  private readonly back: number;
+
   constructor(readonly src: Motion, readonly anchor: Point) {
     this.legs = buildLegs(src, anchor);
     this.pass = this.legs.reduce((s, l) => s + l.dur, 0);
     this.totalLength = this.legs.reduce((s, l) => s + l.len, 0);
+    const back = src.returnSpeed ?? src.speed / 4;
+    this.back = src.repeat === 'slam' && back > 0 ? (this.totalLength / back) * 1000 : 0;
+  }
+
+  /**
+   * repeat 'slam': distance along the route at time tt after the delay — rushing to the end
+   * (speeding up, so it hits hard), resting there, then easing slowly back.
+   */
+  private slamDistance(tt: number): number {
+    const { pass, back } = this;
+    const cycle = pass + SLAM_HOLD_MS + back;
+    const p = tt % cycle;
+    if (p < pass) {
+      const f = p / pass;
+      return f * f * f * this.totalLength;
+    }
+    if (p < pass + SLAM_HOLD_MS || back <= 0) return this.totalLength;
+    return (1 - ease('inOut', (p - pass - SLAM_HOLD_MS) / back)) * this.totalLength;
+  }
+
+  /** The point at distance d along the whole route, as an offset from the anchor */
+  private atDistance(d: number, out: Point): Point {
+    for (const leg of this.legs) {
+      if (d <= leg.len) {
+        pointOnLeg(leg, d, out);
+        out.x -= this.anchor.x;
+        out.y -= this.anchor.y;
+        return out;
+      }
+      d -= leg.len;
+    }
+    const last = this.legs[this.legs.length - 1];
+    pointOnLeg(last, last.len, out);
+    out.x -= this.anchor.x;
+    out.y -= this.anchor.y;
+    return out;
   }
 
   get moves(): boolean {
@@ -177,6 +219,7 @@ export class CompiledMotion {
     if (tt <= 0) return out;
     const { pass } = this;
     const repeat: Repeat = this.src.repeat;
+    if (repeat === 'slam') return this.atDistance(this.slamDistance(tt), out);
     if (repeat === 'once') {
       tt = Math.min(tt, pass);
     } else if (repeat === 'pingpong') {
@@ -214,11 +257,14 @@ export class CompiledMotion {
     const { pass } = this;
     const total = this.totalLength;
     let laps = 0;
+    if (this.src.repeat === 'slam') return this.slamDistance(tt);
     if (this.src.repeat === 'once') {
       tt = Math.min(tt, pass);
     } else if (this.src.repeat === 'pingpong') {
       tt %= pass * 2;
       if (tt > pass) tt = pass * 2 - tt;
+    } else if (this.src.repeat === 'restart') {
+      tt %= pass; // back to the start: the distance starts over too
     } else {
       laps = Math.floor(tt / pass);
       tt -= laps * pass;
@@ -230,6 +276,11 @@ export class CompiledMotion {
       d += leg.len;
     }
     return d;
+  }
+
+  /** 'restart': does the object jump back to its start somewhere between times a and b? */
+  jumps(a: number, b: number): boolean {
+    return this.src.repeat === 'restart' && restartLap(a - this.src.delay, this.pass) !== restartLap(b - this.src.delay, this.pass);
   }
 
   /** The full route of the anchor as one flat polyline, for drawing in the editor */
@@ -262,6 +313,9 @@ export class CompiledRotation {
       const p = tt % (dur * 2);
       const f = p <= dur ? p / dur : (dur * 2 - p) / dur;
       deg = ease(r.easing, f) * r.angle;
+    } else if (r.repeat === 'restart') {
+      // Each sweep starts over from the rest angle
+      deg = ease(r.easing, (tt % dur) / dur) * r.angle;
     } else {
       const n = Math.floor(tt / dur);
       const f = (tt - n * dur) / dur;
@@ -269,4 +323,14 @@ export class CompiledRotation {
     }
     return ((r.clockwise ? 1 : -1) * deg * Math.PI) / 180;
   }
+
+  /** 'restart': does it snap back to the rest angle somewhere between times a and b? */
+  jumps(a: number, b: number): boolean {
+    return this.src.repeat === 'restart' && restartLap(a - this.src.delay, this.dur) !== restartLap(b - this.src.delay, this.dur);
+  }
+}
+
+/** Which pass a 'restart' motion is on at time tt after its delay (the jump back happens as it changes) */
+function restartLap(tt: number, period: number): number {
+  return period > 0 && tt > 0 ? Math.floor(tt / period) : 0;
 }

@@ -214,7 +214,13 @@ export interface Door {
   waitMs: number;
 }
 
-export type Repeat = 'loop' | 'pingpong' | 'once';
+/**
+ * loop: round and round (a route returns to its start along a closing leg) · pingpong: back and
+ * forth · once: stops at the end · restart: at the end it jumps back to the start and plays again ·
+ * slam (routes only): rushes to the end speeding up, hits it hard, rests a moment, then slowly
+ * eases back to the start at `returnSpeed`, and again
+ */
+export type Repeat = 'loop' | 'pingpong' | 'once' | 'restart' | 'slam';
 export type Easing = 'none' | 'in' | 'out' | 'inOut';
 export type MotionType = 'linear' | 'curve' | 'circle';
 
@@ -231,6 +237,8 @@ export interface Motion {
   /** px/s */
   speed: number;
   repeat: Repeat;
+  /** repeat 'slam': speed of the slow way back (px/s); omitted = a quarter of `speed` */
+  returnSpeed?: number;
   /** Applied to every leg between markers (or every lap for circle) */
   easing: Easing;
   /** ms before the motion starts. Negative = start already partway through the motion */

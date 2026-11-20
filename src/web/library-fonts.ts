@@ -1,5 +1,5 @@
 import { FONT_CATALOG, libraryFont, type CatalogFont } from './localized/font-catalog';
-import { FONT_MAIN } from './render';
+import { FONT_MAIN, ZH_HANZI } from './render';
 
 /** URLs of the bundled font files, by folder/file name */
 const FILES = import.meta.glob('../assets/fonts/*/*.{ttf,otf}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
@@ -32,5 +32,5 @@ export function ensureLibraryFont(id: string): Promise<void> {
 /** CSS font-family list for a library font, falling back to the main UI font */
 export function libraryFontCss(id: string): string {
   void ensureLibraryFont(id);
-  return `'${libraryFamily(id)}', ${FONT_MAIN}`;
+  return `${ZH_HANZI}'${libraryFamily(id)}', ${FONT_MAIN}`;
 }
