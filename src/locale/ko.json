@@ -515,7 +515,7 @@
   "pack.statusReadyMany": "레벨 {n}개 · 모두 클리어, 공유할 수 있습니다.",
   "te.importZip": ".zip 가져오기",
   "te.exportZip": ".zip 내보내기",
-  "te.playAsCustomPack": "▶ 커스텀 팩으로 플레이",
+  "te.playAsCustomPack": "커스텀 팩으로 플레이",
   "te.mapFiles": "+ 맵 파일",
   "te.mapEditorPack": "+ 맵 에디터 팩",
   "te.openMap": "+ 열린 맵",
@@ -1260,5 +1260,13 @@
   "te.useMainBadge": "기본 테마 배지 사용",
   "te.badgeFromMain": "이 하위 테마는 {name}의 배지를 씁니다.",
   "te.badgeFromLinked": "이 하위 테마는 연결된 테마 {name}의 배지를 씁니다.",
-  "te.autoDesign": "자동: {name}"
+  "te.autoDesign": "자동: {name}",
+  "te.secPreviewSample": "미리보기 샘플",
+  "te.selectHint": "게임의 레벨 선택 화면을 그대로 보여 줍니다. 레벨을 클릭하면 게임 화면 탭에서 미리 봅니다.",
+  "te.selectDesigned": "테마 전용 색 사용",
+  "te.selectDesignedNote": "레벨 선택 화면의 배경, 레벨 버튼, 뒤로 버튼, 글자 색을 여기서 정합니다.",
+  "te.selectDefaultNote": "끄면 기본 밝은 화면에 테마의 타일 색을 배경으로 씁니다.",
+  "te.selectButtons": "레벨 버튼",
+  "te.selectText": "글자",
+  "te.selectTextNote": "옆 패널의 글자 색입니다. 별 타일과 강조 색은 레벨 버튼 색을 따릅니다."
 }

@@ -1713,16 +1713,24 @@ button.cz-list-item.is-locked:hover, button.cz-list-item.is-locked:focus-visible
 .dstars .dcrystal { color: #3b9cff; text-shadow: 0 0 6px rgba(80, 170, 255, 0.85), 0 0 1px #1d4fb8; opacity: 1; }
 
 /* Theme editor: a full-size preview with floating panels over it (like the map editor) */
-.te-screen { display: block; overflow: hidden; padding: 12px 16px; --te-top: 112px; }
-.te-head { width: 100%; margin: 0 auto; max-width: none; }
-.te-head .dhead-title { font-size: clamp(22px, 3vw, 32px); }
+.te-screen { display: block; overflow: hidden; padding: 0; --te-top: 64px; }
+.te-bar { position: fixed; }
+.te-bar .te-tabs { gap: 2px; padding: 2px; border-radius: 999px; background: var(--accent-soft); }
+.te-bar .te-tabs button { padding: 4px 12px; font-size: 13px; border: 0; background: none; }
+.te-bar .te-tabs button[aria-selected="true"] { background: var(--gradient); color: #fff; }
+.te-bar .te-toolbar { gap: 6px; }
+.te-levels li button.icon-btn, .te-font-row button.icon-btn { padding: 3px 6px; }
+.te-levels li button.icon-btn .ico, .te-font-row button.icon-btn .ico { width: 15px; height: 15px; }
+.te-bar .te-toolbar { margin: 0; }
+.te-bar .te-toolbar[hidden] { display: none; }
+.te-bar select { padding: 3px 8px; border-radius: 999px; font-size: 13px; }
+.te-files { margin-top: 0; }
+.te-files button { font-size: 12px; padding: 4px 12px; }
+.te-part-chips { margin-bottom: 6px; }
+.te-sample input { width: 100%; }
 .te-center { position: fixed; top: var(--te-top); left: 376px; right: 366px; bottom: 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .te-screen.panels-hidden .te-center { left: 16px; right: 16px; }
 .te-screen.panels-hidden .te-float { display: none; }
-.te-topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.te-topbar .te-toolbar { margin: 0; }
-.te-topbar .te-toolbar[hidden] { display: none; }
-.te-panels-btn { margin-left: auto; font-size: 12px; padding: 4px 12px; }
 .te-viewport { flex: 1 1 auto; min-height: 0; display: grid; place-items: center; }
 .te-viewport > [hidden] { display: none; }
 .te-center .te-canvas-hint { margin: 0; font-size: 11px; text-align: center; }
@@ -1764,3 +1772,21 @@ button.cz-list-item.is-locked:hover, button.cz-list-item.is-locked:focus-visible
   .te-float-theme { width: 300px; }
   .te-float-badge, .te-float-levels, .te-float-screen { width: 300px; }
 }
+
+/* Theme editor: the game's level select, drawn for the draft (same background as backdrop.ts draws) */
+.te-select-preview {
+  position: relative; width: 100%; height: 100%; display: grid; place-items: center; overflow: hidden; border-radius: 14px;
+  box-shadow: var(--shadow);
+  background:
+    radial-gradient(1100px 700px at 15% 0%, rgba(255, 255, 255, 0.22), transparent 60%),
+    linear-gradient(135deg, var(--bg-a, #9fe2ff), var(--bg-b, #c3b5ff));
+}
+.te-select-preview.bg-designed {
+  background:
+    linear-gradient(rgba(0, 0, 0, var(--bg-dim, 0)), rgba(0, 0, 0, var(--bg-dim, 0))),
+    var(--bg-img, none) center / var(--bg-size, cover) var(--bg-repeat, no-repeat),
+    linear-gradient(180deg, var(--bg-a), var(--bg-b));
+}
+/* Level select page buttons (packs with more than 21 levels) */
+.dlevel-page .dlevel-arrow { font-size: 26px; }
+.dlevel-page:disabled { opacity: 0.35; cursor: default; }

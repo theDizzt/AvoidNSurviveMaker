@@ -515,7 +515,7 @@
   "pack.statusReadyMany": "{n} levels · all cleared, ready to share.",
   "te.importZip": "Import .zip",
   "te.exportZip": "Export .zip",
-  "te.playAsCustomPack": "▶ Play as custom pack",
+  "te.playAsCustomPack": "Play as custom pack",
   "te.mapFiles": "+ Map files",
   "te.mapEditorPack": "+ Map editor pack",
   "te.openMap": "+ Open map",
@@ -1260,5 +1260,13 @@
   "te.useMainBadge": "Use the main theme's badge",
   "te.badgeFromMain": "This sub-theme wears the badge of {name}.",
   "te.badgeFromLinked": "This sub-theme wears the badge of the linked theme {name}.",
-  "te.autoDesign": "Auto: {name}"
+  "te.autoDesign": "Auto: {name}",
+  "te.secPreviewSample": "Preview sample",
+  "te.selectHint": "This is the game's own level select for this theme. Click a level to preview it in the In-game tab.",
+  "te.selectDesigned": "Use this theme's own colors",
+  "te.selectDesignedNote": "The level select takes its background, level buttons, Back button and text color from here.",
+  "te.selectDefaultNote": "Off: the default light look, with the theme's tile colors as the background.",
+  "te.selectButtons": "Level buttons",
+  "te.selectText": "Text",
+  "te.selectTextNote": "Colors the side panel's text; the stars tile and accents follow the level buttons."
 }

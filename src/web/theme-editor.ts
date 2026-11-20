@@ -16,7 +16,13 @@ import { badgeImage, drawLevelBadge, type BadgeHit } from './badge';
 import { beginFrame, clientToMap, drawMap, fitCanvas, setCamera, unitsPerPx } from './render';
 import { floatingPanel, type FloatingPanel } from './float-panel';
 import { renderThemePanel } from './theme-panel';
-import { ScreenDesigner, type ScreenKind } from './screen-designer';
+import { CampaignUI } from './campaign-ui';
+import { setIcon } from './icons';
+import { DEFAULT_BUTTON, type LayoutElement, type LevelButtonStyle, type ScreenLayout } from './localized/screen-layout';
+import { newElement } from './screen-templates';
+
+/** The level select tab shows the game's own level select screen */
+type ScreenKind = 'select';
 import { ensureFonts } from './screen-render';
 import {
   bundledThemeById, bundledThemeOptions, customStoredTheme, levelThemeIn, OFFICIAL_THEMES, CUSTOM_THEME_PRESETS, setCustomTheme,
@@ -85,9 +91,10 @@ export class ThemeEditor {
   private draft: StoredTheme = { info: blankThemeInfo(), levels: [], images: {} };
   private tab: 'game' | ScreenKind = 'game';
   private tabs!: HTMLElement;
+  /** The game's level select, drawn for the draft (level select tab) */
   private stageHost!: HTMLElement;
   private screenPanel!: HTMLElement;
-  private designer!: ScreenDesigner;
+  private campaign!: CampaignUI;
   private previewIndex = 0;
   private visible = false;
   private readonly canvas: HTMLCanvasElement;
@@ -134,6 +141,11 @@ export class ThemeEditor {
   private readonly head: HTMLElement;
   private readonly floats: { el: HTMLElement; panel: FloatingPanel }[] = [];
   private gameTools!: HTMLElement;
+  /** Sample level number / title inputs (in the badge panel) */
+  private sampleBox!: HTMLElement;
+  private panelsBtn!: HTMLButtonElement;
+  /** Snap toggle (both tabs) */
+  private snapBox!: HTMLElement;
   private badgeFloat!: HTMLElement;
   private levelsFloat!: HTMLElement;
   private screenFloat!: HTMLElement;
@@ -144,8 +156,8 @@ export class ThemeEditor {
     this.opened = this.loadOpened();
     this.placementBox = el('div', 'te-placement');
     this.partChips = el('div', 'te-part-chips');
-    this.undoBtn = el('button', 'te-icon', '↶');
-    this.redoBtn = el('button', 'te-icon', '↷');
+    this.undoBtn = setIcon(el('button'), 'undo', tr('common.undo'), 'Ctrl+Z');
+    this.redoBtn = setIcon(el('button'), 'redo', tr('common.redo'), 'Ctrl+Y');
     this.canvas = el('canvas', 'te-canvas');
     this.ctx = this.canvas.getContext('2d')!;
     this.form = el('div', 'te-form panel');
@@ -161,33 +173,22 @@ export class ThemeEditor {
     this.mapInput = Object.assign(el('input'), { type: 'file', accept: '.json,application/json', multiple: true, hidden: true });
     this.mapInput.addEventListener('change', () => void this.addMapFiles());
 
-    const head = el('header', 'dhead te-head');
-    this.head = head;
-    const back = el('button', 'dback');
-    back.type = 'button';
-    back.title = tr('common.backEsc');
-    back.setAttribute('aria-label', tr('common.back'));
-    const label = el('span', 'dtile-in');
-    label.append(el('strong', '', tr('common.back')));
-    back.append(label);
-    back.addEventListener('click', () => this.onBack());
-    const titles = el('div', 'dhead-titles');
-    titles.append(el('h2', 'dhead-title', tr('common.themeEditor')), el('p', 'dhead-sub', tr('te.mazeColorsLevelBadgeCover')));
-    const actions = el('div', 'dhead-right te-actions');
     const btn = (text: string, fn: () => void, cls = '') => {
       const b = el('button', cls, text);
       b.type = 'button';
       b.addEventListener('click', fn);
       return b;
     };
-    actions.append(
-      btn(tr('te.importZip'), () => this.zipInput.click()),
-      btn(tr('te.exportZip'), () => this.exportZip()),
-      btn(tr('te.playAsCustomPack'), () => this.playCustom(), 'primary'),
-    );
-    head.append(back, titles, actions);
-
-    // The preview fills the screen; the panels float over it (like the map editor)
+    const sep = () => {
+      const s = el('span', 'bar-sep');
+      s.setAttribute('aria-hidden', 'true');
+      return s;
+    };
+    // One compact bar at the top, like the map editor's; everything else lives in the panels
+    const head = el('div', 'editor-bar te-bar');
+    this.head = head;
+    const back = btn(tr('common.back'), () => this.onBack());
+    back.title = tr('common.backEsc');
     const tabs = el('div', 'te-tabs');
     tabs.setAttribute('role', 'tablist');
     for (const [k, label] of [['game', tr('te.inGame')], ['select', tr('te.levelSelect')]] as const) {
@@ -199,17 +200,33 @@ export class ThemeEditor {
       tabs.append(t);
     }
     this.tabs = tabs;
-    this.stageHost = el('div', 'te-stage');
+    this.stageHost = el('div', 'te-select-preview');
+    this.stageHost.dataset.fit = 'parent';
     this.screenPanel = el('div', 'te-screen-panel panel');
-    this.designer = new ScreenDesigner(this.stageHost, this.screenPanel, () => this.draft, () => this.save(), (f, folder) => this.storeFile(f, folder));
+    this.campaign = new CampaignUI(el('div'), this.stageHost);
+    // A level picked on the preview opens in the in-game tab
+    this.campaign.onPlay = (_t, i) => {
+      if (i < 0) return;
+      this.previewIndex = Math.min(i, Math.max(0, this.draft.levels.length - 1));
+      this.node = this.designOfLevel(this.previewIndex)?.id ?? null;
+      this.compiledFor = null;
+      this.renderForm();
+      this.renderLevels();
+      this.setTab('game');
+    };
     this.canvas.dataset.fit = 'parent';
     this.viewport.append(this.canvas, this.stageHost);
     this.gameTools = this.previewToolbar();
-    const panelsBtn = btn(tr('editor.hidePanels'), () => this.togglePanels(), 'te-panels-btn');
-    panelsBtn.title = 'H';
-    const topbar = el('div', 'te-topbar');
-    topbar.append(tabs, this.gameTools, panelsBtn);
-    this.center.append(topbar, this.viewport, el('p', 'te-canvas-hint muted', tr('te.partHint')), this.status);
+    this.panelsBtn = setIcon(btn('', () => this.togglePanels()), 'panels', tr('editor.hidePanels'), 'H');
+    // Wired up by main.ts with the other fullscreen buttons
+    const full = setIcon(el('button', 'btn-fullscreen'), 'fullscreen', tr('common.fullscreen'), 'F');
+    full.type = 'button';
+    head.append(
+      btn(tr('te.playAsCustomPack'), () => this.playCustom(), 'primary'), back, sep(),
+      tabs, sep(),
+      this.undoBtn, this.redoBtn, sep(), this.gameTools, this.snapBox, sep(), this.panelsBtn, full,
+    );
+    this.center.append(this.viewport, el('p', 'te-canvas-hint muted', tr('te.partHint')), this.status);
     this.bindCanvas();
 
     const levelHead = el('div', 'te-levels-head');
@@ -271,11 +288,13 @@ export class ThemeEditor {
     const game = tab === 'game';
     this.canvas.hidden = !game;
     this.gameTools.hidden = !game;
+    const hint = this.center.querySelector<HTMLElement>('.te-canvas-hint');
+    if (hint) hint.textContent = tr(game ? 'te.partHint' : 'te.selectHint');
     this.badgeFloat.hidden = !game;
     this.levelsFloat.hidden = !game;
     this.stageHost.hidden = game;
     this.screenFloat.hidden = game;
-    if (!game) this.designer.open(tab);
+    if (!game) this.renderSelect();
     requestAnimationFrame(() => this.fit());
     this.syncHistoryButtons();
   }
@@ -285,8 +304,7 @@ export class ThemeEditor {
     const root = this.center.parentElement;
     if (!root) return;
     const hidden = root.classList.toggle('panels-hidden');
-    const b = this.center.querySelector<HTMLButtonElement>('.te-panels-btn');
-    if (b) b.textContent = tr(hidden ? 'editor.showPanels' : 'editor.hidePanels');
+    setIcon(this.panelsBtn, hidden ? 'panelsHidden' : 'panels', tr(hidden ? 'editor.showPanels' : 'editor.hidePanels'), 'H');
     requestAnimationFrame(() => this.fit());
   }
 
@@ -313,10 +331,198 @@ export class ThemeEditor {
     const top = Math.round(this.head.getBoundingClientRect().bottom + 8);
     this.center.parentElement?.style.setProperty('--te-top', `${top}px`);
     fitCanvas(this.canvas, this.previewMap());
-    // The level select stage: the largest 16:9 box in the preview area
-    const w = this.viewport.clientWidth, h = this.viewport.clientHeight;
-    const sw = Math.max(160, Math.floor(Math.min(w, h * 16 / 9)));
-    this.stageHost.style.width = `${sw}px`;
+    if (this.tab === 'select') this.campaign.fit();
+  }
+
+  // ───────────────────────── Level select ─────────────────────────
+
+  /** The level select tab: the game's screen for the draft, and its settings */
+  private renderSelect(): void {
+    this.renderSelectPreview();
+    this.renderSelectPanel();
+  }
+
+  private renderSelectPreview(): void {
+    const info = this.draft.info;
+    const entry: ThemeEntry = {
+      info: localizeThemeInfo(info, language), source: info, levels: this.draft.levels, assets: this.draft.images, official: false,
+      coverUrl: info.cover ? this.draft.images[info.cover] : undefined,
+      badgeUrl: info.style.badge.image ? this.draft.images[info.style.badge.image] : undefined,
+    };
+    // The background, as the game draws it behind the level select (backdrop.ts)
+    const bg = info.screens?.select?.background;
+    const host = this.stageHost;
+    host.classList.toggle('bg-designed', !!bg);
+    const [a, b] = bg ? [bg.color, bg.color2 ?? bg.color] : info.colors;
+    host.style.setProperty('--bg-a', a);
+    host.style.setProperty('--bg-b', b);
+    const img = bg?.image && this.draft.images[bg.image];
+    if (img) host.style.setProperty('--bg-img', `url("${img}")`);
+    else host.style.removeProperty('--bg-img');
+    host.style.setProperty('--bg-size', bg?.fit === 'contain' ? 'contain' : bg?.fit === 'tile' ? 'auto' : 'cover');
+    host.style.setProperty('--bg-repeat', bg?.fit === 'tile' ? 'repeat' : 'no-repeat');
+    host.style.setProperty('--bg-dim', String(bg?.dim ?? 0));
+    this.campaign.renderLevels(entry);
+  }
+
+  /** The draft's designed level select (created on first edit) */
+  private selectLayout(create: true): ScreenLayout;
+  private selectLayout(create?: false): ScreenLayout | undefined;
+  private selectLayout(create = false): ScreenLayout | undefined {
+    const info = this.draft.info;
+    if (!info.screens?.select && create) info.screens = { ...info.screens, select: { background: { color: '#291b22' }, elements: [] } };
+    return info.screens?.select;
+  }
+
+  /** The layout element the game reads a setting from, made when missing */
+  private selectElement(kind: 'levelGrid' | 'back' | 'text'): LayoutElement {
+    const layout = this.selectLayout(true);
+    let e = layout.elements.find((x) => x.kind === kind && (kind !== 'text' || x.color));
+    if (!e) {
+      e = newElement(kind);
+      if (kind === 'levelGrid') e.button = { ...DEFAULT_BUTTON };
+      layout.elements.push(e);
+    }
+    return e;
+  }
+
+  /** Color with a "none" box (keeps a #rrggbbaa value's opacity) */
+  private optColor(value: string | undefined, apply: (v: string | undefined) => void, allowNone = true): HTMLElement {
+    const row = el('div', 'sd-color');
+    const c = el('input');
+    c.type = 'color';
+    c.value = (value ?? '#ffffff').slice(0, 7);
+    const alpha = value && value.length === 9 ? value.slice(7) : '';
+    const none = el('input');
+    none.type = 'checkbox';
+    none.checked = !value;
+    const emit = () => {
+      apply(allowNone && none.checked ? undefined : `${c.value.toLowerCase()}${alpha}`);
+      this.save();
+      this.renderSelect();
+    };
+    c.addEventListener('change', () => {
+      none.checked = false;
+      emit();
+    });
+    none.addEventListener('change', emit);
+    row.append(c);
+    if (allowNone) {
+      const l = el('label', 'sd-none');
+      l.append(none, el('span', '', tr('sd.noneLower')));
+      row.append(l);
+    }
+    return row;
+  }
+
+  private selectNum(value: number, min: number, max: number, step: number, apply: (v: number) => void): HTMLInputElement {
+    const i = el('input');
+    i.type = 'number';
+    i.min = String(min);
+    i.max = String(max);
+    i.step = String(step);
+    i.value = String(value);
+    i.addEventListener('change', () => {
+      const v = Number(i.value);
+      if (!Number.isFinite(v)) return;
+      apply(Math.min(max, Math.max(min, v)));
+      this.save();
+      this.renderSelect();
+    });
+    return i;
+  }
+
+  /** What the game's level select takes from a theme: background, level buttons, Back, text color */
+  private renderSelectPanel(): void {
+    const layout = this.selectLayout();
+    const use = el('label', 'toggle');
+    const on = el('input');
+    on.type = 'checkbox';
+    on.checked = !!layout;
+    on.addEventListener('change', () => {
+      const info = this.draft.info;
+      if (on.checked) {
+        this.selectLayout(true);
+        this.selectElement('levelGrid');
+      } else if (info.screens) {
+        delete info.screens.select;
+        if (!Object.keys(info.screens).length) delete info.screens;
+      }
+      this.save();
+      this.renderSelect();
+    });
+    use.append(on, el('span', '', tr('te.selectDesigned')));
+    const intro = this.section('sel-screen', tr('sd.levelSelectScreen'), use, el('p', 'muted', tr(layout ? 'te.selectDesignedNote' : 'te.selectDefaultNote')));
+    if (!layout) {
+      this.screenPanel.replaceChildren(intro);
+      return;
+    }
+    const bg = layout.background;
+    const grid = this.selectElement('levelGrid');
+    const b: LevelButtonStyle = (grid.button ??= { ...DEFAULT_BUTTON });
+    const back = this.selectElement('back');
+    const text = layout.elements.find((x) => x.kind === 'text' && x.color);
+    const images = Object.keys(this.draft.images).filter((n) => /\.(png|jpe?g|webp|gif|svg)$/i.test(n)).sort();
+    const bgImage = el('select');
+    bgImage.append(new Option(tr('sd.none'), ''), ...images.map((f) => new Option(f, f, false, f === bg.image)));
+    bgImage.addEventListener('change', () => {
+      if (bgImage.value) bg.image = bgImage.value;
+      else delete bg.image;
+      this.save();
+      this.renderSelect();
+    });
+    const upload = el('input');
+    upload.type = 'file';
+    upload.accept = 'image/*';
+    upload.addEventListener('change', async () => {
+      const f = upload.files?.[0];
+      if (!f) return;
+      bg.image = await this.storeFile(f, 'images');
+      this.save();
+      this.renderSelect();
+    });
+    const imageRow = el('div', 'sd-asset');
+    imageRow.append(bgImage, upload);
+    const fit = this.select(bg.fit ?? 'cover', [['cover', tr('common.fill')], ['contain', tr('sd.fit')], ['tile', tr('sd.tile')]], (v) => {
+      bg.fit = v;
+      this.renderSelect();
+    });
+
+    this.screenPanel.replaceChildren(
+      this.foldButtons(this.screenPanel),
+      intro,
+      this.section('sel-bg', tr('common.background'), this.group(
+        this.field(tr('common.color'), this.optColor(bg.color, (v) => (bg.color = v ?? '#000000'), false)),
+        this.field(tr('sd.gradientTo'), this.optColor(bg.color2, (v) => {
+          if (v) bg.color2 = v;
+          else delete bg.color2;
+        })),
+        this.field(tr('common.image'), imageRow, true),
+        this.field(tr('sd.imageFit'), fit),
+        this.field(tr('sd.darkenImage'), this.selectNum(bg.dim ?? 0, 0, 0.9, 0.05, (v) => (bg.dim = v))),
+      )),
+      this.section('sel-buttons', tr('te.selectButtons'), this.group(
+        this.field(tr('common.fill'), this.optColor(b.fill, (v) => (b.fill = v ?? '#00000000'))),
+        this.field(tr('sd.everyOtherFill'), this.optColor(b.fill2, (v) => (b.fill2 = v))),
+        this.field(tr('sd.clearedFill'), this.optColor(b.clearedFill, (v) => (b.clearedFill = v))),
+        this.field(tr('sd.border'), this.optColor(b.border, (v) => (b.border = v ?? '#00000000'))),
+        this.field(tr('sd.borderWidth'), this.selectNum(b.borderWidth, 0, 20, 1, (v) => (b.borderWidth = v))),
+        this.field(tr('common.numberColor'), this.optColor(b.numberColor, (v) => (b.numberColor = v ?? '#000000'), false)),
+        this.field(tr('sd.numberGlow'), this.optColor(b.numberGlow, (v) => (b.numberGlow = v))),
+      )),
+      this.section('sel-back', tr('sd.backButton'), this.group(
+        this.field(tr('common.fill'), this.optColor(back.fill, (v) => (back.fill = v))),
+        this.field(tr('sd.border'), this.optColor(back.border, (v) => (back.border = v))),
+        this.field(tr('sd.borderWidth'), this.selectNum(back.borderWidth ?? 0, 0, 20, 1, (v) => (back.borderWidth = v))),
+        this.field(tr('common.color'), this.optColor(back.color, (v) => (back.color = v))),
+      )),
+      this.section('sel-text', tr('te.selectText'), this.group(
+        this.field(tr('common.color'), this.optColor(text?.color, (v) => {
+          if (v) this.selectElement('text').color = v;
+          else if (text) delete text.color;
+        })),
+      ), el('p', 'muted', tr('te.selectTextNote'))),
+    );
   }
 
   // ───────────────────────── State ─────────────────────────
@@ -865,8 +1071,16 @@ export class ThemeEditor {
     });
 
     const design = this.nodeDesign();
+    const files = el('div', 'actions te-files');
+    for (const [label, fn] of [[tr('te.importZip'), () => this.zipInput.click()], [tr('te.exportZip'), () => this.exportZip()]] as const) {
+      const b = el('button', '', label);
+      b.type = 'button';
+      b.addEventListener('click', fn);
+      files.append(b);
+    }
     this.form.replaceChildren(
       this.group(this.field(tr('te.load'), source, true)),
+      files,
       this.themeTree(),
       this.foldButtons(this.form),
       ...(design ? this.subThemeSections(design) : this.mainSections(info)),
@@ -1137,7 +1351,8 @@ export class ThemeEditor {
           else delete badge.image;
         }), true),
       ), reset),
-      section('badge-layout', tr('te.secBadgeLayout'), this.placementBox),
+      section('badge-layout', tr('te.secBadgeLayout'), this.partChips, this.placementBox),
+      section('badge-sample', tr('te.secPreviewSample'), this.sampleBox),
       section('badge-number', tr('te.secBadgeNumber'), group(
         this.field(tr('te.numberFont'), fontPicker(this.select(badge.font, BADGE_FONTS, (v) => b({ font: v })), badge.font)),
         this.field(tr('te.numberDigits'), this.select(String(badge.pad) as '0' | '2' | '3', [['0', '7'], ['2', '07'], ['3', '007']], (v) => b({ pad: Number(v) }))),
@@ -1197,9 +1412,8 @@ export class ThemeEditor {
       });
       const sample = el('span', 'te-font-sample', tr('te.aa01'));
       sample.style.fontFamily = `'th-draft-${f.family}'`;
-      const remove = el('button', 'danger', '✕');
+      const remove = setIcon(el('button', 'danger'), 'trash', tr('te.removeFont'));
       remove.type = 'button';
-      remove.title = tr('te.removeFont');
       remove.addEventListener('click', () => {
         delete this.draft.images[f.file];
         info.fonts!.splice(i, 1);
@@ -1263,6 +1477,7 @@ export class ThemeEditor {
       });
       const tool = (t: string, title: string, fn: () => void, disabled = false) => {
         const b = el('button', '', t);
+        if (!t) setIcon(b, 'trash', title);
         b.type = 'button';
         b.title = title;
         b.disabled = disabled;
@@ -1295,7 +1510,7 @@ export class ThemeEditor {
       li.append(label, designSelect, diffInput,
         tool('↑', tr('pack.moveUp'), move(-1), i === 0),
         tool('↓', tr('pack.moveDown'), move(1), i === levels.length - 1),
-        tool('✕', tr('te.remove'), () => {
+        tool('', tr('te.remove'), () => {
           levels.splice(i, 1);
           this.previewIndex = Math.min(this.previewIndex, Math.max(0, levels.length - 1));
           this.save();
@@ -1410,26 +1625,34 @@ export class ThemeEditor {
   }
 
   private previewToolbar(): HTMLElement {
-    const bar = el('div', 'te-toolbar');
-    const group = (...children: HTMLElement[]) => {
-      const g = el('div', 'te-tool-group');
-      g.append(...children);
-      return g;
-    };
-    for (const [b, title, fn] of [[this.undoBtn, tr('te.undo'), () => this.undo()], [this.redoBtn, tr('te.redo'), () => this.redo()]] as const) {
+    const bar = el('div', 'te-toolbar te-tool-group');
+    for (const [b, fn] of [[this.undoBtn, () => this.undo()], [this.redoBtn, () => this.redo()]] as const) {
       b.type = 'button';
-      b.title = title;
-      b.setAttribute('aria-label', title);
       b.addEventListener('click', fn);
     }
     this.renderChips();
 
-    const zoom = el('select');
-    zoom.title = tr('te.zoom');
-    zoom.append(...ZOOMS.map((z) => new Option(`🔍 ${z * 100}%`, String(z), false, z === this.zoom)));
-    zoom.addEventListener('change', () => (this.zoom = Number(zoom.value) || 1));
+    const zoomBtn = (cls: string, fn: () => void) => {
+      const b = el('button', cls);
+      b.type = 'button';
+      b.addEventListener('click', fn);
+      return b;
+    };
+    const level = zoomBtn('zoom-level', () => setZoom(1));
+    level.title = tr('editor.zoomReset');
+    const setZoom = (z: number) => {
+      this.zoom = z;
+      level.textContent = `${Math.round(z * 100)}%`;
+    };
+    const step = (d: -1 | 1) => () => {
+      const k = ZOOMS.indexOf(this.zoom);
+      setZoom(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, k + d))]);
+    };
+    const out = setIcon(zoomBtn('zoom-btn', step(-1)), 'zoomOut', tr('editor.zoomOut'));
+    const into = setIcon(zoomBtn('zoom-btn', step(1)), 'zoomIn', tr('editor.zoomIn'));
+    setZoom(this.zoom);
 
-    const snapBox = el('label', 'toggle te-snap');
+    const snapBox = el('label', 'check');
     const snap = el('input');
     snap.type = 'checkbox';
     snap.checked = this.snap;
@@ -1453,7 +1676,11 @@ export class ThemeEditor {
     title.maxLength = 80;
     title.addEventListener('input', () => (this.sample.title = title.value || undefined));
 
-    bar.append(group(this.undoBtn, this.redoBtn), this.partChips, group(zoom, snapBox), group(num, title));
+    this.sampleBox = el('div', 'fields te-sample');
+    const field = (label: string, control: HTMLElement) => this.field(label, control);
+    this.sampleBox.append(field(tr('te.sampleNumber'), num), field(tr('te.sampleTitle'), title));
+    this.snapBox = snapBox;
+    bar.append(out, level, into);
     return bar;
   }
 
@@ -1750,7 +1977,8 @@ export class ThemeEditor {
       this.togglePanels();
       return;
     }
-    if (this.tab !== 'game' || !this.part || mod) return;
+    if (this.tab !== 'game') return;
+    if (!this.part || mod) return;
     const step = e.shiftKey ? 10 : 1;
     const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
     if (d) {
@@ -1816,7 +2044,7 @@ export class ThemeEditor {
     this.store();
     this.renderForm();
     this.renderLevels();
-    if (this.tab !== 'game') this.designer.open(this.tab);
+    if (this.tab !== 'game') this.renderSelect();
     this.renderChips();
     this.syncHistoryButtons();
   }

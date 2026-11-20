@@ -127,6 +127,8 @@ function selectPalette(t: ThemeEntry): Record<string, string> | null {
 /** Level select: space between the side panel and the lattice, and how far it may scale up */
 const LEVELS_GAP = 28;
 const LEVELS_MAX_SCALE = 2;
+/** Levels per page of the level select; longer packs get page buttons */
+const LEVELS_PER_PAGE = 21;
 /** Wait this long on a hovered level before loading its leaderboard */
 const BOARD_DELAY_MS = 120;
 
@@ -134,22 +136,28 @@ const BOARD_DELAY_MS = 120;
 function placeLattice(tiles: (HTMLElement | null)[], size: number, perRow: number, gap = 6): { w: number; h: number } {
   const step = (size * Math.SQRT2) / 2 + gap;
   const rowGap = step * 2.2;
+  // Height: down to the lowest tile placed, with the same margin as above the first row, so the
+  // lattice sits centered (a last row using only its upper half leaves no empty band below)
+  let bottom = 0;
   tiles.forEach((t, i) => {
     if (!t) return;
     const row = Math.floor(i / perRow);
     const col = i % perRow;
+    const top = step + row * rowGap + (col % 2) * step - size / 2;
     t.style.width = t.style.height = `${size}px`;
     t.style.left = `${step + col * step - size / 2}px`;
-    t.style.top = `${step + row * rowGap + (col % 2) * step - size / 2}px`;
+    t.style.top = `${top}px`;
+    bottom = Math.max(bottom, top + size);
   });
-  const rows = Math.ceil(tiles.length / perRow);
-  return { w: step * (perRow + 1), h: step * 2 + (rows - 1) * rowGap + step };
+  return { w: step * (perRow + 1), h: bottom + step - size / 2 };
 }
 
 export class CampaignUI {
   /** Play a level of a theme (level −1 = open its level select) */
   onPlay: (theme: ThemeEntry, level: number) => void = () => {};
   onBack: (from: 'themes' | 'levels') => void = () => {};
+  /** Page shown in each theme's level select, by theme id */
+  private readonly levelPages = new Map<string, number>();
 
   private theme: ThemeEntry | null = null;
   private readonly file: HTMLInputElement;
@@ -204,7 +212,8 @@ export class CampaignUI {
     const sw = side.offsetWidth;
     const sh = side.offsetHeight;
     const availW = Math.max(200, root.clientWidth - 32);
-    const availH = Math.max(200, window.innerHeight - 36);
+    // data-fit="parent": fill the element's own box (the theme editor's preview)
+    const availH = Math.max(200, root.dataset.fit === 'parent' ? root.clientHeight - 16 : window.innerHeight - 36);
     const scaleFor = (w: number, h: number) => Math.min(LEVELS_MAX_SCALE, availW / w, availH / h);
     const row = { w: sw + LEVELS_GAP + lw, h: Math.max(sh, lh) };
     const col = { w: Math.max(sw, lw), h: sh + LEVELS_GAP + lh };
@@ -356,7 +365,12 @@ export class CampaignUI {
     let first: HTMLButtonElement | null = null;
     const tiles: HTMLElement[] = [];
     const slots = levelSlots(t);
-    for (let i = 0; i < slots; i++) {
+    // More than a page of levels: one page at a time, with page buttons in the bottom row
+    const pages = Math.max(1, Math.ceil(slots / LEVELS_PER_PAGE));
+    const page = Math.min(pages - 1, this.levelPages.get(t.info.id) ?? 0);
+    const from = page * LEVELS_PER_PAGE;
+    const to = Math.min(slots, from + LEVELS_PER_PAGE);
+    for (let i = from; i < to; i++) {
       const map = themedLevel(t, i);
       const rec = levelRecord(t, i);
       // .alt: every other button (the design's second fill)
@@ -383,14 +397,22 @@ export class CampaignUI {
       b.append(inner(...parts));
       tiles.push(b);
     }
-    // Long custom packs: more zig-zag rows (the screen scrolls past what fits)
-    const perRow = slots > 42 ? 9 : 7;
+    const perRow = 7;
     // One more row under the levels: total stars below the 3rd column (level 17 of 21), Back below
     // the 5th (level 19). Both stay in the upper half of the zig-zag, so they interlock with the row above.
-    const extra = Math.ceil(slots / perRow) * perRow;
+    // With pages, every page keeps the full 21-level shape, and ◀ / ▶ take the 1st and 7th columns.
+    const extra = pages > 1 ? LEVELS_PER_PAGE : Math.ceil((to - from) / perRow) * perRow;
     const layout: (HTMLElement | null)[] = Array.from({ length: extra + perRow }, (_, i) => tiles[i] ?? null);
     layout[extra + 2] = this.starsTile();
     layout[extra + 4] = this.backTile();
+    if (pages > 1) {
+      const turn = (d: -1 | 1) => () => {
+        this.levelPages.set(t.info.id, page + d);
+        this.renderLevels(t);
+      };
+      layout[extra] = this.pageTile('◀', page, pages, page > 0 ? turn(-1) : null, tr('screen.prevLevels'));
+      layout[extra + 6] = this.pageTile('▶', page, pages, page < pages - 1 ? turn(1) : null, tr('screen.nextLevels'));
+    }
     lattice.append(...layout.filter((x): x is HTMLElement => !!x));
     const size = placeLattice(layout, 92, perRow);
     lattice.style.width = `${size.w}px`;
@@ -409,7 +431,7 @@ export class CampaignUI {
     for (const [k, v] of Object.entries(palette ?? {})) body.style.setProperty(k, v);
     const fitBox = el('div', 'dlevels-fit');
     fitBox.append(body);
-    const firstPlayable = Array.from({ length: slots }, (_, i) => i).find((i) => themedLevel(t, i));
+    const firstPlayable = Array.from({ length: to - from }, (_, k) => from + k).find((i) => themedLevel(t, i));
     if (firstPlayable !== undefined) side.show(firstPlayable);
     // No header: total stars and Back are diamonds in the lattice
     this.levelsRoot.replaceChildren(fitBox);
@@ -417,6 +439,17 @@ export class CampaignUI {
       this.fit();
       first?.focus({ preventScroll: true });
     });
+  }
+
+  /** Level select: a page button (◀ / ▶ with "page / pages"), disabled at either end */
+  private pageTile(arrow: string, page: number, pages: number, go: (() => void) | null, title: string): HTMLElement {
+    const b = el('button', 'dtile dlevel dlevel-page');
+    b.type = 'button';
+    b.title = title;
+    b.disabled = !go;
+    b.append(inner(el('strong', 'dlevel-arrow', arrow), el('small', 'dlevel-best', `${page + 1} / ${pages}`)));
+    if (go) b.addEventListener('click', go);
+    return b;
   }
 
   /** Level select: total stars collected in the official worlds, as a lattice diamond */

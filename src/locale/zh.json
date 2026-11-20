@@ -515,7 +515,7 @@
   "pack.statusReadyMany": "{n} 个关卡 · 全部通关，可以分享。",
   "te.importZip": "导入 .zip",
   "te.exportZip": "导出 .zip",
-  "te.playAsCustomPack": "▶ 作为自定义地图包游玩",
+  "te.playAsCustomPack": "作为自定义地图包游玩",
   "te.mapFiles": "+ 地图文件",
   "te.mapEditorPack": "+ 地图编辑器的地图包",
   "te.openMap": "+ 当前打开的地图",
@@ -1260,5 +1260,13 @@
   "te.useMainBadge": "使用主主题徽章",
   "te.badgeFromMain": "此子主题使用 {name} 的徽章。",
   "te.badgeFromLinked": "此子主题使用所连接主题 {name} 的徽章。",
-  "te.autoDesign": "自动：{name}"
+  "te.autoDesign": "自动：{name}",
+  "te.secPreviewSample": "预览示例",
+  "te.selectHint": "这是游戏中此主题的关卡选择界面。点击关卡可在游戏内标签中预览。",
+  "te.selectDesigned": "使用此主题的专属颜色",
+  "te.selectDesignedNote": "关卡选择界面的背景、关卡按钮、返回按钮和文字颜色在此设置。",
+  "te.selectDefaultNote": "关闭时使用默认的明亮外观，并以主题的图块颜色作为背景。",
+  "te.selectButtons": "关卡按钮",
+  "te.selectText": "文字",
+  "te.selectTextNote": "侧边面板的文字颜色；星星图块和强调色跟随关卡按钮。"
 }
