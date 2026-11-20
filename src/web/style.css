@@ -281,6 +281,14 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .simple-interface .logo-back { transform: translate(0.075em, 0.075em); }
 .simple-interface .logo-mid { transform: translate(0.038em, 0.038em); }
 .simple-interface .logo-front, .simple-interface .ddial-thumb { filter: none !important; }
+/* Antialiasing option off: canvases scaled to the screen take the nearest pixel */
+.aa-off canvas { image-rendering: pixelated; }
+/* Shadows option off: no drop shadows. Rings that mark the selected or focused item stay */
+.no-shadows *:not(input):not([aria-pressed="true"]):not([aria-checked="true"]):not(.is-selected):not(:focus-visible):not(.dboard-row),
+.no-shadows *::before, .no-shadows *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
 /* Low graphics: the menu background canvas is not blurred again on every frame */
 .gfx-low .app-bg canvas { filter: none; }
 .stage { width: 100%; }
@@ -740,7 +748,8 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .logo-back .logo-n { color: #1f8f5a; }
 .logo-mid .logo-n { color: #d9fbe8; }
 .logo-front .logo-n { color: #22c55e; }
-.logo-front { filter: drop-shadow(0 3px 0 rgba(30, 60, 120, 0.22)); }
+/* A text shadow, not a drop-shadow filter: a filter is re-rendered as the logo moves */
+.logo-front { text-shadow: 0 3px 0 rgba(30, 60, 120, 0.22); }
 @keyframes logo-orbit-back {
   0% { transform: translate(0.075em, 0.075em); }
   25% { transform: translate(0.03em, 0.105em); }
@@ -759,6 +768,11 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   0%, 100% { transform: rotateX(8deg) rotateY(-10deg); }
   50% { transform: rotateX(4deg) rotateY(10deg); }
 }
+/* Still at low graphics quality (the animation repaints the logo every frame without a fast GPU)
+   and for reduced motion: the layers rest at their starting offsets */
+.gfx-low .logo-3d, .gfx-low .logo-layer { animation: none; }
+.gfx-low .logo-back { transform: translate(0.075em, 0.075em); }
+.gfx-low .logo-mid { transform: translate(0.038em, 0.038em); }
 @media (prefers-reduced-motion: reduce) {
   .logo-3d, .logo-layer { animation: none; }
   .logo-back { transform: translate(0.075em, 0.075em); }

@@ -429,7 +429,7 @@ for (const screen of [screens.menu, screens.options, screens.graphics, screens.s
 
 // ───────────────────────── Options ─────────────────────────
 
-type ToggleOption = 'showDebug' | 'cursorTrail' | 'decorativeEffects' | 'animatedBackground' | 'interfaceEffects' | 'lowSpecSimulation';
+type ToggleOption = 'showDebug' | 'cursorTrail' | 'decorativeEffects' | 'animatedBackground' | 'interfaceEffects' | 'lowSpecSimulation' | 'autoQuality' | 'antialias' | 'shadows';
 type VolumeOption = 'masterVolume' | 'musicVolume' | 'effectsVolume';
 const optionInputs: Record<ToggleOption, HTMLInputElement> = {
   showDebug: $<HTMLInputElement>('opt-debug'),
@@ -438,6 +438,9 @@ const optionInputs: Record<ToggleOption, HTMLInputElement> = {
   animatedBackground: $<HTMLInputElement>('opt-background'),
   interfaceEffects: $<HTMLInputElement>('opt-interface'),
   lowSpecSimulation: $<HTMLInputElement>('opt-simulation'),
+  autoQuality: $<HTMLInputElement>('opt-auto-quality'),
+  antialias: $<HTMLInputElement>('opt-antialias'),
+  shadows: $<HTMLInputElement>('opt-shadows'),
 };
 
 const volumeInputs: Record<VolumeOption, HTMLInputElement> = {
@@ -463,6 +466,8 @@ function syncOptions(): void {
   }
   debugPanel.hidden = !options.showDebug;
   document.documentElement.classList.toggle('simple-interface', !options.interfaceEffects);
+  document.documentElement.classList.toggle('aa-off', !options.antialias);
+  document.documentElement.classList.toggle('no-shadows', !options.shadows);
 }
 
 for (const [k, input] of Object.entries(optionInputs) as [ToggleOption, HTMLInputElement][]) {
@@ -697,6 +702,8 @@ const deaths = new DeathTracker(account);
 account.beforeSignOut = async () => {
   await Promise.all([playTime.flush(), deaths.flush()]);
 };
+// Told after the run in which it happened (toasts are hidden while a run is played)
+play.onAutoQuality = (level) => showToast(t('options.autoQualityLowered', { level: t(`options.graphics.${level}`) }));
 play.onDeath = () => {
   if (testing) return; // editor test plays don't count
   const c = campaignOf(currentKey);

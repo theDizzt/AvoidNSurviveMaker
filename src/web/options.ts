@@ -20,6 +20,12 @@ export interface Options {
   graphics: GraphicsLevel;
   frameLimit: FrameLimit;
   lowSpecSimulation: boolean;
+  /** Lower Graphics quality by itself when play runs slowly (see auto-quality.ts) */
+  autoQuality: boolean;
+  /** Smooth (interpolated) scaling of images and canvases; off = nearest pixel (see graphics.ts) */
+  antialias: boolean;
+  /** Drop shadows in the game and the menus */
+  shadows: boolean;
   cursorTrail: boolean;
   decorativeEffects: boolean;
   animatedBackground: boolean;
@@ -38,6 +44,9 @@ export const DEFAULT_OPTIONS: Readonly<Options> = {
   graphics: 'high',
   frameLimit: 0,
   lowSpecSimulation: false,
+  autoQuality: true,
+  antialias: true,
+  shadows: true,
   cursorTrail: true,
   decorativeEffects: true,
   animatedBackground: true,
@@ -51,7 +60,7 @@ function load(): Options {
   const out = { ...DEFAULT_OPTIONS };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, unknown>;
-    for (const k of ['showDebug', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation'] as const) {
+    for (const k of ['showDebug', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation', 'autoQuality', 'antialias', 'shadows'] as const) {
       if (typeof saved[k] === 'boolean') out[k] = saved[k];
     }
     for (const k of VOLUME_KEYS) {
@@ -97,7 +106,7 @@ export function resetOptions(): void {
 }
 
 /** Options shown on the Graphics screen */
-const GRAPHICS_KEYS = ['graphics', 'frameLimit', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation'] as const;
+const GRAPHICS_KEYS = ['graphics', 'frameLimit', 'autoQuality', 'antialias', 'shadows', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation'] as const;
 
 /** Restore only the Graphics screen's options (one commit, so canvases refit once). */
 export function resetGraphicsOptions(): void {

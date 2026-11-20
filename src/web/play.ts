@@ -1,5 +1,6 @@
 import { t as tr } from './i18n';
 import { FrameLimiter } from './graphics';
+import { AutoQuality } from './auto-quality';
 import { canvasUsage, formatBytes, gpuName, jsHeap } from './resource-monitor';
 import { levelLabel, starGoals, starsFor, starText } from './localized/level';
 import { recordTime } from '../core/time';
@@ -14,7 +15,7 @@ import { COIN_PULL_MS, formatSeconds, Simulation, type Replay } from '../core/si
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
 import { AutoPolling } from './auto-polling';
-import { onOptionsChange, options } from './options';
+import { onOptionsChange, options, type GraphicsLevel } from './options';
 import { gameAudio } from './audio';
 import { DeathBurst } from './death-burst';
 import { drawFogAreas } from './fog';
@@ -56,6 +57,10 @@ export class PlayController {
   onDeath: ((map: MapData) => void) | null = null;
   /** Called when the player presses Esc */
   onExit: (() => void) | null = null;
+  /** Graphics quality was lowered automatically (told once the run is over) */
+  onAutoQuality: ((level: GraphicsLevel) => void) | null = null;
+  private readonly autoQuality = new AutoQuality();
+  private loweredTo: GraphicsLevel | null = null;
   /** Level badge design of the theme being played (null = the default look) */
   badge: { style: BadgeStyle; imageUrl?: string } | null = null;
   /** Shown after a clear when there is a next level, e.g. "N: next level" */
@@ -449,6 +454,17 @@ export class PlayController {
     this.lastFrameAt = now;
     const sim = this.sim;
     const measure = options.pollingRate === -1 && sim.status === 'playing';
+    // Automatic quality: judged only while a run is played; the notice waits until it is over
+    if (sim.status === 'playing') {
+      const lowered = this.autoQuality.frame(now, gap);
+      if (lowered) this.loweredTo = lowered;
+    } else {
+      this.autoQuality.reset(now);
+      if (this.loweredTo) {
+        this.onAutoQuality?.(this.loweredTo);
+        this.loweredTo = null;
+      }
+    }
 
     if (sim.status === 'playing') {
       const target = now - this.t0 - IDLE_MARGIN_MS;

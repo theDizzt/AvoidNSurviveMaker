@@ -69,7 +69,56 @@ function installShadowPolicy(proto: object | undefined): void {
     },
   });
 }
+/**
+ * Shadows option off: no canvas shadow at all (the color setter is held at transparent). The
+ * shadows drawn by hand as offset shapes check `options.shadows` where they are drawn.
+ */
+function installShadowColorPolicy(proto: object | undefined): void {
+  const d = proto && Object.getOwnPropertyDescriptor(proto, 'shadowColor');
+  if (!d?.set || !d.get) return;
+  const { get, set } = d;
+  Object.defineProperty(proto, 'shadowColor', {
+    configurable: true,
+    enumerable: d.enumerable,
+    get,
+    set(this: CanvasRenderingContext2D, v: string) {
+      set.call(this, options.shadows ? v : 'transparent');
+    },
+  });
+}
+
+/**
+ * Antialiasing option off: every image drawn scaled (cached layers, shadows, darkness, sprites)
+ * takes the nearest pixel instead of blending neighbors. Checked on each drawImage, since resizing
+ * a canvas resets its context to smoothing on. Edges of shapes and text are always antialiased by
+ * the browser; canvas 2D has no switch for that.
+ */
+const unsmoothed = new WeakSet<object>();
+function installSmoothingPolicy(proto: object | undefined): void {
+  const draw = proto && Object.getOwnPropertyDescriptor(proto, 'drawImage');
+  const flag = proto && Object.getOwnPropertyDescriptor(proto, 'imageSmoothingEnabled');
+  if (!draw || typeof draw.value !== 'function' || !flag?.set) return;
+  const drawImage = draw.value as (...args: unknown[]) => void;
+  const setSmoothing = flag.set;
+  Object.defineProperty(proto, 'drawImage', {
+    ...draw,
+    value(this: CanvasRenderingContext2D, ...args: unknown[]) {
+      if (!options.antialias) {
+        setSmoothing.call(this, false);
+        unsmoothed.add(this);
+      } else if (unsmoothed.has(this)) {
+        setSmoothing.call(this, true);
+        unsmoothed.delete(this);
+      }
+      drawImage.apply(this, args);
+    },
+  });
+}
+
 if (typeof window !== 'undefined') {
-  installShadowPolicy(window.CanvasRenderingContext2D?.prototype);
-  installShadowPolicy(window.OffscreenCanvasRenderingContext2D?.prototype);
+  for (const proto of [window.CanvasRenderingContext2D?.prototype, window.OffscreenCanvasRenderingContext2D?.prototype]) {
+    installShadowPolicy(proto);
+    installShadowColorPolicy(proto);
+    installSmoothingPolicy(proto);
+  }
 }

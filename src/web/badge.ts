@@ -3,6 +3,7 @@ import type { MapData } from '../core/types';
 import { isLibraryFont } from './localized/font-catalog';
 import { libraryFontCss } from './library-fonts';
 import { animCycle, fillTextFx, FONT_MAIN, FONT_TIMER, FONT_TITLE, ZH_HANZI, type TextFx } from './render';
+import { options } from './options';
 
 /**
  * The in-game level badge at the top-left: the level number in a theme-specific design, with
@@ -358,12 +359,14 @@ function gear(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, 
  * (blurred or not) are the costliest canvas drawing without a fast GPU.
  */
 function dropFill(ctx: CanvasRenderingContext2D, trace: () => void, fill: string | CanvasGradient | CanvasPattern, shadow: string): void {
-  ctx.save();
-  ctx.translate(0, 2);
-  trace();
-  ctx.fillStyle = shadow;
-  ctx.fill();
-  ctx.restore();
+  if (options.shadows) {
+    ctx.save();
+    ctx.translate(0, 2);
+    trace();
+    ctx.fillStyle = shadow;
+    ctx.fill();
+    ctx.restore();
+  }
   trace();
   ctx.fillStyle = fill;
   ctx.fill();
