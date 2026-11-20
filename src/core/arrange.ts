@@ -92,6 +92,7 @@ export function turnObjects(objs: readonly MapObject[], t: Turn): MapObject[] {
     if (out.tilt === undefined) delete out.tilt;
     if (out.spike) out.spike.angle = turnAngle(out.spike.angle);
     if (out.laser) out.laser.angle = turnAngle(out.laser.angle);
+    if (out.turret) out.turret.angle = turnAngle(out.turret.angle);
     if (out.motion) {
       const dx = after.x - before.x;
       const dy = after.y - before.y;
@@ -198,6 +199,26 @@ export function tiltObject(from: MapObject, deg: number): MapObject {
     out.rotation.pivot = { x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 };
   }
   if (out.laser) out.laser.angle = turnAngle(out.laser.angle);
+  if (out.turret) out.turret.angle = turnAngle(out.turret.angle);
   if (out.spike) out.spike.angle = turnAngle(out.spike.angle);
   return out;
+}
+
+/**
+ * Tilt objects as one unit by `deg` about `c` (default: the center of their combined bounds), like
+ * turning a PowerPoint group: each object gains the tilt and its center swings around `c`.
+ * Pivots turn with the shape; routes keep their shape and follow the object's new center.
+ */
+export function tiltObjects(objs: readonly MapObject[], deg: number, c?: Point): MapObject[] {
+  let center = c;
+  if (!center) {
+    const b = objectsBounds(objs);
+    center = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  }
+  return objs.map((o) => {
+    const turned = tiltObject(o, deg);
+    const before = shapeCenter(o.shape);
+    const after = rotatePoint(before, center, deg);
+    return translateObject(turned, Math.round((after.x - before.x) * 100) / 100, Math.round((after.y - before.y) * 100) / 100);
+  });
 }

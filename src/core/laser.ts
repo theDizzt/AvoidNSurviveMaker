@@ -5,7 +5,7 @@ import type { MapData, Point } from './types';
 
 /**
  * Laser beams: a ray from each emitter's center, reflected by mirrors and stopped by walls,
- * doors, other emitters and the map edge. Beams are polylines in map coordinates.
+ * doors, other emitters, turrets and the map edge. Beams are polylines in map coordinates.
  */
 export interface Beam {
   color: number;
@@ -41,10 +41,10 @@ export class BeamCaster {
   constructor(private readonly map: MapData, private readonly objects: readonly CompiledObject[]) {
     this.lasers = objects.flatMap((o, i) => (o.role === 'laser' ? [i] : []));
     this.relevant = objects.flatMap((o, i) =>
-      o.role === 'wall' || o.role === 'mirror' || o.role === 'laser' || o.role === 'door' ? [i] : []);
+      o.role === 'wall' || o.role === 'mirror' || o.role === 'laser' || o.role === 'turret' || o.role === 'door' ? [i] : []);
     this.previousState = new Float64Array(this.relevant.length * 3 + 16).fill(NaN);
     objects.forEach((o, i) => {
-      if (!o.dynamic && (o.role === 'wall' || o.role === 'mirror' || o.role === 'laser')) this.staticRings.set(i, o.poly);
+      if (!o.dynamic && (o.role === 'wall' || o.role === 'mirror' || o.role === 'laser' || o.role === 'turret')) this.staticRings.set(i, o.poly);
     });
   }
 
@@ -96,7 +96,7 @@ export class BeamCaster {
     for (const i of this.relevant) {
       const o = this.objects[i];
       if (st.hidden?.[i]) continue;
-      if (o.role === 'wall' || o.role === 'laser') blockers.push({ ring: this.ring(i, st.timeOf(i)), owner: i });
+      if (o.role === 'wall' || o.role === 'laser' || o.role === 'turret') blockers.push({ ring: this.ring(i, st.timeOf(i)), owner: i });
       else if (o.role === 'mirror') mirrors.push(this.ring(i, st.timeOf(i)));
     }
     // Doors: both halves where they currently are

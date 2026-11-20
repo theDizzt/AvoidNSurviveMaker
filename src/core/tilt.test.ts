@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tiltObject, turnObjects } from './arrange';
+import { tiltObject, tiltObjects, turnObjects } from './arrange';
 import { compileObject } from './object';
 import { bakeTilt, normalizeTilt, tiltedBounds } from './shape';
 import { pointInPoly } from './geometry';
@@ -54,5 +54,20 @@ describe('static tilt', () => {
     const b = tiltedBounds(bar.shape, 90);
     expect(b.w).toBeCloseTo(20);
     expect(b.h).toBeCloseTo(100);
+  });
+});
+
+describe('tilting a multi-selection', () => {
+  it('swings each object around the shared center and adds the tilt', () => {
+    const a: MapObject = { role: 'wall', shape: { type: 'rect', x: 0, y: 0, w: 20, h: 20 }, motion: { type: 'linear', points: [{ x: 10, y: 10 }, { x: 10, y: 50 }] } as MapObject['motion'] };
+    const b: MapObject = { role: 'wall', shape: { type: 'rect', x: 80, y: 0, w: 20, h: 20 }, tilt: 10 };
+    const [ta, tb] = tiltObjects([a, b], 90, { x: 50, y: 10 });
+    // About (50, 10): a's center (10, 10) swings to (50, -30), b's (90, 10) to (50, 50)
+    expect(ta.shape).toMatchObject({ x: 40, y: -40 });
+    expect(ta.tilt).toBe(90);
+    expect(tb.shape).toMatchObject({ x: 40, y: 40 });
+    expect(tb.tilt).toBe(100);
+    // The route keeps its shape and follows the object
+    expect(ta.motion!.points).toEqual([{ x: 50, y: -30 }, { x: 50, y: 10 }]);
   });
 });

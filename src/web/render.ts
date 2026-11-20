@@ -5,13 +5,15 @@ import { tiltPoint, toWorld, transformAt, type CompiledObject, type Transform } 
 import { primaryColor, secondaryColor, shade } from './localized/theme';
 import { switchColor } from './localized/colors';
 import type { Beam } from '../core/laser';
+import { BLAST_MS, MISSILE_R, type Blast, type Shot } from '../core/turret';
 import { autoDoorOpen, doorPanels, initialChannels } from '../core/switches';
 import { isLibraryFont } from './localized/font-catalog';
-import type { Fall, Fill, MapData, MapObject, Point, Pulley, Rect, TextBox } from '../core/types';
-import { fallState } from '../core/hazards';
+import type { Fall, Fill, MapData, MapObject, Point, Pulley, Rect, TextBox, Turret, ZoneShape } from '../core/types';
+import { blinkState, fallState } from '../core/hazards';
 import { libraryFontCss } from './library-fonts';
 import { CompiledMotion } from '../core/motion';
 import { shapeCenter } from '../core/shape';
+import { zoneRing } from '../core/zone';
 import type { LightSource } from '../core/lighting';
 import { renderScale } from './graphics';
 
@@ -185,17 +187,39 @@ export function clientToMap(canvas: HTMLCanvasElement, map: MapData, clientX: nu
   return mapPointer(canvas, map)(clientX, clientY, { x: 0, y: 0 });
 }
 
-function zone(ctx: CanvasRenderingContext2D, r: Rect, fill: string, edge: string, label: string, underlay = true): void {
+/** A START / GOAL zone's outline (its rectangle, or its shape #63–68) as a path */
+export function zonePath(r: Rect, shape: ZoneShape | undefined): Path2D {
+  const p = new Path2D();
+  if (!shape) {
+    p.rect(r.x, r.y, r.w, r.h);
+    return p;
+  }
+  const ring = zoneRing(r, shape);
+  p.moveTo(ring[0], ring[1]);
+  for (let i = 2; i < ring.length; i += 2) p.lineTo(ring[i], ring[i + 1]);
+  p.closePath();
+  return p;
+}
+
+function zone(ctx: CanvasRenderingContext2D, r: Rect, fill: string, edge: string, label: string, underlay = true, shape?: ZoneShape): void {
+  const path = zonePath(r, shape);
   // Light underlay keeps zones readable on dark or busy theme floors
   if (underlay) {
     ctx.fillStyle = 'rgba(255,255,255,0.65)';
-    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.fill(path);
   }
   ctx.fillStyle = fill;
-  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.fill(path);
   ctx.strokeStyle = edge;
   ctx.lineWidth = 2;
-  ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+  if (shape) {
+    // Keep the rim inside the shape, like the rectangle's
+    ctx.save();
+    ctx.clip(path);
+    ctx.lineWidth = 4;
+    ctx.stroke(path);
+    ctx.restore();
+  } else ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
   ctx.fillStyle = edge;
   ctx.font = `700 ${Math.max(8, Math.min(14, r.h * 0.3, r.w * 0.2))}px ${FONT_MAIN}`;
   ctx.textAlign = 'center';
@@ -367,7 +391,11 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
     v.globalCompositeOperation = 'destination-out';
     v.beginPath();
     for (const o of objects) if (o.role === 'path' && !o.dynamic) traceStatic(v, o);
-    for (const r of [map.start, map.goal]) v.rect(r.x, r.y, r.w, r.h);
+    for (const ring of [zoneRing(map.start, map.startShape), zoneRing(map.goal, map.goalShape)]) {
+      v.moveTo(ring[0], ring[1]);
+      for (let i = 2; i < ring.length; i += 2) v.lineTo(ring[i], ring[i + 1]);
+      v.closePath();
+    }
     // nonzero: overlapping floor pieces cut out as one union
     v.fill('nonzero');
     v.globalCompositeOperation = 'source-over';
@@ -470,7 +498,7 @@ function staticLayer(ctx: CanvasRenderingContext2D, map: MapData, objects: reado
     const cap = Math.sqrt(ZOOMED_LAYER_MAX_PX / (map.width * map.height));
     scale = Math.min(cap, 2 ** (Math.ceil(Math.log2(scale) * 2 - 1e-9) / 2));
   }
-  const key = `${scale}|${map.width}x${map.height}|${JSON.stringify(map.theme ?? null)}|${map.start.x},${map.start.y},${map.start.w},${map.start.h}|${map.goal.x},${map.goal.y},${map.goal.w},${map.goal.h}`;
+  const key = `${scale}|${map.width}x${map.height}|${JSON.stringify(map.theme ?? null)}|${map.start.x},${map.start.y},${map.start.w},${map.start.h}|${map.goal.x},${map.goal.y},${map.goal.w},${map.goal.h}|${JSON.stringify(map.startShape ?? null)}|${JSON.stringify(map.goalShape ?? null)}`;
   const hit = layerCache.get(objects);
   if (hit && hit.key === key) return hit.layer;
   const layer = buildStaticLayer(map, objects, scale);
@@ -523,6 +551,8 @@ export interface DrawMapOptions {
   carried?: ArrayLike<number>;
   /** Per object index (pulleys, #52): how far it has turned (radians) */
   pulleyAngle?: ArrayLike<number>;
+  /** Per object index (turrets, #60): the barrel's turn from its rest direction (radians) */
+  turretAim?: ArrayLike<number>;
   /** Opacity of the parts of grinders / saw blades hidden inside walls (the editor shows a ghost); default 0 */
   sawGhost?: number;
 }
@@ -677,7 +707,14 @@ export function drawMap(
 ): void {
   const theme = map.theme;
   const timeOf = (i: number) => opts.clock?.[i] ?? t;
-  const shown = (i: number) => !opts.hidden?.[i];
+  // During a run, a blinking path / wall (#75–82) flickers just before it disappears
+  const blinkFlicker = (i: number) => {
+    const b = opts.hidden ? map.objects[i]?.blink : undefined;
+    if (!b) return false;
+    const st = blinkState(b, timeOf(i));
+    return st.on && st.left < BLINK_WARN_MS && Math.floor(st.left / 70) % 2 === 1;
+  };
+  const shown = (i: number) => !opts.hidden?.[i] && !blinkFlicker(i);
   const channels = opts.channels ?? initialChannels(map);
   const doorOpenAt = (m: MapObject, i: number) => opts.doorOpen?.[i] ?? (m.door!.mode === 'auto' ? autoDoorOpen(m.door!, t) : channels[m.door!.color] ? 1 : 0);
   const isDoor = (m: MapObject | undefined) => m?.role === 'door' && !!m.door && m.shape.type === 'rect';
@@ -788,13 +825,13 @@ export function drawMap(
     ctx.drawImage(st.composite, 0, 0, map.width, map.height);
   }
 
-  zone(ctx, map.start, COLORS.start, COLORS.startEdge, tr('zone.start'));
+  zone(ctx, map.start, COLORS.start, COLORS.startEdge, tr('zone.start'), true, map.startShape);
   // Locked GOAL (coins still to collect): dark gray, with the coins collected so far, e.g. "3/10"
   const left = opts.coinsLeft ?? 0;
   if (left > 0) {
     const total = map.objects.reduce((n, o) => n + (o.role === 'coin' ? 1 : 0), 0);
-    zone(ctx, map.goal, COLORS.goalLocked, COLORS.goalLockedEdge, `${Math.max(0, total - left)}/${total}`, false);
-  } else zone(ctx, map.goal, COLORS.goal, COLORS.goalEdge, tr('zone.goal'));
+    zone(ctx, map.goal, COLORS.goalLocked, COLORS.goalLockedEdge, `${Math.max(0, total - left)}/${total}`, false, map.goalShape);
+  } else zone(ctx, map.goal, COLORS.goal, COLORS.goalEdge, tr('zone.goal'), true, map.goalShape);
 
   // Event zones lie on the floor
   objects.forEach((o, i) => {
@@ -855,6 +892,25 @@ export function drawMap(
     ctx.restore();
     for (const spray of sprays) spray(ctx);
   }
+  // Ice floors (#71–74): a pale blue sheen with glints and fine cracks over the floor
+  objects.forEach((o, i) => {
+    if (o.role === 'path' && map.objects[i]?.ice && shown(i)) drawIce(ctx, o, timeOf(i), i);
+  });
+  // Blinking paths / walls that are gone for now: a faint dashed outline where they'll come back
+  if (opts.hidden) {
+    ctx.save();
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 1.5;
+    objects.forEach((o, i) => {
+      const m = map.objects[i];
+      if (!m?.blink || !opts.hidden![i] || blinkState(m.blink, timeOf(i)).on) return;
+      ctx.strokeStyle = o.role === 'wall' ? 'rgba(226,72,108,0.5)' : 'rgba(47,143,224,0.5)';
+      const p = new Path2D();
+      tracePosed(p, o, timeOf(i));
+      ctx.stroke(p);
+    });
+    ctx.restore();
+  }
   // Screws on the pivots of rotating obstacles set to show them
   objects.forEach((o, i) => {
     if (o.src?.rotation?.showPivot && !o.src.boulder && !o.src.saw && shown(i)) drawPivotScrew(ctx, o, timeOf(i));
@@ -903,12 +959,77 @@ export function drawMap(
     const m = map.objects[i];
     if (o.role === 'laser' && m?.laser && shown(i)) drawEmitter(ctx, o, timeOf(i), m);
   });
+  // Turrets (#60) and missile launchers (#61)
+  objects.forEach((o, i) => {
+    const tu = map.objects[i]?.turret;
+    if (o.role === 'turret' && tu && shown(i)) drawTurret(ctx, o, timeOf(i), tu, opts.turretAim?.[i] ?? 0);
+  });
   // Safe zones on top: whatever passes under them is harmless there
   objects.forEach((o, i) => {
     if (o.role === 'safe' && shown(i)) drawSafeZone(ctx, o, timeOf(i));
   });
   if (opts.gridOnTop) drawGrid(ctx, map, COLORS.gridTop);
 }
+
+/** Ice (#71–74), in the object's posed frame: frosty fill, diagonal glints and a few cracks */
+function drawIce(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, seed: number): void {
+  inFrame(ctx, o, t, () => {
+    const { minX, minY, maxX, maxY } = o.box;
+    const w = maxX - minX;
+    const h = maxY - minY;
+    polyPath(ctx, o.box);
+    ctx.save();
+    ctx.clip();
+    const g = ctx.createLinearGradient(minX, minY, maxX, maxY);
+    g.addColorStop(0, 'rgba(225,245,255,0.85)');
+    g.addColorStop(0.5, 'rgba(176,222,250,0.8)');
+    g.addColorStop(1, 'rgba(214,240,255,0.85)');
+    ctx.fillStyle = g;
+    ctx.fillRect(minX, minY, w, h);
+    // Glints: soft white diagonal bands
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineCap = 'round';
+    const step = 46;
+    for (let k = -h; k < w; k += step) {
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(minX + k, maxY);
+      ctx.lineTo(minX + k + h * 0.6, maxY - h * 0.6);
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(minX + k + 12, maxY);
+      ctx.lineTo(minX + k + 12 + h * 0.35, maxY - h * 0.35);
+      ctx.stroke();
+    }
+    // Cracks, placed by a fixed pseudo-random pattern so they don't jitter
+    let r = (seed + 1) * 9301;
+    const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+    ctx.strokeStyle = 'rgba(90,150,190,0.45)';
+    ctx.lineWidth = 1;
+    const cracks = Math.max(1, Math.round((w * h) / 9000));
+    for (let c = 0; c < Math.min(cracks, 12); c++) {
+      let x = minX + rnd() * w;
+      let y = minY + rnd() * h;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let k = 0; k < 3; k++) {
+        x += (rnd() - 0.5) * 28;
+        y += (rnd() - 0.5) * 28;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+    polyPath(ctx, o.box);
+    ctx.strokeStyle = 'rgba(110,180,225,0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+}
+
+/** A blinking path / wall flickers for this long (ms) before it disappears */
+const BLINK_WARN_MS = 350;
 
 const routeCache = new WeakMap<CompiledObject, number[]>();
 
@@ -1755,6 +1876,223 @@ function drawEmitter(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number
     ctx.arc(cx, cy, s * 0.22, 0, Math.PI * 2);
     ctx.fill();
   });
+}
+
+/**
+ * Turret (#60): an armored base with a turning head and barrel. Missile launcher (#61): the base
+ * with a launch tube along its launch direction and a warhead peeking out of it.
+ */
+function drawTurret(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, tu: Turret, aim: number): void {
+  inFrame(ctx, o, t, () => {
+    const { minX, minY, maxX, maxY } = o.box;
+    const w = maxX - minX;
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const k = w / 60;
+    // Base plate
+    ctx.beginPath();
+    ctx.roundRect(minX, minY, w, maxY - minY, 8 * k);
+    const g = ctx.createLinearGradient(minX, minY, maxX, maxY);
+    g.addColorStop(0, '#5b6270');
+    g.addColorStop(1, '#353a45');
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = '#1d2027';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // Rivets
+    ctx.fillStyle = '#8b93a3';
+    for (const [x, y] of [[minX + 7 * k, minY + 7 * k], [maxX - 7 * k, minY + 7 * k], [minX + 7 * k, maxY - 7 * k], [maxX - 7 * k, maxY - 7 * k]]) {
+      ctx.beginPath();
+      ctx.arc(x, y, 2 * k, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (tu.pierce) {
+      // Anti-materiel rounds: a yellow dashed band inside the base edge
+      ctx.strokeStyle = '#f0b429';
+      ctx.lineWidth = 2 * k;
+      ctx.setLineDash([4 * k, 4 * k]);
+      ctx.beginPath();
+      ctx.roundRect(minX + 2.5 * k, minY + 2.5 * k, w - 5 * k, maxY - minY - 5 * k, 6 * k);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    // Directions are in map space; this frame is turned by the tilt
+    const a = (tu.angle * Math.PI) / 180 + aim - o.tilt;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(a);
+    ctx.lineWidth = 1.2;
+    if (tu.kind === 'gun') {
+      // Barrel, then the head over its root
+      ctx.fillStyle = '#23262e';
+      ctx.fillRect(4 * k, -4.5 * k, 28 * k, 9 * k);
+      ctx.fillStyle = '#121419';
+      ctx.fillRect(27 * k, -5.5 * k, 5 * k, 11 * k);
+      ctx.beginPath();
+      ctx.arc(0, 0, 15 * k, 0, Math.PI * 2);
+      const hg = ctx.createRadialGradient(-4 * k, -4 * k, 2 * k, 0, 0, 15 * k);
+      hg.addColorStop(0, '#9aa3b4');
+      hg.addColorStop(1, '#4a505d');
+      ctx.fillStyle = hg;
+      ctx.fill();
+      ctx.strokeStyle = '#1d2027';
+      ctx.stroke();
+      ctx.fillStyle = '#e04848';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.5 * k, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Launch tube with a warhead at its mouth
+      ctx.fillStyle = '#2b2f38';
+      ctx.beginPath();
+      ctx.roundRect(-14 * k, -9 * k, 44 * k, 18 * k, 4 * k);
+      ctx.fill();
+      ctx.strokeStyle = '#121419';
+      ctx.stroke();
+      ctx.fillStyle = '#f0b429';
+      for (let x = -10; x < 14; x += 8) ctx.fillRect(x * k, -9 * k, 3.5 * k, 18 * k);
+      ctx.fillStyle = '#d8dce4';
+      ctx.beginPath();
+      ctx.moveTo(22 * k, -5 * k);
+      ctx.lineTo(30 * k, -5 * k);
+      ctx.quadraticCurveTo(36 * k, 0, 30 * k, 5 * k);
+      ctx.lineTo(22 * k, 5 * k);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#e04848';
+      ctx.beginPath();
+      ctx.moveTo(30 * k, -5 * k);
+      ctx.quadraticCurveTo(36 * k, 0, 30 * k, 5 * k);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  });
+}
+
+/** Bullets, homing missiles with their smoke trails, and explosions (map units; `now` in sim ms) */
+export function drawShots(ctx: CanvasRenderingContext2D, shots: readonly Shot[], blasts: readonly Blast[], now: number): void {
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const s of shots) {
+    if (!s.missile) {
+      // A bright slug with a short streak behind it
+      const bx = Math.cos(s.dir);
+      const by = Math.sin(s.dir);
+      const tail = Math.min(14, s.speed * 30);
+      const g = ctx.createLinearGradient(s.x - bx * tail, s.y - by * tail, s.x, s.y);
+      g.addColorStop(0, 'rgba(255,200,80,0)');
+      g.addColorStop(1, 'rgba(255,170,40,0.85)');
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(s.x - bx * tail, s.y - by * tail);
+      ctx.lineTo(s.x, s.y);
+      ctx.stroke();
+      ctx.fillStyle = '#3a2a10';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffd36a';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      continue;
+    }
+    // Smoke: puffs along the curve it flew, older ones bigger and fainter
+    const trail = s.trail;
+    const n = trail.length / 2;
+    for (let k = 0; k < n; k++) {
+      const f = (k + 1) / (n + 1);
+      ctx.fillStyle = `rgba(150,150,158,${0.45 * f})`;
+      ctx.beginPath();
+      ctx.arc(trail[k * 2], trail[k * 2 + 1], 2.5 + (1 - f) * 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.dir);
+    // Flame
+    const flick = 0.75 + 0.25 * Math.sin(now * 0.07 + s.born);
+    ctx.fillStyle = '#ffb02e';
+    ctx.beginPath();
+    ctx.moveTo(-8, -3);
+    ctx.lineTo(-8 - 10 * flick, 0);
+    ctx.lineTo(-8, 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#fff3c0';
+    ctx.beginPath();
+    ctx.moveTo(-8, -1.6);
+    ctx.lineTo(-8 - 5 * flick, 0);
+    ctx.lineTo(-8, 1.6);
+    ctx.closePath();
+    ctx.fill();
+    // Fins, body and nose
+    ctx.fillStyle = '#9a2b2b';
+    ctx.beginPath();
+    ctx.moveTo(-8, -3);
+    ctx.lineTo(-11, -6.5);
+    ctx.lineTo(-4, -3);
+    ctx.moveTo(-8, 3);
+    ctx.lineTo(-11, 6.5);
+    ctx.lineTo(-4, 3);
+    ctx.fill();
+    ctx.fillStyle = '#e8ebf0';
+    ctx.strokeStyle = '#3a3f4b';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-8, -3);
+    ctx.lineTo(4, -3);
+    ctx.quadraticCurveTo(11, 0, 4, 3);
+    ctx.lineTo(-8, 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#e04848';
+    ctx.beginPath();
+    ctx.moveTo(4, -3);
+    ctx.quadraticCurveTo(11, 0, 4, 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  // Explosions: a fireball and a shock ring (and sparks for a missile)
+  for (const b of blasts) {
+    const f = (now - b.t) / BLAST_MS;
+    if (f < 0 || f >= 1) continue;
+    const R = b.missile ? MISSILE_R * 6 : 9;
+    const ease = 1 - (1 - f) * (1 - f);
+    ctx.globalAlpha = 1 - f;
+    ctx.strokeStyle = b.missile ? '#ffcf70' : '#ffe2a0';
+    ctx.lineWidth = b.missile ? 3 : 1.5;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, R * (0.4 + ease), 0, Math.PI * 2);
+    ctx.stroke();
+    const r = R * (0.3 + 0.7 * ease);
+    const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, r);
+    g.addColorStop(0, '#fff6d0');
+    g.addColorStop(0.35, '#ffb02e');
+    g.addColorStop(0.75, 'rgba(220,70,30,0.8)');
+    g.addColorStop(1, 'rgba(80,60,60,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    if (b.missile) {
+      ctx.fillStyle = '#ffd36a';
+      for (let k = 0; k < 10; k++) {
+        const a = k * 2.399 + b.x * 0.01;
+        const d = R * (0.5 + 1.1 * ease) * (0.7 + (0.3 * ((k * 37) % 10)) / 10);
+        ctx.beginPath();
+        ctx.arc(b.x + Math.cos(a) * d, b.y + Math.sin(a) * d, 1.8 * (1 - f), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
 }
 
 /** Mirror (#38): silver glass with a bright rim */

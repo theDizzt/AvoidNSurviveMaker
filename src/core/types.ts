@@ -41,8 +41,10 @@ export type Shape =
  *   objects linked to its color with the 'pulley' action (see `pulley`).
  * crystal: a crystal star (#59), at most one per map: picked up like a coin, it earns a bonus star
  *   when the cursor carries it to GOAL.
+ * turret: a gun turret (#60) or homing missile launcher (#61), always 60×60, whose body is deadly
+ *   like a wall and which shoots at the cursor once it comes within range (see `turret`).
  */
-export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret' | 'crystal' | 'pulley';
+export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret' | 'crystal' | 'pulley' | 'turret';
 
 /** fog: grey-white fog (#49) · sand: blowing sand dust (#50) */
 export type FogKind = 'fog' | 'sand';
@@ -120,6 +122,33 @@ export interface Laser {
   on: boolean;
   /** While this switch color is ON, the beam is flipped (on ↔ off) */
   switchColor?: number;
+}
+
+/**
+ * Turret (#60, `gun`): turns its barrel toward the cursor while it is within `range` and fires a
+ * bullet every `fireMs` once the barrel points at it. Missile launcher (#61, `missile`): fires a
+ * homing missile every `fireMs` while the cursor is within `range`; the missile leaves along
+ * `angle`, then steers toward the cursor in a smooth curve and explodes on a wall or the cursor.
+ * Angles are degrees in map space (0 = right, 90 = down) and turn with the object's rotation.
+ */
+export interface Turret {
+  kind: 'gun' | 'missile';
+  /** Detection radius from the center (px) */
+  range: number;
+  /** Time between shots (ms) */
+  fireMs: number;
+  /** Bullet / missile speed (px/s) */
+  speed: number;
+  /** gun: the barrel's rest direction, the middle of its arc · missile: launch direction */
+  angle: number;
+  /** gun: how far the barrel can swing in all, centered on `angle` (360 = all the way round) */
+  arc: number;
+  /** gun: barrel turn speed (deg/s) · missile: how hard the missile steers (deg/s) */
+  turnSpeed: number;
+  /** missile: flight time before it blows up by itself (ms) */
+  lifeMs: number;
+  /** Anti-materiel rounds: bullets / missiles fly through walls */
+  pierce: boolean;
 }
 
 export interface Portal {
@@ -243,6 +272,25 @@ export interface Pulley {
   unwind: number;
 }
 
+/**
+ * Blinking path / wall (#75–82): there for `onMs`, gone for `offMs`, over and over. Before `delay`
+ * ms it is there (a negative delay starts partway through the cycle).
+ */
+export interface Blink {
+  onMs: number;
+  offMs: number;
+  delay: number;
+}
+
+/**
+ * Ice (#71–74), on a path: while the cursor is on it, it keeps sliding — its velocity only slowly
+ * follows the mouse's, so it drifts on after the mouse stops and lags behind a change of direction.
+ * `grip` 1–100: how quickly it catches up (higher = less slippery).
+ */
+export interface Ice {
+  grip: number;
+}
+
 export interface Wave {
   amplitude: number;
   wavelength: number;
@@ -279,6 +327,8 @@ export interface MapObject {
   group?: number;
   /** role 'path': cuts through static walls, which are harmless (and hidden) inside it */
   pierce?: boolean;
+  /** role 'path': slippery ice (#71–74) */
+  ice?: Ice;
   /** role 'trigger' */
   trigger?: Trigger;
   /** role 'door' */
@@ -291,12 +341,16 @@ export interface MapObject {
   boulder?: boolean;
   /** Falling rock (#51): drops from `height` above its resting (landing) place, then shatters */
   fall?: Fall;
+  /** Blinking path / wall (#75–82): appears and disappears on a cycle */
+  blink?: Blink;
   /** role 'pulley' (#52) */
   pulley?: Pulley;
   /** role 'laser' */
   laser?: Laser;
   /** role 'portal' */
   portal?: Portal;
+  /** role 'turret' (#60 / #61) */
+  turret?: Turret;
   /** Grinder / saw blade (#43–46), on a wall */
   saw?: Saw;
   /** role 'text' */
@@ -331,6 +385,13 @@ export interface Theme {
   path: SurfaceStyle;
 }
 
+/**
+ * Shape of a START / GOAL zone (#63–68), laid out inside the zone's rectangle in 0–1 coordinates
+ * (0, 0 = its top-left corner, 1, 1 = its bottom-right): a circle / ellipse filling it, or a
+ * polygon / freeform (`smooth` vertices bend into curves).
+ */
+export type ZoneShape = { type: 'ellipse' } | { type: 'poly'; points: PolyPoint[]; free?: boolean };
+
 export const MAP_VERSION = 2;
 
 /** Clear times (ms) for star ratings: at or under `three` earns 3 stars, and so on. Slower than `one` = no star */
@@ -351,6 +412,10 @@ export interface MapData {
   height: number;
   start: Rect;
   goal: Rect;
+  /** A round / polygon / freeform START (#63 / #65 / #67) inside `start`; omitted = the rectangle */
+  startShape?: ZoneShape;
+  /** A round / polygon / freeform GOAL (#64 / #66 / #68) inside `goal`; omitted = the rectangle */
+  goalShape?: ZoneShape;
   objects: MapObject[];
   /** Omitted = the built-in default look */
   theme?: Theme;

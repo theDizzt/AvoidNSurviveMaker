@@ -1,7 +1,7 @@
 import { t as tr } from './i18n';
 import { levelLabel, starGoals, starsFor, starText } from './localized/level';
 import { recordTime } from '../core/time';
-import { pointInRect } from '../core/geometry';
+import { ZoneArea } from '../core/zone';
 import { objectLights } from '../core/lighting';
 import { toWorld, transformAt, type Transform } from '../core/object';
 import { DEFAULT_BADGE, type BadgeStyle } from './localized/theme-pack';
@@ -17,7 +17,7 @@ import { gameAudio } from './audio';
 import { DeathBurst } from './death-burst';
 import { drawFogAreas } from './fog';
 import {
-  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawCrystalAt, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, drawStopwatch, drawTorchAt, fitCanvas,
+  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawShots, drawCrystalAt, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, drawStopwatch, drawTorchAt, fitCanvas,
   FONT_MAIN, mapPointer, unitsPerPx,
 } from './render';
 
@@ -176,7 +176,7 @@ export class PlayController {
       return;
     }
     const p = clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
-    if (!pointInRect(p.x, p.y, this.map.start)) return;
+    if (!new ZoneArea(this.map.start, this.map.startShape).contains(p.x, p.y)) return;
     const sim = new Simulation(this.map, this.sim.objects);
     if (!sim.start(p.x, p.y)) return;
     e.preventDefault();
@@ -328,16 +328,23 @@ export class PlayController {
     });
   }
 
+  /** Sim time for turret shots and explosions: the run's time, then wall time so a last blast plays out */
+  private shotClock(now: number): number {
+    return this.sim.status === 'playing' ? this.sim.time : now - this.t0;
+  }
+
   private draw(now: number): void {
     const { ctx, map, sim } = this;
     const t = sim.status === 'ready' ? 0 : sim.time;
     beginFrame(ctx, map);
-    const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle };
+    const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle, turretAim: sim.guns.aim };
     const playing = sim.status === 'playing';
     const carried = playing ? this.carried : undefined;
     drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried,
       secretCursor: playing ? { x: sim.x, y: sim.y } : null });
     drawSkinTrail(ctx, skin, this.trail, unitsPerPx(this.el.canvas, map));
+    // Bullets, missiles and explosions
+    if (sim.status !== 'ready' && sim.guns.any) drawShots(ctx, sim.guns.shots, sim.guns.blasts, this.shotClock(now));
     if (sim.status !== 'ready') drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
     // Secret walls cover the floor, obstacles and trail under them, except right around the cursor
     drawSecretWalls(ctx, map, sim.objects, t, playing ? { x: sim.x, y: sim.y } : null, 1, state);

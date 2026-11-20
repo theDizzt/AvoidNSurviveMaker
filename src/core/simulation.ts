@@ -1,9 +1,11 @@
-import { pointInPoly, pointInRect, segmentPolyCrossings, segmentRectEntry } from './geometry';
+import { pointInPoly, segmentPolyCrossings } from './geometry';
 import { displayTime } from './time';
-import { compileMap, compileTiltedAbout, compileZone, toLocal, toWorld, transformAt, type CompiledObject, type Transform } from './object';
+import { compileMap, compileObject, compileTiltedAbout, toLocal, toWorld, transformAt, type CompiledObject, type Transform } from './object';
 import { autoDoorOpen, doorPanels, initialChannels } from './switches';
 import { BeamCaster, beamHit, type Beam } from './laser';
-import { fallState } from './hazards';
+import { TurretSystem, type Shot, type TurretState } from './turret';
+import { ZoneArea, zoneShape } from './zone';
+import { blinkState, fallState } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
 import { rotatePoint, shapeCenter } from './shape';
 
@@ -17,6 +19,8 @@ export const COIN_PULL_MS = 180;
 export const CRYSTAL_MAGNET = 48;
 /** An unwinding pulley (#52) starts running back this long (ms) after it was last turned */
 export const PULLEY_UNWIND_AFTER = 150;
+/** Ice (#71–74): per ms, the cursor's velocity closes this fraction of the gap to the mouse's, per point of grip */
+export const ICE_GRIP_RATE = 0.0002;
 /** Turning only counts this far (map units) from a pulley's center, where the angle is stable */
 const PULLEY_DEAD_ZONE = 3;
 import type { MapData, Point } from './types';
@@ -24,7 +28,8 @@ import type { MapData, Point } from './types';
 export type SimStatus = 'ready' | 'playing' | 'dead' | 'cleared';
 export type AbortReason = 'left' | 'blur' | 'pointer';
 /** wall: static wall · mover: moving/rotating wall · void: outside the paths (counts as wall) · bounds: left the map */
-export type EndReason = 'wall' | 'mover' | 'void' | 'bounds' | 'laser' | AbortReason;
+/** bullet / missile: shot by a turret (#60) or hit by a homing missile (#61) */
+export type EndReason = 'wall' | 'mover' | 'void' | 'bounds' | 'laser' | 'bullet' | 'missile' | AbortReason;
 
 /** t: ms since the run started (START click), sub-millisecond precision preserved */
 export interface ReplaySample {
@@ -87,6 +92,14 @@ export class Simulation {
   crystalHeld = false;
 
   private readonly hasPaths: boolean;
+  /** Ice floors (#71–74) */
+  private readonly ices: readonly number[];
+  /** The cursor's velocity (map units / ms) while sliding on ice */
+  vx = 0;
+  vy = 0;
+  /** START and GOAL (rectangles, or shaped zones #63–68) */
+  private readonly startArea: ZoneArea;
+  private readonly goalArea: ZoneArea;
   /** Objects used for collision: paths and walls + START/GOAL as safe floor when the map has paths */
   private readonly solids: readonly CompiledObject[];
   /** The first `safeCount` solids are safe zones */
@@ -97,6 +110,8 @@ export class Simulation {
   private readonly crystals: readonly number[];
   /** Falling rocks (#51): hidden while not falling */
   private readonly falls: readonly number[];
+  /** Blinking paths / walls (#75–82): hidden while off */
+  private readonly blinks: readonly number[];
 
   // ── Pulleys (#52) ──
   private readonly pulleys: readonly number[];
@@ -149,6 +164,12 @@ export class Simulation {
   private pendingBeams: Beam[] = [];
   private readonly caster: BeamCaster;
 
+  // ── Turrets (#60) / missile launchers (#61) ──
+  /** Barrels, bullets, missiles and explosions */
+  readonly guns: TurretSystem;
+  private readonly gunState: TurretState;
+  private readonly shotHit: { shot: Shot | null } = { shot: null };
+
   // ── Portals ──
   /**
    * The virtual cursor is the mouse position plus this offset: a browser can't move the real
@@ -180,6 +201,7 @@ export class Simulation {
     this.map = map;
     this.objects = objects;
     this.hasPaths = this.objects.some((o) => o.role === 'path');
+    this.ices = map.objects.flatMap((o, i) => (o.role === 'path' && o.ice ? [i] : []));
     // Coins, triggers, darkness areas and text don't block or support the cursor. A door is two
     // sliding wall halves. Safe zones come first: inside one, nothing else matters.
     const solids: CompiledObject[] = [];
@@ -195,9 +217,9 @@ export class Simulation {
     });
     this.safeCount = solids.length;
     this.objects.forEach((o, i) => {
-      if (o.role === 'path' || o.role === 'wall' || o.role === 'laser') {
-        // A laser emitter's body is as deadly as a wall
-        solids.push(o.role === 'laser' ? { ...o, role: 'wall' } : o);
+      if (o.role === 'path' || o.role === 'wall' || o.role === 'laser' || o.role === 'turret') {
+        // A laser emitter's or a turret's body is as deadly as a wall
+        solids.push(o.role === 'laser' || o.role === 'turret' ? { ...o, role: 'wall' } : o);
         src.push(i);
         doorOf.push(-1);
         slide.push(0, 0);
@@ -215,8 +237,13 @@ export class Simulation {
         }
       }
     });
+    this.startArea = new ZoneArea(map.start, map.startShape);
+    this.goalArea = new ZoneArea(map.goal, map.goalShape);
     if (this.hasPaths) {
-      solids.push(compileZone(map.start), compileZone(map.goal));
+      solids.push(
+        compileObject({ role: 'path', shape: zoneShape(map.start, map.startShape) }),
+        compileObject({ role: 'path', shape: zoneShape(map.goal, map.goalShape) }),
+      );
       src.push(-1, -1);
       doorOf.push(-1, -1);
       slide.push(0, 0, 0, 0);
@@ -228,6 +255,7 @@ export class Simulation {
     this.coins = this.objects.flatMap((o, i) => (o.role === 'coin' ? [i] : []));
     this.crystals = this.objects.flatMap((o, i) => (o.role === 'crystal' ? [i] : []));
     this.falls = map.objects.flatMap((o, i) => (o.fall ? [i] : []));
+    this.blinks = map.objects.flatMap((o, i) => (o.blink ? [i] : []));
     this.pulleys = map.objects.flatMap((o, i) => (o.role === 'pulley' && o.pulley ? [i] : []));
     this.pulleyAngle = new Float64Array(this.objects.length);
     this.lastTurn = new Float64Array(this.objects.length);
@@ -270,6 +298,8 @@ export class Simulation {
     this.collectedPos = new Float64Array(this.objects.length * 2);
     this.portals = this.objects.flatMap((o, i) => (o.role === 'portal' ? [i] : []));
     this.caster = new BeamCaster(map, this.objects);
+    this.guns = new TurretSystem(map, this.objects);
+    this.gunState = { timeOf: (i) => this.clockB[i], hidden: this.hidden, doorOpen: this.openB };
     this.resetSwitches();
     this.local = new Float64Array(this.solids.length * 4);
     this.relevant = new Int32Array(this.solids.length);
@@ -284,7 +314,7 @@ export class Simulation {
 
   /** Only starts when the click is inside the START area. */
   start(x: number, y: number): boolean {
-    if (!pointInRect(x, y, this.map.start)) return false;
+    if (!this.startArea.contains(x, y)) return false;
     this.status = 'playing';
     this.time = 0;
     this.tick = 0;
@@ -297,8 +327,11 @@ export class Simulation {
     this.coinsLeft = this.coinTotal;
     this.crystalHeld = false;
     this.resetSwitches();
+    this.guns.reset();
     this.offX = 0;
     this.offY = 0;
+    this.vx = 0;
+    this.vy = 0;
     this.teleports = 0;
     this.pull = null;
     this.portalCooldown = -1;
@@ -341,6 +374,11 @@ export class Simulation {
         sy = this.y;
         continue;
       }
+      if (this.ices.length) {
+        this.slideStep(t, rx, ry);
+        if (this.status !== 'playing' || this.time === t) return;
+        continue;
+      }
       // Where the cursor is heading: the mouse plus the teleport offset
       const tx = rx + this.offX;
       const ty = ry + this.offY;
@@ -368,6 +406,63 @@ export class Simulation {
     }
   }
 
+  /**
+   * One piece (up to the next 1 ms boundary) of the cursor's way toward the mouse sample (rx, ry)
+   * at time t, on a map with ice. Off the ice the cursor follows the mouse (plus the offset); on it,
+   * the cursor's velocity eases toward the mouse's and the difference builds up in the offset.
+   */
+  private slideStep(t: number, rx: number, ry: number): void {
+    const end = Math.min(t, this.tick + 1);
+    const dt = end - this.time;
+    // Where the mouse is now and where it gets to by the end of this piece
+    const mx0 = this.x - this.offX;
+    const my0 = this.y - this.offY;
+    const f = dt / (t - this.time);
+    const mx1 = mx0 + (rx - mx0) * f;
+    const my1 = my0 + (ry - my0) * f;
+    const mvx = (mx1 - mx0) / dt;
+    const mvy = (my1 - my0) / dt;
+    const grip = this.iceGripAt(this.x, this.y);
+    if (grip > 0) {
+      const k = 1 - Math.exp(-dt * grip * ICE_GRIP_RATE);
+      this.vx += (mvx - this.vx) * k;
+      this.vy += (mvy - this.vy) * k;
+      this.offX += (this.vx - mvx) * dt;
+      this.offY += (this.vy - mvy) * dt;
+    } else {
+      this.vx = mvx;
+      this.vy = mvy;
+    }
+    const bx = mx1 + this.offX;
+    const by = my1 + this.offY;
+    this.checkSegment(this.time, this.x, this.y, end, bx, by);
+    if (this.status !== 'playing') return;
+    this.time = end;
+    this.x = bx;
+    this.y = by;
+    if (end === this.tick + 1) this.tick = end;
+  }
+
+  /** Grip of the ice under (x, y), or 0 when it isn't on ice */
+  private iceGripAt(x: number, y: number): number {
+    let grip = 0;
+    for (const i of this.ices) {
+      if (this.hidden[i]) continue;
+      const o = this.objects[i];
+      let lx = x;
+      let ly = y;
+      if (o.dynamic) {
+        toLocal(o, transformAt(o, this.clock[i], tfA), x, y, pA);
+        lx = pA.x;
+        ly = pA.y;
+      }
+      if (lx < o.minX || lx > o.maxX || ly < o.minY || ly > o.maxY || !pointInPoly(lx, ly, o.poly)) continue;
+      // Overlapping ice: the grippiest one counts
+      grip = Math.max(grip, this.map.objects[i].ice!.grip);
+    }
+    return grip;
+  }
+
   /** End of a portal pull: appear at the destination portal's center */
   private teleport(rx: number, ry: number): void {
     const pull = this.pull!;
@@ -381,6 +476,8 @@ export class Simulation {
     this.offY = this.y - ry;
     this.portalCooldown = pull.dest;
     this.teleports++;
+    this.vx = 0;
+    this.vy = 0;
   }
 
   /** The portal a teleport from portal `i` arrives at: the next one of its color (by order) that allows exits */
@@ -553,7 +650,7 @@ export class Simulation {
     this.prepare(ta, xa, ya, tb, xb, yb);
 
     let deathU = Infinity;
-    let reason: 'wall' | 'mover' | 'void' | 'bounds' | 'laser' | null = this.hazardAt(0);
+    let reason: 'wall' | 'mover' | 'void' | 'bounds' | 'laser' | 'bullet' | 'missile' | null = this.hazardAt(0);
     if (reason) {
       deathU = 0;
     } else {
@@ -586,6 +683,18 @@ export class Simulation {
       }
     }
 
+    // Turrets aim and fire from where the cursor was; bullets and missiles fly this tick
+    let shot: Shot | null = null;
+    if (this.guns.any) {
+      this.guns.step(ta, tb, xa, ya, this.gunState);
+      const u = this.guns.cursorHit(xa, ya, xb, yb, this.shotHit);
+      if (u >= 0 && u < deathU && !this.inSafeZone(xa + (xb - xa) * u, ya + (yb - ya) * u, tb)) {
+        deathU = u;
+        shot = this.shotHit.shot!;
+        reason = shot.missile ? 'missile' : 'bullet';
+      }
+    }
+
     // Leaving the map bounds
     let exit = Infinity;
     if (xb < 0) exit = Math.min(exit, xa / (xa - xb));
@@ -606,21 +715,21 @@ export class Simulation {
     // The crystal star, picked up the same way (it doesn't lock GOAL)
     if (!this.crystalHeld && this.hasCrystal) this.coinHits(ta, xa, ya, tb, xb, yb, deathU, this.crystals, CRYSTAL_MAGNET);
 
-    const g = map.goal;
-    let goal = segmentRectEntry(xa, ya, xb, yb, g.x, g.y, g.w, g.h);
+    let goal = this.goalArea.entry(xa, ya, xb, yb);
     if (this.coinsLeft > 0) {
       goal = -1; // GOAL stays locked until every coin is collected
     } else if (goal >= 0 && lastCoinU > goal) {
       // The last coin was collected after entering GOAL: it counts if the cursor is still inside then
       const px = xa + (xb - xa) * lastCoinU;
       const py = ya + (yb - ya) * lastCoinU;
-      goal = pointInRect(px, py, g) ? lastCoinU : -1;
+      goal = this.goalArea.contains(px, py) ? lastCoinU : -1;
     }
     // On a tie, death wins
     if (goal >= 0 && goal < deathU) {
       this.finish('cleared', null, goal, ta, xa, ya, tb, xb, yb);
     } else if (reason) {
       this.finish('dead', reason, deathU, ta, xa, ya, tb, xb, yb);
+      if (shot && (reason === 'bullet' || reason === 'missile')) this.guns.explode(shot, this.x, this.y, this.endTime);
     } else {
       this.endSegment(ta, xa, ya, tb, xb, yb);
     }
@@ -871,6 +980,11 @@ export class Simulation {
     for (const i of this.falls) {
       const falling = fallState(this.map.objects[i].fall!, this.clock[i]).falling;
       if (!falling) this.hidden[i] = 1;
+      else if (!this.map.objects[i].link) this.hidden[i] = 0;
+    }
+    // Blinking paths / walls are only there while on (a switch can still remove them)
+    for (const i of this.blinks) {
+      if (!blinkState(this.map.objects[i].blink!, this.clock[i]).on) this.hidden[i] = 1;
       else if (!this.map.objects[i].link) this.hidden[i] = 0;
     }
     for (const i of this.triggers) {

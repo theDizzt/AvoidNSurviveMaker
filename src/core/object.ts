@@ -109,7 +109,7 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
     cy: tc.y,
     box,
     // Switch-linked objects can move, stop or vanish during a run, so they are drawn on their own
-    dynamic: !!motion?.moves || (!!rotation && rotation.dur > 0) || !!o.link || !!saw,
+    dynamic: !!motion?.moves || (!!rotation && rotation.dur > 0) || !!o.link || !!saw || !!o.blink,
     travelBounds,
   };
 }

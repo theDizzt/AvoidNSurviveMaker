@@ -9,7 +9,7 @@ import type { Easing, FogKind, LinkAction, MapData, MapObject, Motion, MotionTyp
 import { SWITCH_COLORS, switchColor } from './localized/colors';
 import { setIcon, type IconName } from './icons';
 
-import { DEFAULT_BOULDER_WAVE, DEFAULT_SECRET_RADIUS, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS } from './localized/validate';
+import { DEFAULT_BLINK, DEFAULT_BOULDER_WAVE, DEFAULT_ICE_GRIP, DEFAULT_SECRET_RADIUS, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS } from './localized/validate';
 import { TEXT_BASE_FONTS } from './render';
 
 import { fontPicker } from './font-picker';
@@ -166,8 +166,8 @@ export class EditorPropertiesPanel {
 
     // Shape
     const s = o.shape;
-    if (o.role === 'crystal' && s.type === 'rect') {
-      // Always 48×48: only its position
+    if ((o.role === 'crystal' || o.role === 'turret') && s.type === 'rect') {
+      // Always 48×48 / 60×60: only its position
       parts.push(this.group(
         this.numField(tr('ed.centerX'), s.x + s.w / 2, (v) => (s.x = Math.round(v - s.w / 2))),
         this.numField(tr('ed.centerY'), s.y + s.h / 2, (v) => (s.y = Math.round(v - s.h / 2))),
@@ -273,6 +273,7 @@ export class EditorPropertiesPanel {
       );
     }
     if (o.laser) parts.push(...this.laserProps(o));
+    if (o.turret) parts.push(...this.turretProps(o));
     if (o.portal) parts.push(...this.portalProps(o));
     if (o.role === 'mirror') parts.push(this.heading(tr('ed.mirror')), this.note(tr('ed.laserBeamsBounceOffEvery')));
     if (o.role === 'path') {
@@ -280,8 +281,21 @@ export class EditorPropertiesPanel {
         if (on) o.pierce = true;
         else delete o.pierce;
       }));
+      // Ice (#71–74)
+      parts.push(this.toggle(tr('ed.iceToggle'), !!o.ice, (on) => {
+        if (on) o.ice = { grip: DEFAULT_ICE_GRIP };
+        else delete o.ice;
+      }));
+      const ice = o.ice;
+      if (ice) {
+        parts.push(
+          this.group(this.numField(tr('ed.iceGrip'), ice.grip, (v) => (ice.grip = Math.round(Math.min(100, Math.max(1, v)))), 5)),
+          this.note(tr('ed.iceNote')),
+        );
+      }
     }
-    if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'fog' || o.role === 'mirror' || o.role === 'laser') parts.push(...this.linkProps(o));
+    if ((o.role === 'path' || o.role === 'wall') && !o.saw && !o.fall) parts.push(...this.blinkProps(o));
+    if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'fog' || o.role === 'mirror' || o.role === 'laser' || o.role === 'turret') parts.push(...this.linkProps(o));
 
     // Movement (a spike's thrust is its movement)
     if (!o.spike && !o.fall) {
@@ -657,6 +671,61 @@ export class EditorPropertiesPanel {
     }
     out.push(this.note(tr('ed.dragTheOrangeDiamondTo')));
     return out;
+  }
+
+  /** Blinking (#75–82): how long it is there, how long it is gone, and when the cycle starts */
+  blinkProps(o: MapObject): HTMLElement[] {
+    const out: HTMLElement[] = [
+      this.heading(tr('ed.blinking')),
+      this.toggle(tr('ed.blinks'), !!o.blink, (on) => {
+        if (on) o.blink = { ...DEFAULT_BLINK };
+        else delete o.blink;
+      }),
+    ];
+    const b = o.blink;
+    if (!b) return out;
+    const sec = (ms: number) => ms / 1000;
+    const ms = (v: number, min: number) => Math.round(Math.min(LIMITS.maxDelay, Math.max(min, v)) * 1000);
+    out.push(
+      this.group(
+        this.numField(tr('ed.blinkOnS'), sec(b.onMs), (v) => (b.onMs = ms(v, 0.05)), 0.1),
+        this.numField(tr('ed.blinkOffS'), sec(b.offMs), (v) => (b.offMs = ms(v, 0)), 0.1),
+        this.numField(tr('ed.startDelayS'), sec(b.delay), (v) => (b.delay = Math.round(Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, v)) * 1000)), 0.1),
+      ),
+      this.note(tr(o.role === 'path' ? 'ed.blinkPathNote' : 'ed.blinkWallNote')),
+    );
+    return out;
+  }
+
+  /** Turret (#60) / missile launcher (#61): range, rate of fire, shot speed, aiming and anti-materiel rounds */
+  turretProps(o: MapObject): HTMLElement[] {
+    const t = o.turret!;
+    const gun = t.kind === 'gun';
+    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+    const deg = (v: number) => {
+      const a = ((Math.round(v) % 360) + 360) % 360;
+      return a > 180 ? a - 360 : a;
+    };
+    return [
+      this.heading(tr(gun ? 'ed.nameTurret' : 'ed.nameMissile')),
+      this.group(
+        this.numField(tr('ed.turretRange'), t.range, (v) => (t.range = Math.round(clamp(v, 1, LIMITS.maxTurretRange))), 10),
+        this.numField(tr('ed.turretFireS'), t.fireMs / 1000, (v) => (t.fireMs = Math.round(clamp(v, LIMITS.minFireMs / 1000, LIMITS.maxDelay / 1000) * 1000)), 0.1),
+        this.numField(tr(gun ? 'ed.turretBulletSpeed' : 'ed.turretMissileSpeed'), t.speed, (v) => (t.speed = Math.round(clamp(v, 1, LIMITS.maxSpeed))), 10),
+        this.numField(tr(gun ? 'ed.turretAngle' : 'ed.turretLaunchAngle'), t.angle, (v) => (t.angle = deg(v)), 15),
+        ...(gun
+          ? [
+            this.numField(tr('ed.turretTurnSpeed'), t.turnSpeed, (v) => (t.turnSpeed = Math.round(clamp(v, 0, LIMITS.maxRotSpeed))), 15),
+            this.numField(tr('ed.turretArc'), t.arc, (v) => (t.arc = Math.round(clamp(v, 0, 360))), 15),
+          ]
+          : [
+            this.numField(tr('ed.turretHoming'), t.turnSpeed, (v) => (t.turnSpeed = Math.round(clamp(v, 0, LIMITS.maxRotSpeed))), 15),
+            this.numField(tr('ed.turretLifeS'), t.lifeMs / 1000, (v) => (t.lifeMs = Math.round(clamp(v, 0.1, LIMITS.maxDelay / 1000) * 1000)), 0.5),
+          ]),
+      ),
+      this.toggle(tr('ed.turretPierce'), t.pierce, (on) => (t.pierce = on)),
+      this.note(tr(gun ? 'ed.turretNote' : 'ed.missileNote')),
+    ];
   }
 
   portalProps(o: MapObject): HTMLElement[] {
