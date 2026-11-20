@@ -1,7 +1,7 @@
 import { t as tr } from './i18n';
 import { levelLabel, starGoals, starsFor, starText } from './localized/level';
 import { recordTime } from '../core/time';
-import { pointInRect } from '../core/geometry';
+import { ZoneArea } from '../core/zone';
 import { objectLights } from '../core/lighting';
 import { toWorld, transformAt, type Transform } from '../core/object';
 import { DEFAULT_BADGE, type BadgeStyle } from './localized/theme-pack';
@@ -11,12 +11,13 @@ import { badgeTitle } from './theme-registry';
 import { COIN_PULL_MS, formatSeconds, Simulation, type Replay } from '../core/simulation';
 import type { MapData } from '../core/types';
 import { HighResPointer, InputStats } from './input';
-import { options } from './options';
+import { AutoPolling } from './auto-polling';
+import { onOptionsChange, options } from './options';
 import { gameAudio } from './audio';
 import { DeathBurst } from './death-burst';
 import { drawFogAreas } from './fog';
 import {
-  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawCrystalAt, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, drawStopwatch, drawTorchAt, fitCanvas,
+  beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawShots, drawCrystalAt, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, drawStopwatch, drawTorchAt, fitCanvas,
   FONT_MAIN, mapPointer, unitsPerPx,
 } from './render';
 
@@ -60,6 +61,8 @@ export class PlayController {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly input: HighResPointer;
   private readonly stats = new InputStats();
+  private readonly usedStats = new InputStats();
+  private readonly autoPolling = new AutoPolling();
   private t0 = 0;
   private trail: number[] = [];
   /** Per map object: 1 while the cursor carries that torch (#58); cosmetic, reset every run */
@@ -78,6 +81,14 @@ export class PlayController {
   constructor(private readonly el: PlayElements) {
     this.ctx = el.canvas.getContext('2d')!;
     this.input = new HighResPointer((list) => this.onSamples(list));
+    let measuredRate = options.pollingRate;
+    onOptionsChange(next => {
+      if (next.pollingRate === measuredRate) return;
+      measuredRate = next.pollingRate;
+      this.autoPolling.resetMeasurement();
+      this.stats.reset();
+      this.usedStats.reset();
+    });
 
     el.canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     // Cursor left the browser window
@@ -120,6 +131,9 @@ export class PlayController {
   }
 
   reset(recompile = false): void {
+    this.autoPolling.resetMeasurement();
+    this.stats.reset();
+    this.usedStats.reset();
     this.burst = null;
     this.deathNotified = false;
     this.sim = new Simulation(this.map, recompile ? undefined : this.sim.objects);
@@ -162,13 +176,16 @@ export class PlayController {
       return;
     }
     const p = clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
-    if (!pointInRect(p.x, p.y, this.map.start)) return;
+    if (!new ZoneArea(this.map.start, this.map.startShape).contains(p.x, p.y)) return;
     const sim = new Simulation(this.map, this.sim.objects);
     if (!sim.start(p.x, p.y)) return;
     e.preventDefault();
     this.sim = sim;
     this.runPointer = e.pointerId;
     this.lastSampleAt = e.timeStamp;
+    this.autoPolling.resetMeasurement();
+    this.stats.reset();
+    this.usedStats.reset();
     this.burst = null;
     this.deathNotified = false;
     this.t0 = e.timeStamp;
@@ -197,11 +214,14 @@ export class PlayController {
     this.stats.record(list);
     const sim = this.sim;
     if (!sim || sim.status !== 'playing') return;
+    const automatic = options.pollingRate === -1;
+    const workStarted = automatic ? performance.now() : 0;
     const toMap = mapPointer(this.el.canvas, this.map);
     const p = this.point;
     // Polling rate option: use at most this many samples per second. The simulation still runs in
     // 1 ms steps on each sample's own timestamp, so records keep their 1 ms precision.
-    const gap = options.pollingRate > 0 ? 1000 / options.pollingRate : 0;
+    const rate = automatic ? this.autoPolling.rate : options.pollingRate;
+    const gap = rate > 0 ? 1000 / rate : 0;
     for (const ev of list) {
       // Only the pointer (finger) that started the run moves the cursor
       if (ev.pointerId !== this.runPointer) continue;
@@ -209,12 +229,16 @@ export class PlayController {
       if (gap && ev.timeStamp - this.lastSampleAt < gap * 0.9) continue;
       this.lastSampleAt = ev.timeStamp;
       toMap(ev.clientX, ev.clientY, p);
+      // feed ignores samples already overtaken by idle advancement or click handling.
+      const accepted = ev.timeStamp - this.t0 > sim.time;
       sim.feed(ev.timeStamp - this.t0, p.x, p.y);
+      if (accepted) this.usedStats.recordSample(ev.timeStamp);
       this.breakTrailOnTeleport();
       this.trail.push(sim.x, sim.y);
       if (sim.status !== 'playing') break;
     }
     if (this.trail.length > TRAIL_POINTS * 2) this.trail.splice(0, this.trail.length - TRAIL_POINTS * 2);
+    if (automatic) this.autoPolling.addInputWork(performance.now() - workStarted);
   }
 
   /** The run whose coin count `coinsLeft` was last seen in (for the coin sound) */
@@ -227,6 +251,7 @@ export class PlayController {
     if (!this.visible || !this.map) return;
     const now = performance.now();
     const sim = this.sim;
+    const measure = options.pollingRate === -1 && sim.status === 'playing';
 
     if (sim.status === 'playing') {
       const target = now - this.t0 - IDLE_MARGIN_MS;
@@ -269,6 +294,9 @@ export class PlayController {
     }
 
     this.draw(now);
+    if (measure && sim.status === 'playing' && this.autoPolling.frame(now, performance.now() - now)) {
+      this.usedStats.reset();
+    }
 
     this.frames++;
     if (now - this.fpsAt >= 1000) {
@@ -294,22 +322,29 @@ export class PlayController {
     map.objects.forEach((m, i) => {
       if (!m.torch?.carry || carried[i] || sim.hidden[i]) return;
       const o = sim.objects[i];
-      const c = toWorld(o, transformAt(o, sim.clock[i], poseTmp), (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, { x: 0, y: 0 });
-      const reach = Math.max(o.maxX - o.minX, o.maxY - o.minY) / 2 + TORCH_PICKUP;
+      const c = toWorld(o, transformAt(o, sim.clock[i], poseTmp), o.cx, o.cy, { x: 0, y: 0 });
+      const reach = Math.max(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2 + TORCH_PICKUP;
       if (Math.hypot(sim.x - c.x, sim.y - c.y) <= reach) carried[i] = 1;
     });
+  }
+
+  /** Sim time for turret shots and explosions: the run's time, then wall time so a last blast plays out */
+  private shotClock(now: number): number {
+    return this.sim.status === 'playing' ? this.sim.time : now - this.t0;
   }
 
   private draw(now: number): void {
     const { ctx, map, sim } = this;
     const t = sim.status === 'ready' ? 0 : sim.time;
     beginFrame(ctx, map);
-    const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle };
+    const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle, turretAim: sim.guns.aim };
     const playing = sim.status === 'playing';
     const carried = playing ? this.carried : undefined;
     drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried,
       secretCursor: playing ? { x: sim.x, y: sim.y } : null });
     drawSkinTrail(ctx, skin, this.trail, unitsPerPx(this.el.canvas, map));
+    // Bullets, missiles and explosions
+    if (sim.status !== 'ready' && sim.guns.any) drawShots(ctx, sim.guns.shots, sim.guns.blasts, this.shotClock(now));
     if (sim.status !== 'ready') drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
     // Secret walls cover the floor, obstacles and trail under them, except right around the cursor
     drawSecretWalls(ctx, map, sim.objects, t, playing ? { x: sim.x, y: sim.y } : null, 1, state);
@@ -329,8 +364,8 @@ export class PlayController {
       map.objects.forEach((_, i) => {
         if (!this.carried[i]) return;
         const o = sim.objects[i];
-        const w = o.maxX - o.minX;
-        const h = o.maxY - o.minY;
+        const w = o.box.maxX - o.box.minX;
+        const h = o.box.maxY - o.box.minY;
         drawTorchAt(ctx, sim.x + w * 0.5 + 6 * u, sim.y - h * 0.35, w, h, now, i);
       });
     }
@@ -431,10 +466,17 @@ export class PlayController {
 
     if (!options.showDebug) return;
     const s = this.stats.summary();
+    const used = this.usedStats.summary();
     const rows: [string, string][] = [
       [tr('debug.inputEvent'), `${this.input.source}${this.input.coalesced ? ' + getCoalescedEvents' : tr('debug.noCoalesced')}`],
       [tr('debug.sampleInterval'), s.medianMs !== null ? `${s.medianMs.toFixed(3)} ms` : tr('debug.keepMoving')],
-      [tr('debug.pollingRate'), s.hz !== null ? `${Math.round(s.hz)} Hz` : '-'],
+      [tr('debug.rawPollingRate'), s.hz !== null ? `${Math.round(s.hz)} Hz` : '-'],
+      [tr('options.polling'), options.pollingRate === -1
+        ? `${tr('options.pollingAuto')} (${this.autoPolling.rate} Hz)`
+        : options.pollingRate ? `${options.pollingRate} Hz` : tr('options.pollingMax')],
+      [tr('debug.usedPollingRate'), used.hz !== null ? `${Math.round(used.hz)} Hz` : tr('debug.usedPending')],
+      [tr('debug.usedInterval'), used.medianMs !== null ? `${used.medianMs.toFixed(3)} ms` : '-'],
+      [tr('debug.usedSamples'), String(used.total)],
       [tr('debug.minInterval'), s.minMs !== null ? `${s.minMs.toFixed(3)} ms` : '-'],
       [tr('debug.samplesPerEvent'), `${s.avgPerEvent.toFixed(1)} / ${s.maxPerEvent}`],
       [tr('debug.totalSamples'), String(s.total)],

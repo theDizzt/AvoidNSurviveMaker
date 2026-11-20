@@ -57,12 +57,23 @@ export class InputStats {
   private readonly perEvent: number[] = [];
   total = 0;
 
+  reset(): void {
+    this.head = 0;
+    this.count = 0;
+    this.perEvent.length = 0;
+    this.total = 0;
+  }
+
+  recordSample(timeStamp: number): void {
+    this.times[this.head] = timeStamp;
+    this.head = (this.head + 1) % this.times.length;
+    this.count = Math.min(this.count + 1, this.times.length);
+    this.total++;
+  }
+
   record(list: readonly PointerEvent[]): void {
     for (const ev of list) {
-      this.times[this.head] = ev.timeStamp;
-      this.head = (this.head + 1) % this.times.length;
-      this.count = Math.min(this.count + 1, this.times.length);
-      this.total++;
+      this.recordSample(ev.timeStamp);
     }
     this.perEvent.push(list.length);
     if (this.perEvent.length > 120) this.perEvent.shift();

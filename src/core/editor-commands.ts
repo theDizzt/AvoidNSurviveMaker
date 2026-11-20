@@ -1,6 +1,6 @@
 import { alignOffset, distributeOffsets, objectsBounds, reorder, shapeCentroid, translateObject, turnObjects, unionRect,
   type AlignMode, type Turn, type ZOrder } from './arrange';
-import { shapeCenter } from './shape';
+import { bakeTilt, shapeCenter } from './shape';
 import { cloneMapValue, type EditorDocument } from './editor-document';
 import { mergeShapes, type MergeOp } from './merge';
 import { LIMITS } from './validate';
@@ -105,7 +105,7 @@ export function mergeSelection(doc: EditorDocument, op: MergeOp): MergeResult {
   if (ids.length < 2) return { ok: false, reason: 'empty' };
   const first = objects[ids[0]];
   let results: Shape[][];
-  try { results = mergeShapes(op, ids.map(i => objects[i].shape), LIMITS.maxPolyPoints); }
+  try { results = mergeShapes(op, ids.map(i => bakeTilt(objects[i].shape, objects[i].tilt)), LIMITS.maxPolyPoints); }
   catch { return { ok: false, reason: 'invalid' }; }
   if (!results.length) return { ok: false, reason: 'empty' };
   const made: MapObject[] = [];

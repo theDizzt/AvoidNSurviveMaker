@@ -1,5 +1,6 @@
-import { pointInPoly, pointInRect } from '../core/geometry';
-import { compileZone, toLocal, transformAt, type CompiledObject, type Transform } from '../core/object';
+import { pointInPoly } from '../core/geometry';
+import { ZoneArea, zoneShape } from '../core/zone';
+import { compileObject, toLocal, transformAt, type CompiledObject, type Transform } from '../core/object';
 import type { ReplaySample } from '../core/simulation';
 import type { MapData, Point, Role } from '../core/types';
 
@@ -13,7 +14,7 @@ import type { MapData, Point, Role } from '../core/types';
  */
 
 /** Maps the demo can't play by just moving (clicks, coins, teleports, beams…) */
-const UNSUPPORTED: ReadonlySet<Role> = new Set<Role>(['coin', 'trigger', 'door', 'laser', 'mirror', 'portal', 'pulley', 'secret']);
+const UNSUPPORTED: ReadonlySet<Role> = new Set<Role>(['coin', 'trigger', 'door', 'laser', 'mirror', 'portal', 'pulley', 'secret', 'turret']);
 
 /** Grid cells across the longer map side */
 const CELLS = 96;
@@ -102,7 +103,12 @@ export function* planDemoRun(map: MapData, objects: readonly CompiledObject[]): 
   const offsets = [[0, 0], [margin, 0], [-margin, 0], [0, margin], [0, -margin]] as const;
   const P = offsets.length;
 
-  const zones = [compileZone(map.start), compileZone(map.goal)];
+  const zones = [
+    compileObject({ role: 'path', shape: zoneShape(map.start, map.startShape) }),
+    compileObject({ role: 'path', shape: zoneShape(map.goal, map.goalShape) }),
+  ];
+  const startArea = new ZoneArea(map.start, map.startShape);
+  const goalArea = new ZoneArea(map.goal, map.goalShape);
   const hasPaths = objects.some((o) => o.role === 'path');
   const floor = [...objects.filter((o) => o.role === 'path' || o.role === 'safe'), ...zones];
   const walls = objects.filter((o) => o.role === 'wall');
@@ -165,7 +171,7 @@ export function* planDemoRun(map: MapData, objects: readonly CompiledObject[]): 
   let bestD = Infinity;
   for (let c = 0; c < n; c++) {
     const [x, y] = center(c);
-    if (!pointInRect(x, y, map.start)) continue;
+    if (!startArea.contains(x, y)) continue;
     const d = Math.hypot(x - sx, y - sy);
     if (d < bestD && safeAt(c, 0)) {
       bestD = d;
@@ -177,7 +183,7 @@ export function* planDemoRun(map: MapData, objects: readonly CompiledObject[]): 
   const g = map.goal;
   const isGoal = (c: number) => {
     const [x, y] = center(c);
-    return pointInRect(x, y, g);
+    return goalArea.contains(x, y);
   };
   /** Steps to the goal rectangle, ignoring obstacles (Chebyshev, in cells) */
   const heuristic = (c: number) => {

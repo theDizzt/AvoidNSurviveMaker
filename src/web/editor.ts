@@ -1,35 +1,40 @@
 import { t as tr } from './i18n';
-import { pointInPoly, pointInRect } from '../core/geometry';
+import { pointInPoly } from '../core/geometry';
+import type { ZoneShape } from '../core/types';
+import { ZoneArea, zoneFromShape, zoneRing } from '../core/zone';
 import { CompiledMotion } from '../core/motion';
 import { objectLights } from '../core/lighting';
 import { compileObject, transformAt, type CompiledObject, type Transform } from '../core/object';
-import { objectsBounds, shapeCentroid, translateObject, type AlignMode, type Turn, type ZOrder } from '../core/arrange';
+import { objectsBounds, shapeCentroid, tiltObject, tiltObjects, translateObject, type AlignMode, type Turn, type ZOrder } from '../core/arrange';
 import { gameplayKey } from './localized/level';
 import { formatSeconds } from '../core/simulation';
 import { initialChannels } from '../core/switches';
 import { type MergeOp } from '../core/merge';
-import { flattenShape, polyOutline, shapeBounds, shapeCenter } from '../core/shape';
+import { flattenShape, normalizeTilt, polyOutline, rotatePoint, shapeBounds, shapeCenter, tiltedBounds, translateShape } from '../core/shape';
 import { encodeMap } from './localized/share';
 import type { FogKind, MapData, MapObject, Point, PolyPoint, Rect, Shape, TriggerKind } from '../core/types';
 import { switchColor } from './localized/colors';
 import { boulderShape, spikeShape } from '../core/hazards';
 import { BeamCaster } from '../core/laser';
-import { createEmptyMap, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_SECRET_RADIUS, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS, validateMap } from './localized/validate';
-import { beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, fittedView, FONT_MAIN, fitCanvas, setCamera, staticPicture, traceObject, unitsPerPx } from './render';
+import { createEmptyMap, DEFAULT_BLINK, DEFAULT_FALL, DEFAULT_ICE_GRIP, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_PULLEY, DEFAULT_SECRET_RADIUS, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS, validateMap } from './localized/validate';
+import { beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, fittedView, FONT_MAIN, fitCanvas, setCamera, staticPicture, traceObject, unitsPerPx, zonePath } from './render';
 import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
 import { renderThemePanel } from './theme-panel';
-import { badgeFor, badgeTitle, chapterMazePresets } from './theme-registry';
+import { badgeFor, badgeTitle, bundledThemeById, bundledThemeOptions, chapterMazePresets } from './theme-registry';
 import { badgeImage, drawLevelBadge } from './badge';
 import { DEFAULT_BADGE } from './localized/theme-pack';
 
 import { checkSymmetry, mirrorPoint, SYMMETRY_MODES, type SymmetryMode, type SymmetryReport } from '../core/symmetry';
 import { drawFogAreas } from './fog';
-import { Behavior, ObjectTool, Tool, SHAPES, GROUPS, ICONS, isButton, isSquare, toolLabel, objectToolId, ZONE_IDS, sizeText, Hit, Handle, Drag, MAP_SIZES, GRID, HANDLE_PX, PIVOT_SNAP_PX, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP, IDENTITY, newMotion, EditorElements, clone, CommandId, Command, ARROWS, SHORTCUTS, rectFromCorners, rectCorners } from './editor-shared';
+import { Behavior, ObjectTool, Tool, SHAPES, GROUPS, ICONS, isButton, isSquare, toolLabel, objectToolId, zoneToolId, type ZoneTool, sizeText, Hit, Handle, Drag, MAP_SIZES, GRID, HANDLE_PX, PIVOT_SNAP_PX, ROTATE_HANDLE_PX, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP, IDENTITY, newMotion, EditorElements, clone, CommandId, Command, ARROWS, SHORTCUTS, rectFromCorners, rectCorners } from './editor-shared';
 import { EditorDocument, type EditorSelection as Selection } from '../core/editor-document';
 import * as editCommands from '../core/editor-commands';
 import { loadEditorDraft, saveEditorDraft, loadEditorPreference, saveEditorPreference } from './editor-storage';
 import { EditorPropertiesPanel } from './editor-properties';
 export type { EditorElements } from './editor-shared';
+
+/** "30°" / "-12.5°" */
+const tiltText = (deg: number): string => `${Math.round(deg * 10) / 10}°`;
 
 export class Editor {
   onTest: (map: MapData) => void = () => {};
@@ -41,8 +46,8 @@ export class Editor {
   private get map(): MapData { return this.model.map; }
   private set map(value: MapData) { this.model.map = value; }
   /** Maze colors of the map being edited (picks the editor's music) */
-  get mapTheme(): MapData['theme'] {
-    return this.map.theme;
+  get mapLook(): Pick<MapData, 'theme' | 'themeId'> {
+    return { theme: this.map.theme, themeId: this.map.themeId };
   }
   private compiledCache: CompiledObject[] | null = null;
   private readonly routeCache = new WeakMap<CompiledObject, number[]>();
@@ -57,7 +62,7 @@ export class Editor {
   private set sel(value: Selection) { this.model.selection = value; }
   private drag: Drag | null = null;
   /** Polygon / freeform being drawn */
-  private draft: { tool: ObjectTool; points: PolyPoint[] } | null = null;
+  private draft: { tool: ObjectTool | ZoneTool; points: PolyPoint[] } | null = null;
   /** Object whose motion markers are being placed by clicking */
   private markerMode: number | null = null;
   private hover: Point | null = null;
@@ -364,9 +369,9 @@ export class Editor {
     for (const o of this.compiled) if (o.dynamic) traceObject(g, o, IDENTITY);
     g.fill();
     g.fillStyle = COLORS.startEdge;
-    g.fillRect(map.start.x, map.start.y, map.start.w, map.start.h);
+    g.fill(zonePath(map.start, map.startShape));
     g.fillStyle = COLORS.goalEdge;
-    g.fillRect(map.goal.x, map.goal.y, map.goal.w, map.goal.h);
+    g.fill(zonePath(map.goal, map.goalShape));
     const { cssW: vw, cssH: vh, s } = fittedView(this.el.canvas, map);
     const hw = vw / 2 / (s * this.cam.zoom);
     const hh = vh / 2 / (s * this.cam.zoom);
@@ -499,11 +504,23 @@ export class Editor {
       if ('zones' in g) {
         addButton(row, { kind: 'zone', zone: 'start' }, '<span class="pal-zone">S</span><span class="pal-num">9</span>', tr('ed.palStartAreaS'), 'pal-start');
         addButton(row, { kind: 'zone', zone: 'goal' }, '<span class="pal-zone">G</span><span class="pal-num">10</span>', tr('ed.palGoalAreaG'), 'pal-goal');
+        // Round, polygon and freeform START / GOAL (#63–68): the #9 / #10 badge, outlined in that shape
+        const zoneOutline = {
+          poly: '<polygon points="12,1.5 22.5,9.2 18.5,22 5.5,22 1.5,9.2"/>',
+          free: '<path d="M3.5 18.5 C0.8 10 6.5 1.5 12.5 3.2 C18.5 1.2 23.6 7.5 21.6 14 C20 20.5 9 23.6 3.5 18.5 Z"/>',
+        };
+        const zoneIcon = (shape: 'ellipse' | 'poly' | 'free', letter: string) => shape === 'ellipse'
+          ? `<span class="pal-zone pal-zone-round">${letter}</span>`
+          : `<span class="pal-zone pal-zone-svg"><svg viewBox="0 0 24 24" aria-hidden="true">${zoneOutline[shape]}</svg><b>${letter}</b></span>`;
+        ([['ellipse', 63], ['poly', 65], ['free', 67]] as const).forEach(([shape, num]) => {
+          addButton(row, { kind: 'zone', zone: 'start', shape }, `${zoneIcon(shape, 'S')}<span class="pal-num">${num}</span>`, tr(`ed.palStart_${shape}`), 'pal-start');
+          addButton(row, { kind: 'zone', zone: 'goal', shape }, `${zoneIcon(shape, 'G')}<span class="pal-num">${num + 1}</span>`, tr(`ed.palGoal_${shape}`), 'pal-goal');
+        });
       } else {
         SHAPES.forEach(([shape], k) => {
           const tool: ObjectTool = { kind: 'object', role: g.role, behavior: g.behavior, shape };
           const num = g.first + k;
-          const badge = g.behavior === 'moving' ? '<span class="pal-badge">⇄</span>' : g.behavior === 'rotating' ? '<span class="pal-badge">↻</span>' : '';
+          const badge = g.behavior === 'moving' ? '<span class="pal-badge">⇄</span>' : g.behavior === 'rotating' ? '<span class="pal-badge">↻</span>' : g.behavior === 'blinking' ? '<span class="pal-badge">◐</span>' : '';
           addButton(
             row,
             tool,
@@ -516,42 +533,49 @@ export class Editor {
       box.append(h, row);
     }
 
-    // Special objects
-    const h = document.createElement('h4');
-    h.className = 'pal-title';
-    h.textContent = tr('ed.special');
-    const row = document.createElement('div');
-    row.className = 'pal-row';
+    // Special objects, by category
+    const section = (title: string): HTMLElement => {
+      const h = document.createElement('h4');
+      h.className = 'pal-title';
+      h.textContent = title;
+      const row = document.createElement('div');
+      row.className = 'pal-row';
+      box.append(h, row);
+      return row;
+    };
+    const svg = (inner: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${inner}</svg>`;
+
+    // Special terrain: sector / ring sector paths and walls, ice, safe zone, secret walls
+    let row = section(tr('ed.catTerrain'));
     const sectorPath: ObjectTool = { kind: 'object', role: 'path', behavior: 'static', shape: 'sector' };
     const sectorWall: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'sector' };
-    const coin: ObjectTool = { kind: 'object', role: 'coin', behavior: 'static', shape: 'ellipse' };
-    const dark: ObjectTool = { kind: 'object', role: 'dark', behavior: 'static', shape: 'rect' };
-    const svg = (inner: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${inner}</svg>`;
     addButton(row, sectorPath, `${svg(ICONS.sector)}<span class="pal-num">27</span>`, tr('ed.palSectorPath'), 'pal-path pal-static');
     addButton(row, sectorWall, `${svg(ICONS.sector)}<span class="pal-num">28</span>`, tr('ed.palSectorWall'), 'pal-wall pal-static');
-    addButton(row, coin, `${svg('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="4" fill="none"/>')}<span class="pal-num">31</span>`, tr('ed.palCoin'), 'pal-coin');
-    const trig = (kind: TriggerKind): ObjectTool => ({ kind: 'object', role: 'trigger', behavior: 'static', shape: 'rect', trigger: kind });
-    const btn = '<rect x="4" y="4" width="16" height="16" rx="3"/><rect x="7.5" y="7.5" width="9" height="9" rx="2" fill="#fff" fill-opacity="0.55"/>';
-    addButton(row, trig('switch'), `${svg(btn)}<span class="pal-num">32</span>`, tr('ed.palSwitch'), 'pal-switch');
-    addButton(row, trig('timer'), `${svg(`${btn}<path d="M12 12 L12 8 A4 4 0 0 1 16 12 Z" fill="#243450" fill-opacity="0.5"/>`)}<span class="pal-num">33</span>`, tr('ed.palTimerSwitch'), 'pal-switch');
-    addButton(row, trig('hold'), `${svg(`${btn}<circle cx="12" cy="12" r="2" fill="#243450"/>`)}<span class="pal-num">34</span>`, tr('ed.palHoldSwitch'), 'pal-switch');
-    addButton(row, trig('startZone'), `${svg('<rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="3 2"/><path d="M10 9 L15 12 L10 15 Z" fill="#c2577b"/>')}<span class="pal-num">35</span>`, tr('ed.palEventStartZone'), 'pal-zone-ev');
-    addButton(row, trig('stopZone'), `${svg('<rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="3 2"/><rect x="9.5" y="9.5" width="5" height="5" fill="#c2577b"/>')}<span class="pal-num">36</span>`, tr('ed.palEventStopZone'), 'pal-zone-ev');
-    const door: ObjectTool = { kind: 'object', role: 'door', behavior: 'static', shape: 'rect' };
-    addButton(row, door, `${svg('<rect x="2" y="9" width="9" height="6"/><rect x="13" y="9" width="9" height="6"/><path d="M8 6 L5 6 M16 6 L19 6" />')}<span class="pal-num">40</span>`, tr('ed.palAutoDoor'), 'pal-door');
-    addButton(row, dark, `${svg('<rect x="4" y="4" width="16" height="16" rx="2"/>')}<span class="pal-num">41</span>`, tr('ed.palDarknessArea'), 'pal-dark');
+    const ringIcon = '<path d="M4 20 L4 4 A16 16 0 0 1 20 20 L13 20 A9 9 0 0 0 4 11 Z"/>';
+    const ringPath: ObjectTool = { kind: 'object', role: 'path', behavior: 'static', shape: 'sector', ring: true };
+    const ringWall: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'sector', ring: true };
+    addButton(row, ringPath, `${svg(ringIcon)}<span class="pal-num">53</span>`, tr('ed.palRingPath'), 'pal-path pal-static');
+    addButton(row, ringWall, `${svg(ringIcon)}<span class="pal-num">54</span>`, tr('ed.palRingWall'), 'pal-wall pal-static');
+    // Ice floors (#71–74): rectangle, circle, polygon, freeform
+    SHAPES.forEach(([shape], k) => {
+      const tool: ObjectTool = { kind: 'object', role: 'path', behavior: 'static', shape, ice: true };
+      addButton(row, tool, `${svg(ICONS[shape])}<span class="pal-badge">❄</span><span class="pal-num">${71 + k}</span>`, `#${71 + k} ${toolLabel(tool)}${shape === 'poly' || shape === 'free' ? ` — ${tr('ed.clickPointsEnter')}` : ''}`, 'pal-ice');
+    });
+    const safeTool: ObjectTool = { kind: 'object', role: 'safe', behavior: 'static', shape: 'rect' };
+    addButton(row, safeTool, `${svg('<rect x="3" y="3" width="18" height="18" rx="2" fill-opacity="0.45"/><path d="M12 6.5 L16.5 8.3 L16.2 12.4 C15.8 15 14 16.6 12 17.6 C10 16.6 8.2 15 7.8 12.4 L7.5 8.3 Z" fill="#fff"/>')}<span class="pal-num">48</span>`, tr('ed.palSafeZone'), 'pal-safe');
+    const secretTool: ObjectTool = { kind: 'object', role: 'secret', behavior: 'static', shape: 'rect' };
+    addButton(row, secretTool, `${svg('<rect x="3" y="4" width="18" height="16" rx="1.5"/><circle cx="12" cy="12" r="4.5" fill="#fff" fill-opacity="0.9"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">55</span>`, tr('ed.palSecretWall'), 'pal-wall pal-static');
+    const secretFreeTool: ObjectTool = { kind: 'object', role: 'secret', behavior: 'static', shape: 'free' };
+    addButton(row, secretFreeTool, `${svg('<path d="M4 18 C3 9 9 3 13 7 S 21 8 20 15 S 9 21 4 18 Z"/><circle cx="12" cy="12.5" r="4" fill="#fff" fill-opacity="0.9"/><circle cx="12" cy="12.5" r="1.4"/>')}<span class="pal-num">56</span>`, tr('ed.palSecretWallFree'), 'pal-wall pal-static');
+
+    // Traps: spike, boulder, falling rock, grinders and saw blades
+    row = section(tr('ed.catTraps'));
     const spike: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'poly', special: 'spike' };
     const boulder: ObjectTool = { kind: 'object', role: 'wall', behavior: 'moving', shape: 'poly', special: 'boulder' };
-    const laser: ObjectTool = { kind: 'object', role: 'laser', behavior: 'static', shape: 'rect' };
-    const mirror: ObjectTool = { kind: 'object', role: 'mirror', behavior: 'static', shape: 'poly' };
-    const portal: ObjectTool = { kind: 'object', role: 'portal', behavior: 'static', shape: 'rect' };
     addButton(row, spike, `${svg('<path d="M3 21 L18 6 L21 3 L17 7 Z" stroke-linejoin="round"/><path d="M5 19 L8 22 M2 16 L5 19" />')}<span class="pal-num">29</span>`, tr('ed.palSpikeStake'), 'pal-wall pal-moving');
     // Same rock outline as a placed boulder
     const rock = boulderShape(12, 12, 9.5).map((p) => `${p.x},${p.y}`).join(' ');
     addButton(row, boulder, `${svg(`<polygon points="${rock}"/>`)}<span class="pal-num">30</span>`, tr('ed.palRollingBoulder'), 'pal-wall pal-moving');
-    addButton(row, laser, `${svg('<rect x="3" y="8" width="8" height="8" rx="1.5"/><path d="M11 12 L22 12" stroke="#e2486c" stroke-width="2.4"/>')}<span class="pal-num">37</span>`, tr('ed.palLaser'), 'pal-laser');
-    addButton(row, mirror, `${svg('<path d="M4 20 L20 4" stroke-width="4" stroke="#8fa3bf"/><path d="M4 20 L20 4" stroke-width="1.4" stroke="#fff"/>')}<span class="pal-num">38</span>`, tr('ed.palMirror'), 'pal-mirror');
-    addButton(row, portal, `${svg('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="5" fill="none"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">39</span>`, tr('ed.palTeleportPortal'), 'pal-portal');
     const sawTool = (special: 'disc' | 'blade', behavior: Behavior): ObjectTool => ({ kind: 'object', role: 'wall', behavior, shape: special === 'disc' ? 'ellipse' : 'rect', special });
     const discIcon = '<path d="M12 2 L14 5 L17.6 4.2 L18 7.9 L21.4 9.5 L19.6 12.7 L21.4 15.9 L18 17.4 L17.6 21.1 L14 20.3 L12 23 L10 20.3 L6.4 21.1 L6 17.4 L2.6 15.9 L4.4 12.7 L2.6 9.5 L6 7.9 L6.4 4.2 L10 5 Z" transform="scale(0.92) translate(1 0)"/><circle cx="12" cy="12.5" r="2.6" fill="#fff"/>';
     const bladeIcon = '<path d="M2 9 L4 7 L6 9 L8 7 L10 9 L12 7 L14 9 L16 7 L18 9 L20 7 L22 9 L22 15 L20 17 L18 15 L16 17 L14 15 L12 17 L10 15 L8 17 L6 15 L4 17 L2 15 Z"/>';
@@ -560,37 +584,47 @@ export class Editor {
     addButton(row, sawTool('blade', 'static'), `${svg(bladeIcon)}<span class="pal-num">44</span>`, tr('ed.palSawBlade'), 'pal-saw');
     addButton(row, sawTool('disc', 'moving'), `${svg(discIcon + route)}<span class="pal-num">45</span>`, tr('ed.palMovingCircularGrinder'), 'pal-saw');
     addButton(row, sawTool('blade', 'moving'), `${svg(bladeIcon + route)}<span class="pal-num">46</span>`, tr('ed.palMovingSawBlade'), 'pal-saw');
-    const textTool: ObjectTool = { kind: 'object', role: 'text', behavior: 'static', shape: 'rect' };
-    const safeTool: ObjectTool = { kind: 'object', role: 'safe', behavior: 'static', shape: 'rect' };
-    addButton(row, textTool, `${svg('<path d="M5 6 L19 6 M12 6 L12 19 M9 19 L15 19" stroke-width="2.6" fill="none" stroke-linecap="round"/>')}<span class="pal-num">47</span>`, tr('ed.palTextBox'), 'pal-text');
-    addButton(row, safeTool, `${svg('<rect x="3" y="3" width="18" height="18" rx="2" fill-opacity="0.45"/><path d="M12 6.5 L16.5 8.3 L16.2 12.4 C15.8 15 14 16.6 12 17.6 C10 16.6 8.2 15 7.8 12.4 L7.5 8.3 Z" fill="#fff"/>')}<span class="pal-num">48</span>`, tr('ed.palSafeZone'), 'pal-safe');
-    // Fog and sand dust: freeform areas
-    const fogTool = (kind: FogKind): ObjectTool => ({ kind: 'object', role: 'fog', behavior: 'static', shape: 'free', fog: kind });
-    const cloudIcon = '<path d="M6 17 C2.5 17 2.5 12 6 12 C6 8 11 7 12.5 10 C14 7 19.5 8 18.5 12 C22 12 22 17 18 17 Z"/>';
-    addButton(row, fogTool('fog'), `${svg(`${cloudIcon}<path d="M4 20 L20 20" stroke-width="1.6" fill="none" stroke-linecap="round"/>`)}<span class="pal-num">49</span>`, tr('ed.palFog'), 'pal-fog');
-    addButton(row, fogTool('sand'), `${svg(`${cloudIcon}<circle cx="5" cy="20.5" r="1"/><circle cx="10" cy="21" r="1"/><circle cx="15" cy="20.5" r="1"/><circle cx="20" cy="21" r="1"/>`)}<span class="pal-num">50</span>`, tr('ed.palSandDust'), 'pal-sand');
-    // Falling rock (#51) and pulley (#52)
     const fallTool: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'poly', special: 'fall' };
     const fallRock = boulderShape(12, 9, 6.5).map((p) => `${p.x},${p.y}`).join(' ');
     addButton(row, fallTool, `${svg(`<polygon points="${fallRock}"/><path d="M12 17 L12 23 M9.5 20.5 L12 23 L14.5 20.5" stroke-width="1.6" fill="none" stroke-linecap="round"/>`)}<span class="pal-num">51</span>`, tr('ed.palFall'), 'pal-wall pal-moving');
+
+    // Shooters: laser and mirror, turret and homing missile launcher
+    row = section(tr('ed.catShooters'));
+    const laser: ObjectTool = { kind: 'object', role: 'laser', behavior: 'static', shape: 'rect' };
+    const mirror: ObjectTool = { kind: 'object', role: 'mirror', behavior: 'static', shape: 'poly' };
+    addButton(row, laser, `${svg('<rect x="3" y="8" width="8" height="8" rx="1.5"/><path d="M11 12 L22 12" stroke="#e2486c" stroke-width="2.4"/>')}<span class="pal-num">37</span>`, tr('ed.palLaser'), 'pal-laser');
+    addButton(row, mirror, `${svg('<path d="M4 20 L20 4" stroke-width="4" stroke="#8fa3bf"/><path d="M4 20 L20 4" stroke-width="1.4" stroke="#fff"/>')}<span class="pal-num">38</span>`, tr('ed.palMirror'), 'pal-mirror');
+    const turretTool = (kind: 'gun' | 'missile'): ObjectTool => ({ kind: 'object', role: 'turret', behavior: 'static', shape: 'rect', turret: kind });
+    addButton(row, turretTool('gun'), `${svg('<rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="11" cy="12" r="5" fill="#fff"/><path d="M11 12 L22 12" stroke-width="3.2" stroke-linecap="round"/><circle cx="11" cy="12" r="2.2"/>')}<span class="pal-num">60</span>`, tr('ed.palTurret'), 'pal-turret');
+    addButton(row, turretTool('missile'), `${svg('<rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M12 4.5 C14 6.5 14.4 9 14.4 12 L14.4 16 L9.6 16 L9.6 12 C9.6 9 10 6.5 12 4.5 Z" fill="#fff"/><path d="M10.2 17 L12 20.5 L13.8 17 Z" fill="#ff8a1f"/>')}<span class="pal-num">61</span>`, tr('ed.palMissile'), 'pal-turret');
+
+    // Switches and devices: switches, event zones, portal, door, pulley
+    row = section(tr('ed.catDevices'));
+    const trig = (kind: TriggerKind): ObjectTool => ({ kind: 'object', role: 'trigger', behavior: 'static', shape: 'rect', trigger: kind });
+    const btn = '<rect x="4" y="4" width="16" height="16" rx="3"/><rect x="7.5" y="7.5" width="9" height="9" rx="2" fill="#fff" fill-opacity="0.55"/>';
+    addButton(row, trig('switch'), `${svg(btn)}<span class="pal-num">32</span>`, tr('ed.palSwitch'), 'pal-switch');
+    addButton(row, trig('timer'), `${svg(`${btn}<path d="M12 12 L12 8 A4 4 0 0 1 16 12 Z" fill="#243450" fill-opacity="0.5"/>`)}<span class="pal-num">33</span>`, tr('ed.palTimerSwitch'), 'pal-switch');
+    addButton(row, trig('hold'), `${svg(`${btn}<circle cx="12" cy="12" r="2" fill="#243450"/>`)}<span class="pal-num">34</span>`, tr('ed.palHoldSwitch'), 'pal-switch');
+    addButton(row, trig('startZone'), `${svg('<rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="3 2"/><path d="M10 9 L15 12 L10 15 Z" fill="#c2577b"/>')}<span class="pal-num">35</span>`, tr('ed.palEventStartZone'), 'pal-zone-ev');
+    addButton(row, trig('stopZone'), `${svg('<rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="3 2"/><rect x="9.5" y="9.5" width="5" height="5" fill="#c2577b"/>')}<span class="pal-num">36</span>`, tr('ed.palEventStopZone'), 'pal-zone-ev');
+    const portal: ObjectTool = { kind: 'object', role: 'portal', behavior: 'static', shape: 'rect' };
+    addButton(row, portal, `${svg('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="5" fill="none"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">39</span>`, tr('ed.palTeleportPortal'), 'pal-portal');
+    const door: ObjectTool = { kind: 'object', role: 'door', behavior: 'static', shape: 'rect' };
+    addButton(row, door, `${svg('<rect x="2" y="9" width="9" height="6"/><rect x="13" y="9" width="9" height="6"/><path d="M8 6 L5 6 M16 6 L19 6" />')}<span class="pal-num">40</span>`, tr('ed.palAutoDoor'), 'pal-door');
     const pulleyTool: ObjectTool = { kind: 'object', role: 'pulley', behavior: 'static', shape: 'ellipse' };
     addButton(row, pulleyTool, `${svg('<circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 5 L12 19 M5.9 8.5 L18.1 15.5 M5.9 15.5 L18.1 8.5" stroke-width="1.6"/><circle cx="12" cy="12" r="2.4"/>')}<span class="pal-num">52</span>`, tr('ed.palPulley'), 'pal-switch');
-    // Ring sectors (#53/#54), secret walls (#55/#56), torches (#57/#58), crystal star (#59)
-    const ringIcon = '<path d="M4 20 L4 4 A16 16 0 0 1 20 20 L13 20 A9 9 0 0 0 4 11 Z"/>';
-    const ringPath: ObjectTool = { kind: 'object', role: 'path', behavior: 'static', shape: 'sector', ring: true };
-    const ringWall: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'sector', ring: true };
-    addButton(row, ringPath, `${svg(ringIcon)}<span class="pal-num">53</span>`, tr('ed.palRingPath'), 'pal-path pal-static');
-    addButton(row, ringWall, `${svg(ringIcon)}<span class="pal-num">54</span>`, tr('ed.palRingWall'), 'pal-wall pal-static');
-    const secretTool: ObjectTool = { kind: 'object', role: 'secret', behavior: 'static', shape: 'rect' };
-    addButton(row, secretTool, `${svg('<rect x="3" y="4" width="18" height="16" rx="1.5"/><circle cx="12" cy="12" r="4.5" fill="#fff" fill-opacity="0.9"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">55</span>`, tr('ed.palSecretWall'), 'pal-wall pal-static');
-    const secretFreeTool: ObjectTool = { kind: 'object', role: 'secret', behavior: 'static', shape: 'free' };
-    addButton(row, secretFreeTool, `${svg('<path d="M4 18 C3 9 9 3 13 7 S 21 8 20 15 S 9 21 4 18 Z"/><circle cx="12" cy="12.5" r="4" fill="#fff" fill-opacity="0.9"/><circle cx="12" cy="12.5" r="1.4"/>')}<span class="pal-num">56</span>`, tr('ed.palSecretWallFree'), 'pal-wall pal-static');
-    const torchIcon = '<path d="M10 12 L14 12 L13 22 L11 22 Z" fill="#8a5a2b"/><path d="M12 2.5 C15.5 6.5 16 9 14.6 11.5 L9.4 11.5 C8 9 8.5 6.5 12 2.5 Z" fill="#ff8a1f"/><path d="M12 6 C13.6 8 13.8 9.6 13 11 L11 11 C10.2 9.6 10.4 8 12 6 Z" fill="#ffd45e"/>';
-    const torchTool = (carry: boolean): ObjectTool => ({ kind: 'object', role: 'torch', behavior: 'static', shape: 'rect', ...(carry ? { carry: true } : {}) });
-    addButton(row, torchTool(false), `${svg(torchIcon)}<span class="pal-num">57</span>`, tr('ed.palTorch'), 'pal-torch');
-    addButton(row, torchTool(true), `${svg(`${torchIcon}<path d="M16 14 L22.5 17 L19.4 18 L18.4 21.2 Z" fill="#2b86e0"/>`)}<span class="pal-num">58</span>`, tr('ed.palCarryTorch'), 'pal-torch');
+
+    // Collectibles: coin and crystal star
+    row = section(tr('ed.catCollect'));
+    const coin: ObjectTool = { kind: 'object', role: 'coin', behavior: 'static', shape: 'ellipse' };
+    addButton(row, coin, `${svg('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="4" fill="none"/>')}<span class="pal-num">31</span>`, tr('ed.palCoin'), 'pal-coin');
     const crystalTool: ObjectTool = { kind: 'object', role: 'crystal', behavior: 'static', shape: 'rect' };
     addButton(row, crystalTool, `${svg('<path d="M12 2 L14.9 8.6 L22 9.3 L16.6 14 L18.2 21 L12 17.3 L5.8 21 L7.4 14 L2 9.3 L9.1 8.6 Z"/>')}<span class="pal-num">59</span>`, tr('ed.palCrystal'), 'pal-crystal');
+
+    // Sight and light: darkness, fog, sand dust, torches
+    row = section(tr('ed.catSight'));
+    const dark: ObjectTool = { kind: 'object', role: 'dark', behavior: 'static', shape: 'rect' };
+    addButton(row, dark, `${svg('<rect x="4" y="4" width="16" height="16" rx="2"/>')}<span class="pal-num">41</span>`, tr('ed.palDarknessArea'), 'pal-dark');
     // #42 is a map setting, not an object: the button toggles it
     const g = document.createElement('button');
     g.type = 'button';
@@ -604,7 +638,20 @@ export class Editor {
     }));
     this.globalDarkBtn = g;
     row.append(g);
-    box.append(h, row);
+    // Fog and sand dust: freeform areas
+    const fogTool = (kind: FogKind): ObjectTool => ({ kind: 'object', role: 'fog', behavior: 'static', shape: 'free', fog: kind });
+    const cloudIcon = '<path d="M6 17 C2.5 17 2.5 12 6 12 C6 8 11 7 12.5 10 C14 7 19.5 8 18.5 12 C22 12 22 17 18 17 Z"/>';
+    addButton(row, fogTool('fog'), `${svg(`${cloudIcon}<path d="M4 20 L20 20" stroke-width="1.6" fill="none" stroke-linecap="round"/>`)}<span class="pal-num">49</span>`, tr('ed.palFog'), 'pal-fog');
+    addButton(row, fogTool('sand'), `${svg(`${cloudIcon}<circle cx="5" cy="20.5" r="1"/><circle cx="10" cy="21" r="1"/><circle cx="15" cy="20.5" r="1"/><circle cx="20" cy="21" r="1"/>`)}<span class="pal-num">50</span>`, tr('ed.palSandDust'), 'pal-sand');
+    const torchIcon = '<path d="M10 12 L14 12 L13 22 L11 22 Z" fill="#8a5a2b"/><path d="M12 2.5 C15.5 6.5 16 9 14.6 11.5 L9.4 11.5 C8 9 8.5 6.5 12 2.5 Z" fill="#ff8a1f"/><path d="M12 6 C13.6 8 13.8 9.6 13 11 L11 11 C10.2 9.6 10.4 8 12 6 Z" fill="#ffd45e"/>';
+    const torchTool = (carry: boolean): ObjectTool => ({ kind: 'object', role: 'torch', behavior: 'static', shape: 'rect', ...(carry ? { carry: true } : {}) });
+    addButton(row, torchTool(false), `${svg(torchIcon)}<span class="pal-num">57</span>`, tr('ed.palTorch'), 'pal-torch');
+    addButton(row, torchTool(true), `${svg(`${torchIcon}<path d="M16 14 L22.5 17 L19.4 18 L18.4 21.2 Z" fill="#2b86e0"/>`)}<span class="pal-num">58</span>`, tr('ed.palCarryTorch'), 'pal-torch');
+
+    // Decoration: text box
+    row = section(tr('ed.catDecor'));
+    const textTool: ObjectTool = { kind: 'object', role: 'text', behavior: 'static', shape: 'rect' };
+    addButton(row, textTool, `${svg('<path d="M5 6 L19 6 M12 6 L12 19 M9 19 L15 19" stroke-width="2.6" fill="none" stroke-linecap="round"/>')}<span class="pal-num">47</span>`, tr('ed.palTextBox'), 'pal-text');
   }
 
   private setTool(tool: Tool): void {
@@ -722,15 +769,16 @@ export class Editor {
       text = tr('ed.hintSelect');
     } else if (this.tool.kind === 'zone') {
       text = tr(this.tool.zone === 'start' ? 'ed.hintZoneStart' : 'ed.hintZoneGoal');
+      if (this.tool.shape === 'poly' || this.tool.shape === 'free') text = `${text} ${tr('ed.hintZonePoints')}`;
     } else {
       const t = this.tool;
       const how = tr(t.special === 'spike' ? 'ed.howSpike'
         : t.special === 'boulder' ? 'ed.howBoulder'
-          : t.role === 'torch' || t.role === 'crystal' || t.special === 'fall' ? 'ed.howTorch'
+          : t.role === 'torch' || t.role === 'crystal' || t.role === 'turret' || t.special === 'fall' ? 'ed.howTorch'
           : t.role === 'mirror' ? 'ed.howMirror'
             : t.role === 'laser' ? 'ed.howLaser'
               : t.role === 'portal' ? 'ed.howPortal' : t.shape === 'sector' ? 'ed.howSector' : t.role === 'coin' ? 'ed.howCoin' : t.shape === 'poly' || t.shape === 'free' ? 'ed.howPoints' : t.shape === 'ellipse' ? 'ed.howEllipse' : 'ed.howRect');
-      const after = t.behavior === 'moving' ? tr('ed.afterMoving') : t.behavior === 'rotating' ? tr('ed.afterRotating') : '';
+      const after = t.behavior === 'moving' ? tr('ed.afterMoving') : t.behavior === 'rotating' ? tr('ed.afterRotating') : t.behavior === 'blinking' ? tr('ed.afterBlinking') : '';
       text = tr('ed.hintTool', { tool: toolLabel(t), how, after });
     }
     this.el.hint.textContent = text;
@@ -754,14 +802,14 @@ export class Editor {
     const objs = this.compiled;
     const zoneTrigger = (i: number) => !isButton(this.map.objects[i]?.trigger?.kind);
     // Text boxes are drawn over everything, so they are picked first
-    for (const role of ['text', 'coin', 'crystal', 'torch', 'pulley', 'portal', 'laser', 'trigger', 'wall', 'door', 'mirror'] as const) {
+    for (const role of ['text', 'coin', 'crystal', 'torch', 'pulley', 'portal', 'laser', 'turret', 'trigger', 'wall', 'door', 'mirror'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
       }
     }
-    if (pointInRect(p.x, p.y, this.map.goal)) return { kind: 'goal' };
-    if (pointInRect(p.x, p.y, this.map.start)) return { kind: 'start' };
+    if (new ZoneArea(this.map.goal, this.map.goalShape).contains(p.x, p.y)) return { kind: 'goal' };
+    if (new ZoneArea(this.map.start, this.map.startShape).contains(p.x, p.y)) return { kind: 'start' };
     // Darkness and fog areas last, so whatever lies under one can still be clicked
     for (const role of ['safe', 'path', 'trigger', 'dark', 'fog', 'secret'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
@@ -823,11 +871,27 @@ export class Editor {
       return out;
     }
     const o = this.selectedObject();
-    if (!o) return out; // no handles for multi-selections
+    if (!o) {
+      // Multi-selection: one tilt handle above the whole selection
+      const g = this.groupRotate();
+      if (g) out.push({ h: { kind: 'rotate' }, p: g.p });
+      return out;
+    }
     if (o.rotation) out.push({ h: { kind: 'pivot' }, p: o.rotation.pivot });
     o.motion?.points.forEach((p, j) => out.push({ h: { kind: 'marker', j }, p }));
+    out.push({ h: { kind: 'rotate' }, p: this.rotateHandlePoint(o) });
     const s = o.shape;
-    if (o.role === 'coin' || o.role === 'crystal') return out; // fixed size: only route markers / pivot
+    if (o.turret) {
+      // Fixed size: route markers, pivot, tilt and the barrel / launch direction
+      const b = shapeBounds(o.shape);
+      const a = (o.turret.angle * Math.PI) / 180;
+      const r = Math.max(b.w, b.h) / 2 + 22;
+      out.unshift({ h: { kind: 'aim' }, p: { x: b.x + b.w / 2 + Math.cos(a) * r, y: b.y + b.h / 2 + Math.sin(a) * r } });
+      return out;
+    }
+    if (o.role === 'coin' || o.role === 'crystal') return out; // fixed size: only route markers / pivot / tilt
+    // Shape handles sit on the tilted outline
+    const shapeStart = out.length;
     if (o.laser) {
       const b = shapeBounds(o.shape);
       const a = (o.laser.angle * Math.PI) / 180;
@@ -847,7 +911,44 @@ export class Editor {
         out.push({ h: { kind: 'arc', part: 'end' }, p: at(s.start + s.sweep) });
       }
     } else rectCorners(shapeBounds(s)).forEach((p, j) => out.push({ h: { kind: 'corner', j }, p }));
+    if (o.tilt) {
+      const c = shapeCenter(s);
+      for (let k = shapeStart; k < out.length; k++) if (out[k].h.kind !== 'aim') out[k].p = rotatePoint(out[k].p, c, o.tilt);
+    }
     return out;
+  }
+
+  /** The tilt handle: above the object's center, turned with its tilt */
+  private rotateHandlePoint(o: MapObject): Point {
+    const b = shapeBounds(o.shape);
+    const c = shapeCenter(o.shape);
+    const u = unitsPerPx(this.el.canvas, this.map);
+    return rotatePoint({ x: c.x, y: b.y - ROTATE_HANDLE_PX * u }, c, o.tilt ?? 0);
+  }
+
+  /**
+   * The multi-selection tilt handle: center of the selection, the knob above its box and the angle
+   * turned so far. While turning, the center stays put and the knob turns around it.
+   */
+  private groupRotate(): { c: Point; p: Point; deg: number } | null {
+    const d = this.drag;
+    if (d?.type === 'handle' && d.group) {
+      const { c, r, deg } = d.group;
+      return { c, p: rotatePoint({ x: c.x, y: c.y - r }, c, deg), deg };
+    }
+    const ids = this.selIds();
+    if (ids.length < 2) return null;
+    const members = ids.map((i) => this.map.objects[i]).filter(Boolean);
+    if (!members.length) return null;
+    const b = objectsBounds(members);
+    const u = unitsPerPx(this.el.canvas, this.map);
+    const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    return { c, p: { x: c.x, y: b.y - 4 * u - ROTATE_HANDLE_PX * u }, deg: 0 };
+  }
+
+  /** Pointer angle around an object's center, degrees clockwise from straight up */
+  private static angleAround(c: Point, p: Point): number {
+    return (Math.atan2(p.y - c.y, p.x - c.x) * 180) / Math.PI + 90;
   }
 
   private hitHandle(p: Point): Handle | null {
@@ -914,9 +1015,20 @@ export class Editor {
         this.edit(() => shape.points.splice(h.j, 1));
         return;
       }
+      if (h?.kind === 'rotate' && !o && !this.selectedZone()) {
+        const g = this.groupRotate();
+        if (!g) return;
+        const objs = this.selIds().filter((i) => this.map.objects[i]).map((i) => ({ i, o: clone(this.map.objects[i]) }));
+        this.drag = {
+          type: 'handle', h, before: JSON.stringify(this.map), moved: false, orig: objs[0].o,
+          a0: Editor.angleAround(g.c, raw), group: { objs, c: g.c, r: Math.hypot(g.p.x - g.c.x, g.p.y - g.c.y), deg: 0 },
+        };
+        return;
+      }
       if (h) {
         const orig = clone(this.selectedZone() ?? this.selectedObject()!);
-        this.drag = { type: 'handle', h, before: JSON.stringify(this.map), moved: false, orig };
+        const a0 = h.kind === 'rotate' && 'shape' in orig ? Editor.angleAround(shapeCenter(orig.shape), raw) : undefined;
+        this.drag = { type: 'handle', h, before: JSON.stringify(this.map), moved: false, orig, a0 };
         return;
       }
       const hit = this.hitTest(raw);
@@ -949,7 +1061,7 @@ export class Editor {
     }
 
     // Polygon / freeform tools place points one by one (spike, boulder and mirror tools drag instead)
-    if (tool.kind === 'object' && (tool.shape === 'poly' || tool.shape === 'free') && !tool.special && tool.role !== 'mirror') {
+    if (((tool.kind === 'object' && !tool.special && tool.role !== 'mirror') || tool.kind === 'zone') && (tool.shape === 'poly' || tool.shape === 'free')) {
       this.draft = { tool, points: [tool.shape === 'free' && !e.shiftKey ? { ...p, smooth: true } : p] };
       this.clearSelection();
       this.updateHint();
@@ -994,11 +1106,11 @@ export class Editor {
       this.applyCamera();
       return;
     }
-    const raw = this.pointer(e);
+    let raw = this.pointer(e);
     this.hover = raw;
     const d = this.drag;
     if (!d) return;
-    const p = this.snapPoint(raw);
+    let p = this.snapPoint(raw);
 
     if (d.type === 'box') {
       d.x1 = p.x;
@@ -1044,8 +1156,41 @@ export class Editor {
       this.dirty();
       return;
     }
+    if (h.kind === 'rotate' && d.group) {
+      const g = d.group;
+      let deg = Editor.angleAround(g.c, raw) - (d.a0 ?? 0);
+      if ((this.el.snap.checked || e.shiftKey) && !e.altKey) deg = Math.round(deg / 15) * 15;
+      else deg = Math.round(deg);
+      deg = normalizeTilt(deg);
+      g.deg = deg;
+      const turned = tiltObjects(g.objs.map((x) => x.o), deg, g.c);
+      g.objs.forEach(({ i }, k) => { this.map.objects[i] = turned[k]; });
+      this.dirty();
+      return;
+    }
     const o = this.selectedObject();
     if (!o || !('shape' in d.orig)) return;
+    if (h.kind === 'rotate') {
+      const c = shapeCenter(d.orig.shape);
+      const from = d.orig.tilt ?? 0;
+      let deg = from + Editor.angleAround(c, raw) - (d.a0 ?? 0);
+      // 15° steps while Snap is on or Shift is held (Alt places freely)
+      if ((this.el.snap.checked || e.shiftKey) && !e.altKey) deg = Math.round(deg / 15) * 15;
+      else deg = Math.round(deg);
+      this.map.objects[this.selectedIndex()] = tiltObject(d.orig, deg - from);
+      this.dirty();
+      return;
+    }
+    // A tilted shape is edited in its own (untilted) frame, from where the drag started, then
+    // shifted so the parts that didn't change stay where they were
+    const tilt = d.orig.tilt ?? 0;
+    const shapeHandle = h.kind === 'corner' || h.kind === 'vertex' || h.kind === 'arc';
+    const c0 = shapeCenter(d.orig.shape);
+    if (tilt && shapeHandle) {
+      o.shape = clone(d.orig.shape);
+      raw = rotatePoint(raw, c0, -tilt);
+      p = rotatePoint(p, c0, -tilt);
+    }
     if (h.kind === 'pivot' && o.rotation) {
       // Snap to the exact center / corners when close (hold Alt to place freely)
       const reach = PIVOT_SNAP_PX * unitsPerPx(this.el.canvas, this.map);
@@ -1062,10 +1207,12 @@ export class Editor {
       }
       this.pivotSnap = best;
       o.rotation.pivot = best ? { x: Math.round(best.p.x * 100) / 100, y: Math.round(best.p.y * 100) / 100 } : p;
-    } else if (h.kind === 'aim' && o.laser) {
+    } else if (h.kind === 'aim' && (o.laser || o.turret)) {
       const b = shapeBounds(o.shape);
       const deg = (Math.atan2(raw.y - (b.y + b.h / 2), raw.x - (b.x + b.w / 2)) * 180) / Math.PI;
-      o.laser.angle = ((Math.round(this.el.snap.checked ? Math.round(deg / 15) * 15 : deg) % 360) + 360) % 360;
+      const ang = ((Math.round(this.el.snap.checked ? Math.round(deg / 15) * 15 : deg) % 360) + 360) % 360;
+      if (o.laser) o.laser.angle = ang;
+      else o.turret!.angle = ang > 180 ? ang - 360 : ang;
     } else if (h.kind === 'arc' && o.shape.type === 'sector') {
       const s = o.shape;
       const deg = (Math.atan2(raw.y - s.cy, raw.x - s.cx) * 180) / Math.PI;
@@ -1098,6 +1245,11 @@ export class Editor {
       if (o.shape.type === 'rect') o.shape = { type: 'rect', ...r };
       else if (o.shape.type === 'ellipse') o.shape = { type: 'ellipse', cx: r.x + r.w / 2, cy: r.y + r.h / 2, rx: r.w / 2, ry: r.h / 2 };
     }
+    if (tilt && shapeHandle) {
+      const c1 = shapeCenter(o.shape);
+      const at = rotatePoint(c1, c0, tilt);
+      o.shape = translateShape(o.shape, Math.round((at.x - c1.x) * 100) / 100, Math.round((at.y - c1.y) * 100) / 100);
+    }
     this.dirty();
   }
 
@@ -1119,7 +1271,7 @@ export class Editor {
       // Objects entirely inside the box (PowerPoint style)
       const hits: number[] = [];
       this.map.objects.forEach((o, i) => {
-        const b = shapeBounds(o.shape);
+        const b = tiltedBounds(o.shape, o.tilt);
         if (b.x >= r.x && b.y >= r.y && b.x + b.w <= r.x + r.w && b.y + b.h <= r.y + r.h) hits.push(i);
       });
       this.selectObjects([...d.base, ...hits]);
@@ -1152,8 +1304,7 @@ export class Editor {
 
     if (tool.kind === 'zone') {
       if (r.w < 10 || r.h < 10) return;
-      this.edit(() => (this.map[tool.zone] = r));
-      this.selectZone(tool.zone);
+      this.setZone(tool.zone, r, tool.shape === 'ellipse' ? { type: 'ellipse' } : undefined);
       return;
     }
     if (tool.kind !== 'object') return;
@@ -1173,6 +1324,8 @@ export class Editor {
       if (this.map.objects.some((o) => o.role === 'crystal')) return this.flash(tr('ed.oneCrystal'));
       r = { x: d.x0 - LIMITS.crystalSize / 2, y: d.y0 - LIMITS.crystalSize / 2, w: LIMITS.crystalSize, h: LIMITS.crystalSize };
     }
+    // Turrets and missile launchers are always 60×60, centered on the click
+    if (tool.role === 'turret') r = { x: d.x0 - LIMITS.turretSize / 2, y: d.y0 - LIMITS.turretSize / 2, w: LIMITS.turretSize, h: LIMITS.turretSize };
     // Torches 24×40, centered on the click
     if (tool.role === 'torch' && r.w < 4 && r.h < 4) r = { x: d.x0 - 12, y: d.y0 - 20, w: 24, h: 40 };
     // Coins are always 24×24, centered on the click
@@ -1245,13 +1398,32 @@ export class Editor {
     const shape: Shape = draft.tool.shape === 'free'
       ? { type: 'poly', points: draft.points, free: true }
       : { type: 'poly', points: draft.points };
+    if (draft.tool.kind === 'zone') {
+      const z = zoneFromShape(shape);
+      if (z.rect.w < 10 || z.rect.h < 10) return this.updateHint();
+      return this.setZone(draft.tool.zone, z.rect, z.shape);
+    }
     this.addObject(draft.tool, shape);
+  }
+
+  /** Place START or GOAL: its rectangle, and its shape inside it (none = the rectangle itself) */
+  private setZone(zone: 'start' | 'goal', r: Rect, shape: ZoneShape | undefined): void {
+    const key = zone === 'start' ? 'startShape' : 'goalShape';
+    this.edit(() => {
+      this.map[zone] = r;
+      if (shape) this.map[key] = shape;
+      else delete this.map[key];
+    });
+    this.selectZone(zone);
+    this.updateHint();
   }
 
   private addObject(tool: ObjectTool, shape: Shape): void {
     if (this.map.objects.length >= LIMITS.maxObjects) return;
     const o: MapObject = { role: tool.role, shape };
     if (tool.behavior === 'rotating') o.rotation = defaultRotation(o);
+    if (tool.behavior === 'blinking') o.blink = { ...DEFAULT_BLINK };
+    if (tool.ice) o.ice = { grip: DEFAULT_ICE_GRIP };
     if (tool.special === 'boulder') o.boulder = true;
     if (tool.behavior === 'moving') o.motion = newMotion(o);
     if (tool.role === 'trigger') {
@@ -1278,6 +1450,7 @@ export class Editor {
     if (tool.role === 'secret') o.secret = { radius: DEFAULT_SECRET_RADIUS };
     if (tool.special === 'fall') o.fall = { ...DEFAULT_FALL };
     if (tool.role === 'pulley') o.pulley = { color: this.lastColor, ...DEFAULT_PULLEY };
+    if (tool.role === 'turret') o.turret = { ...(tool.turret === 'missile' ? DEFAULT_MISSILE : DEFAULT_GUN) };
     if (tool.role === 'laser') o.laser = { color: this.lastColor, angle: 0, on: true };
     if (tool.role === 'portal') {
       const same = this.map.objects.filter((m) => m.portal?.color === this.lastColor).length;
@@ -1817,6 +1990,46 @@ export class Editor {
   }
 
   /**
+   * The bundled theme (official chapter or custom preset) the map wears when shared on its own:
+   * its badge and music, and its maze colors (one of its designs can be picked for those).
+   */
+  private themePicker(m: MapData): HTMLElement {
+    const sel = document.createElement('select');
+    sel.append(new Option(tr('ed.themeNone'), ''));
+    const picked = m.themeId ? bundledThemeById(m.themeId) : null;
+    const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    let current = '';
+    for (const { id, name, entry } of bundledThemeOptions()) {
+      const style = entry.info.style;
+      sel.append(new Option(name, id));
+      for (const d of style.designs ?? []) sel.append(new Option(`${name} · ${d.name}`, `${id}#${d.id}`));
+      if (picked === entry) {
+        const design = (style.designs ?? []).find((d) => same(d.maze, m.theme) && !same(style.maze, m.theme));
+        current = design ? `${id}#${design.id}` : id;
+      }
+    }
+    sel.value = current;
+    sel.addEventListener('change', () => this.edit(() => {
+      const [id, designId] = sel.value.split('#');
+      const entry = id ? bundledThemeById(id) : null;
+      if (!entry) {
+        delete m.themeId;
+        return;
+      }
+      m.themeId = id;
+      const maze = (designId ? entry.info.style.designs?.find((d) => d.id === designId)?.maze : undefined) ?? entry.info.style.maze;
+      if (maze) m.theme = clone(maze);
+      else delete m.theme;
+    }));
+    const wrap = document.createElement('div');
+    wrap.append(
+      this.properties.group(this.properties.field(tr('ed.mapTheme'), sel, true)),
+      this.properties.note(tr('ed.mapThemeNote')),
+    );
+    return wrap;
+  }
+
+  /**
    * Rebuild the level settings only when they changed, so a field being typed in keeps focus.
    * The fields write into the map object they were built for, so a replaced map (loaded from the
    * menu, undo / redo, new map) always rebuilds them, even when its settings look the same.
@@ -1825,7 +2038,7 @@ export class Editor {
   private renderedLevelMap: MapData | null = null;
   private renderLevel(): void {
     const m = this.map;
-    const json = JSON.stringify([m.title, m.name, m.level, m.stars, this.lastClearMs, m.darkness, m.difficulty]);
+    const json = JSON.stringify([m.title, m.name, m.level, m.stars, this.lastClearMs, m.darkness, m.difficulty, m.themeId, m.theme]);
     if (json === this.renderedLevel && m === this.renderedLevelMap) return;
     this.renderedLevel = json;
     this.renderedLevelMap = m;
@@ -1875,6 +2088,7 @@ export class Editor {
       this.properties.note(tr('ed.theTitleAndNumberAre')),
     ];
 
+    parts.push(this.themePicker(m));
     parts.push(this.properties.toggle(tr('ed.starRatings'), !!m.stars, (on) => {
       if (!on) return void delete m.stars;
       // Suggest times from the last test clear, else 10 / 20 / 30 s
@@ -1957,6 +2171,62 @@ export class Editor {
   // ───────────────────────── Drawing ─────────────────────────
 
   /** Small pill with object info, placed just above-right of (x, y) and kept inside the map */
+  /** The tilt handle: a stem from the object's center, a round knob with a turn arrow, and the angle while turning */
+  private drawRotateHandle(c: Point, angle: number, p: Point, u: number, active: boolean): void {
+    const { ctx } = this;
+    ctx.save();
+    ctx.strokeStyle = COLORS.select;
+    ctx.lineWidth = 1.2 * u;
+    if (active) {
+      // Guide: straight up (0°) and the current direction, with the swept arc between them
+      const r = Math.hypot(p.x - c.x, p.y - c.y);
+      const tilt = (angle * Math.PI) / 180;
+      ctx.setLineDash([3 * u, 3 * u]);
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y);
+      ctx.lineTo(c.x, c.y - r);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      if (tilt) {
+        ctx.fillStyle = 'rgba(58,159,240,0.15)';
+        ctx.beginPath();
+        ctx.moveTo(c.x, c.y);
+        ctx.arc(c.x, c.y, Math.min(r, 40 * u), -Math.PI / 2, -Math.PI / 2 + tilt, tilt < 0);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    // Center (the axis)
+    ctx.fillStyle = COLORS.select;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 2.5 * u, 0, Math.PI * 2);
+    ctx.fill();
+    // Knob
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = COLORS.ink;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 6.5 * u, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3.2 * u, -Math.PI * 0.9, Math.PI * 0.4);
+    ctx.stroke();
+    const tip = { x: p.x + Math.cos(Math.PI * 0.4) * 3.2 * u, y: p.y + Math.sin(Math.PI * 0.4) * 3.2 * u };
+    ctx.beginPath();
+    ctx.moveTo(tip.x - 2.2 * u, tip.y + 0.4 * u);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.lineTo(tip.x + 0.4 * u, tip.y - 2.2 * u);
+    ctx.stroke();
+    ctx.restore();
+    if (active) this.drawInfoLabel(tiltText(angle), p.x + 10 * u, p.y - 6 * u, u);
+  }
+
   private drawInfoLabel(text: string, x: number, y: number, u: number): void {
     const { ctx, map } = this;
     ctx.font = `600 ${12 * u}px ${FONT_MAIN}`;
@@ -2038,7 +2308,8 @@ export class Editor {
       }
     };
     for (const o of this.compiled) ghost(o.poly);
-    for (const z of [map.start, map.goal]) ghost([z.x, z.y, z.x + z.w, z.y, z.x + z.w, z.y + z.h, z.x, z.y + z.h]);
+    ghost(zoneRing(map.start, map.startShape));
+    ghost(zoneRing(map.goal, map.goalShape));
     ctx.stroke();
     ctx.setLineDash([]);
 
@@ -2051,10 +2322,13 @@ export class Editor {
       const o = this.compiled[i];
       if (o) traceObject(ctx, o, IDENTITY);
     }
-    if (report.start) ctx.rect(map.start.x, map.start.y, map.start.w, map.start.h);
-    if (report.goal) ctx.rect(map.goal.x, map.goal.y, map.goal.w, map.goal.h);
+    const zones = new Path2D();
+    if (report.start) zones.addPath(zonePath(map.start, map.startShape));
+    if (report.goal) zones.addPath(zonePath(map.goal, map.goalShape));
     ctx.fill('evenodd');
     ctx.stroke();
+    ctx.fill(zones, 'evenodd');
+    ctx.stroke(zones);
     ctx.restore();
 
     const broken = report.objects.length + (report.start ? 1 : 0) + (report.goal ? 1 : 0);
@@ -2089,7 +2363,7 @@ export class Editor {
     ctx.lineWidth = 1.2 * u;
     for (const o of map.objects) {
       if (!o.spike || o.shape.type !== 'poly') continue;
-      const tip = o.shape.points[0];
+      const tip = o.tilt ? rotatePoint(o.shape.points[0], shapeCenter(o.shape), o.tilt) : o.shape.points[0];
       const a = (o.spike.angle * Math.PI) / 180;
       ctx.beginPath();
       ctx.moveTo(tip.x, tip.y);
@@ -2118,8 +2392,8 @@ export class Editor {
     for (const o of objs) {
       const f = o.src?.fall;
       if (!f) continue;
-      const cx = (o.minX + o.maxX) / 2;
-      const cy = (o.minY + o.maxY) / 2;
+      const cx = o.cx;
+      const cy = o.cy;
       ctx.beginPath();
       ctx.moveTo(cx, cy - f.height);
       ctx.lineTo(cx, cy);
@@ -2214,7 +2488,7 @@ export class Editor {
     map.objects.forEach((o) => {
       const c = o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : o.laser?.switchColor);
       if (c === undefined) return;
-      const b = shapeBounds(o.shape);
+      const b = tiltedBounds(o.shape, o.tilt);
       ctx.fillStyle = switchColor(c).hex;
       ctx.strokeStyle = COLORS.ink;
       ctx.lineWidth = 1.2 * u;
@@ -2241,14 +2515,44 @@ export class Editor {
 
       // "#4 · ID 5 · 120×40" at the top-right of the selection (group members: the group's box too)
       const o = this.selectedObject();
-      const b = zone ?? (o ? shapeBounds(o.shape) : null);
+      const b = zone ?? (o ? tiltedBounds(o.shape, o.tilt) : null);
       if (b) {
         const kind = this.sel?.kind;
+        const size = o ? shapeBounds(o.shape) : b;
         const label = o
-          ? `#${selIndex + 1} · ID ${objectToolId(o)} · ${sizeText(b.w, b.h)}`
-          : `${tr(kind === 'start' ? 'zone.start' : 'zone.goal')} · ID ${ZONE_IDS[kind === 'start' ? 'start' : 'goal']} · ${sizeText(b.w, b.h)}`;
+          ? `#${selIndex + 1} · ID ${objectToolId(o)} · ${sizeText(size.w, size.h)}${o.tilt ? ` · ${tiltText(o.tilt)}` : ''}`
+          : `${tr(kind === 'start' ? 'zone.start' : 'zone.goal')} · ID ${kind === 'start' ? zoneToolId('start', map.startShape) : zoneToolId('goal', map.goalShape)} · ${sizeText(b.w, b.h)}`;
         this.drawInfoLabel(label, b.x + b.w, b.y, u);
       }
+    }
+
+    // A selected turret (#60 / #61): its detection range, and the arc the barrel can swing through
+    const st = selIndex >= 0 ? map.objects[selIndex] : undefined;
+    if (st?.turret) {
+      const c = shapeCenter(st.shape);
+      const tu = st.turret;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(224,72,72,0.75)';
+      ctx.fillStyle = 'rgba(224,72,72,0.06)';
+      ctx.lineWidth = 1.2 * u;
+      ctx.setLineDash([6 * u, 4 * u]);
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, tu.range, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (tu.kind === 'gun' && tu.arc < 360) {
+        const a = (tu.angle * Math.PI) / 180;
+        const half = (tu.arc * Math.PI) / 360;
+        ctx.fillStyle = 'rgba(224,72,72,0.12)';
+        ctx.beginPath();
+        ctx.moveTo(c.x, c.y);
+        ctx.arc(c.x, c.y, tu.range, a - half, a + half);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
     }
 
     // Multi-selection: every member outlined, plus one box around them all
@@ -2333,6 +2637,15 @@ export class Editor {
     for (const { h, p } of this.handles()) {
       ctx.lineWidth = 1.2 * u;
       ctx.strokeStyle = COLORS.ink;
+      if (h.kind === 'rotate') {
+        const active = dr?.type === 'handle' && dr.h.kind === 'rotate';
+        if (o) this.drawRotateHandle(shapeCenter(o.shape), o.tilt ?? 0, p, u, active);
+        else {
+          const g = this.groupRotate();
+          if (g) this.drawRotateHandle(g.c, g.deg, p, u, active);
+        }
+        continue;
+      }
       if (h.kind === 'pivot') {
         ctx.fillStyle = COLORS.pivot;
         ctx.beginPath();

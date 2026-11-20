@@ -18,6 +18,11 @@ const PATTERNS: [PatternKind, string][] = [
   ['sandBrick', t('pattern.sandBrick')],
   ['bark', t('pattern.bark')],
   ['woodGrain', t('pattern.woodGrain')],
+  ['thicket', t('pattern.thicket')],
+  ['mud', t('pattern.mud')],
+  ['snow', t('pattern.snow')],
+  ['ice', t('pattern.ice')],
+  ['iceCrystal', t('pattern.iceCrystal')],
 ];
 const CATEGORIES: [keyof Theme, string][] = [['wall', t('themePanel.walls')], ['path', t('common.paths')]];
 

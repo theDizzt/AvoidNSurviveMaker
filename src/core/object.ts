@@ -1,6 +1,6 @@
 import { BladeMotion, FallMover, FallSpin, Roller, SawSpin, SpikeMover } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
-import { flattenShape, shapeCenter } from './shape';
+import { flattenShape, ringBounds, rotateRing, shapeCenter, type FlatShape } from './shape';
 import type { MapData, MapObject, Point, Rect, Role } from './types';
 
 /**
@@ -17,7 +17,7 @@ export interface Transform {
 export interface CompiledObject {
   readonly src: MapObject | null;
   readonly role: Role;
-  /** Closed ring in local (rest) coordinates */
+  /** Closed ring in local (rest) coordinates, with the object's tilt applied */
   readonly poly: Float64Array;
   readonly minX: number;
   readonly minY: number;
@@ -29,6 +29,13 @@ export interface CompiledObject {
   readonly rotation: { angleAt(t: number): number } | null;
   readonly px: number;
   readonly py: number;
+  /** Static tilt in radians (0 = none), about (cx, cy) */
+  readonly tilt: number;
+  /** Shape center: the tilt center, the motion anchor */
+  readonly cx: number;
+  readonly cy: number;
+  /** The shape before its tilt (same as the tilted ring when there is none). Draw it in `tiltFrame`. */
+  readonly box: FlatShape;
   readonly dynamic: boolean;
   /** Conservative full-motion bounds for non-rotating objects. */
   readonly travelBounds?: { minX: number; minY: number; maxX: number; maxY: number };
@@ -37,12 +44,21 @@ export interface CompiledObject {
 const tmp: Point = { x: 0, y: 0 };
 
 export function compileObject(o: MapObject): CompiledObject {
-  const flat = flattenShape(o.shape);
+  return compileTiltedAbout(o);
+}
+
+/** `tiltCenter` overrides the point the tilt turns about (door panels turn about their whole door) */
+export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledObject {
+  const box = flattenShape(o.shape);
   const center = shapeCenter(o.shape);
+  const tc = tiltCenter ?? center;
+  const tilt = o.tilt ? (o.tilt * Math.PI) / 180 : 0;
+  const flat = tilt ? ringBounds(rotateRing(box.poly, tc, o.tilt!)) : box;
   const route = o.motion ? new CompiledMotion(o.motion, center) : null;
   const saw = o.role === 'wall' ? o.saw : undefined;
-  // A saw blade saws along its long side
-  const axis = flat.maxX - flat.minX >= flat.maxY - flat.minY ? { x: 1, y: 0 } : { x: 0, y: 1 };
+  // A saw blade saws along its long side (turned with the tilt)
+  const long = box.maxX - box.minX >= box.maxY - box.minY;
+  const axis = long ? { x: Math.cos(tilt), y: Math.sin(tilt) } : { x: -Math.sin(tilt), y: Math.cos(tilt) };
   const motion = o.fall ? new FallMover(o.fall)
     : o.spike ? new SpikeMover(o.spike)
     : saw?.kind === 'blade' ? new BladeMotion(route?.moves ? route : null, axis, saw)
@@ -50,7 +66,7 @@ export function compileObject(o: MapObject): CompiledObject {
   // A boulder spins about its own center by the distance it has rolled; a grinder spins steadily
   const rotation = o.fall ? new FallSpin(o.fall)
     : o.boulder && route?.moves
-    ? new Roller(route, Math.min(flat.maxX - flat.minX, flat.maxY - flat.minY) / 2)
+    ? new Roller(route, Math.min(box.maxX - box.minX, box.maxY - box.minY) / 2)
     : saw?.kind === 'disc' ? new SawSpin(saw)
       : saw ? null
         : o.rotation ? new CompiledRotation(o.rotation) : null;
@@ -88,8 +104,12 @@ export function compileObject(o: MapObject): CompiledObject {
     rotation: rotation && rotation.dur > 0 ? rotation : null,
     px: pivot.x,
     py: pivot.y,
+    tilt,
+    cx: tc.x,
+    cy: tc.y,
+    box,
     // Switch-linked objects can move, stop or vanish during a run, so they are drawn on their own
-    dynamic: !!motion?.moves || (!!rotation && rotation.dur > 0) || !!o.link || !!saw,
+    dynamic: !!motion?.moves || (!!rotation && rotation.dur > 0) || !!o.link || !!saw || !!o.blink,
     travelBounds,
   };
 }
@@ -123,6 +143,22 @@ export function toWorld(o: CompiledObject, tf: Transform, x: number, y: number, 
   const ly = y - o.py;
   out.x = tf.cos * lx - tf.sin * ly + o.px + tf.dx;
   out.y = tf.sin * lx + tf.cos * ly + o.py + tf.dy;
+  return out;
+}
+
+/** A point of the untilted shape (`box`) where it sits in the rest pose (tilt applied) */
+export function tiltPoint(o: CompiledObject, x: number, y: number, out: Point): Point {
+  if (!o.tilt) {
+    out.x = x;
+    out.y = y;
+    return out;
+  }
+  const cos = Math.cos(o.tilt);
+  const sin = Math.sin(o.tilt);
+  const dx = x - o.cx;
+  const dy = y - o.cy;
+  out.x = o.cx + cos * dx - sin * dy;
+  out.y = o.cy + sin * dx + cos * dy;
   return out;
 }
 

@@ -2,7 +2,7 @@ import { t as tr } from './i18n';
 
 import { type Transform } from '../core/object';
 
-import type { Easing, FogKind, MapObject, Motion, MotionType, Point, Rect, Repeat, Role, Shape, TriggerKind } from '../core/types';
+import type { Easing, FogKind, MapObject, Motion, MotionType, Point, Rect, Repeat, Role, Shape, TriggerKind, ZoneShape } from '../core/types';
 import { switchColor } from './localized/colors';
 
 import { DEFAULT_BOULDER_WAVE, DEFAULT_MOTION } from './localized/validate';
@@ -11,7 +11,8 @@ export type { EditorSelection as Selection } from '../core/editor-document';
 
 export type ShapeKind = 'rect' | 'ellipse' | 'poly' | 'free' | 'sector';
 
-export type Behavior = 'static' | 'moving' | 'rotating';
+/** blinking: appears and disappears on a cycle (#75–82) */
+export type Behavior = 'static' | 'moving' | 'rotating' | 'blinking';
 
 export interface ObjectTool {
   kind: 'object';
@@ -28,9 +29,20 @@ export interface ObjectTool {
   ring?: boolean;
   /** role 'torch': the carryable kind (#58) */
   carry?: boolean;
+  /** role 'turret': gun turret (#60) or missile launcher (#61) */
+  turret?: 'gun' | 'missile';
+  /** role 'path': ice floor (#71–74) */
+  ice?: boolean;
 }
 
-export type Tool = { kind: 'select' } | { kind: 'zone'; zone: 'start' | 'goal' } | ObjectTool;
+/** START / GOAL tool: a rectangle (#9 / #10), or a circle, polygon or freeform (#63–68) */
+export interface ZoneTool {
+  kind: 'zone';
+  zone: 'start' | 'goal';
+  shape?: 'ellipse' | 'poly' | 'free';
+}
+
+export type Tool = { kind: 'select' } | ZoneTool | ObjectTool;
 
 export const SHAPES: [ShapeKind, string][] = [
   ['rect', tr('ed.rectangle')],
@@ -47,6 +59,8 @@ export const GROUPS: ({ title: string; role: Role; behavior: Behavior; first: nu
   { title: tr('ed.rotatingPaths'), role: 'path', behavior: 'rotating', first: 15 },
   { title: tr('ed.movingWalls'), role: 'wall', behavior: 'moving', first: 19 },
   { title: tr('ed.rotatingWalls'), role: 'wall', behavior: 'rotating', first: 23 },
+  { title: tr('ed.blinkingPaths'), role: 'path', behavior: 'blinking', first: 75 },
+  { title: tr('ed.blinkingWalls'), role: 'wall', behavior: 'blinking', first: 79 },
 ];
 
 export const ICONS: Record<ShapeKind, string> = {
@@ -60,7 +74,7 @@ export const ICONS: Record<ShapeKind, string> = {
 export const SPECIAL_IDS = {
   sectorPath: 27, sectorWall: 28, spike: 29, boulder: 30, coin: 31, laser: 37, mirror: 38, portal: 39, door: 40, dark: 41, globalDark: 42,
   disc: 43, blade: 44, movingDisc: 45, movingBlade: 46, text: 47, safe: 48, fog: 49, sand: 50,
-  fall: 51, pulley: 52, ringPath: 53, ringWall: 54, secret: 55, secretFree: 56, torch: 57, carryTorch: 58, crystal: 59,
+  fall: 51, pulley: 52, ringPath: 53, ringWall: 54, secret: 55, secretFree: 56, torch: 57, carryTorch: 58, crystal: 59, turret: 60, missile: 61,
 } as const;
 
 export const TRIGGER_IDS: Record<TriggerKind, number> = { switch: 32, timer: 33, hold: 34, startZone: 35, stopZone: 36 };
@@ -73,7 +87,7 @@ export const isButton = (k: TriggerKind | undefined) => k === 'switch' || k === 
 
 export const ROLE_NAMES: Record<Role, string> = {
   path: tr('ed.namePath'), wall: tr('ed.nameWall'), coin: tr('ed.nameCoin'), dark: tr('ed.nameDark'), trigger: tr('ed.nameSwitch'), door: tr('ed.nameDoor'), laser: tr('ed.laser'), mirror: tr('ed.mirror'), portal: tr('ed.namePortal'),
-  text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'), torch: tr('ed.nameTorch'), secret: tr('ed.nameSecret'), crystal: tr('ed.nameCrystal'), pulley: tr('ed.namePulley'),
+  text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'), torch: tr('ed.nameTorch'), secret: tr('ed.nameSecret'), crystal: tr('ed.nameCrystal'), pulley: tr('ed.namePulley'), turret: tr('ed.nameTurret'),
 };
 
 export const fogName = (kind: FogKind | undefined) => tr(kind === 'sand' ? 'ed.nameSand' : 'ed.nameFog');
@@ -81,7 +95,7 @@ export const fogName = (kind: FogKind | undefined) => tr(kind === 'sand' ? 'ed.n
 export const isSquare = (o: { role: Role; trigger?: { kind: TriggerKind }; saw?: { kind: string } }) => o.role === 'pulley' || o.role === 'portal' || o.role === 'laser' || isButton(o.trigger?.kind) || o.saw?.kind === 'disc';
 
 export function withBehavior(beh: Behavior, name: string): string {
-  return beh === 'moving' ? tr('ed.nameMoving', { name }) : beh === 'rotating' ? tr('ed.nameRotating', { name }) : name;
+  return beh === 'moving' ? tr('ed.nameMoving', { name }) : beh === 'rotating' ? tr('ed.nameRotating', { name }) : beh === 'blinking' ? tr('ed.nameBlinking', { name }) : name;
 }
 
 export function toolLabel(t: ObjectTool): string {
@@ -91,8 +105,10 @@ export function toolLabel(t: ObjectTool): string {
   if (t.special === 'fall') return tr('ed.nameFall');
   if (t.role === 'fog') return fogName(t.fog);
   if (t.role === 'torch') return tr(t.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch');
+  if (t.role === 'turret') return tr(t.turret === 'missile' ? 'ed.nameMissile' : 'ed.nameTurret');
   if (t.special === 'disc' || t.special === 'blade') return withBehavior(t.behavior === 'moving' ? 'moving' : 'static', tr(t.special === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (t.role !== 'path' && t.role !== 'wall') return ROLE_NAMES[t.role];
+  if (t.ice) return tr('ed.shapeRole', { shape: SHAPES.find(([k]) => k === t.shape)![1], role: tr('ed.nameIce') });
   const shape = t.shape === 'sector' ? tr(t.ring ? 'ed.shapeRing' : 'ed.shapeSector') : SHAPES.find(([k]) => k === t.shape)![1];
   return withBehavior(t.behavior, tr('ed.shapeRole', { shape, role: ROLE_NAMES[t.role] }));
 }
@@ -107,18 +123,19 @@ export function describeObject(o: MapObject): string {
       : o.shape.type === 'ellipse' ? 'common.circle'
         : o.shape.type === 'sector' ? (o.shape.inner ? 'ed.shapeRing' : 'ed.shapeSector')
           : isFreeform(o.shape) ? 'ed.freeform' : 'ed.polygon');
-  const beh: Behavior = o.rotation ? 'rotating' : o.motion ? 'moving' : 'static';
+  const beh: Behavior = o.blink ? 'blinking' : o.rotation ? 'rotating' : o.motion ? 'moving' : 'static';
   if (o.role === 'trigger') return withBehavior(beh, tr('ed.colorName', { color: switchColor(o.trigger?.color ?? 0).name, name: TRIGGER_NAMES[o.trigger?.kind ?? 'switch'] }));
   if (o.spike) return tr('ed.nameSpike');
   if (o.boulder) return tr('ed.nameBoulder');
   if (o.fall) return tr('ed.nameFall');
   if (o.role === 'pulley') return tr('ed.colorName', { color: switchColor(o.pulley?.color ?? 0).name, name: tr('ed.namePulley') });
   if (o.role === 'fog') return withBehavior(beh, fogName(o.fog?.kind));
+  if (o.role === 'turret') return withBehavior(beh, tr(o.turret?.kind === 'missile' ? 'ed.nameMissile' : 'ed.nameTurret'));
   if (o.role === 'torch') return withBehavior(beh, tr(o.torch?.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch'));
   if (o.saw) return withBehavior(o.motion ? 'moving' : 'static', tr(o.saw.kind === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (o.role === 'laser' || o.role === 'portal') return withBehavior(beh, tr('ed.colorName', { color: switchColor((o.laser ?? o.portal)!.color).name, name: ROLE_NAMES[o.role] }));
   if (o.role !== 'path' && o.role !== 'wall') return withBehavior(beh, ROLE_NAMES[o.role]);
-  return withBehavior(beh, tr('ed.shapeRole', { shape, role: ROLE_NAMES[o.role] }));
+  return withBehavior(beh, tr('ed.shapeRole', { shape, role: o.ice ? tr('ed.nameIce') : ROLE_NAMES[o.role] }));
 }
 
 export function objectToolId(o: MapObject): number {
@@ -138,18 +155,28 @@ export function objectToolId(o: MapObject): number {
   if (o.role === 'secret') return isFreeform(o.shape) ? SPECIAL_IDS.secretFree : SPECIAL_IDS.secret;
   if (o.role === 'crystal') return SPECIAL_IDS.crystal;
   if (o.role === 'pulley') return SPECIAL_IDS.pulley;
+  if (o.role === 'turret') return o.turret?.kind === 'missile' ? SPECIAL_IDS.missile : SPECIAL_IDS.turret;
   if (o.fall) return SPECIAL_IDS.fall;
   if (o.role === 'trigger') return TRIGGER_IDS[o.trigger?.kind ?? 'switch'];
+  if (o.ice && o.shape.type !== 'sector') return 71 + (o.shape.type === 'rect' ? 0 : o.shape.type === 'ellipse' ? 1 : isFreeform(o.shape) ? 3 : 2);
   if (o.shape.type === 'sector' && o.shape.inner) return o.role === 'path' ? SPECIAL_IDS.ringPath : SPECIAL_IDS.ringWall;
   if (o.shape.type === 'sector') return o.role === 'path' ? SPECIAL_IDS.sectorPath : SPECIAL_IDS.sectorWall;
   const shape = o.shape.type === 'rect' ? 0 : o.shape.type === 'ellipse' ? 1 : isFreeform(o.shape) ? 3 : 2;
   const group = GROUPS.find(
-    (g) => 'role' in g && g.role === o.role && g.behavior === (o.rotation ? 'rotating' : o.motion ? 'moving' : 'static'),
+    (g) => 'role' in g && g.role === o.role && g.behavior === (o.blink ? 'blinking' : o.rotation ? 'rotating' : o.motion ? 'moving' : 'static'),
   );
   return group && 'first' in group ? group.first + shape : 0;
 }
 
 export const ZONE_IDS = { start: 9, goal: 10 } as const;
+
+/** Palette number of a START / GOAL zone by its shape: 9/10, circles 63/64, polygons 65/66, freeforms 67/68 */
+export function zoneToolId(zone: 'start' | 'goal', shape: ZoneShape | undefined): number {
+  const k = zone === 'start' ? 0 : 1;
+  if (!shape) return ZONE_IDS[zone];
+  if (shape.type === 'ellipse') return 63 + k;
+  return (shape.free ? 67 : 65) + k;
+}
 
 export function sizeText(w: number, h: number): string {
   return `${Math.round(w)}×${Math.round(h)}`;
@@ -165,7 +192,9 @@ export type Handle =
   /** Sector: the two arc ends (angles) and the arc middle (radius) */
   | { kind: 'arc'; part: 'start' | 'end' | 'radius' | 'inner' }
   /** Laser: beam direction */
-  | { kind: 'aim' };
+  | { kind: 'aim' }
+  /** Tilt: turns the object about its center */
+  | { kind: 'rotate' };
 
 export type Drag =
   | { type: 'box'; x0: number; y0: number; x1: number; y1: number; square: boolean }
@@ -177,7 +206,11 @@ export type Drag =
     clicked: number | null;
   }
   | { type: 'marquee'; x0: number; y0: number; x1: number; y1: number; add: boolean; base: number[] }
-  | { type: 'handle'; h: Handle; before: string; moved: boolean; orig: MapObject | Rect };
+  | {
+    type: 'handle'; h: Handle; before: string; moved: boolean; orig: MapObject | Rect; /** rotate: pointer angle at the start (deg) */ a0?: number;
+    /** Rotating a multi-selection: the objects as they were, the fixed center, the handle's distance from it and the angle turned so far */
+    group?: { objs: { i: number; o: MapObject }[]; c: Point; r: number; deg: number };
+  };
 
 
 
@@ -189,6 +222,8 @@ export const GRID = 10;
 export const HANDLE_PX = 7;
 
 export const PIVOT_SNAP_PX = 10;
+/** How far above an object its tilt handle sits (screen px) */
+export const ROTATE_HANDLE_PX = 26;
 
 export const MIN_ZOOM = 0.25;
 

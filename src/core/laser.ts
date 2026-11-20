@@ -1,10 +1,11 @@
 import { toWorld, transformAt, type CompiledObject, type Transform } from './object';
 import { doorPanels } from './switches';
+import { rotateRing } from './shape';
 import type { MapData, Point } from './types';
 
 /**
  * Laser beams: a ray from each emitter's center, reflected by mirrors and stopped by walls,
- * doors, other emitters and the map edge. Beams are polylines in map coordinates.
+ * doors, other emitters, turrets and the map edge. Beams are polylines in map coordinates.
  */
 export interface Beam {
   color: number;
@@ -40,10 +41,10 @@ export class BeamCaster {
   constructor(private readonly map: MapData, private readonly objects: readonly CompiledObject[]) {
     this.lasers = objects.flatMap((o, i) => (o.role === 'laser' ? [i] : []));
     this.relevant = objects.flatMap((o, i) =>
-      o.role === 'wall' || o.role === 'mirror' || o.role === 'laser' || o.role === 'door' ? [i] : []);
+      o.role === 'wall' || o.role === 'mirror' || o.role === 'laser' || o.role === 'turret' || o.role === 'door' ? [i] : []);
     this.previousState = new Float64Array(this.relevant.length * 3 + 16).fill(NaN);
     objects.forEach((o, i) => {
-      if (!o.dynamic && (o.role === 'wall' || o.role === 'mirror' || o.role === 'laser')) this.staticRings.set(i, o.poly);
+      if (!o.dynamic && (o.role === 'wall' || o.role === 'mirror' || o.role === 'laser' || o.role === 'turret')) this.staticRings.set(i, o.poly);
     });
   }
 
@@ -95,7 +96,7 @@ export class BeamCaster {
     for (const i of this.relevant) {
       const o = this.objects[i];
       if (st.hidden?.[i]) continue;
-      if (o.role === 'wall' || o.role === 'laser') blockers.push({ ring: this.ring(i, st.timeOf(i)), owner: i });
+      if (o.role === 'wall' || o.role === 'laser' || o.role === 'turret') blockers.push({ ring: this.ring(i, st.timeOf(i)), owner: i });
       else if (o.role === 'mirror') mirrors.push(this.ring(i, st.timeOf(i)));
     }
     // Doors: both halves where they currently are
@@ -103,10 +104,12 @@ export class BeamCaster {
       const m = this.map.objects[i];
       if (m.role !== 'door' || m.shape.type !== 'rect') continue;
       const open = st.doorOpen?.[i] ?? 0;
+      const c = { x: m.shape.x + m.shape.w / 2, y: m.shape.y + m.shape.h / 2 };
       for (const h of doorPanels(m.shape)) {
         const x = h.rect.x + h.slide.x * open;
         const y = h.rect.y + h.slide.y * open;
-        blockers.push({ ring: new Float64Array([x, y, x + h.rect.w, y, x + h.rect.w, y + h.rect.h, x, y + h.rect.h]), owner: -1 });
+        const ring = new Float64Array([x, y, x + h.rect.w, y, x + h.rect.w, y + h.rect.h, x, y + h.rect.h]);
+        blockers.push({ ring: m.tilt ? rotateRing(ring, c, m.tilt) : ring, owner: -1 });
       }
     }
 
@@ -119,7 +122,7 @@ export class BeamCaster {
       if (l.on === flipped) continue; // off
       const o = this.objects[i];
       transformAt(o, st.timeOf(i), tf);
-      toWorld(o, tf, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2, tmp);
+      toWorld(o, tf, o.cx, o.cy, tmp);
       const a = (l.angle * Math.PI) / 180 + Math.atan2(tf.sin, tf.cos);
       out.push({ color: l.color, pts: this.cast(tmp.x, tmp.y, Math.cos(a), Math.sin(a), blockers, mirrors, i) });
     }

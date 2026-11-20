@@ -13,27 +13,27 @@
     "cover":  "cover.svg",
     "style":  {
                   "maze":  {
-                               "wall":  {
-                                            "edge":  "#b5e965",
-                                            "fill":  {
-                                                         "background":  "#142c27",
-                                                         "color":  "#b759b8",
-                                                         "pattern":  "dots",
-                                                         "size":  16,
-                                                         "type":  "pattern"
-                                                     }
-                                        },
-                               "path":  {
-                                            "edge":  "#b759b8",
-                                            "fill":  {
-                                                         "angle":  90,
-                                                         "from":  "#142c27",
-                                                         "style":  "linear",
-                                                         "to":  "#b759b8",
-                                                         "type":  "gradient"
-                                                     }
-                                        }
-                           },
+                      "wall": {
+                          "fill": {
+                              "type": "pattern",
+                              "pattern": "thicket",
+                              "color": "#4f8f3a",
+                              "background": "#1b3620",
+                              "size": 56
+                          },
+                          "edge": "#b5e965"
+                      },
+                      "path": {
+                          "fill": {
+                              "type": "pattern",
+                              "pattern": "mud",
+                              "color": "#3a2919",
+                              "background": "#6a4f36",
+                              "size": 64
+                          },
+                          "edge": "#a07a52"
+                      }
+                  },
                   "badge":  {
                                 "caption":  "CHAPTER 04 / BOTANY",
                                 "kind":  "ring",

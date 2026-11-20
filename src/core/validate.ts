@@ -3,11 +3,11 @@ import { contentHash } from './record-identity';
 import { pointInPoly, pointInRect } from './geometry';
 import { compileObject, toWorld, transformAt, type Transform } from './object';
 import { createColorsApi } from './colors';
-import { shapeBounds, shapeCenter } from './shape';
+import { normalizeTilt, shapeBounds, shapeCenter } from './shape';
 import {
   MAP_VERSION, PACK_VERSION,
   type Door, type Easing, type Fill, type MapData, type MapPack, type Trigger, type TriggerKind, type MapObject, type Motion, type PatternKind, type Point, type PolyPoint, type Rect,
-  type Repeat, type Rotation, type Shape, type SurfaceStyle, type Theme, type Wave, type Fall, type Pulley,
+  type Repeat, type Rotation, type Shape, type SurfaceStyle, type Theme, type Wave, type Fall, type Pulley, type Turret, type Blink, type ZoneShape,
 } from './types';
 
 export class MapValidationError extends Error {}
@@ -41,6 +41,10 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     /** Crystal stars (#59) are always this size, and a map has at most this many */
     crystalSize: 48,
     maxCrystals: 1,
+    /** Turrets (#60) and missile launchers (#61) are always this size (square) */
+    turretSize: 60,
+    maxTurretRange: 4000,
+    minFireMs: 50,
     /** Global darkness light radius */
     minLight: 0,
     maxLight: 2000,
@@ -206,14 +210,33 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     };
   }
 
+  /** A START / GOAL shape (#63–68): in 0–1 coordinates inside the zone's rectangle */
+  function zoneShapeOf(v: unknown, name: string): ZoneShape {
+    const o = obj(v, name);
+    const type = oneOf(o.type, `${name}.type`, ['ellipse', 'poly'] as const);
+    if (type === 'ellipse') return { type };
+    const points = arr(o.points, `${name}.points`, LIMITS.maxPolyPoints).map((p, i) => {
+      const q = obj(p, `${name}.points[${i}]`);
+      const out: PolyPoint = { x: num(q.x, `${name}.points[${i}].x`, 0, 1), y: num(q.y, `${name}.points[${i}].y`, 0, 1) };
+      if (q.smooth === true) out.smooth = true;
+      return out;
+    });
+    if (points.length < 3) fail(t('validate.polyPoints', { name }));
+    return { type, points, ...(o.free === true ? { free: true } : {}) };
+  }
+
   function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
     const o = obj(v, name);
     const out: MapObject = {
-      role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret', 'crystal', 'pulley'] as const),
+      role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret', 'crystal', 'pulley', 'turret'] as const),
       shape: shape(o.shape, `${name}.shape`, W, H),
     };
     if (o.motion !== undefined) out.motion = motion(o.motion, `${name}.motion`, W, H);
     if (o.rotation !== undefined) out.rotation = rotation(o.rotation, `${name}.rotation`, W, H);
+    if (o.tilt !== undefined) {
+      const tilt = normalizeTilt(num(o.tilt, `${name}.tilt`, -720, 720));
+      if (tilt) out.tilt = tilt;
+    }
     if (o.group !== undefined) {
       const g = num(o.group, `${name}.group`, 1, 1e9);
       if (Number.isInteger(g)) out.group = g;
@@ -229,7 +252,29 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       const h = LIMITS.crystalSize / 2;
       out.shape = { type: 'rect', x: c.x - h, y: c.y - h, w: LIMITS.crystalSize, h: LIMITS.crystalSize };
     }
+    if (out.role === 'turret') {
+      // Always a 60×60 square, centered where the shape was
+      const c = shapeCenter(out.shape);
+      const h = LIMITS.turretSize / 2;
+      out.shape = { type: 'rect', x: c.x - h, y: c.y - h, w: LIMITS.turretSize, h: LIMITS.turretSize };
+      const tu = obj(o.turret, `${name}.turret`);
+      const kind = oneOf(tu.kind, `${name}.turret.kind`, ['gun', 'missile'] as const);
+      const d = kind === 'gun' ? DEFAULT_GUN : DEFAULT_MISSILE;
+      const opt = (k: keyof Turret, min: number, max: number) => (tu[k] === undefined ? d[k] as number : num(tu[k], `${name}.turret.${k}`, min, max));
+      out.turret = {
+        kind,
+        range: opt('range', 1, LIMITS.maxTurretRange),
+        fireMs: opt('fireMs', LIMITS.minFireMs, LIMITS.maxDelay),
+        speed: opt('speed', 1, LIMITS.maxSpeed),
+        angle: opt('angle', -720, 720),
+        arc: opt('arc', 0, 360),
+        turnSpeed: opt('turnSpeed', 0, LIMITS.maxRotSpeed),
+        lifeMs: opt('lifeMs', 100, LIMITS.maxDelay),
+        pierce: tu.pierce === true,
+      };
+    }
     if (out.role === 'path' && o.pierce === true) out.pierce = true;
+    if (out.role === 'path' && o.ice !== undefined) out.ice = { grip: num(obj(o.ice, `${name}.ice`).grip, `${name}.ice.grip`, 1, 100) };
     if (out.role === 'trigger') out.trigger = trigger(o.trigger, `${name}.trigger`);
     if (out.role === 'door') {
       if (out.shape.type !== 'rect') fail(t('validate.doorRect', { name }));
@@ -258,6 +303,14 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       // It only drops: no route or rotation of its own
       delete out.motion;
       delete out.rotation;
+    }
+    if ((out.role === 'path' || out.role === 'wall') && o.blink !== undefined) {
+      const b = obj(o.blink, `${name}.blink`);
+      out.blink = {
+        onMs: num(b.onMs, `${name}.blink.onMs`, 50, LIMITS.maxDelay),
+        offMs: num(b.offMs, `${name}.blink.offMs`, 0, LIMITS.maxDelay),
+        delay: num(b.delay, `${name}.blink.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
+      };
     }
     if (out.role === 'pulley') {
       const pl = obj(o.pulley, `${name}.pulley`);
@@ -333,7 +386,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       const f = obj(o.fog, `${name}.fog`);
       out.fog = { kind: oneOf(f.kind, `${name}.fog.kind`, ['fog', 'sand'] as const), density: num(f.density, `${name}.fog.density`, 0, 100) };
     }
-    if (o.link !== undefined && (out.role === 'path' || out.role === 'wall' || out.role === 'coin' || out.role === 'dark' || out.role === 'fog' || out.role === 'mirror' || out.role === 'laser')) {
+    if (o.link !== undefined && (out.role === 'path' || out.role === 'wall' || out.role === 'coin' || out.role === 'dark' || out.role === 'fog' || out.role === 'mirror' || out.role === 'laser' || out.role === 'turret')) {
       const l = obj(o.link, `${name}.link`);
       out.link = { color: colorIndex(l.color, `${name}.link.color`), action: oneOf(l.action, `${name}.link.action`, ['start', 'stop', 'remove', 'pulley'] as const) };
     }
@@ -361,7 +414,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     return v.toLowerCase();
   }
 
-  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain'] as const satisfies readonly PatternKind[];
+  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'snow', 'ice', 'iceCrystal'] as const satisfies readonly PatternKind[];
 
   function fill(v: unknown, name: string): Fill {
     const o = obj(v, name);
@@ -439,12 +492,18 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       height: H,
       start: rect(o.start, 'start', W, H),
       goal: rect(o.goal, 'goal', W, H),
+      ...(o.startShape !== undefined ? { startShape: zoneShapeOf(o.startShape, 'startShape') } : {}),
+      ...(o.goalShape !== undefined ? { goalShape: zoneShapeOf(o.goalShape, 'goalShape') } : {}),
       objects: arr(o.objects, 'objects', LIMITS.maxObjects).map((m, i) => mapObject(m, `objects[${i}]`, W, H)),
     };
     if (o.theme !== undefined) map.theme = theme(o.theme, 'theme');
     if (o.themeDesign !== undefined) {
       if (typeof o.themeDesign !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(o.themeDesign)) fail('Invalid theme design id');
       map.themeDesign = o.themeDesign;
+    }
+    if (o.themeId !== undefined) {
+      if (typeof o.themeId !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(o.themeId)) fail('Invalid theme id');
+      map.themeId = o.themeId;
     }
     if (o.id !== undefined) {
       if (typeof o.id !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(o.id)) fail('Invalid level id');
@@ -601,6 +660,13 @@ export function createValidateApi(t: Translator = defaultTranslate) {
   const DEFAULT_FALL: Readonly<Fall> = { height: 300, fallMs: 600, waitMs: 1200, delay: 0 };
   /** A new pulley's settings, besides its color (#52) */
   const DEFAULT_PULLEY: Readonly<Omit<Pulley, 'color'>> = { mode: 'hold', turnMs: 1000, unwind: 50 };
+  /** A new ice floor (#71–74) */
+  const DEFAULT_ICE_GRIP = 25;
+  /** A new blinking path / wall (#75–82) */
+  const DEFAULT_BLINK: Readonly<Blink> = { onMs: 1500, offMs: 1000, delay: 0 };
+  /** A new turret (#60) / missile launcher (#61) */
+  const DEFAULT_GUN: Readonly<Turret> = { kind: 'gun', range: 300, fireMs: 800, speed: 320, angle: 0, arc: 360, turnSpeed: 180, lifeMs: 5000, pierce: false };
+  const DEFAULT_MISSILE: Readonly<Turret> = { kind: 'missile', range: 400, fireMs: 2500, speed: 200, angle: -90, arc: 360, turnSpeed: 120, lifeMs: 5000, pierce: false };
   /** Light radius of a new torch (#57 / #58) */
   const DEFAULT_TORCH_LIGHT = 120;
   /** How far around the cursor a secret wall (#55) shows what lies under it */
@@ -618,7 +684,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       delay: 0,
     };
   }
-  return { LIMITS, validateMap, validatePack, mapErrors, mapWarnings, createEmptyMap, DEFAULT_MOTION, DEFAULT_BOULDER_WAVE, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_TORCH_LIGHT, DEFAULT_SECRET_RADIUS, defaultRotation };
+  return { LIMITS, validateMap, validatePack, mapErrors, mapWarnings, createEmptyMap, DEFAULT_MOTION, DEFAULT_BOULDER_WAVE, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_ICE_GRIP, DEFAULT_BLINK, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_TORCH_LIGHT, DEFAULT_SECRET_RADIUS, defaultRotation };
 }
 
-export const { LIMITS, validateMap, validatePack, mapErrors, mapWarnings, createEmptyMap, DEFAULT_MOTION, DEFAULT_BOULDER_WAVE, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_TORCH_LIGHT, DEFAULT_SECRET_RADIUS, defaultRotation } = createValidateApi();
+export const { LIMITS, validateMap, validatePack, mapErrors, mapWarnings, createEmptyMap, DEFAULT_MOTION, DEFAULT_BOULDER_WAVE, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_ICE_GRIP, DEFAULT_BLINK, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_TORCH_LIGHT, DEFAULT_SECRET_RADIUS, defaultRotation } = createValidateApi();

@@ -13,27 +13,55 @@
     "cover":  "cover.svg",
     "style":  {
                   "maze":  {
-                               "wall":  {
-                                            "edge":  "#b6ecff",
-                                            "fill":  {
-                                                         "background":  "#17283e",
-                                                         "color":  "#6e92dd",
-                                                         "pattern":  "diagonal",
-                                                         "size":  16,
-                                                         "type":  "pattern"
-                                                     }
-                                        },
-                               "path":  {
-                                            "edge":  "#6e92dd",
-                                            "fill":  {
-                                                         "angle":  90,
-                                                         "from":  "#17283e",
-                                                         "style":  "linear",
-                                                         "to":  "#6e92dd",
-                                                         "type":  "gradient"
-                                                     }
-                                        }
-                           },
+                      "wall": {
+                          "fill": {
+                              "type": "pattern",
+                              "pattern": "snow",
+                              "color": "#9ebbd8",
+                              "background": "#eef6fc",
+                              "size": 64
+                          },
+                          "edge": "#ffffff"
+                      },
+                      "path": {
+                          "fill": {
+                              "type": "pattern",
+                              "pattern": "ice",
+                              "color": "#e8f8ff",
+                              "background": "#5f9fcf",
+                              "size": 64
+                          },
+                          "edge": "#b6ecff"
+                      }
+                  },
+                  "designs":  [
+                      {
+                          "id": "ice-cave",
+                          "name": "Ice Cave",
+                          "maze": {
+                              "wall": {
+                                  "fill": {
+                                      "type": "pattern",
+                                      "pattern": "iceCrystal",
+                                      "color": "#7fd4f5",
+                                      "background": "#123553",
+                                      "size": 64
+                                  },
+                                  "edge": "#b6ecff"
+                              },
+                              "path": {
+                                  "fill": {
+                                      "type": "pattern",
+                                      "pattern": "ice",
+                                      "color": "#a8e6ff",
+                                      "background": "#1f4d70",
+                                      "size": 64
+                                  },
+                                  "edge": "#6e92dd"
+                              }
+                          }
+                      }
+                  ],
                   "badge":  {
                                 "caption":  "CHAPTER 05 / FROST",
                                 "kind":  "emblem",

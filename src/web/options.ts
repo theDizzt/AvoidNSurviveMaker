@@ -1,5 +1,5 @@
-/** Pointer samples per second used in play; 0 = every sample the mouse sends */
-export const POLLING_RATES = [0, 1000, 500, 250, 125] as const;
+/** Pointer samples per second used in play; -1 = adaptive, 0 = every sample. */
+export const POLLING_RATES = [-1, 0, 1000, 500, 250, 125] as const;
 export type PollingRate = (typeof POLLING_RATES)[number];
 
 /** Rendering quality: canvas resolution and menu background frame rate (see graphics.ts) */

@@ -1,5 +1,5 @@
 import type { CompiledMotion } from './motion';
-import type { Fall, Point, PolyPoint, Saw, Spike } from './types';
+import type { Blink, Fall, Point, PolyPoint, Saw, Spike } from './types';
 
 /**
  * Movement of a spike stake: rest → fast thrust (eases out) → slow return (eases in and out).
@@ -130,6 +130,19 @@ export function spikeShape(base: Point, tip: Point, width: number): PolyPoint[] 
     { x: r(base.x + nx * h), y: r(base.y + ny * h) },
     { x: r(base.x - nx * h), y: r(base.y - ny * h) },
   ];
+}
+
+/**
+ * Where a blinking path / wall (#75–82) is in its cycle at time t: there (`on`) or not, and how
+ * long (ms) until that changes.
+ */
+export function blinkState(b: Blink, t: number): { on: boolean; left: number } {
+  const u = t - b.delay;
+  if (b.offMs <= 0) return { on: true, left: Infinity };
+  if (u < 0) return { on: true, left: -u + b.onMs };
+  const cycle = b.onMs + b.offMs;
+  const p = u % cycle;
+  return p < b.onMs ? { on: true, left: b.onMs - p } : { on: false, left: cycle - p };
 }
 
 /**

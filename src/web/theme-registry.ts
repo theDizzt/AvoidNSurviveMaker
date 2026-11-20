@@ -171,10 +171,55 @@ export function chapterMusicFor(theme: Theme | undefined): string | null {
   return t?.info.music ? t.assets[t.info.music] ?? null : null;
 }
 
-/** Level badge (number + title) design for a map: its chapter's when it uses a chapter preset */
+/** Level badge (number + title) design for a map on its own: its picked theme's, else the chapter its colors come from */
 export function badgeFor(map: MapData): { style: ThemeEntry['info']['style']['badge']; imageUrl?: string } | null {
-  const t = chapterForTheme(map.theme);
+  const t = (map.themeId ? bundledThemeById(map.themeId) : null) ?? chapterForTheme(map.theme);
   return t ? { style: t.info.style.badge, imageUrl: t.badgeUrl } : null;
+}
+
+/** Badge of a theme entry, in the form the play screen takes */
+export function themeBadge(t: ThemeEntry): { style: ThemeEntry['info']['style']['badge']; imageUrl?: string } {
+  return { style: t.info.style.badge, imageUrl: t.badgeUrl };
+}
+
+/** Music URL of a theme entry, if it has music */
+export function themeMusic(t: ThemeEntry | null): string | null {
+  return t?.info.music ? t.assets[t.info.music] ?? null : null;
+}
+
+/** Music for a map on its own (editor, test play, shared link): its picked theme's, else its chapter preset's */
+export function musicFor(map: Pick<MapData, 'theme' | 'themeId'>): string | null {
+  const t = map.themeId ? bundledThemeById(map.themeId) : null;
+  return t ? themeMusic(t) : chapterMusicFor(map.theme);
+}
+
+/**
+ * Themes every player has (bundled in the game), so a map or a theme pack can refer to them by id:
+ * the official chapters, then the custom theme presets.
+ */
+export function bundledThemes(): ThemeEntry[] {
+  return [...OFFICIAL_THEMES, ...CUSTOM_THEME_PRESETS];
+}
+
+export function bundledThemeById(id: string): ThemeEntry | null {
+  return bundledThemes().find((t) => t.info.id === id) ?? null;
+}
+
+/** Picker options for a bundled theme: "Chapter 01 · Name", custom presets by name */
+export function bundledThemeOptions(): { id: string; name: string; entry: ThemeEntry }[] {
+  return [
+    ...OFFICIAL_THEMES.map((t, i) => ({ id: t.info.id, name: tr('themeRegistry.chapterPreset', { n: String(i + 1).padStart(2, '0'), name: t.info.name }), entry: t })),
+    ...CUSTOM_THEME_PRESETS.map((t) => ({ id: t.info.id, name: t.info.name, entry: t })),
+  ];
+}
+
+/**
+ * The theme a level of `pack` wears (badge, music): the bundled theme linked to its design, if
+ * any, else the pack itself. A level's own `themeId` is ignored inside a pack.
+ */
+export function levelThemeIn(pack: ThemeEntry, map: MapData): ThemeEntry {
+  const design = pack.info.style.designs?.find((d) => d.id === map.themeDesign);
+  return (design?.themeId ? bundledThemeById(design.themeId) : null) ?? pack;
 }
 
 /** Title shown in the badge: the map's title, else its name without a "12. " prefix */

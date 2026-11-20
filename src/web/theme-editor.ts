@@ -16,7 +16,7 @@ import { beginFrame, drawMap, fitCanvas } from './render';
 import { renderThemePanel } from './theme-panel';
 import { ScreenDesigner, type ScreenKind } from './screen-designer';
 import { ensureFonts } from './screen-render';
-import { customStoredTheme, OFFICIAL_THEMES, CUSTOM_THEME_PRESETS, setCustomTheme, themeFileMazePresets, type StoredTheme } from './theme-registry';
+import { bundledThemeById, bundledThemeOptions, customStoredTheme, OFFICIAL_THEMES, CUSTOM_THEME_PRESETS, setCustomTheme, themeFileMazePresets, type StoredTheme } from './theme-registry';
 import { download, fileToDataUrl, readThemeZip, urlToDataUrl, writeThemeZip } from './theme-zip';
 
 /**
@@ -293,7 +293,19 @@ export class ThemeEditor {
   private addLevels(maps: MapData[]): void {
     const room = MAX_PACK_LEVELS - this.draft.levels.length;
     if (room <= 0) return alert(tr('te.packFull', { max: MAX_PACK_LEVELS }));
-    this.draft.levels.push(...maps.slice(0, room));
+    // A map's own theme pick (for playing it on its own) gives way to the pack's settings:
+    // drop it, and the maze colors it copied, so the level follows the pack
+    const added = maps.slice(0, room).map((map) => {
+      if (!map.themeId) return map;
+      const out = { ...map };
+      const entry = bundledThemeById(map.themeId);
+      const copied = entry && [entry.info.style.maze, ...(entry.info.style.designs ?? []).map((d) => d.maze)]
+        .some((maze) => maze && JSON.stringify(maze) === JSON.stringify(map.theme));
+      if (copied) delete out.theme;
+      delete out.themeId;
+      return out;
+    });
+    this.draft.levels.push(...added);
     this.save();
     this.renderLevels();
   }
@@ -612,7 +624,23 @@ export class ThemeEditor {
           render();
         }, themeFileMazePresets(), false);
         render();
-        card.append(this.field(tr('te.designName'), name), remove, panel);
+        // Link a bundled theme: levels using this design wear its badge and music too
+        const linkOptions: [string, string][] = [['', tr('te.linkedThemeNone')],
+          ...bundledThemeOptions().filter(o => o.id !== info.id).map(o => [o.id, o.name] as [string, string])];
+        const link = this.select(design.themeId ?? '', linkOptions, value => {
+          const entry = value ? bundledThemeById(value) : null;
+          if (entry) {
+            design.themeId = value;
+            if (entry.info.style.maze) design.maze = structuredClone(entry.info.style.maze);
+            // A design still under its default name takes the theme's name
+            const n = /^design-(\d+)$/.exec(design.id)?.[1];
+            if (design.name === design.id || (n && design.name === tr('te.designNumber', { n: Number(n) }))) design.name = entry.info.name;
+          } else delete design.themeId;
+          this.save();
+          renderDesigns();
+          this.renderLevels();
+        });
+        card.append(this.field(tr('te.designName'), name), this.field(tr('te.linkedTheme'), link), el('p', 'muted', tr('te.linkedThemeNote')), remove, panel);
         designs.append(card);
       }
       const add = el('button', '', tr('te.addDesign'));
