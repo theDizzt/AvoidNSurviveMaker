@@ -1300,5 +1300,16 @@
   "fontLicense.noteDemo": "데모판입니다. 데모 폰트는 보통 개인 사용만 허용되므로 공개 출시 전에 확인하세요.",
   "fx.vine": "덩굴",
   "pattern.snowDirt": "눈 쌓인 흙길",
-  "pattern.snowPile": "소복한 눈"
+  "pattern.snowPile": "소복한 눈",
+  "mapWarn.coinStacked": "코인 #{n}이(가) 코인 #{m} 위에 겹쳐 있어, 하나처럼 보이지만 두 개로 셉니다.",
+  "play.why.wall": "벽에 닿음",
+  "play.why.mover": "움직이는 장애물에 부딪힘",
+  "play.why.void": "길 밖으로 벗어남",
+  "play.why.bounds": "맵 밖으로 나감",
+  "play.why.laser": "레이저에 맞음",
+  "play.why.bullet": "포탑 총알에 맞음",
+  "play.why.missile": "미사일에 맞음",
+  "play.why.left": "커서가 게임 화면 밖으로 나감",
+  "play.why.blur": "창이 포커스를 잃음",
+  "play.why.pointer": "포인터 입력이 끊김"
 }

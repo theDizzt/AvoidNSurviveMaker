@@ -1300,5 +1300,16 @@
   "fontLicense.noteDemo": "这是演示版：演示字体通常仅限个人使用，公开发布前请确认。",
   "fx.vine": "藤蔓",
   "pattern.snowDirt": "积雪土路",
-  "pattern.snowPile": "厚积雪"
+  "pattern.snowPile": "厚积雪",
+  "mapWarn.coinStacked": "金币 #{n} 与金币 #{m} 重叠：看起来是一个，但计为两个。",
+  "play.why.wall": "碰到墙壁",
+  "play.why.mover": "被移动的障碍物撞到",
+  "play.why.void": "离开了道路",
+  "play.why.bounds": "离开了地图",
+  "play.why.laser": "被激光击中",
+  "play.why.bullet": "被炮塔子弹击中",
+  "play.why.missile": "被导弹击中",
+  "play.why.left": "光标离开了游戏区域",
+  "play.why.blur": "窗口失去了焦点",
+  "play.why.pointer": "指针输入中断"
 }

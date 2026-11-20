@@ -1300,5 +1300,16 @@
   "fontLicense.noteDemo": "A demo version: demo fonts are usually for personal use only. Confirm before a public release.",
   "fx.vine": "Vines",
   "pattern.snowDirt": "Snowy dirt road",
-  "pattern.snowPile": "Piled snow"
+  "pattern.snowPile": "Piled snow",
+  "mapWarn.coinStacked": "Coin #{n} sits on top of coin #{m}: they look like one coin but count as two.",
+  "play.why.wall": "Touched a wall",
+  "play.why.mover": "Hit by a moving obstacle",
+  "play.why.void": "Left the path",
+  "play.why.bounds": "Left the map",
+  "play.why.laser": "Hit by a laser",
+  "play.why.bullet": "Hit by a turret bullet",
+  "play.why.missile": "Hit by a missile",
+  "play.why.left": "The cursor left the game area",
+  "play.why.blur": "The window lost focus",
+  "play.why.pointer": "The pointer stopped (lifted or switched)"
 }

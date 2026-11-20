@@ -297,6 +297,9 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.35), rgba(220, 232, 246, 0.6));
 }
 .play-stage { width: auto; }
+/* The drawn cursor's own layer over the game canvas (play.ts drawCursorLayer) */
+.play-stage { position: relative; }
+.play-stage canvas.play-cursor { position: absolute; pointer-events: none; box-shadow: none; border: 0; background: transparent; }
 .play-stage canvas { border-radius: 0; border: 0; box-shadow: 0 0 40px rgba(58, 96, 150, 0.18); }
 /* Hidden in game (keyboard shortcuts only); bottom-left if shown again */
 .play-hud[hidden] { display: none; }

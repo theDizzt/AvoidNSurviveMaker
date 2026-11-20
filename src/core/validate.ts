@@ -640,6 +640,15 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     });
     const s = map.stars;
     if (s && !(s.three <= s.two && s.two <= s.one)) out.push(t('mapWarn.starOrder'));
+    // Coins stacked on each other look like one but each counts toward the total
+    const coinAt = (o: MapObject) => (o.shape.type === 'ellipse' ? { x: o.shape.cx, y: o.shape.cy } : null);
+    map.objects.forEach((o, i) => {
+      const a = o.role === 'coin' && !o.motion && !o.rotation ? coinAt(o) : null;
+      if (!a) return;
+      const j = map.objects.findIndex((p, k) => k < i && p.role === 'coin' && !p.motion && !p.rotation
+        && ((c) => !!c && Math.hypot(c.x - a.x, c.y - a.y) < LIMITS.coinSize / 2)(coinAt(p)));
+      if (j >= 0) out.push(t('mapWarn.coinStacked', { n: i + 1, m: j + 1 }));
+    });
     map.objects.forEach((o, i) => {
       if (o.role === 'coin' && overlapsRect(o, map.goal, 0)) out.push(t('mapWarn.coinInGoal', { n: i + 1 }));
       if (o.boulder && !o.motion) out.push(t('mapWarn.boulderNoRoute', { n: i + 1 }));

@@ -608,3 +608,13 @@ describe('formatUtc', () => {
     expect(formatUtc(undefined)).toBe('—');
   });
 });
+
+describe('stacked coins', () => {
+  it('warns when a coin sits on top of another (they look like one but count twice)', () => {
+    const coin = (cx: number, cy: number) => ({ role: 'coin' as const, shape: { type: 'ellipse' as const, cx, cy, rx: 12, ry: 12 } });
+    const m = { ...createEmptyMap(), objects: [coin(300, 200), coin(500, 200), coin(303, 198)] };
+    const warn = mapWarnings(m);
+    expect(warn.filter((w) => w.includes('#3') && w.includes('#1'))).toHaveLength(1);
+    expect(mapWarnings({ ...m, objects: [coin(300, 200), coin(500, 200)] }).some((w) => w.includes('#2'))).toBe(false);
+  });
+});

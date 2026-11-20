@@ -56,6 +56,17 @@ export class PlayController {
   nextHint: string | null = null;
 
   private map!: MapData;
+  /** The map can move the cursor away from the mouse (ice, portals) */
+  private drifts = false;
+  /**
+   * The mouse position fed to the run, in map units. On maps where the cursor drifts, the run
+   * locks the pointer: the real mouse can't leave the window (steering against a slide often
+   * takes the hand far away), and moves this position by its relative motion instead.
+   */
+  private readonly mouse = { x: 0, y: 0 };
+  private get locked(): boolean {
+    return document.pointerLockElement === this.el.canvas;
+  }
   private mapKey = '';
   private sim!: Simulation;
   private readonly ctx: CanvasRenderingContext2D;
@@ -77,9 +88,30 @@ export class PlayController {
   private frames = 0;
   private fps = 0;
   private fpsAt = 0;
+  /**
+   * The drawn cursor (pointer skins) has a canvas of its own over the game: it is redrawn as soon as
+   * mouse samples arrive instead of with the next full frame. (Not a `desynchronized` context: on
+   * many GPUs that draws straight to the screen without transparency, covering the game in white.)
+   */
+  private readonly cursorLayer: HTMLCanvasElement;
+  private readonly cursorCtx: CanvasRenderingContext2D;
+  /** Map units → device pixels of the game canvas, as of the last frame */
+  private mapTransform: DOMMatrix | null = null;
+  /** Something is drawn on the cursor layer */
+  private cursorShown = false;
+  /**
+   * Fog, dark areas or global darkness can cover the cursor: on such maps it stays in the game
+   * canvas under them (hiding it is part of the challenge), not on the layer above
+   */
+  private coveredCursor = false;
 
   constructor(private readonly el: PlayElements) {
     this.ctx = el.canvas.getContext('2d')!;
+    this.cursorLayer = document.createElement('canvas');
+    this.cursorLayer.className = 'play-cursor';
+    this.cursorLayer.setAttribute('aria-hidden', 'true');
+    this.cursorCtx = this.cursorLayer.getContext('2d')!;
+    el.canvas.parentElement?.append(this.cursorLayer);
     this.input = new HighResPointer((list) => this.onSamples(list));
     let measuredRate = options.pollingRate;
     onOptionsChange(next => {
@@ -93,9 +125,16 @@ export class PlayController {
     el.canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     // Cursor left the browser window
     window.addEventListener('pointerout', (e) => {
-      if (!e.relatedTarget) this.abort('left');
+      // (not while the pointer is locked, or being locked: the mouse can't leave then)
+      if (!e.relatedTarget && !this.locked && !this.lockPending) this.abort('left');
     });
     window.addEventListener('blur', () => this.abort('blur'));
+    document.addEventListener('pointerlockerror', () => (this.lockPending = false));
+    document.addEventListener('pointerlockchange', () => {
+      this.lockPending = false;
+      if (!this.locked && this.lockedRun) this.abort('pointer');
+      this.lockedRun = this.locked;
+    });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.abort('blur');
     });
@@ -125,6 +164,8 @@ export class PlayController {
 
   load(map: MapData): void {
     this.map = map;
+    this.drifts = map.objects.some((o) => !!o.ice || o.role === 'portal');
+    this.coveredCursor = !!map.darkness || map.objects.some((o) => o.role === 'fog' || o.role === 'dark');
     this.mapKey = JSON.stringify(map);
     this.reset(true);
     fitCanvas(this.el.canvas, map);
@@ -155,6 +196,7 @@ export class PlayController {
   hide(): void {
     this.burst = null;
     this.abort('blur');
+    this.unlock();
     this.visible = false;
     this.input.detach();
   }
@@ -163,15 +205,24 @@ export class PlayController {
     if (this.sim?.status === 'playing') this.sim.abort(reason);
   }
 
+  /** The pointer lock of this run, while it holds */
+  private lockedRun = false;
+  /** A pointer lock was asked for and the browser hasn't answered yet */
+  private lockPending = false;
+
+  private unlock(): void {
+    this.lockedRun = false;
+    if (this.locked) document.exitPointerLock();
+  }
+
   private onDown(e: PointerEvent): void {
     if (e.button !== 0) return;
     if (this.sim.status === 'playing') {
       // Clicks during a run press click-operated switches. Another finger (touch) taps where the
       // running finger is: it must never move the cursor, or a second finger could jump to GOAL
       const sim = this.sim;
-      const p = e.pointerId === this.runPointer
-        ? clientToMap(this.el.canvas, this.map, e.clientX, e.clientY)
-        : { x: sim.x - sim.offX, y: sim.y - sim.offY };
+      const p = e.pointerId !== this.runPointer ? { x: sim.x - sim.offX, y: sim.y - sim.offY }
+        : this.locked ? { ...this.mouse } : clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
       sim.click(e.timeStamp - this.t0, p.x, p.y);
       return;
     }
@@ -182,6 +233,19 @@ export class PlayController {
     e.preventDefault();
     this.sim = sim;
     this.runPointer = e.pointerId;
+    this.mouse.x = p.x;
+    this.mouse.y = p.y;
+    // Drifting cursor (ice, portals) with a drawn cursor skin: keep the mouse in the game for the
+    // whole run. The system cursor (skin #0) is never locked: a lock would hide it, and players
+    // choose it because the OS draws it without the drawn cursor's frame of delay
+    if (this.drifts && skin.pointer !== 0 && e.pointerType === 'mouse' && this.el.canvas.requestPointerLock) {
+      try {
+        this.lockPending = true;
+        void Promise.resolve(this.el.canvas.requestPointerLock()).catch(() => (this.lockPending = false));
+      } catch {
+        this.lockPending = false; // not available: the run goes on with the normal pointer
+      }
+    }
     this.lastSampleAt = e.timeStamp;
     this.autoPolling.resetMeasurement();
     this.stats.reset();
@@ -228,7 +292,18 @@ export class PlayController {
       // Small tolerance: hardware timestamps jitter around the nominal interval
       if (gap && ev.timeStamp - this.lastSampleAt < gap * 0.9) continue;
       this.lastSampleAt = ev.timeStamp;
-      toMap(ev.clientX, ev.clientY, p);
+      if (this.locked) {
+        // Locked: the mouse moves by its relative motion (CSS px → map units)
+        const upp = unitsPerPx(this.el.canvas, this.map);
+        this.mouse.x += ev.movementX * upp;
+        this.mouse.y += ev.movementY * upp;
+        p.x = this.mouse.x;
+        p.y = this.mouse.y;
+      } else {
+        toMap(ev.clientX, ev.clientY, p);
+        this.mouse.x = p.x;
+        this.mouse.y = p.y;
+      }
       // feed ignores samples already overtaken by idle advancement or click handling.
       const accepted = ev.timeStamp - this.t0 > sim.time;
       sim.feed(ev.timeStamp - this.t0, p.x, p.y);
@@ -238,7 +313,39 @@ export class PlayController {
       if (sim.status !== 'playing') break;
     }
     if (this.trail.length > TRAIL_POINTS * 2) this.trail.splice(0, this.trail.length - TRAIL_POINTS * 2);
+    // The cursor moves now, not with the next frame
+    this.drawCursorLayer();
     if (automatic) this.autoPolling.addInputWork(performance.now() - workStarted);
+  }
+
+  /**
+   * The pointer skin at the run's cursor, on the cursor layer (kept the size and place of the game
+   * canvas). Called for every batch of mouse samples and every frame; cleared outside a run.
+   */
+  private drawCursorLayer(): void {
+    const layer = this.cursorLayer;
+    const canvas = this.el.canvas;
+    if (layer.width !== canvas.width || layer.height !== canvas.height) {
+      layer.width = canvas.width;
+      layer.height = canvas.height;
+    }
+    const st = layer.style;
+    const left = `${canvas.offsetLeft}px`, top = `${canvas.offsetTop}px`;
+    const w = `${canvas.offsetWidth}px`, h = `${canvas.offsetHeight}px`;
+    if (st.left !== left) st.left = left;
+    if (st.top !== top) st.top = top;
+    if (st.width !== w) st.width = w;
+    if (st.height !== h) st.height = h;
+    const ctx = this.cursorCtx;
+    const sim = this.sim;
+    const show = this.visible && !!sim && sim.status === 'playing' && skin.pointer !== 0 && !this.coveredCursor && !!this.mapTransform;
+    if (!show && !this.cursorShown) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, layer.width, layer.height);
+    this.cursorShown = show;
+    if (!show) return;
+    ctx.setTransform(this.mapTransform!);
+    drawPointer(ctx, skin, sim.x, sim.y, unitsPerPx(canvas, this.map), CURSOR_PX);
   }
 
   /** The run whose coin count `coinsLeft` was last seen in (for the coin sound) */
@@ -248,7 +355,10 @@ export class PlayController {
   private crystalHeld = false;
 
   private frame(): void {
-    if (!this.visible || !this.map) return;
+    if (!this.visible || !this.map) {
+      this.drawCursorLayer();
+      return;
+    }
     const now = performance.now();
     const sim = this.sim;
     const measure = options.pollingRate === -1 && sim.status === 'playing';
@@ -281,6 +391,9 @@ export class PlayController {
       if (sim.endReason !== 'blur' && sim.endReason !== 'left' && sim.endReason !== 'pointer') this.onDeath?.(this.map);
     }
     if (running !== this.el.root.classList.contains('running')) this.el.root.classList.toggle('running', running);
+    if (!running && this.lockedRun) this.unlock();
+    // Pointer skin #0 keeps the system cursor (drawn by the OS, it has no frame of delay); where
+    // the cursor can drift from the mouse a marker shows where it really is (see drawSlideMarker)
     const native = skin.pointer === 0;
     if (native !== this.el.root.classList.contains('native-cursor')) this.el.root.classList.toggle('native-cursor', native);
     if (sim.status === 'cleared' && !this.notified) {
@@ -337,6 +450,7 @@ export class PlayController {
     const { ctx, map, sim } = this;
     const t = sim.status === 'ready' ? 0 : sim.time;
     beginFrame(ctx, map);
+    this.mapTransform = ctx.getTransform();
     const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle, turretAim: sim.guns.aim };
     const playing = sim.status === 'playing';
     const carried = playing ? this.carried : undefined;
@@ -351,10 +465,12 @@ export class PlayController {
 
     if (playing) {
       const u = unitsPerPx(this.el.canvas, map);
-      // The system cursor is hidden during a run (CSS .running); this dot is exactly where the
-      // simulation has the cursor, so what you see is what is checked for collisions
-      // (pointer skin #0 draws nothing: the system cursor stays visible instead, see .native-cursor)
-      drawPointer(ctx, skin, sim.x, sim.y, u, CURSOR_PX);
+      // The system cursor is hidden during a run (CSS .running); the pointer skin is exactly where
+      // the simulation has the cursor, so what you see is what is checked for collisions. It is
+      // drawn on its own low-latency layer (drawCursorLayer), or here when fog or darkness may
+      // cover it. Pointer skin #0 draws nothing: the system cursor stays visible (.native-cursor)
+      if (skin.pointer !== 0 && this.coveredCursor) drawPointer(ctx, skin, sim.x, sim.y, u, CURSOR_PX);
+      if (skin.pointer === 0 && this.drifts) drawSlideMarker(ctx, sim.x - sim.offX, sim.y - sim.offY, sim.x, sim.y, u);
       // A held crystal star circles the cursor once it has flown in
       if (sim.crystalHeld && this.crystalFlownIn(t)) {
         const a = now / 380;
@@ -414,7 +530,8 @@ export class PlayController {
       ctx.moveTo(sim.x + 8, sim.y - 8);
       ctx.lineTo(sim.x - 8, sim.y + 8);
       ctx.stroke();
-      drawBanner(ctx, map, tr('play.failedBanner', { time: formatSeconds(sim.endTime) }), tr('play.failedSub'), '#e2486c');
+      const why = sim.endReason ? tr(`play.why.${sim.endReason}` as 'play.why.wall') : '';
+      drawBanner(ctx, map, tr('play.failedBanner', { time: formatSeconds(sim.endTime) }), [why, tr('play.failedSub')].filter(Boolean).join(' — '), '#e2486c');
     } else {
       const best = this.best.get(this.mapKey);
       const stars = starsFor(map, recordTime(sim.endTime));
@@ -428,6 +545,7 @@ export class PlayController {
       const crystal = sim.hasCrystal ? (sim.crystalHeld ? tr('play.crystalGot') : tr('play.crystalMissed')) : '';
       drawBanner(ctx, map, `${stars !== null ? `${starText(stars)}${sim.crystalHeld ? ' ✦' : ''}  ` : ''}${tr('play.cleared', { time: formatSeconds(recordTime(sim.endTime)) })}`, [crystal, sub].filter(Boolean).join(' — '), '#d48f00');
     }
+    this.drawCursorLayer();
   }
 
   /** "● 2 / 5" pill at the top-left (below the level label) while coins remain to be found */
@@ -493,4 +611,37 @@ export class PlayController {
       }),
     );
   }
+}
+
+/**
+ * With the system cursor (pointer skin #0) on a map where the cursor drifts (ice, portals): a ring
+ * where the cursor really is, tied to the mouse by a faint line, only while the two are apart.
+ * The system cursor itself stays as it is (no added delay).
+ */
+function drawSlideMarker(ctx: CanvasRenderingContext2D, mx: number, my: number, x: number, y: number, u: number): void {
+  const apart = Math.hypot(x - mx, y - my);
+  if (apart < 2 * u) return;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, apart / (12 * u));
+  ctx.setLineDash([4 * u, 4 * u]);
+  ctx.lineWidth = 1.5 * u;
+  ctx.strokeStyle = 'rgba(20, 30, 50, 0.45)';
+  ctx.beginPath();
+  ctx.moveTo(mx, my);
+  ctx.lineTo(x, y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineWidth = 2.5 * u;
+  ctx.strokeStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(x, y, 6 * u, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 1.5 * u;
+  ctx.strokeStyle = '#e2486c';
+  ctx.stroke();
+  ctx.fillStyle = '#e2486c';
+  ctx.beginPath();
+  ctx.arc(x, y, 1.6 * u, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
