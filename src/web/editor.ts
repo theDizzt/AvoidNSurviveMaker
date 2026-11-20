@@ -1,4 +1,5 @@
 import { t as tr } from './i18n';
+import { FrameLimiter } from './graphics';
 import { pointInPoly } from '../core/geometry';
 import type { ZoneShape } from '../core/types';
 import { ZoneArea, zoneFromShape, zoneRing } from '../core/zone';
@@ -17,7 +18,7 @@ import { switchColor } from './localized/colors';
 import { boulderShape, spikeShape } from '../core/hazards';
 import { BeamCaster } from '../core/laser';
 import { createEmptyMap, DEFAULT_BLINK, DEFAULT_FALL, DEFAULT_ICE_GRIP, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_PULLEY, DEFAULT_SECRET_RADIUS, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS, validateMap } from './localized/validate';
-import { beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, fittedView, FONT_MAIN, fitCanvas, setCamera, staticPicture, traceObject, unitsPerPx, zonePath } from './render';
+import { beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, fittedView, releaseRenderCaches, FONT_MAIN, fitCanvas, setCamera, staticPicture, traceObject, unitsPerPx, zonePath } from './render';
 import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
 import { renderThemePanel } from './theme-panel';
 import { badgeFor, badgeTitle, bundledThemeById, bundledThemeOptions, chapterMazePresets, subThemeLabel } from './theme-registry';
@@ -139,7 +140,7 @@ export class Editor {
     });
     window.addEventListener('keydown', (e) => this.onKey(e));
     this.setupZoom();
-    const refit = () => fitCanvas(el.canvas, this.map);
+    const refit = () => this.fit();
     new ResizeObserver(refit).observe(el.canvas.parentElement!);
     window.addEventListener('resize', refit);
 
@@ -202,7 +203,7 @@ export class Editor {
         this.map.width = w;
         this.map.height = h;
       });
-      fitCanvas(el.canvas, this.map);
+      this.fit();
     });
 
     el.test.addEventListener('click', () => {
@@ -217,16 +218,17 @@ export class Editor {
       if (!confirm(tr('ed.clearTheCurrentMapAnd'))) return;
       this.edit(() => (this.map = createEmptyMap()));
       this.clearSelection();
-      fitCanvas(el.canvas, this.map);
+      this.fit();
     });
 
     this.setTool({ kind: 'select' });
     this.changed();
 
     // Schedule the next frame first: one frame that throws must not freeze the editor canvas
-    const loop = () => {
+    const limiter = new FrameLimiter();
+    const loop = (now: number) => {
       requestAnimationFrame(loop);
-      this.draw();
+      if (limiter.due(now)) this.draw();
     };
     requestAnimationFrame(loop);
   }
@@ -387,12 +389,22 @@ export class Editor {
     fitCanvas(this.el.canvas, this.map);
   }
 
+  /** Size the canvas for the window, only while shown: hidden, it holds no pixels (see hide) */
+  private fit(): void {
+    if (this.visible) fitCanvas(this.el.canvas, this.map);
+    else this.el.canvas.width = this.el.canvas.height = 0;
+  }
+
   hide(): void {
     this.visible = false;
     this.minimap.hidden = true;
     closeContextMenu();
     this.finishModes();
     this.toggleHelp(false);
+    // Offscreen layers are rebuilt on the next draw; don't hold them while other screens show
+    releaseRenderCaches(this.ctx, this.compiledCache ?? undefined);
+    // The canvas's own pixels too: show() refits it
+    this.el.canvas.width = this.el.canvas.height = 0;
   }
 
   /** Bring a map from the play screen into the editor (remix). Previous work can be restored with Undo */
@@ -400,7 +412,7 @@ export class Editor {
     this.finishModes();
     this.edit(() => (this.map = clone(map)));
     this.clearSelection();
-    fitCanvas(this.el.canvas, this.map);
+    this.fit();
   }
 
   /** If the map cleared in test play matches the one being edited, mark it shareable */
@@ -694,7 +706,7 @@ export class Editor {
   private afterHistoryJump(): void {
     this.lastNudge = null;
     this.finishModes();
-    fitCanvas(this.el.canvas, this.map);
+    this.fit();
     this.changed();
   }
 

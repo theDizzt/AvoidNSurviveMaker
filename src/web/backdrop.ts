@@ -4,7 +4,7 @@ import { levelSlots, themedLevel, type ThemeEntry } from './localized/theme-pack
 import type { MapData } from '../core/types';
 import { DeathBurst } from './death-burst';
 import { demoPlayable, planDemoRun } from './demo-pilot';
-import { COLORS, drawCoinPulls, drawMap, drawTrail } from './render';
+import { COLORS, drawCoinPulls, drawMap, drawTrail, releaseRenderCaches } from './render';
 import { OFFICIAL_THEMES } from './theme-registry';
 import { backdropFps, renderScale } from './graphics';
 import { onOptionsChange, options } from './options';
@@ -106,6 +106,8 @@ export class Backdrop {
     if (!active && this.raf) {
       cancelAnimationFrame(this.raf);
       this.raf = 0;
+      // Hidden behind other screens: free its offscreen layers (rebuilt when it shows again)
+      releaseRenderCaches(this.ctx, this.run?.objects);
     }
   }
 

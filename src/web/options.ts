@@ -2,6 +2,10 @@
 export const POLLING_RATES = [-1, 0, 1000, 500, 250, 125] as const;
 export type PollingRate = (typeof POLLING_RATES)[number];
 
+/** Frames drawn per second at most; 0 = every display refresh. */
+export const FRAME_LIMITS = [0, 240, 144, 120, 60, 30] as const;
+export type FrameLimit = (typeof FRAME_LIMITS)[number];
+
 /** Rendering quality: canvas resolution and menu background frame rate (see graphics.ts) */
 export const GRAPHICS_LEVELS = ['high', 'medium', 'low'] as const;
 export type GraphicsLevel = (typeof GRAPHICS_LEVELS)[number];
@@ -14,6 +18,7 @@ export interface Options {
   effectsVolume: number;
   pollingRate: PollingRate;
   graphics: GraphicsLevel;
+  frameLimit: FrameLimit;
   lowSpecSimulation: boolean;
   cursorTrail: boolean;
   decorativeEffects: boolean;
@@ -31,6 +36,7 @@ export const DEFAULT_OPTIONS: Readonly<Options> = {
   effectsVolume: 80,
   pollingRate: 0,
   graphics: 'high',
+  frameLimit: 0,
   lowSpecSimulation: false,
   cursorTrail: true,
   decorativeEffects: true,
@@ -53,6 +59,7 @@ function load(): Options {
       if (typeof value === 'number' && Number.isFinite(value)) out[k] = Math.max(0, Math.min(100, value));
     }
     if ((POLLING_RATES as readonly unknown[]).includes(saved.pollingRate)) out.pollingRate = saved.pollingRate as PollingRate;
+    if ((FRAME_LIMITS as readonly unknown[]).includes(saved.frameLimit)) out.frameLimit = saved.frameLimit as FrameLimit;
     if ((GRAPHICS_LEVELS as readonly unknown[]).includes(saved.graphics)) out.graphics = saved.graphics as GraphicsLevel;
   } catch {
     /* storage unavailable or corrupted → defaults */
@@ -78,6 +85,7 @@ export function setOption<K extends keyof Options>(key: K, value: Options[K]): v
     value = Math.max(0, Math.min(100, value)) as Options[K];
   }
   if (key === 'pollingRate' && !(POLLING_RATES as readonly unknown[]).includes(value)) return;
+  if (key === 'frameLimit' && !(FRAME_LIMITS as readonly unknown[]).includes(value)) return;
   if (key === 'graphics' && !(GRAPHICS_LEVELS as readonly unknown[]).includes(value)) return;
   (options as Options)[key] = value;
   commit();
@@ -89,7 +97,7 @@ export function resetOptions(): void {
 }
 
 /** Options shown on the Graphics screen */
-const GRAPHICS_KEYS = ['graphics', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation'] as const;
+const GRAPHICS_KEYS = ['graphics', 'frameLimit', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation'] as const;
 
 /** Restore only the Graphics screen's options (one commit, so canvases refit once). */
 export function resetGraphicsOptions(): void {
@@ -100,7 +108,7 @@ export function resetGraphicsOptions(): void {
 /** Apply together so listeners resize/repaint only once. */
 export function applyLowSpecOptions(): void {
   Object.assign(options as Options, {
-    graphics: 'low', pollingRate: -1, showDebug: false,
+    graphics: 'low', frameLimit: 60, pollingRate: -1, showDebug: false,
     lowSpecSimulation: true,
     cursorTrail: false, decorativeEffects: false, animatedBackground: false, interfaceEffects: false,
   } satisfies Partial<Options>);

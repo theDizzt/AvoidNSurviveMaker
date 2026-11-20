@@ -23,6 +23,27 @@ export function renderScale(cssW: number, cssH: number): number {
   return Math.max(0.5, Math.min(dpr, q.maxDpr, byPixels));
 }
 
+/**
+ * Frame limit option. Call once per animation frame with its timestamp: true when this frame
+ * should be drawn. Only drawing is skipped: the simulation runs on input timestamps, so
+ * collisions and records are identical at every limit. A cap above the display's refresh rate
+ * has no effect (requestAnimationFrame never runs faster than the display).
+ */
+export class FrameLimiter {
+  private next = 0;
+
+  due(now: number): boolean {
+    const fps = options.frameLimit;
+    if (!fps) return true;
+    const gap = 1000 / fps;
+    // Small tolerance: rAF timestamps jitter around the display interval
+    if (now < this.next - 1) return false;
+    // Step from the scheduled time to hold the average rate; resync after a long pause
+    this.next = now - this.next > gap ? now + gap : this.next + gap;
+    return true;
+  }
+}
+
 /** Frame rate of the animated menu background */
 export function backdropFps(): number {
   return LEVELS[options.graphics].backdropFps;

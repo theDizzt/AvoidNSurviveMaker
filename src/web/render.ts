@@ -333,18 +333,10 @@ function offscreen(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCon
 interface StaticLayer {
   /** Floor + wall mass, ready to draw when nothing moves */
   layer: HTMLCanvasElement;
-  /** Floor alone (path fill and grid) */
-  floor: HTMLCanvasElement;
   /** Static wall mass alone (no shadow / rim): `outside` + `wallPieces` */
   walls: HTMLCanvasElement;
-  /** Everything outside the static floor */
-  outside: HTMLCanvasElement;
-  /** Static wall objects, minus static paths that cut through walls */
-  wallPieces: HTMLCanvasElement;
-  /** Scratch canvas for the per-frame wall mass */
-  frame: HTMLCanvasElement;
-  /** Scratch canvas: floor + per-frame wall mass, drawn onto the map in one go */
-  composite: HTMLCanvasElement;
+  /** Only on maps whose wall mass can change per frame (see needsComposite) */
+  dyn?: DynamicLayers;
   /** Layer pixels per map unit */
   scale: number;
   /** Scratch canvas for animated surfaces (theme `anim`) */
@@ -355,6 +347,71 @@ interface StaticLayer {
   compositeState?: number[];
   /** Where the static walls are, for grinder dust (built on first use) */
   mask?: WallMask;
+}
+
+/** Layers for rebuilding the wall mass every frame (moving paths / walls, doors, secret walls) */
+interface DynamicLayers {
+  /** Floor alone (path fill and grid) */
+  floor: HTMLCanvasElement;
+  /** Everything outside the static floor */
+  outside: HTMLCanvasElement;
+  /** Static wall objects, minus static paths that cut through walls */
+  wallPieces: HTMLCanvasElement;
+  /** Scratch canvas for the per-frame wall mass */
+  frame: HTMLCanvasElement;
+  /** Scratch canvas: floor + per-frame wall mass, drawn onto the map in one go */
+  composite: HTMLCanvasElement;
+}
+
+/** A door drawn as sliding panels (part of the wall mass) */
+function isPanelDoor(m: MapObject | undefined): boolean {
+  return m?.role === 'door' && !!m.door && m.shape.type === 'rect';
+}
+
+/** A moving path or wall (not a grinder / saw) that cuts into or adds to the wall mass */
+function movesWallMass(map: MapData, o: CompiledObject, i: number): boolean {
+  return o.dynamic && (o.role === 'path' || (o.role === 'wall' && !map.objects[i]?.saw));
+}
+
+/**
+ * Whether drawMap can ever need the per-frame composite for this map. Without it a map keeps only
+ * its finished picture and wall mass: 2 full-size canvases instead of 7.
+ */
+function needsComposite(map: MapData, objects: readonly CompiledObject[]): boolean {
+  return objects.some((o, i) => movesWallMass(map, o, i) || isPanelDoor(map.objects[i]) || o.role === 'secret');
+}
+
+/** Free a canvas's pixels now instead of whenever it is garbage collected */
+function freeCanvas(c: HTMLCanvasElement | undefined): void {
+  if (c) c.width = c.height = 0;
+}
+
+function freeStaticLayer(st: StaticLayer): void {
+  // The secret-wall overlay keeps its own scratch canvas, keyed by the overlay's context
+  const sg = st.secret?.getContext('2d');
+  if (sg) {
+    freeCanvas(secretLayers.get(sg));
+    secretLayers.delete(sg);
+  }
+  for (const c of [st.layer, st.walls, st.anim, st.secret, st.dyn?.floor, st.dyn?.outside, st.dyn?.wallPieces, st.dyn?.frame, st.dyn?.composite]) freeCanvas(c);
+}
+
+/**
+ * Release the offscreen canvases cached for a screen that is being left: the static layers of its
+ * objects and the darkness / secret-wall / grinder scratch layers of its canvas. They are rebuilt
+ * on the next draw.
+ */
+export function releaseRenderCaches(ctx: CanvasRenderingContext2D, objects?: readonly CompiledObject[]): void {
+  const owned = layerOwner.get(ctx);
+  if (owned) dropStaticLayer(owned);
+  layerOwner.delete(ctx);
+  if (objects) dropStaticLayer(objects);
+  freeCanvas(darkLayers.get(ctx));
+  darkLayers.delete(ctx);
+  freeCanvas(secretLayers.get(ctx));
+  secretLayers.delete(ctx);
+  freeCanvas(sawLayers.get(ctx)?.[0]);
+  sawLayers.delete(ctx);
 }
 
 /** The static wall mass at a coarse resolution: 1 = wall */
@@ -443,7 +500,11 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   const [layer, s] = offscreen(w, h);
   s.drawImage(floor, 0, 0);
   drawWallMass(s, wallCanvas, theme, scale);
-  return { layer, floor, walls: wallCanvas, outside, wallPieces, frame: offscreen(w, h)[0], composite: offscreen(w, h)[0], scale };
+  if (!needsComposite(map, objects)) {
+    for (const c of [floor, outside, wallPieces]) freeCanvas(c);
+    return { layer, walls: wallCanvas, scale };
+  }
+  return { layer, walls: wallCanvas, scale, dyn: { floor, outside, wallPieces, frame: offscreen(w, h)[0], composite: offscreen(w, h)[0] } };
 }
 
 /** 0 → 1 → 0 once per cycle (`speed` cycles per second) */
@@ -564,6 +625,15 @@ function tracePosed(g: Path2D, o: CompiledObject, t: number, hole = false): void
 }
 
 const layerCache = new WeakMap<readonly CompiledObject[], { key: string; layer: StaticLayer }>();
+/** The objects whose static layer each canvas drew last */
+const layerOwner = new WeakMap<CanvasRenderingContext2D, readonly CompiledObject[]>();
+
+/** Free and forget the static layer of these objects; the next draw of them builds it again */
+function dropStaticLayer(objects: readonly CompiledObject[]): void {
+  const hit = layerCache.get(objects);
+  if (hit) freeStaticLayer(hit.layer);
+  layerCache.delete(objects);
+}
 
 /** The last static picture drawn for these objects (floor + walls, nothing moving), e.g. for a minimap */
 export function staticPicture(objects: readonly CompiledObject[]): HTMLCanvasElement | null {
@@ -581,9 +651,18 @@ function staticLayer(ctx: CanvasRenderingContext2D, map: MapData, objects: reado
     scale = Math.min(cap, 2 ** (Math.ceil(Math.log2(scale) * 2 - 1e-9) / 2));
   }
   const key = `${scale}|${map.width}x${map.height}|${JSON.stringify(map.theme ?? null)}|${map.start.x},${map.start.y},${map.start.w},${map.start.h}|${map.goal.x},${map.goal.y},${map.goal.w},${map.goal.h}|${JSON.stringify(map.startShape ?? null)}|${JSON.stringify(map.goalShape ?? null)}`;
+  // Each canvas keeps the layers of only the objects it draws now. Older ones (the previous map,
+  // or the editor's objects before an edit) are freed here instead of waiting for garbage collection
+  const before = layerOwner.get(ctx);
+  if (before !== objects) {
+    if (before) dropStaticLayer(before);
+    layerOwner.set(ctx, objects);
+  }
   const hit = layerCache.get(objects);
   if (hit && hit.key === key) return hit.layer;
   const layer = buildStaticLayer(map, objects, scale);
+  // The old resolution's canvases are done with: free them now, not at garbage collection
+  if (hit) freeStaticLayer(hit.layer);
   layerCache.set(objects, { key, layer });
   return layer;
 }
@@ -799,7 +878,7 @@ export function drawMap(
   const shown = (i: number) => !opts.hidden?.[i] && !blinkFlicker(i);
   const channels = opts.channels ?? initialChannels(map);
   const doorOpenAt = (m: MapObject, i: number) => opts.doorOpen?.[i] ?? (m.door!.mode === 'auto' ? autoDoorOpen(m.door!, t) : channels[m.door!.color] ? 1 : 0);
-  const isDoor = (m: MapObject | undefined) => m?.role === 'door' && !!m.door && m.shape.type === 'rect';
+  const isDoor = isPanelDoor;
 
   // Moving paths, moving walls and doors join the static scene: paths cut the wall mass, walls
   // and door panels add to it, all in the same world-aligned fill, shadow and rim
@@ -807,9 +886,10 @@ export function drawMap(
   st.secretReady = false;
   const conceal = opts.secretCursor !== undefined && objects.some((o, i) => o.role === 'secret' && shown(i));
   const isSaw = (i: number) => !!map.objects[i]?.saw;
-  const moving = objects.some((o, i) => (o.dynamic && (o.role === 'path' || (o.role === 'wall' && !isSaw(i)))) || isDoor(map.objects[i]));
+  const moving = objects.some((o, i) => movesWallMass(map, o, i) || isDoor(map.objects[i]));
+  const dyn = st.dyn;
   let reuseComposite = false;
-  if (moving || conceal) {
+  if (dyn && (moving || conceal)) {
     const previous = st.compositeState;
     const values = previous ?? [];
     let changed = !previous;
@@ -836,16 +916,16 @@ export function drawMap(
     st.compositeState = values;
     reuseComposite = !changed;
   }
-  if (!moving && !conceal) {
+  if (!dyn || (!moving && !conceal)) {
     ctx.drawImage(st.layer, 0, 0, map.width, map.height);
   } else if (reuseComposite) {
     st.secretReady = conceal;
-    ctx.drawImage(st.composite, 0, 0, map.width, map.height);
+    ctx.drawImage(dyn.composite, 0, 0, map.width, map.height);
   } else {
     const scale = st.scale;
-    const g = st.frame.getContext('2d')!;
+    const g = dyn.frame.getContext('2d')!;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, st.frame.width, st.frame.height);
+    g.clearRect(0, 0, dyn.frame.width, dyn.frame.height);
     // Moving paths open up the area outside the floor; only wall-piercing ones cut the wall pieces
     const cut = (pierce: boolean) => {
       g.setTransform(scale, 0, 0, scale, 0, 0);
@@ -864,9 +944,9 @@ export function drawMap(
       }
       g.setTransform(1, 0, 0, 1, 0, 0);
     };
-    g.drawImage(st.outside, 0, 0);
+    g.drawImage(dyn.outside, 0, 0);
     cut(false);
-    g.drawImage(st.wallPieces, 0, 0);
+    g.drawImage(dyn.wallPieces, 0, 0);
     cut(true);
     g.setTransform(scale, 0, 0, scale, 0, 0);
     const walls = new Path2D();
@@ -889,7 +969,7 @@ export function drawMap(
     if (conceal) {
       // Build the covering at wall-layer resolution and union it BEFORE shadows.
       // This removes internal seams and lets both surfaces share pattern sampling.
-      const secret = st.secret ??= offscreen(st.frame.width, st.frame.height)[0];
+      const secret = st.secret ??= offscreen(dyn.frame.width, dyn.frame.height)[0];
       const sg = secret.getContext('2d')!;
       sg.setTransform(1, 0, 0, 1, 0, 0);
       sg.clearRect(0, 0, secret.width, secret.height);
@@ -900,15 +980,15 @@ export function drawMap(
       st.secretReady = true;
     }
     // Compose at layer resolution, then place it on the map (zoom and letterbox included)
-    const c = st.composite.getContext('2d')!;
+    const c = dyn.composite.getContext('2d')!;
     c.setTransform(1, 0, 0, 1, 0, 0);
-    c.clearRect(0, 0, st.composite.width, st.composite.height);
-    c.drawImage(st.floor, 0, 0);
-    drawWallMass(c, st.frame, theme, scale);
-    ctx.drawImage(st.composite, 0, 0, map.width, map.height);
+    c.clearRect(0, 0, dyn.composite.width, dyn.composite.height);
+    c.drawImage(dyn.floor, 0, 0);
+    drawWallMass(c, dyn.frame, theme, scale);
+    ctx.drawImage(dyn.composite, 0, 0, map.width, map.height);
   }
   // Animated floor / walls: drawn over the surfaces, masked by this frame's wall mass
-  if (theme?.path.anim || theme?.wall.anim) drawSurfaceAnims(ctx, map, st, !moving && !conceal ? st.walls : st.frame, opts.now ?? t);
+  if (theme?.path.anim || theme?.wall.anim) drawSurfaceAnims(ctx, map, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t);
 
   zone(ctx, map.start, COLORS.start, COLORS.startEdge, tr('zone.start'), true, map.startShape);
   // Locked GOAL (coins still to collect): dark gray, with the coins collected so far, e.g. "3/10"
@@ -969,7 +1049,7 @@ export function drawMap(
     // Erase what lies inside the wall mass this frame (static walls, or the per-frame mass with
     // moving walls and doors)
     g.globalCompositeOperation = 'destination-out';
-    g.drawImage(moving || conceal ? st.frame : st.walls, 0, 0, map.width, map.height);
+    g.drawImage(dyn && (moving || conceal) ? dyn.frame : st.walls, 0, 0, map.width, map.height);
     g.globalCompositeOperation = 'source-over';
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2751,16 +2831,17 @@ function stopwatchGlyph(ch: string, font: string, size: number, cell: number, fa
  * Each glyph is drawn once into a sprite and then only copied, so a frame costs a few image
  * copies instead of dozens of text draws and a blurred shadow (cheap without a GPU too).
  */
-export function drawStopwatch(ctx: CanvasRenderingContext2D, map: MapData, ms: number, _now: number): void {
+/** `digits`: 3 shows milliseconds (clear records), 2 hundredths (running timer, failed runs) */
+export function drawStopwatch(ctx: CanvasRenderingContext2D, map: MapData, ms: number, _now: number, digits: 2 | 3 = 3): void {
   const total = displayTime(ms);
   const whole = String(Math.floor(total / 1000));
-  const frac = `.${String(total % 1000).padStart(3, '0')}`;
+  const frac = `.${String(total % 1000).padStart(3, '0').slice(0, digits)}`;
   const base = timerColor(map);
   const k = ctx.getTransform().a; // device px per map unit
   const fontBig = `400 ${SW_BIG}px ${FONT_TIMER}`;
   const fontSmall = `400 ${SW_SMALL}px ${FONT_TIMER}`;
   const { cellBig, cellSmall, dotW, fracDrop } = stopwatchMetrics(ctx, fontBig, fontSmall);
-  const width = whole.length * cellBig + dotW + 3 * cellSmall;
+  const width = whole.length * cellBig + dotW + digits * cellSmall;
   const x0 = map.width - 22 - SW_DEPTH * SW_STEP - width;
   const y = 14 + SW_BIG;
   // Seconds and milliseconds in slightly different tints

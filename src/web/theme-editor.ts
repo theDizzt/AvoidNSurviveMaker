@@ -14,7 +14,7 @@ import type { MapData } from '../core/types';
 import type { TextEffects } from '../core/text-effects';
 import { createEmptyMap, validateMap, validatePack } from './localized/validate';
 import { badgeImage, drawLevelBadge, type BadgeHit } from './badge';
-import { beginFrame, clientToMap, drawMap, fitCanvas, setCamera, unitsPerPx } from './render';
+import { beginFrame, clientToMap, drawMap, fitCanvas, releaseRenderCaches, setCamera, unitsPerPx } from './render';
 import { floatingPanel, type FloatingPanel } from './float-panel';
 import { renderThemePanel } from './theme-panel';
 import { CampaignUI } from './campaign-ui';
@@ -328,6 +328,7 @@ export class ThemeEditor {
   hide(): void {
     gameAudio.setMusic(null);
     this.visible = false;
+    releaseRenderCaches(this.ctx, this.compiled ?? undefined);
   }
 
   private fit(): void {

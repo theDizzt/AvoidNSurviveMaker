@@ -341,7 +341,6 @@
   "play.rulePaths": "沿着路径前进，不碰到墙到达 GOAL",
   "play.ruleWalls": "不碰到墙、障碍物和地图边缘，到达 GOAL",
   "play.clickStart": "点击 START 开始",
-  "play.failedBanner": "失败 · {time}",
   "play.failedSub": "点击 START 重试",
   "play.best": "最佳 {time}",
   "play.bestStarsOne": "（{n} 星）",

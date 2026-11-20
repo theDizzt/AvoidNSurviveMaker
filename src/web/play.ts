@@ -1,4 +1,6 @@
 import { t as tr } from './i18n';
+import { FrameLimiter } from './graphics';
+import { canvasUsage, formatBytes, gpuName, jsHeap } from './resource-monitor';
 import { levelLabel, starGoals, starsFor, starText } from './localized/level';
 import { recordTime } from '../core/time';
 import { ZoneArea } from '../core/zone';
@@ -18,7 +20,7 @@ import { DeathBurst } from './death-burst';
 import { drawFogAreas } from './fog';
 import {
   beginFrame, clientToMap, COLORS, drawBanner, drawCoinPulls, drawShots, drawCrystalAt, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, drawStopwatch, drawTorchAt, fitCanvas,
-  FONT_MAIN, mapPointer, unitsPerPx,
+  FONT_MAIN, mapPointer, releaseRenderCaches, unitsPerPx,
 } from './render';
 
 /**
@@ -87,8 +89,35 @@ export class PlayController {
   private visible = false;
   private best = new Map<string, number>();
   private lastDebug = 0;
+  /** Time between drawn frames: shows hitches the draw time can't (GPU work, GC, layout) */
+  private lastFrameAt = 0;
+  private gapSum = 0;
+  private gapMax = 0;
+  private gapMs = 0;
+  private gapMaxMs = 0;
+  /** Hit-detection work (sim.feed / advanceTo) per second, and the longest single call */
+  private simSum = 0;
+  private simMax = 0;
+  private simMsPerSec = 0;
+  private simMaxMs = 0;
+  private simAt = 0;
+
+  private addSimTime(ms: number): void {
+    this.simSum += ms;
+    this.simMax = Math.max(this.simMax, ms);
+  }
+
+  /** Canvas memory is summed once a second, not on every debug refresh */
+  private canvasStats: ReturnType<typeof canvasUsage> | null = null;
+  private canvasStatsAt = 0;
   private frames = 0;
   private fps = 0;
+  /** Average and worst draw time over the last second (ms) */
+  private drawMs = 0;
+  private drawMaxMs = 0;
+  private drawSum = 0;
+  private drawMax = 0;
+  private readonly limiter = new FrameLimiter();
   private fpsAt = 0;
   /**
    * The drawn cursor has a tiny cached canvas over the game: it moves as soon as mouse samples
@@ -212,6 +241,8 @@ export class PlayController {
     this.unlock();
     this.visible = false;
     this.input.detach();
+    // Offscreen layers are rebuilt on the next draw; don't hold them while other screens show
+    releaseRenderCaches(this.ctx, this.sim?.objects);
   }
 
   private abort(reason: 'left' | 'blur' | 'pointer'): void {
@@ -319,7 +350,9 @@ export class PlayController {
       }
       // feed ignores samples already overtaken by idle advancement or click handling.
       const accepted = ev.timeStamp - this.t0 > sim.time;
+      const simStart = performance.now();
       sim.feed(ev.timeStamp - this.t0, p.x, p.y);
+      this.addSimTime(performance.now() - simStart);
       if (accepted) this.usedStats.recordSample(ev.timeStamp);
       this.breakTrailOnTeleport();
       if (options.cursorTrail) this.trail.push(sim.x, sim.y);
@@ -386,12 +419,25 @@ export class PlayController {
       return;
     }
     const now = performance.now();
+    // Frame limit option: skip drawing this display refresh (pointer input still runs the game)
+    if (!this.limiter.due(now)) return;
+    // Gaps over 250 ms are pauses (hidden tab, screen change), not hitches
+    const gap = now - this.lastFrameAt;
+    if (gap < 250) {
+      this.gapSum += gap;
+      this.gapMax = Math.max(this.gapMax, gap);
+    }
+    this.lastFrameAt = now;
     const sim = this.sim;
     const measure = options.pollingRate === -1 && sim.status === 'playing';
 
     if (sim.status === 'playing') {
       const target = now - this.t0 - IDLE_MARGIN_MS;
-      if (target > sim.time) sim.advanceTo(target);
+      if (target > sim.time) {
+        const simStart = performance.now();
+        sim.advanceTo(target);
+        this.addSimTime(performance.now() - simStart);
+      }
       this.breakTrailOnTeleport();
       this.pickUpTorches();
     }
@@ -432,7 +478,11 @@ export class PlayController {
       this.onClear?.(this.map, sim.getReplay(), time, sim.crystalHeld);
     }
 
+    const drawStart = performance.now();
     this.draw(now);
+    const drawTime = performance.now() - drawStart;
+    this.drawSum += drawTime;
+    this.drawMax = Math.max(this.drawMax, drawTime);
     if (measure && sim.status === 'playing' && this.autoPolling.frame(now, performance.now() - now)) {
       this.usedStats.reset();
     }
@@ -440,6 +490,16 @@ export class PlayController {
     this.frames++;
     if (now - this.fpsAt >= 1000) {
       this.fps = (this.frames * 1000) / (now - this.fpsAt);
+      this.drawMs = this.frames ? this.drawSum / this.frames : 0;
+      this.drawMaxMs = this.drawMax;
+      this.drawSum = this.drawMax = 0;
+      this.gapMs = this.frames ? this.gapSum / this.frames : 0;
+      this.gapMaxMs = this.gapMax;
+      this.gapSum = this.gapMax = 0;
+      this.simMsPerSec = (this.simSum * 1000) / (now - this.simAt || 1);
+      this.simMaxMs = this.simMax;
+      this.simSum = this.simMax = 0;
+      this.simAt = now;
       this.frames = 0;
       this.fpsAt = now;
     }
@@ -535,7 +595,8 @@ export class PlayController {
     const elapsed = sim.status === 'ready' ? 0
       : sim.status === 'playing' ? now - this.t0
         : sim.status === 'cleared' ? recordTime(sim.endTime) : sim.endTime;
-    drawStopwatch(ctx, map, elapsed, now);
+    // Milliseconds only for a clear record; the running timer and failed runs show hundredths
+    drawStopwatch(ctx, map, elapsed, now, sim.status === 'cleared' ? 3 : 2);
 
     if (sim.status === 'playing') {
       if (sim.coinTotal) this.drawCoinCount(top);
@@ -557,7 +618,7 @@ export class PlayController {
       ctx.lineTo(sim.x - 8, sim.y + 8);
       ctx.stroke();
       const why = sim.endReason ? tr(`play.why.${sim.endReason}` as 'play.why.wall') : '';
-      drawBanner(ctx, map, tr('play.failedBanner', { time: formatSeconds(sim.endTime) }), [why, tr('play.failedSub')].filter(Boolean).join(' — '), '#e2486c');
+      drawBanner(ctx, map, tr('play.statusFailed'), [why, tr('play.failedSub')].filter(Boolean).join(' — '), '#e2486c');
     } else {
       const best = this.best.get(this.mapKey);
       const stars = starsFor(map, recordTime(sim.endTime));
@@ -602,7 +663,7 @@ export class PlayController {
   private updateText(now: number): void {
     const sim = this.sim;
     const state =
-      sim.status === 'playing' ? tr('play.statusPlaying', { time: formatSeconds(now - this.t0) })
+      sim.status === 'playing' ? tr('play.statusPlaying', { time: formatSeconds(now - this.t0, 2) })
         : sim.status === 'ready' ? tr('play.statusReady')
           : sim.status === 'cleared' ? tr('play.statusCleared', { time: formatSeconds(recordTime(sim.endTime)) })
             : tr('play.statusFailed');
@@ -626,19 +687,42 @@ export class PlayController {
       [tr('debug.totalSamples'), String(s.total)],
       [tr('debug.ticks'), String(sim.ticks)],
       [tr('options.simulation'), `${sim.simulationStepMs} ms`],
+      [tr('debug.simTime'), `${this.simMsPerSec.toFixed(2)} ms/s · ${tr('debug.simMax')} ${this.simMaxMs.toFixed(2)} ms`],
       [tr('debug.fps'), this.fps.toFixed(0)],
+      [tr('debug.drawTime'), `${this.drawMs.toFixed(2)} / ${this.drawMaxMs.toFixed(2)} ms`],
+      [tr('debug.frameGap'), `${this.gapMs.toFixed(2)} / ${this.gapMaxMs.toFixed(2)} ms`],
     ];
-    this.el.debug.replaceChildren(
-      ...rows.flatMap(([k, v]) => {
-        const dt = document.createElement('dt');
-        dt.textContent = k;
-        const dd = document.createElement('dd');
-        dd.textContent = v;
-        return [dt, dd];
-      }),
-    );
+    if (!this.canvasStats || now - this.canvasStatsAt >= 1000) {
+      this.canvasStats = canvasUsage();
+      this.canvasStatsAt = now;
+    }
+    const canvases = this.canvasStats;
+    rows.push([tr('debug.canvasMemory'), `${formatBytes(canvases.bytes)} (${tr('debug.canvasCount', { n: canvases.count })})`]);
+    // The biggest users, by where they are or what made them
+    for (const g of canvases.groups.slice(0, DEBUG_CANVAS_GROUPS)) {
+      rows.push([`↳ ${g.label}${g.count > 1 ? ` ×${g.count}` : ''}`, `${formatBytes(g.bytes)} · ${g.w}×${g.h}`]);
+    }
+    const heap = jsHeap();
+    rows.push([tr('debug.jsHeap'), heap ? `${formatBytes(heap.used)} / ${formatBytes(heap.limit)}` : tr('debug.unavailable')]);
+    rows.push([tr('debug.gpu'), gpuName() ?? tr('debug.unavailable')]);
+    const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    rows.push([tr('debug.device'), `${navigator.hardwareConcurrency || '?'} ${tr('debug.cores')}${deviceMemory ? ` · ${deviceMemory} GB RAM` : ''}`]);
+    // Shown during runs too: update the rows in place instead of rebuilding them every 200 ms
+    const list = this.el.debug;
+    if (list.children.length !== rows.length * 2) {
+      list.replaceChildren(...rows.flatMap(() => [document.createElement('dt'), document.createElement('dd')]));
+    }
+    rows.forEach(([k, v], i) => {
+      const dt = list.children[i * 2];
+      const dd = list.children[i * 2 + 1];
+      if (dt.textContent !== k) dt.textContent = k;
+      if (dd.textContent !== v) dd.textContent = v;
+    });
   }
 }
+
+/** Canvas memory groups listed in the debug panel */
+const DEBUG_CANVAS_GROUPS = 8;
 
 /**
  * With the system cursor (pointer skin #0) on a map where the cursor drifts (ice, portals): a ring

@@ -1,3 +1,5 @@
+// First: it registers every canvas the other modules create (debug panel memory estimate)
+import './resource-monitor';
 import { language, LANGUAGES, saveLanguage, t, type Language } from './i18n';
 import { renderFontLicenses } from './font-licenses';
 import './style.css';
@@ -15,7 +17,7 @@ import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-u
 import { levelKey, recordClear, themeUnlocked, totalStars } from './progress';
 import { filledSlots, themedLevel, type ThemeEntry } from './localized/theme-pack';
 import { OFFICIAL_THEMES, allThemes, badgeFor, levelThemeIn, musicFor, themeBadge, themeMusic } from './theme-registry';
-import { applyLowSpecOptions, GRAPHICS_LEVELS, onOptionsChange, options, POLLING_RATES, resetGraphicsOptions, resetOptions, setOption } from './options';
+import { applyLowSpecOptions, FRAME_LIMITS, GRAPHICS_LEVELS, onOptionsChange, options, POLLING_RATES, resetGraphicsOptions, resetOptions, setOption } from './options';
 import { refreshSkinGate, setSkinGate } from './skin';
 import { CustomizeUI } from './customize-ui';
 import { PlayController } from './play';
@@ -483,11 +485,18 @@ qualityTile.addEventListener('click', () => {
   const next = GRAPHICS_LEVELS[(GRAPHICS_LEVELS.indexOf(options.graphics) + 1) % GRAPHICS_LEVELS.length];
   setOption('graphics', next);
 });
+// Frame limit steps Unlimited → 240 → 144 → 120 → 60 → 30 → Unlimited
+const frameLimitTile = $<HTMLButtonElement>('opt-frame-limit');
+frameLimitTile.addEventListener('click', () => {
+  setOption('frameLimit', FRAME_LIMITS[(FRAME_LIMITS.indexOf(options.frameLimit) + 1) % FRAME_LIMITS.length]);
+});
 let appliedGraphics = options.graphics;
 const syncPerformance = () => {
   pollingTile.dataset.level = options.pollingRate ? 'capped' : 'max';
   $('opt-polling-value').textContent = options.pollingRate === -1 ? t('options.pollingAuto')
     : options.pollingRate ? `${options.pollingRate} Hz` : t('options.pollingMax');
+  frameLimitTile.dataset.level = options.frameLimit ? 'capped' : 'max';
+  $('opt-frame-limit-value').textContent = options.frameLimit ? `${options.frameLimit} FPS` : t('options.frameLimitOff');
   for (const tile of [graphicsTile, qualityTile]) tile.dataset.level = options.graphics;
   document.documentElement.classList.toggle('gfx-low', options.graphics === 'low');
   $('opt-graphics-value').textContent = $('opt-graphics-level-value').textContent = t(`options.graphics.${options.graphics}`);
