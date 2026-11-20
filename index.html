@@ -187,7 +187,7 @@
               </span>
             </div>
             <button type="button" id="opt-graphics" class="dtile dgraphics" style="grid-column: 1; grid-row: 3" data-i18n-title="options.graphicsHint">
-              <span class="dtile-in"><strong data-i18n="options.graphics"></strong><span id="opt-graphics-value" class="dgraphics-value"></span><small data-i18n="options.graphicsSub"></small></span>
+              <span class="dtile-in"><strong data-i18n="options.graphics"></strong><span id="opt-graphics-value" class="dgraphics-value"></span><small data-i18n="options.graphicsOpen"></small></span>
             </button>
             <button type="button" id="opt-polling" class="dtile dgraphics" style="grid-column: 2; grid-row: 3" data-i18n-title="options.pollingHint">
               <span class="dtile-in"><strong data-i18n="options.polling"></strong><span id="opt-polling-value" class="dgraphics-value"></span><small data-i18n="options.graphicsSub"></small></span>
@@ -210,6 +210,41 @@
               <span class="dtile-in"><strong data-i18n="options.licenses"></strong><small data-i18n="options.licensesSub"></small></span>
             </button>
             <button type="button" id="options-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 4">
+              <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Graphics: every rendering option on the same diamond grid -->
+    <div id="graphics-screen" class="screen menu" hidden>
+      <div class="menu-inner menu-diamonds">
+        <h2 class="logo logo-sm" data-i18n="options.graphics"></h2>
+        <div class="dia-wrap" id="graphics-dia">
+          <div class="dgrid dgrid-panel" style="--cols: 4">
+            <button type="button" id="opt-graphics-level" class="dtile dgraphics" style="grid-column: 1; grid-row: 1" data-i18n-title="options.graphicsHint">
+              <span class="dtile-in"><strong data-i18n="options.quality"></strong><span id="opt-graphics-level-value" class="dgraphics-value"></span><small data-i18n="options.graphicsSub"></small></span>
+            </button>
+            <label class="dtile dtoggle" style="grid-column: 2; grid-row: 1" data-i18n-title="options.trailHint">
+              <span class="dtile-in"><input type="checkbox" id="opt-trail" /><strong data-i18n="options.trail"></strong><small data-i18n="options.trailHint"></small></span>
+            </label>
+            <label class="dtile dtoggle" style="grid-column: 3; grid-row: 1" data-i18n-title="options.effectsHint">
+              <span class="dtile-in"><input type="checkbox" id="opt-effects" /><strong data-i18n="options.decorations"></strong><small data-i18n="options.effectsHint"></small></span>
+            </label>
+            <button type="button" id="options-low-spec" class="dtile" style="grid-column: 4; grid-row: 1" data-i18n-title="options.lowSpecHint">
+              <span class="dtile-in"><strong data-i18n="options.lowSpec"></strong><small data-i18n="options.lowSpecSub"></small></span>
+            </button>
+            <label class="dtile dtoggle" style="grid-column: 1; grid-row: 2" data-i18n-title="options.backgroundHint">
+              <span class="dtile-in"><input type="checkbox" id="opt-background" /><strong data-i18n="options.background"></strong><small data-i18n="options.backgroundHint"></small></span>
+            </label>
+            <label class="dtile dtoggle" style="grid-column: 2; grid-row: 2" data-i18n-title="options.interfaceHint">
+              <span class="dtile-in"><input type="checkbox" id="opt-interface" /><strong data-i18n="options.interface"></strong><small data-i18n="options.interfaceHint"></small></span>
+            </label>
+            <button type="button" id="graphics-reset" class="dtile" style="grid-column: 3; grid-row: 2">
+              <span class="dtile-in"><strong data-i18n="options.reset"></strong><small data-i18n="options.graphicsResetSub"></small></span>
+            </button>
+            <button type="button" id="graphics-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 2">
               <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
             </button>
           </div>

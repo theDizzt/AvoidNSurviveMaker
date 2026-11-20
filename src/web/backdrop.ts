@@ -7,6 +7,7 @@ import { demoPlayable, planDemoRun } from './demo-pilot';
 import { COLORS, drawCoinPulls, drawMap, drawTrail } from './render';
 import { OFFICIAL_THEMES } from './theme-registry';
 import { backdropFps, renderScale } from './graphics';
+import { onOptionsChange, options } from './options';
 
 /**
  * Page background behind the menus:
@@ -60,7 +61,9 @@ export class Backdrop {
       .filter((m): m is MapData => !!m && demoPlayable(m)));
     window.addEventListener('resize', () => this.resize());
     document.addEventListener('visibilitychange', () => this.schedule());
+    onOptionsChange(() => this.schedule());
     this.resize();
+    this.schedule();
   }
 
   /** Switch the background; `theme` gives the colors for 'theme' mode */
@@ -86,7 +89,8 @@ export class Backdrop {
   }
 
   private schedule(): void {
-    const active = this.mode === 'demo' && !document.hidden && this.pool.length > 0;
+    this.canvas.style.visibility = options.animatedBackground ? '' : 'hidden';
+    const active = options.animatedBackground && this.mode === 'demo' && !document.hidden && this.pool.length > 0;
     if (!active && this.run && this.pausedAt === null) this.pausedAt = performance.now();
     if (active && this.pausedAt !== null) {
       const gap = performance.now() - this.pausedAt;
@@ -110,7 +114,7 @@ export class Backdrop {
       Math.sqrt(MAX_BACKGROUND_PIXELS / Math.max(1, window.innerWidth * window.innerHeight)));
     this.canvas.width = Math.round(window.innerWidth * dpr);
     this.canvas.height = Math.round(window.innerHeight * dpr);
-    if (this.run) this.draw(performance.now());
+    if (this.run && options.animatedBackground) this.draw(performance.now());
   }
 
   private nextRun(now: number): Run {

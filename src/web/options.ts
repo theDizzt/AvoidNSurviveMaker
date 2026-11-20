@@ -14,6 +14,10 @@ export interface Options {
   effectsVolume: number;
   pollingRate: PollingRate;
   graphics: GraphicsLevel;
+  cursorTrail: boolean;
+  decorativeEffects: boolean;
+  animatedBackground: boolean;
+  interfaceEffects: boolean;
 }
 
 type VolumeKey = 'masterVolume' | 'musicVolume' | 'effectsVolume';
@@ -26,6 +30,10 @@ export const DEFAULT_OPTIONS: Readonly<Options> = {
   effectsVolume: 80,
   pollingRate: 0,
   graphics: 'high',
+  cursorTrail: true,
+  decorativeEffects: true,
+  animatedBackground: true,
+  interfaceEffects: true,
 };
 
 const STORAGE_KEY = 'avoid-n-survive:options';
@@ -35,7 +43,7 @@ function load(): Options {
   const out = { ...DEFAULT_OPTIONS };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, unknown>;
-    for (const k of ['showDebug'] as const) {
+    for (const k of ['showDebug', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects'] as const) {
       if (typeof saved[k] === 'boolean') out[k] = saved[k];
     }
     for (const k of VOLUME_KEYS) {
@@ -75,6 +83,24 @@ export function setOption<K extends keyof Options>(key: K, value: Options[K]): v
 
 export function resetOptions(): void {
   Object.assign(options as Options, DEFAULT_OPTIONS);
+  commit();
+}
+
+/** Options shown on the Graphics screen */
+const GRAPHICS_KEYS = ['graphics', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects'] as const;
+
+/** Restore only the Graphics screen's options (one commit, so canvases refit once). */
+export function resetGraphicsOptions(): void {
+  for (const k of GRAPHICS_KEYS) (options as Record<string, unknown>)[k] = DEFAULT_OPTIONS[k];
+  commit();
+}
+
+/** Apply together so listeners resize/repaint only once. */
+export function applyLowSpecOptions(): void {
+  Object.assign(options as Options, {
+    graphics: 'low', pollingRate: -1, showDebug: false,
+    cursorTrail: false, decorativeEffects: false, animatedBackground: false, interfaceEffects: false,
+  } satisfies Partial<Options>);
   commit();
 }
 

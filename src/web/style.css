@@ -268,6 +268,13 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .check { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .check input { padding: 0; accent-color: var(--accent); }
 
+/* Low-spec UI: remove costly blur/shadow passes without changing layout or focus outlines. */
+.simple-interface *, .simple-interface *::before, .simple-interface *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
 .stage { width: 100%; }
 .stage canvas {
   display: block;
@@ -299,7 +306,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .play-stage { width: auto; }
 /* The drawn cursor's own layer over the game canvas (play.ts drawCursorLayer) */
 .play-stage { position: relative; }
-.play-stage canvas.play-cursor { position: absolute; pointer-events: none; box-shadow: none; border: 0; background: transparent; }
+.play-stage canvas.play-cursor { position: absolute; left: 0; top: 0; will-change: transform; pointer-events: none; box-shadow: none; border: 0; background: transparent; }
 .play-stage canvas { border-radius: 0; border: 0; box-shadow: 0 0 40px rgba(58, 96, 150, 0.18); }
 /* Hidden in game (keyboard shortcuts only); bottom-left if shown again */
 .play-hud[hidden] { display: none; }
@@ -1468,8 +1475,8 @@ button.se-back:hover, button.se-start:hover, button.se-back:focus-visible, butto
  * controls stay readable. Under 640px wide main.ts adds .dia-flat and the tiles fall back to a
  * plain two-column grid of upright cards.
  */
-#options-screen, #stats-screen, #achievements-screen, #customize-screen { overflow-y: auto; align-items: safe center; }
-#options-screen .menu-inner, #stats-screen .menu-inner, #achievements-screen .menu-inner, #customize-screen .menu-inner { margin-block: auto; padding-block: 24px; gap: 10px; }
+#options-screen, #graphics-screen, #stats-screen, #achievements-screen, #customize-screen { overflow-y: auto; align-items: safe center; }
+#options-screen .menu-inner, #graphics-screen .menu-inner, #stats-screen .menu-inner, #achievements-screen .menu-inner, #customize-screen .menu-inner { margin-block: auto; padding-block: 24px; gap: 10px; }
 .dgrid-panel { --cell: 168px; --gap: 12px; }
 .dgrid-panel .dtile-in strong { font-family: var(--font-main); font-size: 17px; }
 .dgrid-panel .dtile-in small { font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }

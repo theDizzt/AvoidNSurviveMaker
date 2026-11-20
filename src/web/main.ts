@@ -15,7 +15,7 @@ import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-u
 import { levelKey, recordClear, themeUnlocked, totalStars } from './progress';
 import { filledSlots, themedLevel, type ThemeEntry } from './localized/theme-pack';
 import { OFFICIAL_THEMES, allThemes, badgeFor, levelThemeIn, musicFor, themeBadge, themeMusic } from './theme-registry';
-import { GRAPHICS_LEVELS, onOptionsChange, options, POLLING_RATES, resetOptions, setOption } from './options';
+import { applyLowSpecOptions, GRAPHICS_LEVELS, onOptionsChange, options, POLLING_RATES, resetGraphicsOptions, resetOptions, setOption } from './options';
 import { refreshSkinGate, setSkinGate } from './skin';
 import { CustomizeUI } from './customize-ui';
 import { PlayController } from './play';
@@ -65,7 +65,7 @@ for (const id of ['menu-version', 'preload-version']) $(id).textContent = VERSIO
 
 // ───────────────────────── Screens ─────────────────────────
 
-type Screen = 'preload' | 'menu' | 'themes' | 'levels' | 'themeEditor' | 'options' | 'licenses' | 'stats' | 'achievements' | 'customize' | 'auth' | 'verify' | 'play' | 'editor';
+type Screen = 'preload' | 'menu' | 'themes' | 'levels' | 'themeEditor' | 'options' | 'graphics' | 'licenses' | 'stats' | 'achievements' | 'customize' | 'auth' | 'verify' | 'play' | 'editor';
 
 const screens: Record<Screen, HTMLElement> = {
   preload: $('preload-screen'),
@@ -74,6 +74,7 @@ const screens: Record<Screen, HTMLElement> = {
   levels: $('levels-screen'),
   themeEditor: $('theme-editor-screen'),
   options: $('options-screen'),
+  graphics: $('graphics-screen'),
   licenses: $('licenses-screen'),
   stats: $('stats-screen'),
   achievements: $('achievements-screen'),
@@ -150,6 +151,7 @@ const fitPanel = (id: string, side = 0, below = 0) => {
 window.addEventListener('resize', () => {
   if (current === 'menu') fitMenu();
   if (current === 'options') fitPanel('options-dia');
+  if (current === 'graphics') fitPanel('graphics-dia');
   if (current === 'stats') fitPanel('stats-dia');
   if (current === 'achievements') fitPanel('achievements-dia', ACH_SIDE, ACH_BELOW);
   if (current === 'customize') fitPanel('customize-dia');
@@ -275,6 +277,10 @@ function showImmediately(next: Screen): void {
   if (next === 'options') {
     requestAnimationFrame(() => fitPanel('options-dia'));
     $('options-back').focus();
+  }
+  if (next === 'graphics') {
+    requestAnimationFrame(() => fitPanel('graphics-dia'));
+    $('graphics-back').focus();
   }
   if (next === 'stats') {
     requestAnimationFrame(() => fitPanel('stats-dia'));
@@ -404,7 +410,7 @@ $('menu-options').addEventListener('click', () => show('options'));
 $('menu-editor').addEventListener('click', showEditor);
 
 // Arrow keys move between menu buttons
-for (const screen of [screens.menu, screens.options, screens.stats]) {
+for (const screen of [screens.menu, screens.options, screens.graphics, screens.stats]) {
   screen.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement && e.target.type === 'range') return;
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
@@ -418,10 +424,14 @@ for (const screen of [screens.menu, screens.options, screens.stats]) {
 
 // ───────────────────────── Options ─────────────────────────
 
-type ToggleOption = 'showDebug';
+type ToggleOption = 'showDebug' | 'cursorTrail' | 'decorativeEffects' | 'animatedBackground' | 'interfaceEffects';
 type VolumeOption = 'masterVolume' | 'musicVolume' | 'effectsVolume';
 const optionInputs: Record<ToggleOption, HTMLInputElement> = {
   showDebug: $<HTMLInputElement>('opt-debug'),
+  cursorTrail: $<HTMLInputElement>('opt-trail'),
+  decorativeEffects: $<HTMLInputElement>('opt-effects'),
+  animatedBackground: $<HTMLInputElement>('opt-background'),
+  interfaceEffects: $<HTMLInputElement>('opt-interface'),
 };
 
 const volumeInputs: Record<VolumeOption, HTMLInputElement> = {
@@ -446,6 +456,7 @@ function syncOptions(): void {
     $(`${input.id}-value`).textContent = `${options[k]}%`;
   }
   debugPanel.hidden = !options.showDebug;
+  document.documentElement.classList.toggle('simple-interface', !options.interfaceEffects);
 }
 
 for (const [k, input] of Object.entries(optionInputs) as [ToggleOption, HTMLInputElement][]) {
@@ -463,8 +474,11 @@ const pollingTile = $<HTMLButtonElement>('opt-polling');
 pollingTile.addEventListener('click', () => {
   setOption('pollingRate', POLLING_RATES[(POLLING_RATES.indexOf(options.pollingRate) + 1) % POLLING_RATES.length]);
 });
+// The Options tile opens the Graphics screen; its Quality tile steps High → Medium → Low
 const graphicsTile = $<HTMLButtonElement>('opt-graphics');
-graphicsTile.addEventListener('click', () => {
+graphicsTile.addEventListener('click', () => show('graphics'));
+const qualityTile = $<HTMLButtonElement>('opt-graphics-level');
+qualityTile.addEventListener('click', () => {
   const next = GRAPHICS_LEVELS[(GRAPHICS_LEVELS.indexOf(options.graphics) + 1) % GRAPHICS_LEVELS.length];
   setOption('graphics', next);
 });
@@ -473,8 +487,8 @@ const syncPerformance = () => {
   pollingTile.dataset.level = options.pollingRate ? 'capped' : 'max';
   $('opt-polling-value').textContent = options.pollingRate === -1 ? t('options.pollingAuto')
     : options.pollingRate ? `${options.pollingRate} Hz` : t('options.pollingMax');
-  graphicsTile.dataset.level = options.graphics;
-  $('opt-graphics-value').textContent = t(`options.graphics.${options.graphics}`);
+  for (const tile of [graphicsTile, qualityTile]) tile.dataset.level = options.graphics;
+  $('opt-graphics-value').textContent = $('opt-graphics-level-value').textContent = t(`options.graphics.${options.graphics}`);
   // A new resolution: every canvas refits on resize
   if (options.graphics !== appliedGraphics) {
     appliedGraphics = options.graphics;
@@ -485,6 +499,12 @@ onOptionsChange(syncPerformance);
 syncPerformance();
 
 $('options-back').addEventListener('click', () => show('menu'));
+$('options-low-spec').addEventListener('click', applyLowSpecOptions);
+$('graphics-reset').addEventListener('click', resetGraphicsOptions);
+$('graphics-back').addEventListener('click', () => show('options'));
+screens.graphics.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') show('options');
+});
 $('options-reset').addEventListener('click', () => {
   resetOptions();
 });

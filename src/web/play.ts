@@ -29,6 +29,8 @@ const IDLE_MARGIN_MS = 40;
 const TRAIL_POINTS = 800;
 /** On-screen size (CSS px) of the virtual cursor that replaces the system cursor during a run */
 const CURSOR_PX = 8;
+/** Room for the arrow/sword extending from the hotspot, including antialiasing padding. */
+const CURSOR_SPRITE_PX = 64;
 /** A carryable torch (#58) is picked up when the cursor comes this close to its edge (map units) */
 const TORCH_PICKUP = 6;
 const poseTmp: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
@@ -89,8 +91,8 @@ export class PlayController {
   private fps = 0;
   private fpsAt = 0;
   /**
-   * The drawn cursor (pointer skins) has a canvas of its own over the game: it is redrawn as soon as
-   * mouse samples arrive instead of with the next full frame. (Not a `desynchronized` context: on
+   * The drawn cursor has a tiny cached canvas over the game: it moves as soon as mouse samples
+   * arrive instead of with the next full frame. (Not a `desynchronized` context: on
    * many GPUs that draws straight to the screen without transparency, covering the game in white.)
    */
   private readonly cursorLayer: HTMLCanvasElement;
@@ -99,6 +101,12 @@ export class PlayController {
   private mapTransform: DOMMatrix | null = null;
   /** Something is drawn on the cursor layer */
   private cursorShown = false;
+  private cursorSpriteKey = '';
+  private cursorScaleX = 1;
+  private cursorScaleY = 1;
+  private cursorLeft = 0;
+  private cursorTop = 0;
+  private cursorPosition = '';
   /**
    * Fog, dark areas or global darkness can cover the cursor: on such maps it stays in the game
    * canvas under them (hiding it is part of the challenge), not on the layer above
@@ -109,12 +117,17 @@ export class PlayController {
     this.ctx = el.canvas.getContext('2d')!;
     this.cursorLayer = document.createElement('canvas');
     this.cursorLayer.className = 'play-cursor';
+    this.cursorLayer.style.visibility = 'hidden';
+    this.cursorLayer.style.width = `${CURSOR_SPRITE_PX}px`;
+    this.cursorLayer.style.height = `${CURSOR_SPRITE_PX}px`;
     this.cursorLayer.setAttribute('aria-hidden', 'true');
     this.cursorCtx = this.cursorLayer.getContext('2d')!;
     el.canvas.parentElement?.append(this.cursorLayer);
     this.input = new HighResPointer((list) => this.onSamples(list));
     let measuredRate = options.pollingRate;
     onOptionsChange(next => {
+      if (!next.cursorTrail) this.trail.length = 0;
+      if (!next.decorativeEffects) this.burst = null;
       if (next.pollingRate === measuredRate) return;
       measuredRate = next.pollingRate;
       this.autoPolling.resetMeasurement();
@@ -253,7 +266,7 @@ export class PlayController {
     this.burst = null;
     this.deathNotified = false;
     this.t0 = e.timeStamp;
-    this.trail = [p.x, p.y];
+    this.trail = options.cursorTrail ? [p.x, p.y] : [];
     this.carried = new Uint8Array(this.map.objects.length);
     this.trailTeleports = 0;
     this.notified = false;
@@ -271,7 +284,7 @@ export class PlayController {
   private breakTrailOnTeleport(): void {
     if (this.sim.teleports === this.trailTeleports) return;
     this.trailTeleports = this.sim.teleports;
-    this.trail.push(NaN, NaN, this.sim.x, this.sim.y);
+    if (options.cursorTrail) this.trail.push(NaN, NaN, this.sim.x, this.sim.y);
   }
 
   private onSamples(list: readonly PointerEvent[]): void {
@@ -309,7 +322,7 @@ export class PlayController {
       sim.feed(ev.timeStamp - this.t0, p.x, p.y);
       if (accepted) this.usedStats.recordSample(ev.timeStamp);
       this.breakTrailOnTeleport();
-      this.trail.push(sim.x, sim.y);
+      if (options.cursorTrail) this.trail.push(sim.x, sim.y);
       if (sim.status !== 'playing') break;
     }
     if (this.trail.length > TRAIL_POINTS * 2) this.trail.splice(0, this.trail.length - TRAIL_POINTS * 2);
@@ -319,33 +332,46 @@ export class PlayController {
   }
 
   /**
-   * The pointer skin at the run's cursor, on the cursor layer (kept the size and place of the game
-   * canvas). Called for every batch of mouse samples and every frame; cleared outside a run.
+   * Cache the skin in a small canvas. Only frames measure layout; mouse batches move the
+   * cached image via transform without repainting or reading layout.
    */
-  private drawCursorLayer(): void {
+  private drawCursorLayer(refresh = false): void {
     const layer = this.cursorLayer;
-    const canvas = this.el.canvas;
-    if (layer.width !== canvas.width || layer.height !== canvas.height) {
-      layer.width = canvas.width;
-      layer.height = canvas.height;
-    }
     const st = layer.style;
-    const left = `${canvas.offsetLeft}px`, top = `${canvas.offsetTop}px`;
-    const w = `${canvas.offsetWidth}px`, h = `${canvas.offsetHeight}px`;
-    if (st.left !== left) st.left = left;
-    if (st.top !== top) st.top = top;
-    if (st.width !== w) st.width = w;
-    if (st.height !== h) st.height = h;
-    const ctx = this.cursorCtx;
     const sim = this.sim;
     const show = this.visible && !!sim && sim.status === 'playing' && skin.pointer !== 0 && !this.coveredCursor && !!this.mapTransform;
-    if (!show && !this.cursorShown) return;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, layer.width, layer.height);
-    this.cursorShown = show;
-    if (!show) return;
-    ctx.setTransform(this.mapTransform!);
-    drawPointer(ctx, skin, sim.x, sim.y, unitsPerPx(canvas, this.map), CURSOR_PX);
+    if (!show) {
+      if (this.cursorShown) st.visibility = 'hidden';
+      this.cursorShown = false;
+      return;
+    }
+    if (refresh) {
+      const canvas = this.el.canvas;
+      this.cursorScaleX = canvas.clientWidth / canvas.width;
+      this.cursorScaleY = canvas.clientHeight / canvas.height;
+      this.cursorLeft = canvas.offsetLeft;
+      this.cursorTop = canvas.offsetTop;
+      const pixels = Math.ceil(CURSOR_SPRITE_PX * (window.devicePixelRatio || 1));
+      const key = `${pixels}:${skin.pointer}:${skin.primary}:${skin.accent}`;
+      if (key !== this.cursorSpriteKey) {
+        layer.width = layer.height = pixels;
+        const scale = pixels / CURSOR_SPRITE_PX;
+        this.cursorCtx.setTransform(scale, 0, 0, scale, 0, 0);
+        drawPointer(this.cursorCtx, skin, CURSOR_SPRITE_PX / 2, CURSOR_SPRITE_PX / 2, 1, CURSOR_PX);
+        this.cursorSpriteKey = key;
+      }
+    }
+    if (!this.cursorSpriteKey) return;
+    const m = this.mapTransform!;
+    const x = this.cursorLeft + (m.a * sim.x + m.c * sim.y + m.e) * this.cursorScaleX - CURSOR_SPRITE_PX / 2;
+    const y = this.cursorTop + (m.b * sim.x + m.d * sim.y + m.f) * this.cursorScaleY - CURSOR_SPRITE_PX / 2;
+    const position = `translate3d(${x}px, ${y}px, 0)`;
+    if (position !== this.cursorPosition) {
+      st.transform = position;
+      this.cursorPosition = position;
+    }
+    if (!this.cursorShown) st.visibility = 'visible';
+    this.cursorShown = true;
   }
 
   /** The run whose coin count `coinsLeft` was last seen in (for the coin sound) */
@@ -386,7 +412,7 @@ export class PlayController {
     const running = sim.status === 'playing';
     if (sim.status === 'dead' && !this.deathNotified) {
       this.deathNotified = true;
-      this.burst = new DeathBurst(sim.x, sim.y, skin.primary, now);
+      this.burst = options.decorativeEffects ? new DeathBurst(sim.x, sim.y, skin.primary, now) : null;
       if (sim.endReason !== 'blur' && sim.endReason !== 'left') gameAudio.death();
       if (sim.endReason !== 'blur' && sim.endReason !== 'left' && sim.endReason !== 'pointer') this.onDeath?.(this.map);
     }
@@ -456,10 +482,10 @@ export class PlayController {
     const carried = playing ? this.carried : undefined;
     drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried,
       secretCursor: playing ? { x: sim.x, y: sim.y } : null });
-    drawSkinTrail(ctx, skin, this.trail, unitsPerPx(this.el.canvas, map));
+    if (options.cursorTrail) drawSkinTrail(ctx, skin, this.trail, unitsPerPx(this.el.canvas, map));
     // Bullets, missiles and explosions
     if (sim.status !== 'ready' && sim.guns.any) drawShots(ctx, sim.guns.shots, sim.guns.blasts, this.shotClock(now));
-    if (sim.status !== 'ready') drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
+    if (options.decorativeEffects && sim.status !== 'ready') drawCoinPulls(ctx, sim, t, sim.x, sim.y, COIN_PULL_MS);
     // Secret walls cover the floor, obstacles and trail under them, except right around the cursor
     drawSecretWalls(ctx, map, sim.objects, t, playing ? { x: sim.x, y: sim.y } : null, 1, state);
 
@@ -472,7 +498,7 @@ export class PlayController {
       if (skin.pointer !== 0 && this.coveredCursor) drawPointer(ctx, skin, sim.x, sim.y, u, CURSOR_PX);
       if (skin.pointer === 0 && this.drifts) drawSlideMarker(ctx, sim.x - sim.offX, sim.y - sim.offY, sim.x, sim.y, u);
       // A held crystal star circles the cursor once it has flown in
-      if (sim.crystalHeld && this.crystalFlownIn(t)) {
+      if (sim.crystalHeld && (!options.decorativeEffects || this.crystalFlownIn(t))) {
         const a = now / 380;
         drawCrystalAt(ctx, sim.x + Math.cos(a) * 15 * u, sim.y + Math.sin(a) * 15 * u, 13 * u, now);
       }
@@ -545,7 +571,7 @@ export class PlayController {
       const crystal = sim.hasCrystal ? (sim.crystalHeld ? tr('play.crystalGot') : tr('play.crystalMissed')) : '';
       drawBanner(ctx, map, `${stars !== null ? `${starText(stars)}${sim.crystalHeld ? ' ✦' : ''}  ` : ''}${tr('play.cleared', { time: formatSeconds(recordTime(sim.endTime)) })}`, [crystal, sub].filter(Boolean).join(' — '), '#d48f00');
     }
-    this.drawCursorLayer();
+    this.drawCursorLayer(true);
   }
 
   /** "● 2 / 5" pill at the top-left (below the level label) while coins remain to be found */
