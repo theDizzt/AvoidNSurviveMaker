@@ -87,7 +87,9 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     return v;
   }
 
-  const REPEATS = ['loop', 'pingpong', 'once'] as const satisfies readonly Repeat[];
+  const REPEATS = ['loop', 'pingpong', 'once', 'restart', 'slam'] as const satisfies readonly Repeat[];
+  /** 'slam' is for routes only */
+  const ROTATION_REPEATS = ['loop', 'pingpong', 'once', 'restart'] as const satisfies readonly Repeat[];
   const EASINGS = ['none', 'in', 'out', 'inOut'] as const satisfies readonly Easing[];
 
   function rect(v: unknown, name: string, W: number, H: number): Rect {
@@ -150,6 +152,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       } : {}),
       speed: num(o.speed, `${name}.speed`, 0, LIMITS.maxSpeed),
       repeat: oneOf(o.repeat, `${name}.repeat`, REPEATS),
+      ...(o.returnSpeed !== undefined ? { returnSpeed: num(o.returnSpeed, `${name}.returnSpeed`, 1, LIMITS.maxSpeed) } : {}),
       easing: oneOf(o.easing, `${name}.easing`, EASINGS),
       delay: num(o.delay, `${name}.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
       clockwise: bool(o.clockwise, `${name}.clockwise`),
@@ -173,7 +176,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       speed: num(o.speed, `${name}.speed`, 0, LIMITS.maxRotSpeed),
       angle: num(o.angle, `${name}.angle`, 0, LIMITS.maxAngle),
       clockwise: bool(o.clockwise, `${name}.clockwise`),
-      repeat: oneOf(o.repeat, `${name}.repeat`, REPEATS),
+      repeat: oneOf(o.repeat, `${name}.repeat`, ROTATION_REPEATS),
       easing: oneOf(o.easing, `${name}.easing`, EASINGS),
       delay: num(o.delay, `${name}.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
       ...(o.showPivot === true ? { showPivot: true } : {}),
@@ -335,7 +338,6 @@ export function createValidateApi(t: Translator = defaultTranslate) {
         stroke: kind === 'blade' ? num(s.stroke, `${name}.saw.stroke`, 0, Math.max(W, H)) : 0,
         strokeMs: kind === 'blade' ? num(s.strokeMs, `${name}.saw.strokeMs`, 50, LIMITS.maxDelay) : 0,
       };
-      delete out.rotation; // a saw's own spin / sawing is its rotation
       const b = shapeBounds(out.shape);
       if (kind === 'disc') {
         // Always a circle

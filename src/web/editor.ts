@@ -584,6 +584,8 @@ export class Editor {
     addButton(row, sawTool('blade', 'static'), `${svg(bladeIcon)}<span class="pal-num">44</span>`, tr('ed.palSawBlade'), 'pal-saw');
     addButton(row, sawTool('disc', 'moving'), `${svg(discIcon + route)}<span class="pal-num">45</span>`, tr('ed.palMovingCircularGrinder'), 'pal-saw');
     addButton(row, sawTool('blade', 'moving'), `${svg(bladeIcon + route)}<span class="pal-num">46</span>`, tr('ed.palMovingSawBlade'), 'pal-saw');
+    // A saw blade turning around a pivot (#62)
+    addButton(row, sawTool('blade', 'rotating'), `${svg(`<g transform="rotate(-30 12 12)">${bladeIcon}</g><circle cx="12" cy="12" r="2.2" fill="#fff"/>`)}<span class="pal-badge">↻</span><span class="pal-num">62</span>`, tr('ed.palRotatingSaw'), 'pal-saw');
     const fallTool: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'poly', special: 'fall' };
     const fallRock = boulderShape(12, 9, 6.5).map((p) => `${p.x},${p.y}`).join(' ');
     addButton(row, fallTool, `${svg(`<polygon points="${fallRock}"/><path d="M12 17 L12 23 M9.5 20.5 L12 23 L14.5 20.5" stroke-width="1.6" fill="none" stroke-linecap="round"/>`)}<span class="pal-num">51</span>`, tr('ed.palFall'), 'pal-wall pal-moving');

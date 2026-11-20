@@ -1,0 +1,484 @@
+{
+  "v": 2,
+  "name": "wood06",
+  "author": "Dizzt, Kukui",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 330,
+    "y": 180,
+    "w": 120,
+    "h": 60
+  },
+  "goal": {
+    "x": 1620,
+    "y": 600,
+    "w": 60,
+    "h": 120
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 330,
+        "y": 240,
+        "w": 120,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1560,
+        "y": 600,
+        "w": 60,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 420,
+        "w": 1320,
+        "h": 480
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 300,
+        "cy": 840,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 300,
+        "cy": 480,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 900,
+        "cy": 660,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 300,
+        "cy": 480,
+        "rx": 70,
+        "ry": 70
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 300,
+            "y": 840
+          }
+        ],
+        "speed": 720,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true,
+        "showPath": true
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 420,
+        "cy": 840,
+        "rx": 70,
+        "ry": 70
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 420,
+            "y": 480
+          }
+        ],
+        "speed": 720,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true,
+        "showPath": true
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": false,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 540,
+        "cy": 480,
+        "rx": 70,
+        "ry": 70
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 540,
+            "y": 840
+          }
+        ],
+        "speed": 720,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true,
+        "showPath": true
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 660,
+        "cy": 840,
+        "rx": 70,
+        "ry": 70
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 660,
+            "y": 480
+          }
+        ],
+        "speed": 720,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true,
+        "showPath": true
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": false,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 780,
+        "cy": 480,
+        "rx": 70,
+        "ry": 70
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 780,
+            "y": 840
+          }
+        ],
+        "speed": 720,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true,
+        "showPath": true
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 900,
+        "cy": 840,
+        "rx": 70,
+        "ry": 70
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 900,
+            "y": 480
+          }
+        ],
+        "speed": 720,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true,
+        "showPath": true
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": false,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1020,
+        "cy": 480,
+        "rx": 70,
+        "ry": 70
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1020,
+            "y": 840
+          }
+        ],
+        "speed": 720,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true,
+        "showPath": true
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1140,
+        "cy": 840,
+        "rx": 70,
+        "ry": 70
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1140,
+            "y": 480
+          }
+        ],
+        "speed": 720,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true,
+        "showPath": true
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": false,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1260,
+        "cy": 480,
+        "rx": 70,
+        "ry": 70
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1260,
+            "y": 840
+          }
+        ],
+        "speed": 720,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true,
+        "showPath": true
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1380,
+        "cy": 840,
+        "rx": 70,
+        "ry": 70
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1380,
+            "y": 480
+          }
+        ],
+        "speed": 720,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true,
+        "showPath": true
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": false,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1500,
+        "cy": 480,
+        "rx": 70,
+        "ry": 70
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1500,
+            "y": 840
+          }
+        ],
+        "speed": 720,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true,
+        "showPath": true
+      },
+      "saw": {
+        "kind": "disc",
+        "clockwise": true,
+        "spin": 720,
+        "stroke": 0,
+        "strokeMs": 0
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1500,
+        "cy": 480,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1500,
+        "cy": 840,
+        "rx": 12,
+        "ry": 12
+      }
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "bark",
+        "color": "#24180f",
+        "background": "#5e4229",
+        "size": 64
+      },
+      "edge": "#1a120b"
+    },
+    "path": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "woodGrain",
+        "color": "#a8743f",
+        "background": "#e6c592",
+        "size": 64
+      },
+      "edge": "#7a5230"
+    }
+  },
+  "id": "5",
+  "title": "Vertical Slice",
+  "level": 6,
+  "difficulty": 3,
+  "stars": {
+    "three": 7500,
+    "two": 11000,
+    "one": 18000
+  }
+}

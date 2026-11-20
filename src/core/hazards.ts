@@ -69,6 +69,56 @@ export class SawSpin {
   }
 }
 
+/**
+ * A grinder / saw blade that also turns around a pivot (#62). One pose for both: the object turns
+ * about its own center by the pivot turn plus its own spin, and that center swings around the
+ * pivot; a blade's sawing runs along its turned long side. Used as both the motion and the
+ * rotation of the compiled object (whose pivot is the saw's center).
+ *
+ *   world = R(θ+φ)(local − c) + R(θ)(c + s − p) + p + route
+ */
+export class SawTurn {
+  readonly moves = true;
+  readonly dur: number;
+  private readonly tmp: Point = { x: 0, y: 0 };
+
+  constructor(
+    private readonly turn: { angleAt(t: number): number; readonly dur: number },
+    private readonly spin: SawSpin | null,
+    private readonly stroke: BladeMotion | null,
+    private readonly route: { offsetAt(t: number, out: Point): Point } | null,
+    private readonly center: Point,
+    private readonly pivot: Point,
+  ) {
+    this.dur = Math.max(turn.dur, spin ? 1 : 0);
+  }
+
+  angleAt(t: number): number {
+    return this.turn.angleAt(t) + (this.spin ? this.spin.angleAt(t) : 0);
+  }
+
+  offsetAt(t: number, out: Point): Point {
+    const a = this.turn.angleAt(t);
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    let x = this.center.x - this.pivot.x;
+    let y = this.center.y - this.pivot.y;
+    if (this.stroke) {
+      this.stroke.offsetAt(t, this.tmp);
+      x += this.tmp.x;
+      y += this.tmp.y;
+    }
+    out.x = cos * x - sin * y + this.pivot.x - this.center.x;
+    out.y = sin * x + cos * y + this.pivot.y - this.center.y;
+    if (this.route) {
+      this.route.offsetAt(t, this.tmp);
+      out.x += this.tmp.x;
+      out.y += this.tmp.y;
+    }
+    return out;
+  }
+}
+
 /** A saw blade's sawing: a quick back-and-forth along `axis` (unit vector), on top of its route */
 export class BladeMotion {
   readonly moves = true;

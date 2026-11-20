@@ -407,6 +407,9 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   for (const o of objects) if (o.role === 'wall' && !o.dynamic) traceStatic(p, o);
   p.fillStyle = theme ? fillStyle(p, theme.wall.fill, whole) : COLORS.wall;
   p.fill('nonzero');
+  // Grow the pieces by about half a pixel: where a wall's edge lies exactly on the edge of the
+  // area outside the paths, both edges are antialiased and the floor would show through the seam
+  sealSeams(p, scale);
   if (objects.some((o) => o.role === 'path' && !o.dynamic && o.src?.pierce)) {
     p.globalCompositeOperation = 'destination-out';
     p.beginPath();
@@ -430,6 +433,21 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   s.drawImage(floor, 0, 0);
   drawWallMass(s, wallCanvas, theme, scale);
   return { layer, floor, walls: wallCanvas, outside, wallPieces, frame: offscreen(w, h)[0], composite: offscreen(w, h)[0], scale };
+}
+
+/**
+ * Stroke the wall outline just filled (the current path, or `path`) about one device pixel wide
+ * in the same fill, so wall pieces overlap the wall mass next to them instead of meeting it at two
+ * half-transparent antialiased edges (which leaves a thin light seam).
+ */
+function sealSeams(g: CanvasRenderingContext2D, scale: number, path?: Path2D): void {
+  g.save();
+  g.strokeStyle = g.fillStyle;
+  g.lineWidth = 1.2 / scale;
+  g.lineJoin = 'round';
+  if (path) g.stroke(path);
+  else g.stroke();
+  g.restore();
 }
 
 /** The wall mass onto the floor: a soft shadow, then the walls with a thin rim in the edge color */
@@ -803,6 +821,7 @@ export function drawMap(
     });
     g.fillStyle = theme ? fillStyle(g, theme.wall.fill, { minX: 0, minY: 0, maxX: map.width, maxY: map.height }) : COLORS.wall;
     g.fill(walls, 'nonzero');
+    sealSeams(g, scale, walls);
     if (conceal) {
       // Build the covering at wall-layer resolution and union it BEFORE shadows.
       // This removes internal seams and lets both surfaces share pattern sampling.
@@ -913,7 +932,7 @@ export function drawMap(
   }
   // Screws on the pivots of rotating obstacles set to show them
   objects.forEach((o, i) => {
-    if (o.src?.rotation?.showPivot && !o.src.boulder && !o.src.saw && shown(i)) drawPivotScrew(ctx, o, timeOf(i));
+    if (o.src?.rotation?.showPivot && !o.src.boulder && shown(i)) drawPivotScrew(ctx, o, timeOf(i));
   });
   // Switch doors: a stripe in the switch color along each panel
   map.objects.forEach((m, i) => {
@@ -1059,6 +1078,13 @@ function drawRoute(ctx: CanvasRenderingContext2D, o: CompiledObject, color: stri
 /** A screw head on a rotating obstacle's pivot, turning with it */
 function drawPivotScrew(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): void {
   transformAt(o, t, tf);
+  // A turning saw (#62) is posed about its own center; its pivot travels only with its route
+  const p = o.src?.saw && o.src.rotation ? o.src.rotation.pivot : null;
+  if (p) {
+    const route = o.src!.motion ? new CompiledMotion(o.src!.motion, shapeCenter(o.src!.shape)).offsetAt(t, { x: 0, y: 0 }) : { x: 0, y: 0 };
+    tf.dx = p.x + route.x - o.px;
+    tf.dy = p.y + route.y - o.py;
+  }
   const r = Math.max(2.5, Math.min(6, Math.min(o.maxX - o.minX, o.maxY - o.minY) * 0.3));
   ctx.save();
   ctx.transform(tf.cos, tf.sin, -tf.sin, tf.cos, o.px + tf.dx, o.py + tf.dy);
@@ -1761,9 +1787,10 @@ function drawSaw(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, m:
         const q = tiltPoint(o, lx, ly, { x: 0, y: 0 });
         const p = toWorld(o, tf, q.x, q.y, q);
         if (!isWallAt(mask, p.x, p.y)) continue;
-        contact.push(long
-          ? { x: p.x, y: p.y, dx: along * 0.8, dy: side * 0.6 }
-          : { x: p.x, y: p.y, dx: side * 0.6, dy: along * 0.8 });
+        // Dust flies along the blade as it is turned now
+        const dx = long ? along * 0.8 : side * 0.6;
+        const dy = long ? side * 0.6 : along * 0.8;
+        contact.push({ x: p.x, y: p.y, dx: tf.cos * dx - tf.sin * dy, dy: tf.sin * dx + tf.cos * dy });
       }
     }
     ctx.save();

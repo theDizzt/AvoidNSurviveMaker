@@ -15,7 +15,7 @@ import { TEXT_BASE_FONTS } from './render';
 import { fontPicker } from './font-picker';
 
 import type { EditorSelection } from '../core/editor-document';
-import { TRIGGER_NAMES, isButton, describeObject, objectToolId, ZONE_IDS, sizeText, REPEAT_OPTIONS, EASING_OPTIONS, ROUTE_OPTIONS, DIRECTION_OPTIONS, newMotion, Command } from './editor-shared';
+import { TRIGGER_NAMES, isButton, describeObject, objectToolId, ZONE_IDS, sizeText, REPEAT_OPTIONS, ROUTE_REPEAT_OPTIONS, EASING_OPTIONS, ROUTE_OPTIONS, DIRECTION_OPTIONS, newMotion, Command } from './editor-shared';
 
 export interface EditorPropertiesHost {
   readonly map: MapData;
@@ -321,9 +321,15 @@ export class EditorPropertiesPanel {
           m.type = v;
           delete m.segmentTypes;
         }),
-        this.selectField<Repeat>(tr('ed.repeat'), m.repeat, REPEAT_OPTIONS, (v) => (m.repeat = v)),
-        this.numField(tr('ed.speedPxS'), m.speed, (v) => (m.speed = Math.min(LIMITS.maxSpeed, Math.max(0, v))), 10),
-        this.selectField<Easing>(tr('ed.smooth'), m.easing, EASING_OPTIONS, (v) => (m.easing = v)),
+        this.selectField<Repeat>(tr('ed.repeat'), m.repeat, ROUTE_REPEAT_OPTIONS, (v) => {
+          m.repeat = v;
+          if (v !== 'slam') delete m.returnSpeed;
+        }),
+        this.numField(tr(m.repeat === 'slam' ? 'ed.slamSpeed' : 'ed.speedPxS'), m.speed, (v) => (m.speed = Math.min(LIMITS.maxSpeed, Math.max(0, v))), 10),
+        // A slam has its own fixed easing: rushing in, easing back
+        ...(m.repeat === 'slam'
+          ? [this.numField(tr('ed.slamReturnSpeed'), m.returnSpeed ?? m.speed / 4, (v) => (m.returnSpeed = Math.min(LIMITS.maxSpeed, Math.max(1, Math.round(v)))), 10)]
+          : [this.selectField<Easing>(tr('ed.smooth'), m.easing, EASING_OPTIONS, (v) => (m.easing = v))]),
         this.numField(tr('ed.startDelayMs'), m.delay, (v) => (m.delay = Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, Math.round(v)))), 100),
       ];
       if (m.type === 'circle') {
@@ -369,8 +375,8 @@ export class EditorPropertiesPanel {
 
     }
 
-    // Rotation (a boulder spins by rolling, a saw by itself)
-    if (!o.boulder && !o.saw && !o.fall) {
+    // Rotation (a boulder spins by rolling; a saw keeps its own spin / sawing on top of it, #62)
+    if (!o.boulder && !o.fall) {
     // Rotation
     parts.push(this.heading(tr('ed.rotation')), this.toggle(tr('ed.rotatesAroundAPivot'), !!o.rotation, (on) => {
       if (on) o.rotation = defaultRotation(o);

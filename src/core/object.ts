@@ -1,4 +1,4 @@
-import { BladeMotion, FallMover, FallSpin, Roller, SawSpin, SpikeMover } from './hazards';
+import { BladeMotion, FallMover, FallSpin, Roller, SawSpin, SawTurn, SpikeMover } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
 import { flattenShape, ringBounds, rotateRing, shapeCenter, type FlatShape } from './shape';
 import type { MapData, MapObject, Point, Rect, Role } from './types';
@@ -37,6 +37,11 @@ export interface CompiledObject {
   /** The shape before its tilt (same as the tilted ring when there is none). Draw it in `tiltFrame`. */
   readonly box: FlatShape;
   readonly dynamic: boolean;
+  /**
+   * The pose jumps (a 'restart' route or rotation going back to its start) between times a and b:
+   * a collision check over that span takes the pose at the end, instead of sweeping across.
+   */
+  readonly jumps?: (a: number, b: number) => boolean;
   /** Conservative full-motion bounds for non-rotating objects. */
   readonly travelBounds?: { minX: number; minY: number; maxX: number; maxY: number };
 }
@@ -59,12 +64,19 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
   // A saw blade saws along its long side (turned with the tilt)
   const long = box.maxX - box.minX >= box.maxY - box.minY;
   const axis = long ? { x: Math.cos(tilt), y: Math.sin(tilt) } : { x: -Math.sin(tilt), y: Math.cos(tilt) };
-  const motion = o.fall ? new FallMover(o.fall)
+  // A saw turning around a pivot (#62): its spin / sawing and its route ride on the turn
+  const sawTurn = saw && o.rotation && !o.fall
+    ? new SawTurn(new CompiledRotation(o.rotation), saw.kind === 'disc' ? new SawSpin(saw) : null,
+      saw.kind === 'blade' ? new BladeMotion(null, axis, saw) : null, route?.moves ? route : null, tc, o.rotation.pivot)
+    : null;
+  const motion = sawTurn ? sawTurn
+    : o.fall ? new FallMover(o.fall)
     : o.spike ? new SpikeMover(o.spike)
     : saw?.kind === 'blade' ? new BladeMotion(route?.moves ? route : null, axis, saw)
       : route;
   // A boulder spins about its own center by the distance it has rolled; a grinder spins steadily
-  const rotation = o.fall ? new FallSpin(o.fall)
+  const rotation = sawTurn ? sawTurn
+    : o.fall ? new FallSpin(o.fall)
     : o.boulder && route?.moves
     ? new Roller(route, Math.min(box.maxX - box.minX, box.maxY - box.minY) / 2)
     : saw?.kind === 'disc' ? new SawSpin(saw)
@@ -111,6 +123,9 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
     // Switch-linked objects can move, stop or vanish during a run, so they are drawn on their own
     dynamic: !!motion?.moves || (!!rotation && rotation.dur > 0) || !!o.link || !!saw || !!o.blink,
     travelBounds,
+    ...(o.motion?.repeat === 'restart' || o.rotation?.repeat === 'restart'
+      ? { jumps: (a: number, b: number) => !!route?.jumps(a, b) || (rotation instanceof CompiledRotation && rotation.jumps(a, b)) }
+      : {}),
   };
 }
 
