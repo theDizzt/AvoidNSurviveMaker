@@ -275,6 +275,13 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   box-shadow: none !important;
   text-shadow: none !important;
 }
+/* Continuous repaints: the swaying 3D logo and the drop-shadow filters it and the dials carry */
+.simple-interface .logo-3d, .simple-interface .logo-layer { animation: none !important; }
+.simple-interface .logo-back { transform: translate(0.075em, 0.075em); }
+.simple-interface .logo-mid { transform: translate(0.038em, 0.038em); }
+.simple-interface .logo-front, .simple-interface .ddial-thumb { filter: none !important; }
+/* Low graphics: the menu background canvas is not blurred again on every frame */
+.gfx-low .app-bg canvas { filter: none; }
 .stage { width: 100%; }
 .stage canvas {
   display: block;

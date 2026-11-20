@@ -488,6 +488,7 @@ const syncPerformance = () => {
   $('opt-polling-value').textContent = options.pollingRate === -1 ? t('options.pollingAuto')
     : options.pollingRate ? `${options.pollingRate} Hz` : t('options.pollingMax');
   for (const tile of [graphicsTile, qualityTile]) tile.dataset.level = options.graphics;
+  document.documentElement.classList.toggle('gfx-low', options.graphics === 'low');
   $('opt-graphics-value').textContent = $('opt-graphics-level-value').textContent = t(`options.graphics.${options.graphics}`);
   // A new resolution: every canvas refits on resize
   if (options.graphics !== appliedGraphics) {
