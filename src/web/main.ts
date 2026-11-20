@@ -424,7 +424,7 @@ for (const screen of [screens.menu, screens.options, screens.graphics, screens.s
 
 // ───────────────────────── Options ─────────────────────────
 
-type ToggleOption = 'showDebug' | 'cursorTrail' | 'decorativeEffects' | 'animatedBackground' | 'interfaceEffects';
+type ToggleOption = 'showDebug' | 'cursorTrail' | 'decorativeEffects' | 'animatedBackground' | 'interfaceEffects' | 'lowSpecSimulation';
 type VolumeOption = 'masterVolume' | 'musicVolume' | 'effectsVolume';
 const optionInputs: Record<ToggleOption, HTMLInputElement> = {
   showDebug: $<HTMLInputElement>('opt-debug'),
@@ -432,6 +432,7 @@ const optionInputs: Record<ToggleOption, HTMLInputElement> = {
   decorativeEffects: $<HTMLInputElement>('opt-effects'),
   animatedBackground: $<HTMLInputElement>('opt-background'),
   interfaceEffects: $<HTMLInputElement>('opt-interface'),
+  lowSpecSimulation: $<HTMLInputElement>('opt-simulation'),
 };
 
 const volumeInputs: Record<VolumeOption, HTMLInputElement> = {

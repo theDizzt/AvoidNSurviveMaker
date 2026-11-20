@@ -40,6 +40,8 @@ export interface ReplaySample {
 
 export interface Replay {
   v: 1;
+  /** Omitted in legacy replays (1 ms). The map can still require fine steps. */
+  simulationStepMs?: 8;
   samples: ReplaySample[];
   /** Clicks during the run (click-activated switches), in time order */
   clicks?: ReplaySample[];
@@ -52,9 +54,11 @@ const pA: Point = { x: 0, y: 0 };
 const pB: Point = { x: 0, y: 0 };
 
 /**
- * Deterministic fixed 1 ms tick simulation.
+ * Deterministic simulation, normally split at 1 ms boundaries.
+ * Low-spec mode batches segments away from moving hazards into at most 8 ms;
+ * nearby interactions and stateful mechanics retain the original 1 ms stepping.
  *
- * - The cursor path between input samples is treated as line segments, split at every 1 ms boundary.
+ * - Input samples define line segments, split at 1 ms (or eligible low-spec 8 ms) boundaries.
  * - Each piece is tested against every object in that object's own local frame: the cursor
  *   endpoints are mapped through the inverse of the object's pose at the start and end of the
  *   piece. That turns moving and rotating objects into static polygons and the cursor's motion
@@ -62,7 +66,7 @@ const pB: Point = { x: 0, y: 0 };
  * - All boundary crossings along the segment are collected and the segment is checked
  *   interval by interval: safe = (inside some path, or the map has no paths) and inside no wall,
  *   where static walls don't count inside a path that cuts through walls (`pierce`).
- * - The same sample list always produces the same result, so replays can be verified on a server.
+ * - The same samples and step mode produce the same result for replay verification.
  */
 export class Simulation {
   readonly map: MapData;
@@ -196,10 +200,25 @@ export class Simulation {
   private tick = 0;
   private samples: ReplaySample[] = [];
   private abortReason: AbortReason | null = null;
+  /** Maximum step for this run; fixed at construction so changing settings cannot alter a replay. */
+  readonly simulationStepMs: 1 | 8;
+  private readonly fineStepObjects: readonly number[];
 
-  constructor(map: MapData, objects: readonly CompiledObject[] = compileMap(map)) {
+  constructor(map: MapData, objects: readonly CompiledObject[] = compileMap(map), lowSpec = false) {
     this.map = map;
     this.objects = objects;
+    // Integrators and mechanisms with nonlocal effects still need the original event order.
+    // Analytic motion, rotation, falling and blinking are handled by spatial guards below.
+    const needsFineSteps = map.objects.some(o =>
+      o.ice || o.link ||
+      o.role === 'trigger' || o.role === 'door' || o.role === 'portal' ||
+      o.role === 'pulley' || o.role === 'laser' || o.role === 'turret');
+    this.simulationStepMs = lowSpec && !needsFineSteps ? 8 : 1;
+    this.fineStepObjects = objects.flatMap((o, i) => {
+      if (o.role === 'coin' || o.role === 'crystal') return [i];
+      return (o.dynamic || o.src?.fall || o.src?.blink) &&
+        (o.role === 'wall' || o.role === 'path' || o.role === 'safe') ? [i] : [];
+    });
     this.hasPaths = this.objects.some((o) => o.role === 'path');
     this.ices = map.objects.flatMap((o, i) => (o.role === 'path' && o.ice ? [i] : []));
     // Coins, triggers, darkness areas and text don't block or support the cursor. A door is two
@@ -307,7 +326,7 @@ export class Simulation {
     this.solidPose = this.solids.map(() => ({ dx: 0, dy: 0, cos: 1, sin: 0 }));
   }
 
-  /** Number of 1 ms ticks processed */
+  /** Last completed whole millisecond (not a count of segment checks). */
   get ticks(): number {
     return this.tick;
   }
@@ -382,7 +401,7 @@ export class Simulation {
       // Where the cursor is heading: the mouse plus the teleport offset
       const tx = rx + this.offX;
       const ty = ry + this.offY;
-      const boundary = this.tick + 1;
+      const boundary = this.nextBoundary(t, tx, ty);
       if (t < boundary) {
         this.checkSegment(this.time, this.x, this.y, t, tx, ty);
         if (this.status === 'playing') {
@@ -392,7 +411,7 @@ export class Simulation {
         }
         return;
       }
-      // Cut the segment at the next 1 ms boundary and check that piece
+      // Sweep the entire segment; finish() interpolates the crossing time, never quantizing to the step.
       const f = (boundary - st) / (t - st);
       const bx = sx + (tx - sx) * f;
       const by = sy + (ty - sy) * f;
@@ -404,6 +423,30 @@ export class Simulation {
       this.tick = boundary;
       if (t === boundary) return;
     }
+  }
+
+  private nextBoundary(t: number, x: number, y: number): number {
+    const fine = Math.floor(this.time) + 1;
+    if (this.simulationStepMs === 1) return fine;
+    const coarse = (Math.floor(this.time / 8) + 1) * 8;
+    const f = (Math.min(t, coarse) - this.time) / (t - this.time);
+    const bx = this.x + (x - this.x) * f;
+    const by = this.y + (y - this.y) * f;
+    const minX = Math.min(this.x, bx), maxX = Math.max(this.x, bx);
+    const minY = Math.min(this.y, by), maxY = Math.max(this.y, by);
+    // Use full-motion bounds: an off-screen/hidden object may move or blink into
+    // the path during this interval. Never infer safety from endpoint poses alone.
+    for (const i of this.fineStepObjects) {
+      if (this.collected[i]) continue;
+      const o = this.objects[i];
+      const b = o.interactionBounds;
+      if (!b) return fine; // Custom compiled objects without a bound stay exact.
+      // Preserve collection/GOAL ordering, including a crystal beyond the finish line.
+      const pad = o.role === 'coin' ? COIN_MAGNET : o.role === 'crystal' ? CRYSTAL_MAGNET : 0;
+      if (maxX >= b.minX - pad && minX <= b.maxX + pad &&
+          maxY >= b.minY - pad && minY <= b.maxY + pad) return fine;
+    }
+    return coarse;
   }
 
   /**
@@ -536,6 +579,7 @@ export class Simulation {
 
   getReplay(): Replay {
     const r: Replay = { v: 1, samples: this.samples.slice() };
+    if (this.simulationStepMs === 8) r.simulationStepMs = 8;
     if (this.clicks.length) r.clicks = this.clicks.slice();
     if (this.abortReason) r.abort = { reason: this.abortReason };
     return r;
@@ -552,6 +596,9 @@ export class Simulation {
       const o = solids[i];
       const srcIdx = this.solidSrc[i];
       if (srcIdx >= 0 && this.hidden[srcIdx]) continue; // removed by a switch
+      // nextBoundary certified that a batched segment misses every dynamic solid's
+      // full orbit. Do not manufacture a long local-frame chord for a rotating object.
+      if (this.simulationStepMs === 8 && tb - ta > 1 && (o.dynamic || o.src?.fall || o.src?.blink)) continue;
       let ax = xa;
       let ay = ya;
       let bx = xb;
@@ -645,7 +692,7 @@ export class Simulation {
     return onPath ? null : 'void';
   }
 
-  /** Check the cursor's movement over [ta,tb] (within one 1 ms tick) */
+  /** Check the complete cursor sweep over [ta,tb], retaining fractional event times. */
   private checkSegment(ta: number, xa: number, ya: number, tb: number, xb: number, yb: number): void {
     const { map } = this;
     this.beginSegment(ta, tb);
@@ -1010,6 +1057,8 @@ export class Simulation {
     list: readonly number[], magnet: number,
   ): number {
     let latest = -Infinity;
+    // Every collectible was ruled out by nextBoundary before batching this interval.
+    if (this.simulationStepMs === 8 && tb - ta > 1) return latest;
     for (const i of list) {
       if (this.collected[i]) continue;
       const o = this.objects[i];
@@ -1076,7 +1125,7 @@ export class Simulation {
 
 /** Re-run a replay from scratch (for server-side record verification) */
 export function runReplay(map: MapData, replay: Replay, checkBudget: () => void = () => {}): Simulation {
-  const sim = new Simulation(map);
+  const sim = new Simulation(map, undefined, replay.simulationStepMs === 8);
   const [first, ...rest] = replay.samples;
   if (!first || first.t !== 0 || !sim.start(first.x, first.y)) return sim;
   const clicks = replay.clicks ?? [];

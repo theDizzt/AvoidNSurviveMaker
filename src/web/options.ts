@@ -14,6 +14,7 @@ export interface Options {
   effectsVolume: number;
   pollingRate: PollingRate;
   graphics: GraphicsLevel;
+  lowSpecSimulation: boolean;
   cursorTrail: boolean;
   decorativeEffects: boolean;
   animatedBackground: boolean;
@@ -30,6 +31,7 @@ export const DEFAULT_OPTIONS: Readonly<Options> = {
   effectsVolume: 80,
   pollingRate: 0,
   graphics: 'high',
+  lowSpecSimulation: false,
   cursorTrail: true,
   decorativeEffects: true,
   animatedBackground: true,
@@ -43,7 +45,7 @@ function load(): Options {
   const out = { ...DEFAULT_OPTIONS };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, unknown>;
-    for (const k of ['showDebug', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects'] as const) {
+    for (const k of ['showDebug', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation'] as const) {
       if (typeof saved[k] === 'boolean') out[k] = saved[k];
     }
     for (const k of VOLUME_KEYS) {
@@ -87,7 +89,7 @@ export function resetOptions(): void {
 }
 
 /** Options shown on the Graphics screen */
-const GRAPHICS_KEYS = ['graphics', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects'] as const;
+const GRAPHICS_KEYS = ['graphics', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation'] as const;
 
 /** Restore only the Graphics screen's options (one commit, so canvases refit once). */
 export function resetGraphicsOptions(): void {
@@ -99,6 +101,7 @@ export function resetGraphicsOptions(): void {
 export function applyLowSpecOptions(): void {
   Object.assign(options as Options, {
     graphics: 'low', pollingRate: -1, showDebug: false,
+    lowSpecSimulation: true,
     cursorTrail: false, decorativeEffects: false, animatedBackground: false, interfaceEffects: false,
   } satisfies Partial<Options>);
   commit();

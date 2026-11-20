@@ -44,6 +44,8 @@ export interface CompiledObject {
   readonly jumps?: (a: number, b: number) => boolean;
   /** Conservative full-motion bounds for non-rotating objects. */
   readonly travelBounds?: { minX: number; minY: number; maxX: number; maxY: number };
+  /** Conservative bounds over the entire motion, including rotation; used only for adaptive stepping. */
+  readonly interactionBounds?: { minX: number; minY: number; maxX: number; maxY: number };
 }
 
 const tmp: Point = { x: 0, y: 0 };
@@ -108,6 +110,25 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
     travelBounds = { minX: flat.minX + minDX - 1e-7, minY: flat.minY + minDY - 1e-7,
       maxX: flat.maxX + maxDX + 1e-7, maxY: flat.maxY + maxDY + 1e-7 };
   }
+  let interactionBounds = travelBounds;
+  if (!interactionBounds) {
+    // Rotation can pass through the cursor even when both endpoint poses miss it.
+    // Bound the entire orbit, not just the two sampled poses.
+    let radius = 0;
+    for (let k = 0; k < flat.poly.length; k += 2) {
+      radius = Math.max(radius, Math.hypot(flat.poly[k] - pivot.x, flat.poly[k + 1] - pivot.y));
+    }
+    let routeRadius = 0;
+    if (route) for (const leg of route.legs) for (let k = 0; k < leg.pts.length; k += 2) {
+      routeRadius = Math.max(routeRadius, Math.hypot(leg.pts[k] - center.x, leg.pts[k + 1] - center.y));
+    }
+    radius += routeRadius + Math.abs(o.fall?.height ?? 0) + Math.abs(o.spike?.reach ?? 0)
+      + Math.abs(saw?.stroke ?? 0) / 2;
+    if (sawTurn && o.rotation) radius += 2 * Math.hypot(center.x - o.rotation.pivot.x, center.y - o.rotation.pivot.y);
+    radius += 1e-7;
+    interactionBounds = { minX: pivot.x - radius, minY: pivot.y - radius,
+      maxX: pivot.x + radius, maxY: pivot.y + radius };
+  }
   return {
     src: o,
     role: o.role,
@@ -123,6 +144,7 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
     // Switch-linked objects can move, stop or vanish during a run, so they are drawn on their own
     dynamic: !!motion?.moves || (!!rotation && rotation.dur > 0) || !!o.link || !!saw || !!o.blink,
     travelBounds,
+    interactionBounds,
     ...(o.motion?.repeat === 'restart' || o.rotation?.repeat === 'restart'
       ? { jumps: (a: number, b: number) => !!route?.jumps(a, b) || (rotation instanceof CompiledRotation && rotation.jumps(a, b)) }
       : {}),

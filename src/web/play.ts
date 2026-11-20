@@ -190,7 +190,7 @@ export class PlayController {
     this.usedStats.reset();
     this.burst = null;
     this.deathNotified = false;
-    this.sim = new Simulation(this.map, recompile ? undefined : this.sim.objects);
+    this.sim = new Simulation(this.map, recompile ? undefined : this.sim.objects, options.lowSpecSimulation);
     this.trail = [];
     this.carried = new Uint8Array(this.map.objects.length);
     this.notified = false;
@@ -241,7 +241,7 @@ export class PlayController {
     }
     const p = clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
     if (!new ZoneArea(this.map.start, this.map.startShape).contains(p.x, p.y)) return;
-    const sim = new Simulation(this.map, this.sim.objects);
+    const sim = new Simulation(this.map, this.sim.objects, options.lowSpecSimulation);
     if (!sim.start(p.x, p.y)) return;
     e.preventDefault();
     this.sim = sim;
@@ -625,6 +625,7 @@ export class PlayController {
       [tr('debug.samplesPerEvent'), `${s.avgPerEvent.toFixed(1)} / ${s.maxPerEvent}`],
       [tr('debug.totalSamples'), String(s.total)],
       [tr('debug.ticks'), String(sim.ticks)],
+      [tr('options.simulation'), `${sim.simulationStepMs} ms`],
       [tr('debug.fps'), this.fps.toFixed(0)],
     ];
     this.el.debug.replaceChildren(
