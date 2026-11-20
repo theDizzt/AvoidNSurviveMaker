@@ -1588,6 +1588,10 @@ export interface TextFx {
   gradient?: string;
   depth?: number;
   depthColor?: string;
+  shadowX?: number;
+  shadowY?: number;
+  shadowBlur?: number;
+  glowSize?: number;
 }
 
 /** One line of text with its effects, centered on `y` (needs textBaseline 'middle') */
@@ -1621,9 +1625,22 @@ export function fillTextFx(ctx: CanvasRenderingContext2D, line: string, x: numbe
   ctx.save();
   if (fx.shadow) {
     const off = Math.max(2, size * 0.08) + depth * 0.8;
+    const dx = fx.shadowX ?? off * 0.75;
+    const dy = fx.shadowY ?? off;
     ctx.save();
     ctx.globalAlpha *= 0.5;
-    solid(off * 0.75, off, fx.shadow);
+    if (fx.shadowBlur) {
+      // A soft shadow: canvas shadows are in device pixels, so scale with the zoom
+      const m = ctx.getTransform();
+      const zoom = Math.hypot(m.a, m.b);
+      ctx.shadowColor = fx.shadow;
+      ctx.shadowBlur = fx.shadowBlur * zoom;
+      // Draw the letters far away so only their shadow lands here
+      const far = 20000;
+      ctx.shadowOffsetX = (dx + far) * m.a + dy * m.c;
+      ctx.shadowOffsetY = (dx + far) * m.b + dy * m.d;
+      solid(-far, 0, fx.shadow);
+    } else solid(dx, dy, fx.shadow);
     ctx.restore();
   }
   // 3D: stacked copies 1px apart toward the bottom right, the farthest first
@@ -1633,7 +1650,7 @@ export function fillTextFx(ctx: CanvasRenderingContext2D, line: string, x: numbe
     const m = ctx.getTransform();
     ctx.save();
     ctx.shadowColor = fx.glow;
-    ctx.shadowBlur = size * 0.45 * Math.hypot(m.a, m.b);
+    ctx.shadowBlur = size * 0.45 * (fx.glowSize ?? 1) * Math.hypot(m.a, m.b);
     ctx.fillStyle = fx.glow;
     ctx.fillText(line, x, y);
     ctx.fillText(line, x, y);

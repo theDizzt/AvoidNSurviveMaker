@@ -7,13 +7,13 @@ import { compileMap } from '../core/object';
 import { levelMaze } from '../core/theme-pack';
 import {
   averageDifficulty, blankThemeInfo, DEFAULT_BADGE, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo,
-  type BadgeFont, type BadgeKind, type BadgeStyle, type ThemeEntry, type ThemeInfo, type ThemeText,
+  type BadgeFont, type BadgeKind, type BadgePart, type BadgePartId, type BadgeStyle, type BadgeTextFormat, type ThemeEntry, type ThemeInfo, type ThemeText,
 } from './localized/theme-pack';
 import type { MapData } from '../core/types';
 import type { TextEffects } from '../core/text-effects';
 import { createEmptyMap, validateMap, validatePack } from './localized/validate';
-import { badgeImage, drawLevelBadge } from './badge';
-import { beginFrame, drawMap, fitCanvas } from './render';
+import { badgeImage, drawLevelBadge, type BadgeHit } from './badge';
+import { beginFrame, clientToMap, drawMap, fitCanvas, unitsPerPx } from './render';
 import { renderThemePanel } from './theme-panel';
 import { ScreenDesigner, type ScreenKind } from './screen-designer';
 import { ensureFonts } from './screen-render';
@@ -27,6 +27,15 @@ import { download, fileToDataUrl, readThemeZip, urlToDataUrl, writeThemeZip } fr
  */
 
 const DRAFT_KEY = 'avoid-n-survive:theme-draft';
+/** Which form sections are open (remembered per browser) */
+const OPEN_KEY = 'avoid-n-survive:theme-editor-open';
+/** Sections open the first time */
+const OPEN_DEFAULT = ['info', 'badge-design', 'badge-layout'];
+const HISTORY_MAX = 100;
+
+const PARTS: BadgePartId[] = ['graphic', 'number', 'title'];
+const PART_NAMES: Record<BadgePartId, string> = { graphic: tr('te.partGraphic'), number: tr('te.partNumber'), title: tr('te.partTitle') };
+const ZOOMS = [1, 1.5, 2, 3];
 
 const BADGE_KINDS: [BadgeKind, string][] = [
   ['pill', tr('te.roundedPlate')], ['disc', tr('te.vinylRecord')], ['emblem', tr('te.snowflakeEmblem')], ['plate', tr('te.gearPlate')],
@@ -91,8 +100,38 @@ export class ThemeEditor {
   /** JSON of the map `compiled` was built from (null = rebuild) */
   private compiledFor: string | null = null;
 
+  // Badge placement on the preview (drag to move, handles to rotate / resize)
+  /** Where each badge part was drawn last frame */
+  private hits: BadgeHit[] = [];
+  private part: BadgePartId | null = null;
+  private hover: BadgePartId | 'rotate' | 'scale' | null = null;
+  private drag: {
+    id: BadgePartId; mode: 'move' | 'rotate' | 'scale'; hit: BadgeHit;
+    from: { x: number; y: number }; start: BadgePart;
+  } | null = null;
+  /** Preview magnification around the top-left corner, where the badge is */
+  private zoom = 1;
+  private snap = true;
+  /** Sample level number / title to try the badge with */
+  private sample: { level?: number; title?: string } = {};
+  private readonly placementBox: HTMLElement;
+  private readonly partChips: HTMLElement;
+  private readonly undoBtn: HTMLButtonElement;
+  private readonly redoBtn: HTMLButtonElement;
+  /** Undo history: theme.json snapshots, `histIndex` the current one */
+  private history: string[] = [];
+  private histIndex = -1;
+  private histAt = 0;
+  private opened: Set<string>;
+
   constructor(root: HTMLElement) {
     this.restoreDraft();
+    this.resetHistory();
+    this.opened = this.loadOpened();
+    this.placementBox = el('div', 'te-placement');
+    this.partChips = el('div', 'te-part-chips');
+    this.undoBtn = el('button', 'te-icon', '↶');
+    this.redoBtn = el('button', 'te-icon', '↷');
     this.canvas = el('canvas', 'te-canvas');
     this.ctx = this.canvas.getContext('2d')!;
     this.form = el('div', 'te-form panel');
@@ -157,7 +196,8 @@ export class ThemeEditor {
     const previewRow = el('div', 'te-preview-row');
     previewRow.append(this.tilePreview);
     const canvasBox = el('div', 'te-canvas-box');
-    canvasBox.append(this.canvas);
+    canvasBox.append(this.previewToolbar(), this.canvas, el('p', 'te-canvas-hint muted', tr('te.partHint')));
+    this.bindCanvas();
     this.gameParts = [canvasBox, previewRow, levelsBox];
     side.append(tabs, canvasBox, this.stageHost, previewRow, levelsBox, this.screenPanel, this.status);
 
@@ -167,6 +207,7 @@ export class ThemeEditor {
     root.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement)) this.onBack();
     });
+    window.addEventListener('keydown', (e) => this.onKey(e));
     window.addEventListener('resize', () => this.visible && this.fit());
     const loop = () => {
       if (this.visible) this.drawPreview();
@@ -192,6 +233,7 @@ export class ThemeEditor {
     this.screenPanel.hidden = game;
     if (!game) this.designer.open(tab);
     else requestAnimationFrame(() => this.fit());
+    this.syncHistoryButtons();
   }
 
   /** Put an uploaded file into the pack under folder/, returning its path */
@@ -231,6 +273,12 @@ export class ThemeEditor {
 
   private save(): void {
     this.compiledFor = null;
+    this.record();
+    this.store();
+  }
+
+  /** Write the draft to browser storage */
+  private store(): void {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(this.draft));
     } catch {
@@ -261,6 +309,8 @@ export class ThemeEditor {
     }
     this.draft = { info: structuredClone(('source' in entry ? entry.source : undefined) ?? entry.info), levels: structuredClone(entry.levels), images };
     this.previewIndex = 0;
+    this.part = null;
+    this.resetHistory();
     this.save();
     this.renderForm();
     this.renderLevels();
@@ -365,58 +415,119 @@ export class ThemeEditor {
     return input;
   }
 
-  /** Text effect rows (outline, shadow, neon, gradient, 3D): a checkbox, a color and maybe a size each */
+  /**
+   * Text effect rows (outline, shadow, neon, gradient, 3D): a checkbox, a color and its numbers.
+   * Optional numbers left empty use the automatic value.
+   */
   private fxFields(current: TextEffects | undefined, apply: (fx: TextEffects | undefined) => void): HTMLElement[] {
     const fx: TextEffects = { ...current };
     type ColorKey = 'outline' | 'shadow' | 'glow' | 'gradient' | 'depthColor';
-    type SizeKey = 'outlineWidth' | 'depth';
-    const row = (label: string, key: ColorKey, def: string, size?: { key: SizeKey; def: number; min: number; max: number; step: number }) => {
+    type NumKey = 'outlineWidth' | 'depth' | 'shadowX' | 'shadowY' | 'shadowBlur' | 'glowSize';
+    interface Extra { key: NumKey; def: number; min: number; max: number; step: number; title: string; optional?: boolean }
+    const row = (label: string, key: ColorKey, def: string, extras: Extra[] = []) => {
       const on = el('input');
       on.type = 'checkbox';
       on.checked = key === 'depthColor' ? !!fx.depth : !!fx[key];
       const c = el('input');
       c.type = 'color';
       c.value = fx[key] ?? def;
-      const n = size ? el('input') : null;
-      if (n && size) {
+      const nums = extras.map((x) => {
+        const n = el('input');
         n.type = 'number';
-        n.min = String(size.min);
-        n.max = String(size.max);
-        n.step = String(size.step);
-        n.value = String(fx[size.key] ?? size.def);
-      }
+        n.min = String(x.min);
+        n.max = String(x.max);
+        n.step = String(x.step);
+        n.title = x.title;
+        n.placeholder = x.optional ? tr('te.auto') : '';
+        const v = fx[x.key];
+        n.value = v !== undefined ? String(v) : x.optional ? '' : String(x.def);
+        return n;
+      });
       const sync = () => {
         if (on.checked) {
           fx[key] = c.value.toLowerCase();
-          if (n && size) {
-            const v = Number(n.value);
-            const clamped = Math.min(size.max, Math.max(size.min, Number.isFinite(v) ? v : size.def));
-            fx[size.key] = size.key === 'depth' ? Math.round(clamped) : clamped;
-          }
+          extras.forEach((x, i) => {
+            const raw = nums[i].value.trim();
+            if (x.optional && raw === '') {
+              delete fx[x.key];
+              return;
+            }
+            const v = Number(raw);
+            const clamped = Math.min(x.max, Math.max(x.min, Number.isFinite(v) ? v : x.def));
+            fx[x.key] = x.key === 'depth' ? Math.round(clamped) : clamped;
+          });
         } else {
           delete fx[key];
-          if (size) delete fx[size.key];
+          for (const x of extras) delete fx[x.key];
         }
         c.disabled = !on.checked;
-        if (n) n.disabled = !on.checked;
+        for (const n of nums) n.disabled = !on.checked;
         apply(Object.keys(fx).length ? { ...fx } : undefined);
         this.save();
       };
       c.disabled = !on.checked;
-      if (n) n.disabled = !on.checked;
+      for (const n of nums) n.disabled = !on.checked;
       on.addEventListener('change', sync);
       c.addEventListener('input', () => on.checked && sync());
-      n?.addEventListener('change', () => on.checked && sync());
+      for (const n of nums) n.addEventListener('change', () => on.checked && sync());
       const wrap = el('div', 'te-fx-row');
-      wrap.append(on, c, ...(n ? [n] : []));
-      return this.field(label, wrap);
+      wrap.append(on, c, ...nums.flatMap((n, i) => {
+        const l = el('label', 'te-fx-num');
+        l.append(el('small', '', extras[i].title), n);
+        return [l];
+      }));
+      return this.field(label, wrap, extras.length > 1);
     };
     return [
-      row(tr('common.outline'), 'outline', '#1a2233', { key: 'outlineWidth', def: 2, min: 0.5, max: 20, step: 0.5 }),
-      row(tr('fx.shadow'), 'shadow', '#000000'),
-      row(tr('fx.glow'), 'glow', '#3ae8ff'),
+      row(tr('common.outline'), 'outline', '#1a2233', [{ key: 'outlineWidth', def: 2, min: 0.5, max: 20, step: 0.5, title: tr('ed.outlineWidth') }]),
+      row(tr('fx.shadow'), 'shadow', '#000000', [
+        { key: 'shadowX', def: 2, min: -40, max: 40, step: 0.5, title: 'X', optional: true },
+        { key: 'shadowY', def: 2, min: -40, max: 40, step: 0.5, title: 'Y', optional: true },
+        { key: 'shadowBlur', def: 0, min: 0, max: 40, step: 0.5, title: tr('fx.shadowBlur'), optional: true },
+      ]),
+      row(tr('fx.glow'), 'glow', '#3ae8ff', [{ key: 'glowSize', def: 1, min: 0.2, max: 4, step: 0.1, title: tr('fx.glowSize'), optional: true }]),
       row(tr('fx.gradient'), 'gradient', '#ff7a3a'),
-      row(tr('fx.depth'), 'depthColor', '#1a2233', { key: 'depth', def: 4, min: 1, max: 30, step: 1 }),
+      row(tr('fx.depth'), 'depthColor', '#1a2233', [{ key: 'depth', def: 4, min: 1, max: 30, step: 1, title: tr('fx.depthSize') }]),
+    ];
+  }
+
+  /** Lettering of the number or title: weight, italic, letter spacing, case */
+  private formatFields(current: BadgeTextFormat | undefined, apply: (f: BadgeTextFormat | undefined) => void): HTMLElement[] {
+    const f: BadgeTextFormat = { ...current };
+    const done = () => apply(Object.keys(f).length ? { ...f } : undefined);
+    const weights: [string, string][] = [['', tr('te.designDefault')],
+      ...[300, 400, 500, 600, 700, 800, 900].map((w) => [String(w), tr(`te.weight${w}` as 'te.weight400')] as [string, string])];
+    const tri: [string, string][] = [['', tr('te.designDefault')], ['on', tr('te.on')], ['off', tr('te.off')]];
+    const spacing = el('input');
+    spacing.type = 'number';
+    spacing.min = '-10';
+    spacing.max = '40';
+    spacing.step = '0.5';
+    spacing.value = String(f.spacing ?? 0);
+    spacing.addEventListener('change', () => {
+      const v = Math.min(40, Math.max(-10, Number(spacing.value) || 0));
+      if (v) f.spacing = v;
+      else delete f.spacing;
+      done();
+      this.save();
+    });
+    return [
+      this.field(tr('te.weight'), this.select(f.weight ? String(f.weight) : '', weights, (v) => {
+        if (v) f.weight = Number(v);
+        else delete f.weight;
+        done();
+      })),
+      this.field(tr('sd.italic'), this.select(f.italic === undefined ? '' : f.italic ? 'on' : 'off', tri, (v) => {
+        if (v) f.italic = v === 'on';
+        else delete f.italic;
+        done();
+      })),
+      this.field(tr('te.letterSpacing'), spacing),
+      this.field(tr('te.textCase'), this.select(f.transform ?? '', [['', tr('te.designDefault')], ['upper', tr('te.caseUpper')], ['lower', tr('te.caseLower')]], (v) => {
+        if (v) f.transform = v;
+        else delete f.transform;
+        done();
+      })),
     ];
   }
 
@@ -534,7 +645,7 @@ export class ThemeEditor {
    */
   private translationSections(
     info: ThemeInfo,
-    section: (title: string, ...children: HTMLElement[]) => HTMLElement,
+    section: (id: string, title: string, ...children: HTMLElement[]) => HTMLElement,
     group: (...children: HTMLElement[]) => HTMLElement,
   ): HTMLElement[] {
     return LANGUAGES.filter((l) => l.id !== DEFAULT_LANGUAGE).map((l) => {
@@ -550,7 +661,7 @@ export class ThemeEditor {
         else delete info.i18n;
         this.renderTile();
       };
-      return section(tr('te.translation', { language: l.label }),
+      return section(`i18n-${l.id}`, tr('te.translation', { language: l.label }),
         el('p', 'muted', tr('te.translationHint')),
         group(
           this.field(tr('te.name'), this.text(get('name'), set('name', 60), { max: 60 }), true),
@@ -675,15 +786,38 @@ export class ThemeEditor {
       g.append(...children);
       return g;
     };
-    const section = (title: string, ...children: HTMLElement[]) => {
+    // Collapsible sections; which ones are open is remembered
+    const section = (id: string, title: string, ...children: HTMLElement[]) => {
+      const d = el('details', 'theme-section te-section');
+      d.open = this.opened.has(id);
+      const sum = el('summary');
+      sum.append(el('h3', '', title));
       const s = el('section');
-      s.append(el('h3', '', title), ...children);
-      return s;
+      s.append(...children);
+      d.append(sum, s);
+      d.addEventListener('toggle', () => {
+        if (d.open) this.opened.add(id);
+        else this.opened.delete(id);
+        this.saveOpened();
+      });
+      return d;
     };
+    const foldAll = (open: boolean) => () => {
+      for (const d of this.form.querySelectorAll<HTMLDetailsElement>('details.te-section')) d.open = open;
+    };
+    const fold = el('div', 'actions te-fold');
+    for (const [label, open] of [[tr('te.expandAll'), true], [tr('te.collapseAll'), false]] as const) {
+      const b = el('button', 'subtle', label);
+      b.type = 'button';
+      b.addEventListener('click', foldAll(open));
+      fold.append(b);
+    }
+    const tri = (v: boolean | undefined): '' | 'on' | 'off' => (v === undefined ? '' : v ? 'on' : 'off');
 
     this.form.replaceChildren(
       group(this.field(tr('te.load'), source, true)),
-      section(tr('te.themeInfo'), group(
+      fold,
+      section('info', tr('te.themeInfo'), group(
         this.field(tr('te.name'), this.text(info.name, (v) => (info.name = v.trim() || tr('themePack.untitled')), { max: 60 }), true),
         this.field(tr('te.idForSaves'), this.text(info.id, (v) => (info.id = v.replace(/[^a-zA-Z0-9_-]/g, '') || 'my-theme'), { max: 60 })),
         this.field(tr('common.releaseDate'), this.text(info.released, (v) => (info.released = v), { type: 'date' })),
@@ -709,36 +843,13 @@ export class ThemeEditor {
         }, { multiline: true }), true),
       )),
       ...this.translationSections(info, section, group),
-      section(tr('te.fonts'), this.fontsBox()),
-      section(tr('te.backgroundMusic'), this.musicControl()),
-      section(tr('te.mazeColors'), el('h4', '', tr('te.defaultDesign')), maze, designs),
-      section(tr('te.levelBadge'), group(
+      section('fonts', tr('te.fonts'), this.fontsBox()),
+      section('music', tr('te.backgroundMusic'), this.musicControl()),
+      section('maze', tr('te.mazeColors'), el('h4', '', tr('te.defaultDesign')), maze, designs),
+      section('badge-design', tr('te.secBadgeDesign'), group(
         this.field(tr('te.design'), this.select(badge.kind, BADGE_KINDS, (v) => b({ kind: v }))),
-        this.field(tr('te.numberFont'), fontPicker(this.select(badge.font, BADGE_FONTS, (v) => b({ font: v })), badge.font)),
-        this.field(tr('te.titleFont'), fontPicker(this.select<BadgeFont | ''>(badge.titleFont ?? '', [['', tr('te.sameAsNumber')], ...BADGE_FONTS], (v) => {
-          if (v) badge.titleFont = v;
-          else delete badge.titleFont;
-        }), badge.titleFont ?? '')),
-        this.field(tr('te.numberDigits'), this.select(String(badge.pad) as '0' | '2' | '3', [['0', '7'], ['2', '07'], ['3', '007']], (v) => b({ pad: Number(v) }))),
-        this.field(tr('te.caption'), this.text(badge.caption ?? '', (v) => {
-          if (v.trim()) badge.caption = v.slice(0, 40);
-          else delete badge.caption;
-        }, { max: 40 })),
         this.field(tr('te.mainColor'), this.color(badge.primary, (v) => b({ primary: v }))),
         this.field(tr('te.secondColor'), this.color(badge.secondary, (v) => b({ secondary: v }))),
-        this.field(tr('common.numberColor'), this.color(badge.numberColor, (v) => b({ numberColor: v }))),
-        this.field(tr('te.titleColor'), this.color(badge.titleColor, (v) => b({ titleColor: v }))),
-        el('p', 'field wide te-fx-head', tr('te.numberEffects')),
-        ...this.fxFields(badge.numberFx, (fx) => {
-          if (fx) badge.numberFx = fx;
-          else delete badge.numberFx;
-        }),
-        el('p', 'field wide te-fx-head', tr('te.titleEffects')),
-        ...this.fxFields(badge.titleFx, (fx) => {
-          if (fx) badge.titleFx = fx;
-          else delete badge.titleFx;
-        }),
-        toggle,
         this.field(tr('te.badgeImageCustomImageDesign'), this.image(badge.image, 'badge', (n) => {
           if (n) badge.image = n;
           else delete badge.image;
@@ -748,12 +859,53 @@ export class ThemeEditor {
         reset.type = 'button';
         reset.addEventListener('click', () => {
           info.style.badge = { ...DEFAULT_BADGE };
+          this.part = null;
           this.save();
           this.renderForm();
         });
         return reset;
       })()),
+      section('badge-layout', tr('te.secBadgeLayout'), this.placementBox),
+      section('badge-number', tr('te.secBadgeNumber'), group(
+        this.field(tr('te.numberFont'), fontPicker(this.select(badge.font, BADGE_FONTS, (v) => b({ font: v })), badge.font)),
+        this.field(tr('te.numberDigits'), this.select(String(badge.pad) as '0' | '2' | '3', [['0', '7'], ['2', '07'], ['3', '007']], (v) => b({ pad: Number(v) }))),
+        this.field(tr('common.numberColor'), this.color(badge.numberColor, (v) => b({ numberColor: v }))),
+        ...this.formatFields(badge.numberFormat, (f) => {
+          if (f) badge.numberFormat = f;
+          else delete badge.numberFormat;
+        }),
+        el('p', 'field wide te-fx-head', tr('te.numberEffects')),
+        ...this.fxFields(badge.numberFx, (fx) => {
+          if (fx) badge.numberFx = fx;
+          else delete badge.numberFx;
+        }),
+      )),
+      section('badge-title', tr('te.secBadgeTitle'), toggle, group(
+        this.field(tr('te.titleFont'), fontPicker(this.select<BadgeFont | ''>(badge.titleFont ?? '', [['', tr('te.sameAsNumber')], ...BADGE_FONTS], (v) => {
+          if (v) badge.titleFont = v;
+          else delete badge.titleFont;
+        }), badge.titleFont ?? '')),
+        this.field(tr('te.titleColor'), this.color(badge.titleColor, (v) => b({ titleColor: v }))),
+        this.field(tr('te.caption'), this.text(badge.caption ?? '', (v) => {
+          if (v.trim()) badge.caption = v.slice(0, 40);
+          else delete badge.caption;
+        }, { max: 40 })),
+        this.field(tr('te.titlePlate'), this.select(tri(badge.titlePlate), [['', tr('te.designDefault')], ['on', tr('te.on')], ['off', tr('te.off')]], (v) => {
+          if (v) badge.titlePlate = v === 'on';
+          else delete badge.titlePlate;
+        })),
+        ...this.formatFields(badge.titleFormat, (f) => {
+          if (f) badge.titleFormat = f;
+          else delete badge.titleFormat;
+        }),
+        el('p', 'field wide te-fx-head', tr('te.titleEffects')),
+        ...this.fxFields(badge.titleFx, (fx) => {
+          if (fx) badge.titleFx = fx;
+          else delete badge.titleFx;
+        }),
+      )),
     );
+    this.renderPlacement();
     this.renderTile();
   }
 
@@ -907,7 +1059,11 @@ export class ThemeEditor {
   private previewMap(): MapData {
     const style = this.draft.info.style;
     const m = this.draft.levels[this.previewIndex] ?? demoMap();
-    const out: MapData = { ...m, level: m.level ?? this.previewIndex + 1, title: m.title ?? m.name.replace(/^\d+\.\s*/, '') };
+    const out: MapData = {
+      ...m,
+      level: this.sample.level ?? m.level ?? this.previewIndex + 1,
+      title: this.sample.title || (m.title ?? m.name.replace(/^\d+\.\s*/, '')),
+    };
     out.theme = levelMaze(style, m);
     return out;
   }
@@ -921,9 +1077,465 @@ export class ThemeEditor {
     }
     const now = performance.now();
     beginFrame(this.ctx, map);
+    // Zoomed in on the top-left corner, where the badge sits
+    if (this.zoom !== 1) this.ctx.scale(this.zoom, this.zoom);
     drawMap(this.ctx, map, this.compiled, now % 600000, { now });
     const badge = this.draft.info.style.badge;
     const imgName = badge.image;
-    drawLevelBadge(this.ctx, map, badge, badgeImage(imgName ? this.draft.images[imgName] : undefined), now);
+    const hits: BadgeHit[] = [];
+    drawLevelBadge(this.ctx, map, badge, badgeImage(imgName ? this.draft.images[imgName] : undefined), now, hits);
+    this.hits = hits;
+    this.drawOverlay(map);
+  }
+
+  // ───────────────────────── Badge placement ─────────────────────────
+
+  /** Placement of one part (a fresh empty one when it has none) */
+  private placed(id: BadgePartId): BadgePart {
+    return this.draft.info.style.badge.layout?.[id] ?? {};
+  }
+
+  /** Set a part's placement, dropping values back at the design's default */
+  private setPlaced(id: BadgePartId, p: BadgePart): void {
+    const badge = this.draft.info.style.badge;
+    const clean: BadgePart = {};
+    if (p.x) clean.x = Math.round(p.x * 10) / 10;
+    if (p.y) clean.y = Math.round(p.y * 10) / 10;
+    if (p.scale !== undefined && Math.abs(p.scale - 1) > 1e-3) clean.scale = Math.round(Math.min(5, Math.max(0.2, p.scale)) * 1000) / 1000;
+    if (p.rotate) {
+      let r = ((p.rotate % 360) + 540) % 360 - 180;
+      r = Math.round(r * 10) / 10;
+      if (r) clean.rotate = r;
+    }
+    if (p.hidden) clean.hidden = true;
+    const layout = { ...badge.layout };
+    if (Object.keys(clean).length) layout[id] = clean;
+    else delete layout[id];
+    if (Object.keys(layout).length) badge.layout = layout;
+    else delete badge.layout;
+  }
+
+  private previewToolbar(): HTMLElement {
+    const bar = el('div', 'te-toolbar');
+    const group = (...children: HTMLElement[]) => {
+      const g = el('div', 'te-tool-group');
+      g.append(...children);
+      return g;
+    };
+    for (const [b, title, fn] of [[this.undoBtn, tr('te.undo'), () => this.undo()], [this.redoBtn, tr('te.redo'), () => this.redo()]] as const) {
+      b.type = 'button';
+      b.title = title;
+      b.setAttribute('aria-label', title);
+      b.addEventListener('click', fn);
+    }
+    this.renderChips();
+
+    const zoom = el('select');
+    zoom.title = tr('te.zoom');
+    zoom.append(...ZOOMS.map((z) => new Option(`🔍 ${z * 100}%`, String(z), false, z === this.zoom)));
+    zoom.addEventListener('change', () => (this.zoom = Number(zoom.value) || 1));
+
+    const snapBox = el('label', 'toggle te-snap');
+    const snap = el('input');
+    snap.type = 'checkbox';
+    snap.checked = this.snap;
+    snap.addEventListener('change', () => (this.snap = snap.checked));
+    snapBox.append(snap, el('span', '', tr('te.snap')));
+    snapBox.title = tr('te.snapHint');
+
+    const num = el('input', 'te-sample-num');
+    num.type = 'number';
+    num.min = '0';
+    num.max = '9999';
+    num.placeholder = '#';
+    num.title = tr('te.sampleNumber');
+    num.addEventListener('input', () => {
+      const v = Math.round(Number(num.value));
+      this.sample.level = num.value.trim() !== '' && Number.isFinite(v) ? Math.max(0, Math.min(9999, v)) : undefined;
+    });
+    const title = el('input', 'te-sample-title');
+    title.placeholder = tr('te.sampleTitle');
+    title.title = tr('te.sampleTitle');
+    title.maxLength = 80;
+    title.addEventListener('input', () => (this.sample.title = title.value || undefined));
+
+    bar.append(group(this.undoBtn, this.redoBtn), this.partChips, group(zoom, snapBox), group(num, title));
+    return bar;
+  }
+
+  /** Part buttons above the preview (the selected one is highlighted) */
+  private renderChips(): void {
+    this.partChips.replaceChildren(...PARTS.map((id) => {
+      const b = el('button', '', PART_NAMES[id]);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(this.part === id));
+      if (this.placed(id).hidden) b.classList.add('te-chip-hidden');
+      b.addEventListener('click', () => this.selectPart(this.part === id ? null : id));
+      return b;
+    }));
+  }
+
+  private selectPart(id: BadgePartId | null): void {
+    this.part = id;
+    this.renderChips();
+    this.renderPlacement();
+  }
+
+  /** The placement section: X / Y / size / rotation of each part */
+  private renderPlacement(): void {
+    const box = this.placementBox;
+    const rows = PARTS.map((id) => {
+      const p = this.placed(id);
+      const row = el('div', `te-place-row${this.part === id ? ' on' : ''}`);
+      const name = el('button', 'te-place-name', PART_NAMES[id]);
+      name.type = 'button';
+      name.addEventListener('click', () => this.selectPart(id));
+      const num = (value: number, step: number, title: string, apply: (v: number) => void) => {
+        const i = el('input');
+        i.type = 'number';
+        i.step = String(step);
+        i.title = title;
+        i.value = String(Math.round(value * 10) / 10);
+        i.addEventListener('focus', () => this.part !== id && this.selectPart(id));
+        i.addEventListener('change', () => {
+          const v = Number(i.value);
+          if (!Number.isFinite(v)) return;
+          apply(v);
+          this.save();
+          this.renderPlacement();
+        });
+        const l = el('label', 'te-place-num');
+        l.append(el('small', '', title), i);
+        return l;
+      };
+      const hide = el('label', 'toggle te-place-hide');
+      const hc = el('input');
+      hc.type = 'checkbox';
+      hc.checked = !!p.hidden;
+      hc.addEventListener('change', () => {
+        this.setPlaced(id, { ...this.placed(id), hidden: hc.checked || undefined });
+        this.save();
+        this.renderChips();
+      });
+      hide.append(hc, el('span', '', id === 'graphic' ? tr('te.hideShape') : tr('te.hidePart')));
+      const reset = el('button', 'subtle', tr('te.resetPart'));
+      reset.type = 'button';
+      reset.disabled = !Object.keys(p).length;
+      reset.addEventListener('click', () => {
+        this.setPlaced(id, {});
+        this.save();
+        this.renderPlacement();
+        this.renderChips();
+      });
+      row.append(name,
+        num(p.x ?? 0, 1, 'X', (v) => this.setPlaced(id, { ...this.placed(id), x: v })),
+        num(p.y ?? 0, 1, 'Y', (v) => this.setPlaced(id, { ...this.placed(id), y: v })),
+        num((p.scale ?? 1) * 100, 5, tr('te.scalePct'), (v) => this.setPlaced(id, { ...this.placed(id), scale: v / 100 })),
+        num(p.rotate ?? 0, 5, tr('te.rotateDeg'), (v) => this.setPlaced(id, { ...this.placed(id), rotate: v })),
+        hide, reset);
+      return row;
+    });
+    const resetAll = el('button', 'subtle', tr('te.resetLayout'));
+    resetAll.type = 'button';
+    resetAll.disabled = !this.draft.info.style.badge.layout;
+    resetAll.addEventListener('click', () => {
+      delete this.draft.info.style.badge.layout;
+      this.save();
+      this.renderPlacement();
+      this.renderChips();
+    });
+    box.replaceChildren(...rows, resetAll);
+  }
+
+  /** Map point under the mouse (in the zoomed preview) */
+  private pointer(e: MouseEvent): { x: number; y: number } {
+    const p = clientToMap(this.canvas, this.previewMap(), e.clientX, e.clientY);
+    return { x: p.x / this.zoom, y: p.y / this.zoom };
+  }
+
+  /** Map units per CSS pixel on the preview */
+  private unit(map: MapData): number {
+    return unitsPerPx(this.canvas, map) / this.zoom;
+  }
+
+  /** The selected part's rotate and resize handles */
+  private handles(hit: BadgeHit, u: number): { rotate: { x: number; y: number }; top: { x: number; y: number }; scale: { x: number; y: number } } {
+    const [a, b, c, d] = hit.poly;
+    const top = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    // Outward from the box's top edge
+    const ux = a.x - d.x, uy = a.y - d.y;
+    const len = Math.hypot(ux, uy) || 1;
+    return { rotate: { x: top.x + (ux / len) * 22 * u, y: top.y + (uy / len) * 22 * u }, top, scale: c };
+  }
+
+  private hitAt(p: { x: number; y: number }): { id: BadgePartId; mode: 'move' | 'rotate' | 'scale'; hit: BadgeHit } | null {
+    const map = this.previewMap();
+    const u = this.unit(map);
+    const sel = this.hits.find((h) => h.part === this.part);
+    if (sel) {
+      const h = this.handles(sel, u);
+      if (Math.hypot(p.x - h.rotate.x, p.y - h.rotate.y) < 9 * u) return { id: sel.part, mode: 'rotate', hit: sel };
+      if (Math.hypot(p.x - h.scale.x, p.y - h.scale.y) < 9 * u) return { id: sel.part, mode: 'scale', hit: sel };
+    }
+    const inside = (h: BadgeHit) => {
+      let sign = 0;
+      for (let i = 0; i < 4; i++) {
+        const a = h.poly[i], b = h.poly[(i + 1) % 4];
+        const cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+        if (Math.abs(cross) < 1e-9) continue;
+        if (sign === 0) sign = Math.sign(cross);
+        else if (Math.sign(cross) !== sign) return false;
+      }
+      return true;
+    };
+    // The selected part first, then the title, the number, the graphic
+    const order = [...this.hits].sort((a, b) => rank(a) - rank(b));
+    function rank(h: BadgeHit): number {
+      return h.part === sel?.part ? -1 : PARTS.length - PARTS.indexOf(h.part);
+    }
+    const hit = order.find(inside);
+    return hit ? { id: hit.part, mode: 'move', hit } : null;
+  }
+
+  private bindCanvas(): void {
+    const c = this.canvas;
+    c.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      const p = this.pointer(e);
+      const hit = this.hitAt(p);
+      if (!hit) {
+        if (this.part) this.selectPart(null);
+        return;
+      }
+      e.preventDefault();
+      if (this.part !== hit.id) this.selectPart(hit.id);
+      this.drag = { ...hit, from: p, start: { ...this.placed(hit.id) } };
+      c.setPointerCapture(e.pointerId);
+    });
+    c.addEventListener('pointermove', (e) => {
+      const p = this.pointer(e);
+      if (!this.drag) {
+        const hit = this.hitAt(p);
+        this.hover = hit ? (hit.mode === 'move' ? hit.id : hit.mode) : null;
+        c.style.cursor = !hit ? '' : hit.mode === 'rotate' ? 'alias' : hit.mode === 'scale' ? 'nwse-resize' : 'move';
+        return;
+      }
+      const { id, mode, hit, from, start } = this.drag;
+      const snap = this.snap !== e.altKey;
+      const next: BadgePart = { ...start };
+      if (mode === 'move') {
+        // Mouse movement into the part's own frame (the number may sit in a turned plate)
+        const [a, b, cc, d] = hit.frame;
+        const det = a * d - b * cc || 1;
+        const dx = p.x - from.x, dy = p.y - from.y;
+        let lx = (d * dx - cc * dy) / det;
+        let ly = (-b * dx + a * dy) / det;
+        if (e.shiftKey) {
+          if (Math.abs(lx) > Math.abs(ly)) ly = 0;
+          else lx = 0;
+        }
+        const step = snap ? 2 : 0.5;
+        next.x = Math.round(((start.x ?? 0) + lx) / step) * step;
+        next.y = Math.round(((start.y ?? 0) + ly) / step) * step;
+      } else if (mode === 'rotate') {
+        const a0 = Math.atan2(from.y - hit.pivot.y, from.x - hit.pivot.x);
+        const a1 = Math.atan2(p.y - hit.pivot.y, p.x - hit.pivot.x);
+        let r = (start.rotate ?? 0) + ((a1 - a0) * 180) / Math.PI;
+        r = snap || e.shiftKey ? Math.round(r / 15) * 15 : Math.round(r);
+        next.rotate = r;
+      } else {
+        const d0 = Math.hypot(from.x - hit.pivot.x, from.y - hit.pivot.y) || 1;
+        const d1 = Math.hypot(p.x - hit.pivot.x, p.y - hit.pivot.y);
+        const sc = Math.min(5, Math.max(0.2, (start.scale ?? 1) * (d1 / d0)));
+        next.scale = snap ? Math.round(sc * 20) / 20 : Math.round(sc * 100) / 100;
+      }
+      this.setPlaced(id, next);
+    });
+    const end = (e: PointerEvent) => {
+      if (!this.drag) return;
+      this.drag = null;
+      if (c.hasPointerCapture(e.pointerId)) c.releasePointerCapture(e.pointerId);
+      this.save();
+      this.renderPlacement();
+    };
+    c.addEventListener('pointerup', end);
+    c.addEventListener('pointercancel', end);
+    c.addEventListener('pointerleave', () => !this.drag && (this.hover = null));
+    c.addEventListener('dblclick', (e) => {
+      const hit = this.hitAt(this.pointer(e));
+      if (!hit || hit.mode !== 'move') return;
+      // Back to the design's spot (a hidden part stays hidden)
+      this.setPlaced(hit.id, this.placed(hit.id).hidden ? { hidden: true } : {});
+      this.save();
+      this.renderPlacement();
+    });
+  }
+
+  /** Outlines of the parts (hovered, selected) and the selected one's handles */
+  private drawOverlay(map: MapData): void {
+    const ctx = this.ctx;
+    const u = this.unit(map);
+    const poly = (h: BadgeHit) => {
+      ctx.beginPath();
+      h.poly.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+      ctx.closePath();
+    };
+    ctx.save();
+    for (const h of this.hits) {
+      const selected = h.part === this.part;
+      if (!selected && h.part !== this.hover && !this.drag) continue;
+      if (this.drag && !selected) continue;
+      poly(h);
+      ctx.lineWidth = (selected ? 1.6 : 1.2) * u;
+      ctx.setLineDash(selected ? [] : [4 * u, 3 * u]);
+      ctx.strokeStyle = selected ? '#2f8cf0' : 'rgba(47,140,240,0.8)';
+      ctx.stroke();
+      if (!selected) continue;
+      ctx.setLineDash([]);
+      const hd = this.handles(h, u);
+      ctx.beginPath();
+      ctx.moveTo(hd.top.x, hd.top.y);
+      ctx.lineTo(hd.rotate.x, hd.rotate.y);
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(hd.rotate.x, hd.rotate.y, 5 * u, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.rect(hd.scale.x - 4.5 * u, hd.scale.y - 4.5 * u, 9 * u, 9 * u);
+      ctx.fill();
+      ctx.stroke();
+      // Pivot
+      ctx.beginPath();
+      ctx.arc(h.pivot.x, h.pivot.y, 2.5 * u, 0, Math.PI * 2);
+      ctx.fillStyle = '#2f8cf0';
+      ctx.fill();
+      // Live readout while dragging
+      if (this.drag) {
+        const p = this.placed(h.part);
+        const text = this.drag.mode === 'rotate' ? `${Math.round(p.rotate ?? 0)}°`
+          : this.drag.mode === 'scale' ? `${Math.round((p.scale ?? 1) * 100)}%`
+            : `${Math.round(p.x ?? 0)}, ${Math.round(p.y ?? 0)}`;
+        ctx.font = `600 ${12 * u}px sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        const tw = ctx.measureText(text).width;
+        const bx = hd.scale.x + 8 * u, by = hd.scale.y + 6 * u;
+        ctx.fillStyle = 'rgba(20,24,40,0.8)';
+        ctx.beginPath();
+        ctx.roundRect(bx, by, tw + 10 * u, 18 * u, 4 * u);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(text, bx + 5 * u, by + 3 * u);
+      }
+    }
+    ctx.restore();
+  }
+
+  private onKey(e: KeyboardEvent): void {
+    if (!this.visible) return;
+    const t = e.target;
+    const typing = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || (t instanceof HTMLElement && t.isContentEditable);
+    if (typing) return;
+    const mod = e.ctrlKey || e.metaKey;
+    const k = e.key.toLowerCase();
+    if (mod && k === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) this.redo();
+      else this.undo();
+      return;
+    }
+    if (mod && k === 'y') {
+      e.preventDefault();
+      this.redo();
+      return;
+    }
+    if (this.tab !== 'game' || !this.part || mod) return;
+    const step = e.shiftKey ? 10 : 1;
+    const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+    if (d) {
+      e.preventDefault();
+      const p = this.placed(this.part);
+      this.setPlaced(this.part, { ...p, x: (p.x ?? 0) + d[0], y: (p.y ?? 0) + d[1] });
+      this.save();
+      this.renderPlacement();
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      this.setPlaced(this.part, {});
+      this.save();
+      this.renderPlacement();
+      this.renderChips();
+    }
+  }
+
+  // ───────────────────────── Undo ─────────────────────────
+
+  private resetHistory(): void {
+    this.history = [JSON.stringify(this.draft.info)];
+    this.histIndex = 0;
+    this.histAt = 0;
+    this.syncHistoryButtons();
+  }
+
+  /** Remember the theme as it is now; quick runs of changes (a color being dragged) count as one */
+  private record(): void {
+    const snap = JSON.stringify(this.draft.info);
+    if (snap === this.history[this.histIndex]) return;
+    const now = performance.now();
+    this.history.length = this.histIndex + 1;
+    if (now - this.histAt < 400 && this.histIndex > 0) this.history[this.histIndex] = snap;
+    else {
+      this.history.push(snap);
+      if (this.history.length > HISTORY_MAX) this.history.shift();
+      this.histIndex = this.history.length - 1;
+    }
+    this.histAt = now;
+    this.syncHistoryButtons();
+  }
+
+  private syncHistoryButtons(): void {
+    if (!this.undoBtn) return;
+    this.undoBtn.disabled = this.histIndex <= 0;
+    this.redoBtn.disabled = this.histIndex >= this.history.length - 1;
+  }
+
+  private undo(): void {
+    if (this.histIndex > 0) this.restore(this.histIndex - 1);
+  }
+
+  private redo(): void {
+    if (this.histIndex < this.history.length - 1) this.restore(this.histIndex + 1);
+  }
+
+  private restore(index: number): void {
+    this.histIndex = index;
+    this.histAt = 0;
+    this.draft.info = JSON.parse(this.history[index]) as ThemeInfo;
+    this.compiledFor = null;
+    this.store();
+    this.renderForm();
+    this.renderLevels();
+    if (this.tab !== 'game') this.designer.open(this.tab);
+    this.renderChips();
+    this.syncHistoryButtons();
+  }
+
+  private loadOpened(): Set<string> {
+    try {
+      const raw = localStorage.getItem(OPEN_KEY);
+      if (raw) return new Set(JSON.parse(raw) as string[]);
+    } catch {
+      /* default */
+    }
+    return new Set(OPEN_DEFAULT);
+  }
+
+  private saveOpened(): void {
+    try {
+      localStorage.setItem(OPEN_KEY, JSON.stringify([...this.opened]));
+    } catch {
+      /* not remembered */
+    }
   }
 }

@@ -17,7 +17,16 @@ export interface TextEffects {
   depth?: number;
   /** Color of the 3D sides '#rrggbb' */
   depthColor?: string;
+  /** Shadow offset in px (default: grows with the text size) */
+  shadowX?: number;
+  shadowY?: number;
+  /** Shadow blur in px (0 = a hard shadow) */
+  shadowBlur?: number;
+  /** Glow spread, × the default (0.2–4) */
+  glowSize?: number;
 }
+
+const finite = (v: unknown, min: number, max: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : undefined);
 
 const hex6 = (v: unknown) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : undefined);
 
@@ -32,5 +41,13 @@ export function readTextEffects(v: unknown): TextEffects | undefined {
   }
   if (out.outline) out.outlineWidth = typeof o.outlineWidth === 'number' && Number.isFinite(o.outlineWidth) ? Math.max(0.5, Math.min(20, o.outlineWidth)) : 2;
   if (typeof o.depth === 'number' && o.depth >= 1) out.depth = Math.min(30, Math.round(o.depth));
+  if (out.shadow) {
+    const sx = finite(o.shadowX, -40, 40), sy = finite(o.shadowY, -40, 40), sb = finite(o.shadowBlur, 0, 40);
+    if (sx !== undefined) out.shadowX = sx;
+    if (sy !== undefined) out.shadowY = sy;
+    if (sb) out.shadowBlur = sb;
+  }
+  const gs = finite(o.glowSize, 0.2, 4);
+  if (out.glow && gs !== undefined && gs !== 1) out.glowSize = gs;
   return Object.keys(out).length ? out : undefined;
 }

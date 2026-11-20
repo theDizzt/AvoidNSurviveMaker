@@ -4,6 +4,28 @@ import { OFFICIAL_THEMES, CUSTOM_THEME_PRESETS } from './theme-registry';
 import { readThemeZip, writeThemeZip } from './theme-zip';
 
 describe('theme packs', () => {
+  it('reads badge placement, lettering and the extra text effects leniently', () => {
+    const info = validateThemeInfo({
+      format: 1,
+      style: {
+        badge: {
+          kind: 'disc',
+          layout: { graphic: { x: 12, y: -4, scale: 9, rotate: 0 }, number: { hidden: true, x: 'no' }, title: { scale: 1 }, junk: { x: 1 } },
+          numberFormat: { weight: 640, italic: false, spacing: 2.25, transform: 'upper' },
+          titleFormat: { transform: 'sideways' },
+          titlePlate: false,
+          titleFx: { shadow: '#000000', shadowX: 3, shadowY: -99, shadowBlur: 6, glow: '#ff00ff', glowSize: 2.5 },
+        },
+      },
+    });
+    const b = info.style.badge;
+    expect(b.layout).toEqual({ graphic: { x: 12, y: -4, scale: 5 }, number: { hidden: true } });
+    expect(b.numberFormat).toEqual({ weight: 600, italic: false, spacing: 2.3, transform: 'upper' });
+    expect(b.titleFormat).toBeUndefined();
+    expect(b.titlePlate).toBe(false);
+    expect(b.titleFx).toMatchObject({ shadowX: 3, shadowY: -40, shadowBlur: 6, glowSize: 2.5 });
+  });
+
   it('an official theme is worth 66 stars (21 levels x 3 + 3 crystal stars), 1056 in all', () => {
     for (const t of OFFICIAL_THEMES) {
       expect(maxStars(t), t.info.id).toBe(66);

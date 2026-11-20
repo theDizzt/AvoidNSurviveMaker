@@ -11,6 +11,33 @@ export type BadgeKind = 'pill' | 'disc' | 'emblem' | 'plate' | 'slant' | 'ring' 
 /** A base font, or the id of a bundled library font (see font-catalog) */
 export type BadgeFont = 'title' | 'main' | 'serif' | 'heavy' | 'timer' | (string & {});
 
+/** Where one part of the badge sits, relative to the design's own spot (all optional) */
+export interface BadgePart {
+  /** Offset in map px */
+  x?: number;
+  y?: number;
+  /** Size, × the design's (0.2–5) */
+  scale?: number;
+  /** Degrees, clockwise */
+  rotate?: number;
+  /** Not drawn */
+  hidden?: boolean;
+}
+
+/** Badge parts: the graphic (which carries the number), the number inside it, the title block */
+export type BadgePartId = 'graphic' | 'number' | 'title';
+export type BadgeLayout = Partial<Record<BadgePartId, BadgePart>>;
+
+/** Lettering of the number or title; unset fields keep the design's own */
+export interface BadgeTextFormat {
+  /** Font weight 100–900 */
+  weight?: number;
+  italic?: boolean;
+  /** Letter spacing in px */
+  spacing?: number;
+  transform?: 'upper' | 'lower';
+}
+
 export interface BadgeStyle {
   kind: BadgeKind;
   /** Main color of the badge shape */
@@ -33,6 +60,12 @@ export interface BadgeStyle {
   caption?: string;
   /** Picture drawn behind the number (file name in the pack); used by kind 'image' */
   image?: string;
+  /** Free placement of the parts (moved, scaled, rotated) */
+  layout?: BadgeLayout;
+  numberFormat?: BadgeTextFormat;
+  titleFormat?: BadgeTextFormat;
+  /** Soft plate behind the title (each design has its own default) */
+  titlePlate?: boolean;
 }
 
 export interface ThemeDesign {
@@ -214,6 +247,13 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
     if (titleFx) badge.titleFx = titleFx;
     if (str(b.caption)) badge.caption = str(b.caption, 40);
     if (str(b.image)) badge.image = str(b.image, 120);
+    const layout = readBadgeLayout(b.layout);
+    if (layout) badge.layout = layout;
+    const numberFormat = readBadgeTextFormat(b.numberFormat);
+    if (numberFormat) badge.numberFormat = numberFormat;
+    const titleFormat = readBadgeTextFormat(b.titleFormat);
+    if (titleFormat) badge.titleFormat = titleFormat;
+    if (typeof b.titlePlate === 'boolean') badge.titlePlate = b.titlePlate;
     const info: ThemeInfo = {
       format: THEME_FORMAT,
       id: str(o.id, 60).replace(/[^a-zA-Z0-9_-]/g, '') || base.id,
@@ -258,6 +298,42 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
       });
     }
     return info;
+  }
+
+  const obj = (v: unknown): Record<string, unknown> | null => (typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Record<string, unknown> : null);
+  const fin = (v: unknown, min: number, max: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : undefined);
+
+  /** Badge part placement; parts left at the design's spot are dropped */
+  function readBadgeLayout(v: unknown): BadgeLayout | undefined {
+    const o = obj(v);
+    if (!o) return undefined;
+    const out: BadgeLayout = {};
+    for (const id of ['graphic', 'number', 'title'] as const) {
+      const p = obj(o[id]);
+      if (!p) continue;
+      const part: BadgePart = {};
+      const x = fin(p.x, -2000, 2000), y = fin(p.y, -2000, 2000), sc = fin(p.scale, 0.2, 5), r = fin(p.rotate, -360, 360);
+      if (x) part.x = Math.round(x * 10) / 10;
+      if (y) part.y = Math.round(y * 10) / 10;
+      if (sc !== undefined && sc !== 1) part.scale = Math.round(sc * 1000) / 1000;
+      if (r) part.rotate = Math.round(r * 10) / 10;
+      if (p.hidden === true) part.hidden = true;
+      if (Object.keys(part).length) out[id] = part;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+
+  function readBadgeTextFormat(v: unknown): BadgeTextFormat | undefined {
+    const o = obj(v);
+    if (!o) return undefined;
+    const out: BadgeTextFormat = {};
+    const w = fin(o.weight, 100, 900);
+    if (w !== undefined) out.weight = Math.round(w / 100) * 100;
+    if (typeof o.italic === 'boolean') out.italic = o.italic;
+    const sp = fin(o.spacing, -10, 40);
+    if (sp) out.spacing = Math.round(sp * 10) / 10;
+    if (o.transform === 'upper' || o.transform === 'lower') out.transform = o.transform;
+    return Object.keys(out).length ? out : undefined;
   }
 
   /** The "i18n" block of theme.json: language id → translated text (same limits as the default text) */

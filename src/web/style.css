@@ -1372,6 +1372,36 @@ button.se-back:hover, button.se-start:hover, button.se-back:focus-visible, butto
 .te-fx-row input:disabled { opacity: 0.4; }
 .te-font-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: center; }
 .te-font-sample { font-size: 20px; }
+/* Theme editor: badge placement on the preview, collapsible form sections */
+.te-side { position: sticky; top: 8px; }
+.te-toolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
+.te-tool-group { display: flex; gap: 4px; align-items: center; }
+.te-icon { padding: 3px 10px; font-size: 16px; line-height: 1.2; }
+.te-part-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.te-part-chips button { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.te-part-chips button[aria-pressed="true"] { background: var(--gradient); color: #fff; border-color: transparent; }
+.te-chip-hidden { opacity: 0.55; text-decoration: line-through; }
+.te-snap { margin: 0; font-size: 12px; }
+.te-toolbar select { font-size: 12px; }
+.te-sample-num { width: 64px; font-size: 12px; }
+.te-sample-title { width: 150px; font-size: 12px; }
+.te-canvas { touch-action: none; }
+.te-canvas-hint { margin: 6px 0 0; font-size: 12px; }
+.te-fold { margin-top: 0; justify-content: flex-end; }
+.te-fold button { font-size: 12px; padding: 3px 10px; }
+.te-form > details.te-section { border-top: 1px solid var(--accent-soft); padding-top: 10px; }
+.te-section > section { padding-top: 10px; }
+.te-placement { display: flex; flex-direction: column; gap: 6px; }
+.te-placement > .muted { margin: 0; font-size: 12px; }
+.te-place-row { display: grid; grid-template-columns: 76px repeat(4, minmax(0, 1fr)); gap: 4px 6px; align-items: end; padding: 6px; border-radius: 8px; border: 1px solid transparent; }
+.te-place-row.on { border-color: var(--accent); background: var(--accent-soft); }
+.te-place-name { padding: 4px 6px; font-size: 12px; font-weight: 700; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.te-place-num { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); }
+.te-place-num input { width: 100%; min-width: 0; }
+.te-place-hide { grid-column: 2 / span 3; margin: 0; font-size: 12px; }
+.te-place-row > button.subtle { grid-column: 5; font-size: 12px; padding: 3px 6px; }
+.te-fx-row { flex-wrap: wrap; }
+.te-fx-num { display: flex; flex-direction: column; gap: 1px; font-size: 10px; color: var(--muted); }
 
 /* ───────────────────────── Licenses (music & fonts) ───────────────────────── */
 
