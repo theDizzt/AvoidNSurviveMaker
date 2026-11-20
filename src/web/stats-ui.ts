@@ -62,6 +62,14 @@ export class StatsUI {
     private readonly deaths: DeathTracker,
   ) {}
 
+  /** Refresh only the play-time field (the total grows every 30 s while the game is open) */
+  updatePlayTime(): void {
+    const profile = this.account.profile;
+    if (!profile) return;
+    this.set('time', formatPlayTime(profile.total_play_seconds));
+    this.set('time-note', `${profile.total_play_seconds.toLocaleString()}s`);
+  }
+
   private set(field: StatField, text: string): void {
     const slot = this.grid.querySelector<HTMLElement>(`[data-stat="${field}"]`);
     if (slot) slot.textContent = text;

@@ -85,6 +85,7 @@ export class AuthUI {
     updateNick();
 
     account.onChange(() => this.renderBadges());
+    account.onPlayTotal(() => this.renderBadges());
     this.renderBadges();
   }
 

@@ -63,6 +63,7 @@ export class Account {
   /** Message from the email-verification redirect, shown once after boot */
   notice: { kind: 'ok' | 'error'; text: string } | null = null;
   private readonly listeners = new Set<() => void>();
+  private readonly playTotalListeners = new Set<() => void>();
   private sessionGeneration = 0;
 
   get configured(): boolean {
@@ -73,11 +74,19 @@ export class Account {
     return this.profile ? formatTag(this.profile.nickname, this.profile.discriminator) : null;
   }
 
-  /** Update the cached total after the server accepted a play-time report */
+  /**
+   * Update the cached total after the server accepted a play-time report (every 30 s). Only the
+   * play-time displays hear about it: a full onChange would refetch stats and leaderboards.
+   */
   setPlayTotal(totalSeconds: number): void {
-    if (!this.profile) return;
+    if (!this.profile || this.profile.total_play_seconds === totalSeconds) return;
     this.profile = { ...this.profile, total_play_seconds: totalSeconds };
-    this.emit();
+    for (const fn of this.playTotalListeners) fn();
+  }
+
+  /** The total play time changed (signing in or out still goes through onChange) */
+  onPlayTotal(fn: () => void): void {
+    this.playTotalListeners.add(fn);
   }
 
   onChange(fn: () => void): void {

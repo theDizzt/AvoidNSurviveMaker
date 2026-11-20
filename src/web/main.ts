@@ -717,6 +717,7 @@ function renderRecordsOption(): void {
 }
 const stats = new StatsUI($('stats-dia'), $('stats-message'), $('stats-records'), account, recordSync, deaths);
 account.onChange(() => current === 'stats' && void stats.render());
+account.onPlayTotal(() => current === 'stats' && stats.updatePlayTime());
 account.onChange(renderRecordsOption);
 account.onChange(clearLeaderboardCache); // so the player's own row is marked after signing in
 renderRecordsOption();

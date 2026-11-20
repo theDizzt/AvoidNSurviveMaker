@@ -16,6 +16,7 @@ import { shapeCenter } from '../core/shape';
 import { zoneRing } from '../core/zone';
 import type { LightSource } from '../core/lighting';
 import { renderScale } from './graphics';
+import { options } from './options';
 
 export const COLORS = {
   bg: '#f6fbff',
@@ -2643,29 +2644,34 @@ function stripes(ctx: CanvasRenderingContext2D, a: string, b: string): CanvasPat
   return p;
 }
 
-/**
- * Run stopwatch, e.g. "60.789": big whole seconds, smaller milliseconds, a 3D extrusion with a
- * drop shadow in the theme's color, and diagonal stripes sliding through the letters.
- * The timer font isn't monospaced, so every digit is centered in a cell as wide as the widest
- * digit: the readout never shifts as the numbers change. Drawn at the top-right corner.
- */
-export function drawStopwatch(ctx: CanvasRenderingContext2D, map: MapData, ms: number, now: number): void {
-  const total = displayTime(ms);
-  const whole = String(Math.floor(total / 1000));
-  const frac = `.${String(total % 1000).padStart(3, '0')}`;
-  const base = timerColor(map);
-  const big = 54;
-  const small = 32;
-  const depth = 7;
-  const step = 0.9;
-  const k = ctx.getTransform().a; // device px per map unit, for shadow blur
-  const fontBig = `400 ${big}px ${FONT_TIMER}`;
-  const fontSmall = `400 ${small}px ${FONT_TIMER}`;
+/** Stopwatch layout (map units) */
+const SW_BIG = 54;
+const SW_SMALL = 32;
+const SW_DEPTH = 7;
+const SW_STEP = 0.9;
+/** Room around a glyph sprite for the extrusion, the shadow blur and its offset */
+const SW_PAD = 14;
 
+interface StopwatchMetrics { cellBig: number; cellSmall: number; dotW: number; fracDrop: number }
+let swMetrics: StopwatchMetrics | null = null;
+let swFontReady = false;
+/** Finished glyphs by character, size, tint, color, resolution and graphics level */
+const swGlyphs = new Map<string, HTMLCanvasElement>();
+
+/** Once the timer font has loaded, drop whatever was measured or drawn with a fallback font */
+function stopwatchFontReady(font: string): boolean {
+  if (!swFontReady && typeof document !== 'undefined' && document.fonts?.check(font)) {
+    swFontReady = true;
+    swMetrics = null;
+    swGlyphs.clear();
+  }
+  return swFontReady;
+}
+
+/** Fixed digit cells and baseline correction; measured once (the font never changes) */
+function stopwatchMetrics(ctx: CanvasRenderingContext2D, fontBig: string, fontSmall: string): StopwatchMetrics {
+  if (swMetrics) return swMetrics;
   ctx.save();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-
   // Fixed cells: widest digit for each size; the dot gets its own width
   const cellOf = (font: string) => {
     ctx.font = font;
@@ -2673,10 +2679,6 @@ export function drawStopwatch(ctx: CanvasRenderingContext2D, map: MapData, ms: n
     for (let d = 0; d <= 9; d++) w = Math.max(w, ctx.measureText(String(d)).width);
     return w;
   };
-  const cellBig = cellOf(fontBig);
-  const cellSmall = cellOf(fontSmall);
-  ctx.font = fontSmall;
-  const dotW = ctx.measureText('.').width;
   // Same font baseline isn't the same visual bottom: this font's digits dip below the baseline
   // in proportion to their size, so drop the small part by the difference to line up the bottoms.
   // Measured on "0" (a few digits like 3 and 9 sit a pixel off and shouldn't skew the alignment).
@@ -2684,56 +2686,95 @@ export function drawStopwatch(ctx: CanvasRenderingContext2D, map: MapData, ms: n
     ctx.font = font;
     return ctx.measureText('0').actualBoundingBoxDescent;
   };
-  const fracDrop = dip(fontBig) - dip(fontSmall);
-  const width = whole.length * cellBig + dotW + 3 * cellSmall;
-  const x0 = map.width - 22 - depth * step - width;
-  const y = 14 + big;
-
-  /** Each character at its fixed position; `paint` fills or strokes one glyph */
-  const glyphs = (dx: number, dy: number, paint: (ch: string, x: number, y: number, isFrac: boolean) => void) => {
-    let x = x0 + dx;
-    ctx.font = fontBig;
-    for (const ch of whole) {
-      paint(ch, x + cellBig / 2, y + dy, false);
-      x += cellBig;
-    }
-    ctx.font = fontSmall;
-    for (const ch of frac) {
-      const w = ch === '.' ? dotW : cellSmall;
-      paint(ch, x + w / 2, y + dy + fracDrop, true);
-      x += w;
-    }
-  };
-
-  // Extrusion: stacked copies down-right in a dark shade; the deepest one casts the soft shadow
-  const side = shade(base, -0.45);
-  for (let i = depth; i >= 1; i--) {
-    if (i === depth) {
-      ctx.shadowColor = 'rgba(20,30,50,0.38)';
-      ctx.shadowBlur = 8 * k;
-      ctx.shadowOffsetY = 3 * k;
-    }
-    ctx.fillStyle = i === depth ? shade(side, -0.2) : shade(side, -0.12 * (i / depth));
-    glyphs(i * step, i * step, (ch, x, yy) => ctx.fillText(ch, x, yy));
-    ctx.shadowColor = 'transparent';
-  }
-
-  // Face: seconds and milliseconds in slightly different tints, stripes sliding to the right
-  const fracBase = shade(base, 0.32);
-  const faceWhole = stripes(ctx, base, shade(base, 0.22));
-  const faceFrac = stripes(ctx, fracBase, shade(fracBase, 0.28));
-  const slide = ((now / 1000) * 18) % STRIPE_TILE;
-  const m = new DOMMatrix().translate(slide, 0).scale(1 / STRIPE_RES);
-  faceWhole?.setTransform(m);
-  faceFrac?.setTransform(m);
-  glyphs(0, 0, (ch, x, yy, isFrac) => {
-    ctx.fillStyle = isFrac ? (faceFrac ?? fracBase) : (faceWhole ?? base);
-    ctx.fillText(ch, x, yy);
-  });
-
-  // Thin light rim on the face for a crisp edge
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-  glyphs(0, 0, (ch, x, yy) => ctx.strokeText(ch, x, yy));
+  const m = { cellBig: cellOf(fontBig), cellSmall: cellOf(fontSmall), dotW: 0, fracDrop: dip(fontBig) - dip(fontSmall) };
+  ctx.font = fontSmall;
+  m.dotW = ctx.measureText('.').width;
   ctx.restore();
+  if (stopwatchFontReady(fontBig)) swMetrics = m;
+  return m;
+}
+
+/**
+ * One finished stopwatch glyph (extrusion, drop shadow, striped face and light rim) at device
+ * resolution `k`. Its alphabetic baseline sits SW_PAD + size below the top, the glyph centered in
+ * a `cell` wide box SW_PAD from the left.
+ */
+function stopwatchGlyph(ch: string, font: string, size: number, cell: number, face: string, stripe: string, side: string, k: number): HTMLCanvasElement | null {
+  const key = `${ch}|${size}|${face}|${side}|${k.toFixed(3)}|${options.graphics}`;
+  const hit = swGlyphs.get(key);
+  if (hit) return hit;
+  const w = cell + SW_DEPTH * SW_STEP + SW_PAD * 2;
+  const h = size * 1.3 + SW_DEPTH * SW_STEP + SW_PAD * 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.ceil(w * k));
+  canvas.height = Math.max(1, Math.ceil(h * k));
+  const g = canvas.getContext('2d');
+  if (!g) return null;
+  g.setTransform(k, 0, 0, k, 0, 0);
+  g.font = font;
+  g.textAlign = 'center';
+  g.textBaseline = 'alphabetic';
+  const x = SW_PAD + cell / 2;
+  const y = SW_PAD + size;
+  // Extrusion: stacked copies down-right in a dark shade; the deepest one casts the soft shadow
+  for (let i = SW_DEPTH; i >= 1; i--) {
+    if (i === SW_DEPTH) {
+      g.shadowColor = 'rgba(20,30,50,0.38)';
+      g.shadowBlur = 8 * k;
+      g.shadowOffsetY = 3 * k;
+    }
+    g.fillStyle = i === SW_DEPTH ? shade(side, -0.2) : shade(side, -0.12 * (i / SW_DEPTH));
+    g.fillText(ch, x + i * SW_STEP, y + i * SW_STEP);
+    g.shadowColor = 'transparent';
+  }
+  // Face: diagonal stripes (still: the sprite is drawn as is every frame)
+  const pattern = stripes(g, face, stripe);
+  pattern?.setTransform(new DOMMatrix().scale(1 / STRIPE_RES));
+  g.fillStyle = pattern ?? face;
+  g.fillText(ch, x, y);
+  // Thin light rim on the face for a crisp edge
+  g.lineWidth = 1;
+  g.strokeStyle = 'rgba(255,255,255,0.6)';
+  g.strokeText(ch, x, y);
+  if (stopwatchFontReady(font)) {
+    if (swGlyphs.size > 256) swGlyphs.clear(); // resolution or theme changed many times
+    swGlyphs.set(key, canvas);
+  }
+  return canvas;
+}
+
+/**
+ * Run stopwatch, e.g. "60.789": big whole seconds, smaller milliseconds, a 3D extrusion with a
+ * drop shadow in the theme's color, and diagonal stripes on the letters.
+ * The timer font isn't monospaced, so every digit is centered in a cell as wide as the widest
+ * digit: the readout never shifts as the numbers change. Drawn at the top-right corner.
+ * Each glyph is drawn once into a sprite and then only copied, so a frame costs a few image
+ * copies instead of dozens of text draws and a blurred shadow (cheap without a GPU too).
+ */
+export function drawStopwatch(ctx: CanvasRenderingContext2D, map: MapData, ms: number, _now: number): void {
+  const total = displayTime(ms);
+  const whole = String(Math.floor(total / 1000));
+  const frac = `.${String(total % 1000).padStart(3, '0')}`;
+  const base = timerColor(map);
+  const k = ctx.getTransform().a; // device px per map unit
+  const fontBig = `400 ${SW_BIG}px ${FONT_TIMER}`;
+  const fontSmall = `400 ${SW_SMALL}px ${FONT_TIMER}`;
+  const { cellBig, cellSmall, dotW, fracDrop } = stopwatchMetrics(ctx, fontBig, fontSmall);
+  const width = whole.length * cellBig + dotW + 3 * cellSmall;
+  const x0 = map.width - 22 - SW_DEPTH * SW_STEP - width;
+  const y = 14 + SW_BIG;
+  // Seconds and milliseconds in slightly different tints
+  const side = shade(base, -0.45);
+  const fracBase = shade(base, 0.32);
+  const wholeStripe = shade(base, 0.22);
+  const fracStripe = shade(fracBase, 0.28);
+
+  let x = x0;
+  const put = (ch: string, font: string, size: number, cell: number, face: string, stripe: string, baseline: number) => {
+    const img = stopwatchGlyph(ch, font, size, cell, face, stripe, side, k);
+    if (img) ctx.drawImage(img, x - SW_PAD, baseline - size - SW_PAD, img.width / k, img.height / k);
+    x += cell;
+  };
+  for (const ch of whole) put(ch, fontBig, SW_BIG, cellBig, base, wholeStripe, y);
+  for (const ch of frac) put(ch, fontSmall, SW_SMALL, ch === '.' ? dotW : cellSmall, fracBase, fracStripe, y + fracDrop);
 }
