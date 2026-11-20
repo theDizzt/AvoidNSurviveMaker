@@ -499,7 +499,7 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   drawGrid(f, map, COLORS.grid);
   const [layer, s] = offscreen(w, h);
   s.drawImage(floor, 0, 0);
-  drawWallMass(s, wallCanvas, theme, scale);
+  drawWallMass(s, wallCanvas, scale);
   if (!needsComposite(map, objects)) {
     for (const c of [floor, outside, wallPieces]) freeCanvas(c);
     return { layer, walls: wallCanvas, scale };
@@ -575,17 +575,42 @@ function sealSeams(g: CanvasRenderingContext2D, scale: number, path?: Path2D): v
   g.restore();
 }
 
-/** The wall mass onto the floor: a soft shadow, then the walls with a thin rim in the edge color */
-function drawWallMass(s: CanvasRenderingContext2D, walls: HTMLCanvasElement, theme: MapData['theme'], scale: number): void {
+/**
+ * The wall shadow: a flat silhouette of the wall mass in the shadow color, shifted down. No blur:
+ * a blur is the most expensive canvas operation, and on maps with moving walls this runs every
+ * frame, which stalls integrated graphics. The silhouette is made at half the layer's resolution
+ * (a quarter of the pixels) and scaled up; its edge lies under the walls or is a soft 1-2 px fade.
+ */
+const SHADOW_DOWNSCALE = 2;
+/** How far the shadow falls below the walls (map units) */
+const SHADOW_OFFSET = 4;
+let shadowScratch: [HTMLCanvasElement, CanvasRenderingContext2D] | null = null;
+
+/** The wall mass onto the floor: a flat shadow, then the walls */
+function drawWallMass(s: CanvasRenderingContext2D, walls: HTMLCanvasElement, scale: number): void {
+  const d = SHADOW_DOWNSCALE;
+  const sw = Math.max(1, Math.ceil(walls.width / d));
+  const sh = Math.max(1, Math.ceil(walls.height / d));
+  shadowScratch ??= offscreen(sw, sh);
+  const [shadow, g] = shadowScratch;
+  if (shadow.width < sw || shadow.height < sh) {
+    shadow.width = Math.max(shadow.width, sw);
+    shadow.height = Math.max(shadow.height, sh);
+  }
+  // Silhouette: the walls, recolored to the shadow color (their alpha kept)
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, shadow.width, shadow.height);
+  g.drawImage(walls, 0, 0, sw, sh);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = SHADOW;
+  g.fillRect(0, 0, sw, sh);
+  g.globalCompositeOperation = 'source-over';
+
   s.save();
   s.setTransform(1, 0, 0, 1, 0, 0);
-  s.shadowColor = SHADOW;
-  s.shadowBlur = 12 * scale;
-  s.shadowOffsetY = 4 * scale;
-  s.drawImage(walls, 0, 0);
-  s.shadowColor = theme ? theme.wall.edge : COLORS.wallEdge;
-  s.shadowBlur = 1.5 * scale;
-  s.shadowOffsetY = 0;
+  s.imageSmoothingEnabled = true;
+  s.drawImage(shadow, 0, 0, sw, sh, 0, SHADOW_OFFSET * scale, sw * d, sh * d);
+  // No rim around the walls: it was a blurred shadow in the edge color, the costliest part left
   s.drawImage(walls, 0, 0);
   s.restore();
 }
@@ -984,7 +1009,7 @@ export function drawMap(
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, dyn.composite.width, dyn.composite.height);
     c.drawImage(dyn.floor, 0, 0);
-    drawWallMass(c, dyn.frame, theme, scale);
+    drawWallMass(c, dyn.frame, scale);
     ctx.drawImage(dyn.composite, 0, 0, map.width, map.height);
   }
   // Animated floor / walls: drawn over the surfaces, masked by this frame's wall mass
@@ -2831,17 +2856,16 @@ function stopwatchGlyph(ch: string, font: string, size: number, cell: number, fa
  * Each glyph is drawn once into a sprite and then only copied, so a frame costs a few image
  * copies instead of dozens of text draws and a blurred shadow (cheap without a GPU too).
  */
-/** `digits`: 3 shows milliseconds (clear records), 2 hundredths (running timer, failed runs) */
-export function drawStopwatch(ctx: CanvasRenderingContext2D, map: MapData, ms: number, _now: number, digits: 2 | 3 = 3): void {
+export function drawStopwatch(ctx: CanvasRenderingContext2D, map: MapData, ms: number, _now: number): void {
   const total = displayTime(ms);
   const whole = String(Math.floor(total / 1000));
-  const frac = `.${String(total % 1000).padStart(3, '0').slice(0, digits)}`;
+  const frac = `.${String(total % 1000).padStart(3, '0')}`;
   const base = timerColor(map);
   const k = ctx.getTransform().a; // device px per map unit
   const fontBig = `400 ${SW_BIG}px ${FONT_TIMER}`;
   const fontSmall = `400 ${SW_SMALL}px ${FONT_TIMER}`;
   const { cellBig, cellSmall, dotW, fracDrop } = stopwatchMetrics(ctx, fontBig, fontSmall);
-  const width = whole.length * cellBig + dotW + digits * cellSmall;
+  const width = whole.length * cellBig + dotW + 3 * cellSmall;
   const x0 = map.width - 22 - SW_DEPTH * SW_STEP - width;
   const y = 14 + SW_BIG;
   // Seconds and milliseconds in slightly different tints

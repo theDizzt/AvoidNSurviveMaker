@@ -1148,18 +1148,11 @@ export function runReplay(map: MapData, replay: Replay, checkBudget: () => void 
 }
 
 /** ms → "12.345" (fractional milliseconds discarded, like saved records) */
-/**
- * Decimals shown for a time: 3 (1 ms) for clear records, 2 (10 ms) for running timers and failed
- * runs, where the last digit means nothing. Truncated, never rounded up.
- */
-export type TimeDigits = 2 | 3;
-
-export function formatTime(ms: number, digits: TimeDigits = 3): string {
-  const unit = digits === 3 ? 1 : 10;
-  return ((Math.floor(displayTime(ms) / unit) * unit) / 1000).toFixed(digits);
+export function formatTime(ms: number): string {
+  return (displayTime(ms) / 1000).toFixed(3);
 }
 
 /** ms → "12.345s": the one way a run time is shown, in every language */
-export function formatSeconds(ms: number, digits: TimeDigits = 3): string {
-  return `${formatTime(ms, digits)}s`;
+export function formatSeconds(ms: number): string {
+  return `${formatTime(ms)}s`;
 }

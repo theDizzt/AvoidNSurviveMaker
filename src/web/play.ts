@@ -595,8 +595,7 @@ export class PlayController {
     const elapsed = sim.status === 'ready' ? 0
       : sim.status === 'playing' ? now - this.t0
         : sim.status === 'cleared' ? recordTime(sim.endTime) : sim.endTime;
-    // Milliseconds only for a clear record; the running timer and failed runs show hundredths
-    drawStopwatch(ctx, map, elapsed, now, sim.status === 'cleared' ? 3 : 2);
+    drawStopwatch(ctx, map, elapsed, now);
 
     if (sim.status === 'playing') {
       if (sim.coinTotal) this.drawCoinCount(top);
@@ -663,7 +662,7 @@ export class PlayController {
   private updateText(now: number): void {
     const sim = this.sim;
     const state =
-      sim.status === 'playing' ? tr('play.statusPlaying', { time: formatSeconds(now - this.t0, 2) })
+      sim.status === 'playing' ? tr('play.statusPlaying', { time: formatSeconds(now - this.t0) })
         : sim.status === 'ready' ? tr('play.statusReady')
           : sim.status === 'cleared' ? tr('play.statusCleared', { time: formatSeconds(recordTime(sim.endTime)) })
             : tr('play.statusFailed');
