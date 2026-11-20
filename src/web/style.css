@@ -88,8 +88,8 @@
   --warn-soft: rgba(240, 180, 40, 0.14);
   --ok: #1b9a72;
 
-  --shadow: 0 12px 34px rgba(58, 96, 150, 0.14), 0 2px 6px rgba(58, 96, 150, 0.06);
-  --shadow-sm: 0 2px 8px rgba(58, 96, 150, 0.1);
+  --shadow: 0 4px 0 rgba(58, 96, 150, 0.14), 0 1px 0 rgba(58, 96, 150, 0.06);
+  --shadow-sm: 0 1px 0 rgba(58, 96, 150, 0.1);
   --radius: 14px;
   --glass: blur(14px) saturate(1.2);
   color-scheme: light;
@@ -185,7 +185,7 @@ button.primary {
   color: var(--accent-ink);
   border-color: transparent;
   font-weight: 700;
-  box-shadow: 0 6px 16px rgba(58, 159, 240, 0.28);
+  box-shadow: 0 2px 0 rgba(58, 159, 240, 0.28);
 }
 button.primary:hover:not(:disabled) { filter: brightness(1.05); border-color: transparent; }
 button.danger { color: var(--danger); }
@@ -258,7 +258,7 @@ input[type="color"] { width: 100%; height: 34px; padding: 3px 4px; cursor: point
   background: var(--gradient);
   color: #fff;
   border-color: transparent;
-  box-shadow: 0 4px 14px rgba(58, 159, 240, 0.25);
+  box-shadow: 0 1px 0 rgba(58, 159, 240, 0.25);
 }
 .pill-btn.ghost { background: rgba(255, 255, 255, 0.8); color: var(--text); border-color: var(--border); box-shadow: var(--shadow-sm); }
 
@@ -314,7 +314,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 /* The drawn cursor's own layer over the game canvas (play.ts drawCursorLayer) */
 .play-stage { position: relative; }
 .play-stage canvas.play-cursor { position: absolute; left: 0; top: 0; will-change: transform; pointer-events: none; box-shadow: none; border: 0; background: transparent; }
-.play-stage canvas { border-radius: 0; border: 0; box-shadow: 0 0 40px rgba(58, 96, 150, 0.18); }
+.play-stage canvas { border-radius: 0; border: 0; box-shadow: none; }
 /* Hidden in game (keyboard shortcuts only); bottom-left if shown again */
 .play-hud[hidden] { display: none; }
 .play-hud {
@@ -360,6 +360,13 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   transition: opacity 0.2s ease;
 }
 .play-back::before { content: '←'; margin-right: 6px; }
+/* No glass blur over the game canvas: it changes every frame, so the blur behind these would be
+   redone every frame too (a stall on integrated graphics when a run ends and they fade in) */
+.play-view .play-back, .play-view .play-debug, .play-view .play-hud {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(255, 255, 255, 0.92);
+}
 /* While a run is in progress: get out of the way (no clicks, no covering the map) */
 .play-view.running .play-hud,
 .play-view.running .play-back { opacity: 0; pointer-events: none; }
@@ -408,7 +415,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.35), rgba(220, 232, 246, 0.6));
 }
 .editor-stage { width: auto; }
-.editor-stage canvas { border-radius: 0; border: 0; box-shadow: 0 0 40px rgba(58, 96, 150, 0.18); }
+.editor-stage canvas { border-radius: 0; border: 0; box-shadow: none; }
 .editor-bar {
   position: absolute;
   top: 12px;
@@ -449,7 +456,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   z-index: 3;
   border-radius: 8px;
   border: 2px solid #fff;
-  box-shadow: 0 4px 18px rgba(20, 30, 50, 0.35);
+  box-shadow: 0 1px 0 rgba(20, 30, 50, 0.35);
   background: #fff;
   cursor: pointer;
   touch-action: none;
@@ -492,7 +499,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .editor-float.float-right { right: 12px; width: 300px; }
 /* The object panel starts just left of the level panel */
 .editor-float.float-object { right: 324px; width: 260px; }
-.editor-float.dragging { z-index: 3; box-shadow: 0 18px 44px rgba(58, 96, 150, 0.26); opacity: 0.96; }
+.editor-float.dragging { z-index: 3; box-shadow: 0 6px 0 rgba(58, 96, 150, 0.26); opacity: 0.96; }
 .float-head {
   display: flex;
   align-items: center;
@@ -778,7 +785,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   backdrop-filter: var(--glass);
   -webkit-backdrop-filter: var(--glass);
   border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 18px 48px rgba(58, 96, 150, 0.2);
+  box-shadow: 0 6px 0 rgba(58, 96, 150, 0.2);
 }
 .preload-dia .dprogress-svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: default; touch-action: auto; pointer-events: none; }
 .dprogress-svg .ddial-track, .dprogress-svg .ddial-fill { stroke-width: 6; }
@@ -830,7 +837,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   background: var(--gradient);
   color: var(--accent-ink);
   border-color: transparent;
-  box-shadow: 0 10px 24px rgba(58, 159, 240, 0.32);
+  box-shadow: 0 3px 0 rgba(58, 159, 240, 0.32);
 }
 .menu-btn.primary:hover:not(:disabled), .menu-btn.primary:focus-visible { border-color: transparent; filter: brightness(1.06); }
 .menu-btn.subtle { font-size: 15px; font-weight: 400; padding: 10px 16px; color: var(--muted); }
@@ -923,7 +930,7 @@ button[aria-pressed="true"] .ico .ico-bg { fill: var(--accent-soft); }
   border-radius: 10px;
   background: var(--surface-solid);
   border: 1px solid var(--border);
-  box-shadow: 0 12px 32px rgba(36, 52, 80, 0.22), 0 2px 6px rgba(36, 52, 80, 0.08);
+  box-shadow: 0 4px 0 rgba(36, 52, 80, 0.22), 0 1px 0 rgba(36, 52, 80, 0.08);
   font-size: 13px;
   color: var(--text);
   user-select: none;
@@ -963,7 +970,7 @@ button[aria-pressed="true"] .ico .ico-bg { fill: var(--accent-soft); }
   color: #fff;
   font: 500 12px/1.35 var(--font-main);
   letter-spacing: 0.01em;
-  box-shadow: 0 6px 18px rgba(36, 52, 80, 0.25);
+  box-shadow: 0 2px 0 rgba(36, 52, 80, 0.25);
   pointer-events: none;
   white-space: pre-line;
   animation: tip-in 0.12s ease-out;
@@ -1023,14 +1030,14 @@ button[aria-pressed="true"] .ico .ico-bg { fill: var(--accent-soft); }
   background: rgba(255, 255, 255, 0.78);
   backdrop-filter: var(--glass);
   -webkit-backdrop-filter: var(--glass);
-  box-shadow: 0 10px 26px rgba(58, 96, 150, 0.18);
+  box-shadow: 0 3px 0 rgba(58, 96, 150, 0.18);
   color: var(--text);
   transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
 }
 button.dtile { cursor: pointer; }
 button.dtile:hover:not(:disabled), button.dtile:focus-visible {
   transform: scale(1.05);
-  box-shadow: 0 16px 34px rgba(58, 96, 150, 0.28), 0 0 0 3px rgba(255, 255, 255, 0.9);
+  box-shadow: 0 5px 0 rgba(58, 96, 150, 0.28), 0 0 0 3px rgba(255, 255, 255, 0.9);
   z-index: 1;
   outline: none;
 }
@@ -1057,8 +1064,8 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 /* Start Game: green into blue, matching the logo's green N */
 /* Start Game and every Back button share this gradient */
 :root { --go-gradient: linear-gradient(135deg, #3ddc84 0%, #1fb37a 38%, #2a9fe0 72%, #3a7ff0 100%); }
-.dtile-primary { background: var(--go-gradient); color: #fff; border-color: transparent; box-shadow: 0 16px 40px rgba(34, 170, 140, 0.4); }
-.dtile-primary .dtile-in strong { font-size: 40px; text-shadow: 0 3px 12px rgba(10, 70, 80, 0.35); }
+.dtile-primary { background: var(--go-gradient); color: #fff; border-color: transparent; box-shadow: 0 5px 0 rgba(34, 170, 140, 0.4); }
+.dtile-primary .dtile-in strong { font-size: 40px; text-shadow: 0 1px 0 rgba(10, 70, 80, 0.35); }
 .dtile-primary .dtile-in small { font-size: 15px; opacity: 0.95; }
 .dtile-deco { background: rgba(255, 255, 255, 0.35); box-shadow: none; }
 /* Main-menu account tile: Sign In / Sign Out */
@@ -1078,7 +1085,7 @@ button.dtile:disabled { cursor: not-allowed; opacity: 1; }
 a.dtile { display: block; text-decoration: none; color: var(--text); }
 a.dtile:hover, a.dtile:focus-visible {
   transform: scale(1.05);
-  box-shadow: 0 16px 34px rgba(58, 96, 150, 0.28), 0 0 0 3px rgba(255, 255, 255, 0.9);
+  box-shadow: 0 5px 0 rgba(58, 96, 150, 0.28), 0 0 0 3px rgba(255, 255, 255, 0.9);
   z-index: 1;
   outline: none;
 }
@@ -1107,15 +1114,15 @@ a.dtile:hover, a.dtile:focus-visible {
   transform: rotate(45deg);
   background: var(--go-gradient);
   color: #fff;
-  box-shadow: 0 12px 30px rgba(34, 170, 140, 0.4);
+  box-shadow: 0 4px 0 rgba(34, 170, 140, 0.4);
   cursor: pointer;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .dback .dtile-in { padding: 0; }
-.dback .dtile-in strong { font-family: var(--font-title); font-size: 20px; text-shadow: 0 2px 8px rgba(10, 70, 80, 0.35); }
+.dback .dtile-in strong { font-family: var(--font-title); font-size: 20px; text-shadow: 0 1px 0 rgba(10, 70, 80, 0.35); }
 .dback:hover, .dback:focus-visible {
   transform: rotate(45deg) scale(1.08);
-  box-shadow: 0 16px 36px rgba(34, 170, 140, 0.5), 0 0 0 3px rgba(255, 255, 255, 0.9);
+  box-shadow: 0 5px 0 rgba(34, 170, 140, 0.5), 0 0 0 3px rgba(255, 255, 255, 0.9);
   outline: none;
 }
 .menu-buttons .dback, .dback-center { align-self: center; }
@@ -1134,7 +1141,7 @@ a.dtile:hover, a.dtile:focus-visible {
 
 /* World tiles */
 .dtheme { color: #fff; border-color: rgba(255, 255, 255, 0.5); }
-.dtheme .dtile-in { text-shadow: 0 2px 8px rgba(20, 30, 60, 0.35); }
+.dtheme .dtile-in { text-shadow: 0 1px 0 rgba(20, 30, 60, 0.35); }
 .dtheme-no { font-family: var(--font-title); font-size: 13px; opacity: 0.85; }
 .dtheme-name { font-size: 19px !important; }
 .dtheme-tag { font-size: 11px !important; max-width: 140px; }
@@ -1196,7 +1203,7 @@ a.dtile:hover, a.dtile:focus-visible {
   background: color-mix(in srgb, var(--th-surface) 88%, transparent);
   color: var(--th-text);
   border-color: color-mix(in srgb, var(--th-border) 55%, transparent);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28);
 }
 .th-designed .dside-chapter { color: var(--th-accent); }
 .th-designed .dside-desc, .th-designed .dboard-name, .th-designed .dboard-time { color: var(--th-text); }
@@ -1218,15 +1225,15 @@ a.dtile:hover, a.dtile:focus-visible {
 .dlevel { position: absolute; transform: rotate(45deg); border-radius: 14px; }
 button.dlevel:hover:not(:disabled), button.dlevel:focus-visible { transform: rotate(45deg) scale(1.07); }
 .dlevel.cleared { background: linear-gradient(135deg, var(--c1), var(--c2)); color: #fff; }
-.dlevel.cleared .dtile-in { text-shadow: 0 1px 6px rgba(20, 30, 60, 0.35); }
+.dlevel.cleared .dtile-in { text-shadow: 0 1px 0 rgba(20, 30, 60, 0.35); }
 .dlevel.soon { background: rgba(255, 255, 255, 0.4); color: var(--muted); box-shadow: none; }
 .dlevel-no { font-size: 24px !important; font-family: var(--level-font, var(--font-title)) !important; }
 .dlevel-total { font-size: 24px !important; }
 /* Level select extras under the levels: total stars and Back */
 .dlevel-stars { background: linear-gradient(135deg, #fff4c4, #ffd25e); }
 .dlevel-stars .dtotal-star { font-size: 18px; }
-.dlevel-back { background: var(--go-gradient); color: #fff; border-color: transparent; box-shadow: 0 12px 30px rgba(34, 170, 140, 0.4); }
-.dlevel-back strong { font-size: 18px !important; text-shadow: 0 2px 8px rgba(10, 70, 80, 0.35); }
+.dlevel-back { background: var(--go-gradient); color: #fff; border-color: transparent; box-shadow: 0 4px 0 rgba(34, 170, 140, 0.4); }
+.dlevel-back strong { font-size: 18px !important; text-shadow: 0 1px 0 rgba(10, 70, 80, 0.35); }
 /* Themes with a designed level select (info.screens.select): its button and Back colors */
 .lattice.lv-designed .dlevel:not(.dlevel-stars):not(.dlevel-back) {
   background: var(--lv-fill); color: var(--lv-number);
@@ -1236,7 +1243,7 @@ button.dlevel:hover:not(:disabled), button.dlevel:focus-visible { transform: rot
    :not(.dlevel-stars) keeps this as specific as the base rule above so it wins. */
 .lattice.lv-designed .dlevel.alt:not(.dlevel-stars) { background: var(--lv-fill2); }
 .lattice.lv-designed .dlevel .dtile-in { text-shadow: none; }
-.lattice.lv-designed .dlevel-no { text-shadow: 0 0 10px var(--lv-glow, transparent); }
+.lattice.lv-designed .dlevel-no { text-shadow: 0 0 0 var(--lv-glow, transparent); }
 .lattice.lv-designed .dlevel.soon { opacity: 0.45; }
 .lattice.bk-designed .dlevel-back {
   background: var(--bk-fill, var(--go-gradient)); color: var(--bk-color, #fff);
@@ -1255,7 +1262,7 @@ button.dlevel:hover:not(:disabled), button.dlevel:focus-visible { transform: rot
 .dhead-right { display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 .dworld { position: absolute; transform: rotate(45deg); border-radius: 14px; color: #fff; border: 2px solid rgba(255, 255, 255, 0.85); }
 button.dworld:hover:not(:disabled), button.dworld:focus-visible { transform: rotate(45deg) scale(1.07); }
-.dworld .dtile-in { gap: 2px; text-shadow: 0 2px 8px rgba(20, 30, 60, 0.55); }
+.dworld .dtile-in { gap: 2px; text-shadow: 0 1px 0 rgba(20, 30, 60, 0.55); }
 .dworld-no { font-family: var(--font-title); font-size: 12px; opacity: 0.9; }
 .dworld-name { font-size: 15px !important; line-height: 1.1; }
 .dworld-tag { font-size: 11px !important; }
@@ -1504,7 +1511,7 @@ button.se-back:hover, button.se-start:hover, button.se-back:focus-visible, butto
 .dgrid-panel .dtile-in small { font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
 label.dtile { cursor: pointer; }
 label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within {
-  box-shadow: 0 16px 34px rgba(58, 96, 150, 0.28), 0 0 0 3px rgba(255, 255, 255, 0.9);
+  box-shadow: 0 5px 0 rgba(58, 96, 150, 0.28), 0 0 0 3px rgba(255, 255, 255, 0.9);
   z-index: 1;
 }
 .dtile-back .dtile-in strong { font-size: 26px !important; }
@@ -1527,7 +1534,7 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 .dpill::before {
   content: ''; position: absolute; z-index: -1; inset: calc(var(--size) * 0.1464 + 1px);
   transform: rotate(45deg); border-radius: 6px;
-  background: #fff; border: 1px solid var(--border); box-shadow: 0 3px 8px rgba(58, 96, 150, 0.16);
+  background: #fff; border: 1px solid var(--border); box-shadow: 0 1px 0 rgba(58, 96, 150, 0.16);
   transition: background 0.12s, border-color 0.12s, transform 0.12s;
 }
 .dpill:hover:not(:disabled)::before, .dpill-file:not(:has(input:disabled)):hover::before {
@@ -1574,7 +1581,7 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 .dgraphics-value { white-space: nowrap; }
 .dgraphics:is([data-level="high"], [data-level="max"]) { background: var(--gradient); color: #fff; border-color: transparent; }
 .dgraphics:is([data-level="high"], [data-level="max"]) .dgraphics-value { color: #fff; }
-.dgraphics:is([data-level="high"], [data-level="max"]) .dtile-in { text-shadow: 0 1px 6px rgba(20, 30, 60, 0.3); }
+.dgraphics:is([data-level="high"], [data-level="max"]) .dtile-in { text-shadow: 0 1px 0 rgba(20, 30, 60, 0.3); }
 
 /* Language picker */
 .dlanguage .dtile-in { gap: 4px; }
@@ -1589,7 +1596,7 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 .dtoggle input[type="checkbox"]:checked { background: #fff; border-color: #fff; box-shadow: inset 0 0 0 4px #3a9ff0; }
 .dtoggle input[type="checkbox"]:focus-visible { outline: 2px solid #326bc0; outline-offset: 4px; }
 .dtoggle:has(input:checked) { background: var(--gradient); color: #fff; border-color: transparent; }
-.dtoggle:has(input:checked) .dtile-in { text-shadow: 0 1px 6px rgba(20, 30, 60, 0.3); }
+.dtoggle:has(input:checked) .dtile-in { text-shadow: 0 1px 0 rgba(20, 30, 60, 0.3); }
 
 /* Stats tiles */
 .stats-message { min-height: 1.3em; text-align: center; }
@@ -1650,8 +1657,8 @@ body:has(#play-view.running) .toast { visibility: hidden; }
 .cz-picker .cz-name { font-size: 14px !important; line-height: 1.2; overflow-wrap: anywhere; }
 .cz-step { --size: 40px; font-size: 17px; font-weight: 700; }
 .cz-slot .dtile-in { gap: 5px; }
-.cz-slot[aria-pressed="true"] { box-shadow: 0 16px 34px rgba(58, 96, 150, 0.28), 0 0 0 4px var(--accent); }
-.cz-chip { width: 40px; height: 40px; transform: rotate(45deg); border-radius: 6px; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(36, 52, 80, 0.3); }
+.cz-slot[aria-pressed="true"] { box-shadow: 0 5px 0 rgba(58, 96, 150, 0.28), 0 0 0 4px var(--accent); }
+.cz-chip { width: 40px; height: 40px; transform: rotate(45deg); border-radius: 6px; border: 2px solid #fff; box-shadow: 0 1px 0 rgba(36, 52, 80, 0.3); }
 .cz-hex { font-variant-numeric: tabular-nums; }
 /* The palette sits in the turned tile's own frame: rows and columns run along the diamond's edges */
 .cz-palette-tile { display: grid; place-items: center; padding: 22px; }
@@ -1661,7 +1668,7 @@ body:has(#play-view.running) .toast { visibility: hidden; }
 .cz-swatch[aria-checked="true"] { outline: 3px solid var(--text); outline-offset: 1px; box-shadow: 0 0 0 1px #fff inset; z-index: 1; }
 .cz-swatch:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
 .dia-flat .cz-palette-tile { aspect-ratio: 1; max-width: 360px; width: 100%; justify-self: center; min-height: 0; }
-.ach-tile.is-selected { box-shadow: 0 16px 34px rgba(58, 96, 150, 0.28), 0 0 0 4px var(--accent); z-index: 1; }
+.ach-tile.is-selected { box-shadow: 0 5px 0 rgba(58, 96, 150, 0.28), 0 0 0 4px var(--accent); z-index: 1; }
 
 /* Skin list: every pointer or trail skin as a small diamond grid over the screen */
 .cz-overlay { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; overflow: hidden; background: rgba(22, 32, 52, 0.62); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
@@ -1671,11 +1678,11 @@ body:has(#play-view.running) .toast { visibility: hidden; }
 .dpage {
   flex: none; width: 58px; height: 58px; margin: 12px; padding: 0; border-radius: 12px; transform: rotate(45deg);
   display: grid; place-items: center; border: 1px solid rgba(255, 255, 255, 0.8);
-  background: rgba(255, 255, 255, 0.9); box-shadow: 0 10px 26px rgba(36, 52, 80, 0.3); cursor: pointer;
+  background: rgba(255, 255, 255, 0.9); box-shadow: 0 3px 0 rgba(36, 52, 80, 0.3); cursor: pointer;
   transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
 }
 .dpage span { transform: rotate(-45deg); font-size: 28px; font-weight: 700; line-height: 1; color: var(--text); }
-.dpage:hover:not(:disabled), .dpage:focus-visible { transform: rotate(45deg) scale(1.08); box-shadow: 0 14px 32px rgba(36, 52, 80, 0.35), 0 0 0 3px var(--accent); outline: none; }
+.dpage:hover:not(:disabled), .dpage:focus-visible { transform: rotate(45deg) scale(1.08); box-shadow: 0 5px 0 rgba(36, 52, 80, 0.35), 0 0 0 3px var(--accent); outline: none; }
 .dpage:disabled { opacity: 0.35; cursor: default; }
 .cz-page-label { margin: 0; color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 1px 6px rgba(20, 30, 50, 0.6); }
 .cz-list .dtile-deco { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.3); backdrop-filter: none; -webkit-backdrop-filter: none; }
@@ -1683,7 +1690,7 @@ body:has(#play-view.running) .toast { visibility: hidden; }
 .cz-overlay-head { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .cz-overlay-head h3 { margin: 0; font-family: var(--font-title); font-size: 28px; color: #fff; text-shadow: 0 2px 10px rgba(20, 30, 50, 0.55); }
 /* Close: a small diamond like the other menu buttons; the ✕ stays upright */
-.cz-overlay-close { width: 38px; height: 38px; margin: 8px; padding: 0; border-radius: 9px; background: rgba(255, 255, 255, 0.92); box-shadow: 0 6px 16px rgba(36, 52, 80, 0.3); transform: rotate(45deg); display: grid; place-items: center; transition: transform 0.15s, border-color 0.15s; }
+.cz-overlay-close { width: 38px; height: 38px; margin: 8px; padding: 0; border-radius: 9px; background: rgba(255, 255, 255, 0.92); box-shadow: 0 2px 0 rgba(36, 52, 80, 0.3); transform: rotate(45deg); display: grid; place-items: center; transition: transform 0.15s, border-color 0.15s; }
 .cz-overlay-close span { transform: rotate(-45deg); line-height: 1; }
 .cz-overlay-close:hover, .cz-overlay-close:focus-visible { transform: rotate(45deg) scale(1.1); border-color: var(--accent); }
 .cz-list { --cell: 120px; --gap: 10px; }
@@ -1692,7 +1699,7 @@ body:has(#play-view.running) .toast { visibility: hidden; }
 .cz-list-item .cz-num { font-weight: 700; color: var(--muted); }
 /* No card behind the list: solid tiles so the screen underneath doesn't show through */
 .cz-list-item { background: #fff; backdrop-filter: none; -webkit-backdrop-filter: none; }
-.cz-list-item[aria-pressed="true"] { background: #e6f2ff; box-shadow: 0 16px 34px rgba(20, 40, 80, 0.35), 0 0 0 4px var(--accent); }
+.cz-list-item[aria-pressed="true"] { background: #e6f2ff; box-shadow: 0 5px 0 rgba(20, 40, 80, 0.35), 0 0 0 4px var(--accent); }
 .cz-list-item[aria-pressed="true"] .dtile-in strong { color: #1d63b8; }
 .cz-list-item.is-locked { background: #c9ccd2; border-color: rgba(255, 255, 255, 0.45); cursor: not-allowed; box-shadow: none; }
 button.cz-list-item.is-locked:hover, button.cz-list-item.is-locked:focus-visible { transform: none; box-shadow: none; filter: none; }
@@ -1703,7 +1710,7 @@ button.cz-list-item.is-locked:hover, button.cz-list-item.is-locked:focus-visible
 
 /* Page buttons beside the achievements grid */
 .dpage-row { display: flex; align-items: center; justify-content: center; gap: 28px; max-width: 100%; }
-.dpage-row .dpage { background: rgba(255, 255, 255, 0.85); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass); box-shadow: 0 10px 26px rgba(58, 96, 150, 0.22); }
+.dpage-row .dpage { background: rgba(255, 255, 255, 0.85); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass); box-shadow: 0 3px 0 rgba(58, 96, 150, 0.22); }
 #achievements-page { margin: 0; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
 /* Achievement progress: the loading screen's diamond track, open at the bottom corner, with the count in the gap */
 .ach-tile .dprogress-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; cursor: inherit; }
@@ -1730,13 +1737,13 @@ button.cz-list-item.is-locked:hover, button.cz-list-item.is-locked:focus-visible
   position: relative; flex: none; width: 76px; height: 76px; margin: 14px; padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 14px; overflow: hidden; transform: rotate(45deg);
   background: rgba(255, 255, 255, 0.85); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
-  box-shadow: 0 10px 26px rgba(58, 96, 150, 0.2); color: var(--text); cursor: pointer;
+  box-shadow: 0 3px 0 rgba(58, 96, 150, 0.2); color: var(--text); cursor: pointer;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .dsmall .dtile-in { padding: 0; gap: 1px; }
 .dsmall .dtile-in strong { font-size: 13px; }
 .dsmall .dstat-label { font-size: 9px !important; }
-.dsmall:hover, .dsmall:focus-visible { transform: rotate(45deg) scale(1.08); box-shadow: 0 14px 30px rgba(58, 96, 150, 0.3), 0 0 0 3px rgba(255, 255, 255, 0.9); outline: none; }
+.dsmall:hover, .dsmall:focus-visible { transform: rotate(45deg) scale(1.08); box-shadow: 0 5px 0 rgba(58, 96, 150, 0.3), 0 0 0 3px rgba(255, 255, 255, 0.9); outline: none; }
 /* "Mark new as seen": a small pill in the summary tile, only while something is new */
 .ach-seen { margin-top: 6px; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #fff; border: 1px solid rgba(182, 138, 38, 0.5); color: #8a6410; cursor: pointer; }
 .ach-seen:hover, .ach-seen:focus-visible { background: #fff8dc; outline: none; box-shadow: 0 0 0 2px #b68a26; }
@@ -1842,12 +1849,12 @@ button.cz-list-item.is-locked:hover, button.cz-list-item.is-locked:focus-visible
 .te-fx-row .cp-swatch { width: 52px; flex: none; }
 .cp-pop {
   position: fixed; z-index: 100; width: 232px; padding: 10px; display: flex; flex-direction: column; gap: 9px;
-  border-radius: 14px; background: var(--surface-solid); border: 1px solid var(--border); box-shadow: 0 16px 40px rgba(36, 52, 80, 0.25);
+  border-radius: 14px; background: var(--surface-solid); border: 1px solid var(--border); box-shadow: 0 5px 0 rgba(36, 52, 80, 0.25);
 }
 .cp-sv { position: relative; height: 140px; border-radius: 8px; cursor: crosshair; touch-action: none; }
 .cp-thumb, .cp-bar-thumb {
   position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
-  border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.3); pointer-events: none;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(0, 0, 0, 0.3); pointer-events: none;
 }
 .cp-bar { position: relative; height: 12px; border-radius: 999px; cursor: pointer; touch-action: none; }
 .cp-bar-thumb { top: 50%; background: #fff; }

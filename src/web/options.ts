@@ -31,7 +31,7 @@ const VOLUME_KEYS: readonly VolumeKey[] = ['masterVolume', 'musicVolume', 'effec
 
 export const DEFAULT_OPTIONS: Readonly<Options> = {
   showDebug: false,
-  masterVolume: 80,
+  masterVolume: 25,
   musicVolume: 60,
   effectsVolume: 80,
   pollingRate: 0,

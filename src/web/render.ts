@@ -344,7 +344,6 @@ interface StaticLayer {
   /** Secret-wall overlay at exactly the same resolution as the wall mass. */
   secret?: HTMLCanvasElement;
   secretReady?: boolean;
-  compositeState?: number[];
   /** Where the static walls are, for grinder dust (built on first use) */
   mask?: WallMask;
 }
@@ -361,6 +360,12 @@ interface DynamicLayers {
   frame: HTMLCanvasElement;
   /** Scratch canvas: floor + per-frame wall mass, drawn onto the map in one go */
   composite: HTMLCanvasElement;
+  /** `frame` and `composite` hold a whole picture (later frames only redo what changed) */
+  valid: boolean;
+  /** Whether that picture had the secret walls covering */
+  conceal: boolean;
+  /** Per object taking part: its pose (or door opening / reveal) and area when last composed */
+  pieces: Map<number, { key: string; box: Bounds }>;
 }
 
 /** A door drawn as sliding panels (part of the wall mass) */
@@ -504,7 +509,7 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
     for (const c of [floor, outside, wallPieces]) freeCanvas(c);
     return { layer, walls: wallCanvas, scale };
   }
-  return { layer, walls: wallCanvas, scale, dyn: { floor, outside, wallPieces, frame: offscreen(w, h)[0], composite: offscreen(w, h)[0] } };
+  return { layer, walls: wallCanvas, scale, dyn: { floor, outside, wallPieces, frame: offscreen(w, h)[0], composite: offscreen(w, h)[0], valid: false, conceal: false, pieces: new Map() } };
 }
 
 /** 0 → 1 → 0 once per cycle (`speed` cycles per second) */
@@ -587,31 +592,47 @@ const SHADOW_OFFSET = 4;
 let shadowScratch: [HTMLCanvasElement, CanvasRenderingContext2D] | null = null;
 
 /** The wall mass onto the floor: a flat shadow, then the walls */
-function drawWallMass(s: CanvasRenderingContext2D, walls: HTMLCanvasElement, scale: number): void {
+function drawWallMass(s: CanvasRenderingContext2D, walls: HTMLCanvasElement, scale: number, area?: PixelRect): void {
   const d = SHADOW_DOWNSCALE;
-  const sw = Math.max(1, Math.ceil(walls.width / d));
-  const sh = Math.max(1, Math.ceil(walls.height / d));
+  const W = walls.width;
+  const H = walls.height;
+  const sw = Math.max(1, Math.ceil(W / d));
+  const sh = Math.max(1, Math.ceil(H / d));
   shadowScratch ??= offscreen(sw, sh);
   const [shadow, g] = shadowScratch;
   if (shadow.width < sw || shadow.height < sh) {
     shadow.width = Math.max(shadow.width, sw);
     shadow.height = Math.max(shadow.height, sh);
   }
-  // Silhouette: the walls, recolored to the shadow color (their alpha kept)
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.clearRect(0, 0, shadow.width, shadow.height);
-  g.drawImage(walls, 0, 0, sw, sh);
-  g.globalCompositeOperation = 'source-in';
-  g.fillStyle = SHADOW;
-  g.fillRect(0, 0, sw, sh);
-  g.globalCompositeOperation = 'source-over';
+  const off = SHADOW_OFFSET * scale;
+  // The walls whose shadow falls in `area`: the same columns, from a shadow's offset higher up
+  // (a little wider for the smoothing of the scaled-up copy), aligned to the scratch's pixels
+  const r = area ?? { x: 0, y: 0, w: W, h: H };
+  const x0 = Math.max(0, Math.floor((r.x - 2 * d) / d) * d);
+  const y0 = Math.max(0, Math.floor((r.y - off - 2 * d) / d) * d);
+  const x1 = Math.min(W, r.x + r.w + 2 * d);
+  const y1 = Math.min(H, r.y + r.h + 2 * d);
+  if (x1 > x0 && y1 > y0) {
+    const gx = x0 / d;
+    const gy = y0 / d;
+    const gw = (x1 - x0) / d;
+    const gh = (y1 - y0) / d;
+    // Silhouette: the walls, recolored to the shadow color (their alpha kept)
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(gx - 1, gy - 1, gw + 2, gh + 2);
+    g.drawImage(walls, x0, y0, x1 - x0, y1 - y0, gx, gy, gw, gh);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = SHADOW;
+    g.fillRect(gx, gy, gw, gh);
+    g.globalCompositeOperation = 'source-over';
+  }
 
   s.save();
   s.setTransform(1, 0, 0, 1, 0, 0);
   s.imageSmoothingEnabled = true;
-  s.drawImage(shadow, 0, 0, sw, sh, 0, SHADOW_OFFSET * scale, sw * d, sh * d);
+  if (x1 > x0 && y1 > y0) s.drawImage(shadow, x0 / d, y0 / d, (x1 - x0) / d, (y1 - y0) / d, x0, y0 + off, x1 - x0, y1 - y0);
   // No rim around the walls: it was a blurred shadow in the edge color, the costliest part left
-  s.drawImage(walls, 0, 0);
+  s.drawImage(walls, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
   s.restore();
 }
 
@@ -647,6 +668,76 @@ function tracePosed(g: Path2D, o: CompiledObject, t: number, hole = false): void
     e: o.px + tf.dx - tf.cos * o.px + tf.sin * o.py,
     f: o.py + tf.dy - tf.sin * o.px - tf.cos * o.py,
   });
+}
+
+/** A rectangle in a layer's pixels */
+interface PixelRect { x: number; y: number; w: number; h: number }
+
+/** Map units around a changed piece that are composed again: antialiasing and seam sealing */
+const DIRTY_PAD = 4;
+
+/** Bounds of an object's outline in this pose (world coordinates) */
+function posedBounds(o: CompiledObject, tf: Transform): Bounds {
+  const e = o.px + tf.dx - tf.cos * o.px + tf.sin * o.py;
+  const f = o.py + tf.dy - tf.sin * o.px - tf.cos * o.py;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const p = o.poly;
+  for (let k = 0; k < p.length; k += 2) {
+    const x = tf.cos * p[k] - tf.sin * p[k + 1] + e;
+    const y = tf.sin * p[k] + tf.cos * p[k + 1] + f;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+/** Everywhere a door's panels can be, open or closed, tilted or not */
+function doorReach(m: MapObject): Bounds {
+  const s = m.shape as { x: number; y: number; w: number; h: number };
+  // Panels slide out by half the door's length on each side; any tilt stays within this radius
+  const r = Math.hypot(s.w, s.h);
+  const cx = s.x + s.w / 2;
+  const cy = s.y + s.h / 2;
+  return { minX: cx - r, minY: cy - r, maxX: cx + r, maxY: cy + r };
+}
+
+/** Map-unit bounds → the layer's pixels, padded (more below, for the shadow) and clamped */
+function toPixels(b: Bounds, scale: number, full: PixelRect): PixelRect {
+  const x0 = Math.max(0, Math.floor((b.minX - DIRTY_PAD) * scale));
+  const y0 = Math.max(0, Math.floor((b.minY - DIRTY_PAD) * scale));
+  const x1 = Math.min(full.w, Math.ceil((b.maxX + DIRTY_PAD) * scale));
+  const y1 = Math.min(full.h, Math.ceil((b.maxY + DIRTY_PAD + SHADOW_OFFSET) * scale));
+  return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
+}
+
+/**
+ * Merge overlapping rectangles (each pixel is then composed once). Past a few rectangles, or once
+ * they cover most of the layer, one rectangle for the whole layer is cheaper.
+ */
+function mergeRects(list: PixelRect[], full: PixelRect): PixelRect[] {
+  const rects = list.filter((r) => r.w > 0 && r.h > 0);
+  for (let merged = true; merged;) {
+    merged = false;
+    for (let i = 0; i < rects.length && !merged; i++) {
+      for (let j = i + 1; j < rects.length; j++) {
+        const a = rects[i];
+        const b = rects[j];
+        if (a.x <= b.x + b.w && b.x <= a.x + a.w && a.y <= b.y + b.h && b.y <= a.y + a.h) {
+          const x = Math.min(a.x, b.x);
+          const y = Math.min(a.y, b.y);
+          rects[i] = { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+          rects.splice(j, 1);
+          merged = true;
+          break;
+        }
+      }
+    }
+  }
+  const area = rects.reduce((n, r) => n + r.w * r.h, 0);
+  if (rects.length > 8 || area > full.w * full.h * 0.6) return rects.length ? [full] : [];
+  return rects;
 }
 
 const layerCache = new WeakMap<readonly CompiledObject[], { key: string; layer: StaticLayer }>();
@@ -840,6 +931,12 @@ export function drawDarkAreas(
 const darkLayers = new WeakMap<CanvasRenderingContext2D, HTMLCanvasElement>();
 
 /**
+ * Darkness is drawn at this fraction of the canvas's resolution and scaled up: lights only fade
+ * softly, so the smaller layer looks the same while filling a sixteenth of the pixels each frame.
+ */
+const DARK_DOWNSCALE = 4;
+
+/**
  * Global darkness (#42): black over the whole map with soft lights cut out (map units).
  * `alpha` < 1 previews it in the editor.
  */
@@ -849,8 +946,9 @@ export function drawGlobalDark(
   const opacity = Math.max(0, Math.min(100, map.darkness?.intensity ?? 100)) / 100;
   if (opacity === 0 || alpha <= 0) return;
   const m = ctx.getTransform();
-  const cw = ctx.canvas.width;
-  const ch = ctx.canvas.height;
+  const d = DARK_DOWNSCALE;
+  const cw = Math.max(1, Math.ceil(ctx.canvas.width / d));
+  const ch = Math.max(1, Math.ceil(ctx.canvas.height / d));
   let layer = darkLayers.get(ctx);
   if (!layer) darkLayers.set(ctx, (layer = document.createElement('canvas')));
   if (layer.width !== cw || layer.height !== ch) {
@@ -860,7 +958,7 @@ export function drawGlobalDark(
   const g = layer.getContext('2d')!;
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, cw, ch);
-  g.setTransform(m);
+  g.setTransform(m.a / d, m.b / d, m.c / d, m.d / d, m.e / d, m.f / d);
   g.globalCompositeOperation = 'source-over';
   g.fillStyle = '#000';
   g.fillRect(0, 0, map.width, map.height);
@@ -883,7 +981,8 @@ export function drawGlobalDark(
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = alpha * opacity;
-  ctx.drawImage(layer, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(layer, 0, 0, cw * d, ch * d);
   ctx.restore();
 }
 
@@ -913,107 +1012,147 @@ export function drawMap(
   const isSaw = (i: number) => !!map.objects[i]?.saw;
   const moving = objects.some((o, i) => movesWallMass(map, o, i) || isDoor(map.objects[i]));
   const dyn = st.dyn;
-  let reuseComposite = false;
-  if (dyn && (moving || conceal)) {
-    const previous = st.compositeState;
-    const values = previous ?? [];
-    let changed = !previous;
-    let at = 0;
-    const check = (value: number) => {
-      if (values[at] !== value) changed = true;
-      values[at++] = value;
-    };
-    check(conceal ? 1 : 0);
-    check(conceal && opts.secretCursor ? 1 : 0);
-    check(conceal ? opts.secretCursor?.x ?? 0 : 0);
-    check(conceal ? opts.secretCursor?.y ?? 0 : 0);
-    objects.forEach((o, i) => {
-      const door = isDoor(map.objects[i]);
-      if (!(o.dynamic && (o.role === 'path' || (o.role === 'wall' && !isSaw(i))))
-        && !door && !(conceal && o.role === 'secret')) return;
-      check(i);
-      check(shown(i) ? 1 : 0);
-      check(shown(i) && (o.motion || o.rotation) ? timeOf(i) : 0);
-      check(door && shown(i) ? doorOpenAt(map.objects[i], i) : 0);
-    });
-    if (values.length !== at) changed = true;
-    values.length = at;
-    st.compositeState = values;
-    reuseComposite = !changed;
-  }
   if (!dyn || (!moving && !conceal)) {
     ctx.drawImage(st.layer, 0, 0, map.width, map.height);
-  } else if (reuseComposite) {
-    st.secretReady = conceal;
-    ctx.drawImage(dyn.composite, 0, 0, map.width, map.height);
   } else {
     const scale = st.scale;
-    const g = dyn.frame.getContext('2d')!;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, dyn.frame.width, dyn.frame.height);
-    // Moving paths open up the area outside the floor; only wall-piercing ones cut the wall pieces
-    const cut = (pierce: boolean) => {
-      g.setTransform(scale, 0, 0, scale, 0, 0);
-      const path = new Path2D();
-      let any = false;
+    const full: PixelRect = { x: 0, y: 0, w: dyn.frame.width, h: dyn.frame.height };
+    // Only the parts that changed are composed again: where each moving piece, door or (while
+    // concealing) secret wall was last frame and is now. The rest of the composite is still right
+    const cursor = conceal ? opts.secretCursor ?? null : null;
+    const concealKey = conceal ? (cursor ? `${cursor.x},${cursor.y}` : 'hidden') : '';
+    const dirty: PixelRect[] = [];
+    const redrawAll = !dyn.valid || dyn.conceal !== conceal;
+    const seen = new Set<number>();
+    objects.forEach((o, i) => {
+      const m = map.objects[i];
+      const door = isDoor(m);
+      const secret = conceal && o.role === 'secret';
+      if (!movesWallMass(map, o, i) && !door && !secret) return;
+      seen.add(i);
+      const on = shown(i);
+      let key: string;
+      let box: Bounds;
+      if (door) {
+        key = on ? `d${doorOpenAt(m!, i)}` : '-';
+        box = doorReach(m!);
+      } else {
+        transformAt(o, timeOf(i), tf);
+        key = on ? `${tf.dx},${tf.dy},${tf.cos},${tf.sin}` : '-';
+        box = posedBounds(o, tf);
+      }
+      // The cursor's reveal changes a secret wall's look without moving it
+      if (secret) key += `|${concealKey}`;
+      const before = dyn.pieces.get(i);
+      if (!before || before.key !== key) {
+        if (before) dirty.push(toPixels(before.box, scale, full));
+        dirty.push(toPixels(box, scale, full));
+        dyn.pieces.set(i, { key, box });
+      }
+    });
+    // Pieces no longer taking part (secret walls once covering stops) leave their old area
+    for (const [i, piece] of dyn.pieces) {
+      if (seen.has(i)) continue;
+      dirty.push(toPixels(piece.box, scale, full));
+      dyn.pieces.delete(i);
+    }
+    const rects = redrawAll ? [full] : mergeRects(dirty, full);
+    dyn.valid = true;
+    dyn.conceal = conceal;
+
+    if (rects.length) {
+      const g = dyn.frame.getContext('2d')!;
+      const c = dyn.composite.getContext('2d')!;
+      // Paths for the whole frame, built once and filled inside each changed rectangle
+      const cuts = [new Path2D(), new Path2D()];
+      const anyCut = [false, false];
       objects.forEach((o, i) => {
-        if (o.dynamic && o.role === 'path' && !!o.src?.pierce === pierce && shown(i)) {
-          tracePosed(path, o, timeOf(i));
-          any = true;
+        if (o.dynamic && o.role === 'path' && shown(i)) {
+          const k = o.src?.pierce ? 1 : 0;
+          tracePosed(cuts[k], o, timeOf(i));
+          anyCut[k] = true;
         }
       });
-      if (any) {
+      const walls = new Path2D();
+      objects.forEach((o, i) => {
+        if (o.dynamic && o.role === 'wall' && !isSaw(i) && shown(i)) tracePosed(walls, o, timeOf(i));
+      });
+      map.objects.forEach((m, i) => {
+        if (!isDoor(m) || !shown(i)) return;
+        const open = doorOpenAt(m, i);
+        const sh = m.shape as { x: number; y: number; w: number; h: number };
+        const panels = new Path2D();
+        for (const half of doorPanels(sh)) {
+          panels.rect(half.rect.x + half.slide.x * open, half.rect.y + half.slide.y * open, half.rect.w, half.rect.h);
+        }
+        walls.addPath(panels, m.tilt ? tiltMatrix(m.tilt, sh.x + sh.w / 2, sh.y + sh.h / 2) : undefined);
+      });
+      const wallFill = theme ? fillStyle(g, theme.wall.fill, { minX: 0, minY: 0, maxX: map.width, maxY: map.height }) : COLORS.wall;
+      // Moving paths open up the area outside the floor; only wall-piercing ones cut the wall pieces
+      const cut = (k: number) => {
+        if (!anyCut[k]) return;
+        g.setTransform(scale, 0, 0, scale, 0, 0);
         g.globalCompositeOperation = 'destination-out';
-        g.fill(path, 'nonzero');
+        g.fill(cuts[k], 'nonzero');
         g.globalCompositeOperation = 'source-over';
+        g.setTransform(1, 0, 0, 1, 0, 0);
+      };
+      for (const r of rects) {
+        // Wall mass of this frame, inside r
+        g.save();
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.beginPath();
+        g.rect(r.x, r.y, r.w, r.h);
+        g.clip();
+        g.clearRect(r.x, r.y, r.w, r.h);
+        g.drawImage(dyn.outside, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+        cut(0);
+        g.drawImage(dyn.wallPieces, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+        cut(1);
+        g.setTransform(scale, 0, 0, scale, 0, 0);
+        g.fillStyle = wallFill;
+        g.fill(walls, 'nonzero');
+        sealSeams(g, scale, walls);
+        if (conceal) {
+          // Build the covering at wall-layer resolution and union it BEFORE shadows.
+          // This removes internal seams and lets both surfaces share pattern sampling.
+          const secret = st.secret ??= offscreen(dyn.frame.width, dyn.frame.height)[0];
+          const sg = secret.getContext('2d')!;
+          sg.save();
+          sg.setTransform(1, 0, 0, 1, 0, 0);
+          sg.beginPath();
+          sg.rect(r.x, r.y, r.w, r.h);
+          sg.clip();
+          sg.clearRect(r.x, r.y, r.w, r.h);
+          sg.setTransform(scale, 0, 0, scale, 0, 0);
+          paintSecretWalls(sg, map, objects, t, cursor, 1, opts);
+          sg.restore();
+          g.setTransform(1, 0, 0, 1, 0, 0);
+          g.drawImage(secret, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+        }
+        g.restore();
       }
-      g.setTransform(1, 0, 0, 1, 0, 0);
-    };
-    g.drawImage(dyn.outside, 0, 0);
-    cut(false);
-    g.drawImage(dyn.wallPieces, 0, 0);
-    cut(true);
-    g.setTransform(scale, 0, 0, scale, 0, 0);
-    const walls = new Path2D();
-    objects.forEach((o, i) => {
-      if (o.dynamic && o.role === 'wall' && !isSaw(i) && shown(i)) tracePosed(walls, o, timeOf(i));
-    });
-    map.objects.forEach((m, i) => {
-      if (!isDoor(m) || !shown(i)) return;
-      const open = doorOpenAt(m, i);
-      const s = m.shape as { x: number; y: number; w: number; h: number };
-      const panels = new Path2D();
-      for (const half of doorPanels(s)) {
-        panels.rect(half.rect.x + half.slide.x * open, half.rect.y + half.slide.y * open, half.rect.w, half.rect.h);
+      // Compose at layer resolution, inside the same rectangles; the shadow of r comes from the
+      // wall mass just above it, which is up to date everywhere now
+      for (const r of rects) {
+        c.save();
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        c.beginPath();
+        c.rect(r.x, r.y, r.w, r.h);
+        c.clip();
+        c.clearRect(r.x, r.y, r.w, r.h);
+        c.drawImage(dyn.floor, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+        drawWallMass(c, dyn.frame, scale, r);
+        c.restore();
       }
-      walls.addPath(panels, m.tilt ? tiltMatrix(m.tilt, s.x + s.w / 2, s.y + s.h / 2) : undefined);
-    });
-    g.fillStyle = theme ? fillStyle(g, theme.wall.fill, { minX: 0, minY: 0, maxX: map.width, maxY: map.height }) : COLORS.wall;
-    g.fill(walls, 'nonzero');
-    sealSeams(g, scale, walls);
-    if (conceal) {
-      // Build the covering at wall-layer resolution and union it BEFORE shadows.
-      // This removes internal seams and lets both surfaces share pattern sampling.
-      const secret = st.secret ??= offscreen(dyn.frame.width, dyn.frame.height)[0];
-      const sg = secret.getContext('2d')!;
-      sg.setTransform(1, 0, 0, 1, 0, 0);
-      sg.clearRect(0, 0, secret.width, secret.height);
-      sg.setTransform(scale, 0, 0, scale, 0, 0);
-      paintSecretWalls(sg, map, objects, t, opts.secretCursor ?? null, 1, opts);
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      g.drawImage(secret, 0, 0);
-      st.secretReady = true;
     }
-    // Compose at layer resolution, then place it on the map (zoom and letterbox included)
-    const c = dyn.composite.getContext('2d')!;
-    c.setTransform(1, 0, 0, 1, 0, 0);
-    c.clearRect(0, 0, dyn.composite.width, dyn.composite.height);
-    c.drawImage(dyn.floor, 0, 0);
-    drawWallMass(c, dyn.frame, scale);
+    st.secretReady = conceal;
+    // Place it on the map (zoom and letterbox included)
     ctx.drawImage(dyn.composite, 0, 0, map.width, map.height);
   }
-  // Animated floor / walls: drawn over the surfaces, masked by this frame's wall mass
-  if (theme?.path.anim || theme?.wall.anim) drawSurfaceAnims(ctx, map, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t);
+  // Animated floor / walls: drawn over the surfaces, masked by this frame's wall mass. Off at low
+  // graphics quality: a whole-screen layer more every frame
+  if ((theme?.path.anim || theme?.wall.anim) && options.graphics !== 'low') drawSurfaceAnims(ctx, map, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t);
 
   zone(ctx, map.start, COLORS.start, COLORS.startEdge, tr('zone.start'), true, map.startShape);
   // Locked GOAL (coins still to collect): dark gray, with the coins collected so far, e.g. "3/10"
@@ -2655,15 +2794,15 @@ export function drawBanner(ctx: CanvasRenderingContext2D, map: MapData, title: s
   const h = sub ? 76 : 50;
   const x = (map.width - w) / 2;
   const y = 16;
-  ctx.save();
-  ctx.shadowColor = 'rgba(58,96,150,0.25)';
-  ctx.shadowBlur = 18;
-  ctx.shadowOffsetY = 4;
+  // Flat shadow (an offset shape, no blur): the banner is drawn every frame after a run ends
+  ctx.fillStyle = 'rgba(58,96,150,0.18)';
+  ctx.beginPath();
+  ctx.roundRect(x, y + 4, w, h, 14);
+  ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,0.94)';
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, 14);
   ctx.fill();
-  ctx.restore();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = color;
@@ -2821,16 +2960,10 @@ function stopwatchGlyph(ch: string, font: string, size: number, cell: number, fa
   g.textBaseline = 'alphabetic';
   const x = SW_PAD + cell / 2;
   const y = SW_PAD + size;
-  // Extrusion: stacked copies down-right in a dark shade; the deepest one casts the soft shadow
+  // Extrusion: stacked copies down-right in a dark shade (the 3D look; no blurred drop shadow)
   for (let i = SW_DEPTH; i >= 1; i--) {
-    if (i === SW_DEPTH) {
-      g.shadowColor = 'rgba(20,30,50,0.38)';
-      g.shadowBlur = 8 * k;
-      g.shadowOffsetY = 3 * k;
-    }
     g.fillStyle = i === SW_DEPTH ? shade(side, -0.2) : shade(side, -0.12 * (i / SW_DEPTH));
     g.fillText(ch, x + i * SW_STEP, y + i * SW_STEP);
-    g.shadowColor = 'transparent';
   }
   // Face: diagonal stripes (still: the sprite is drawn as is every frame)
   const pattern = stripes(g, face, stripe);
@@ -2849,12 +2982,12 @@ function stopwatchGlyph(ch: string, font: string, size: number, cell: number, fa
 }
 
 /**
- * Run stopwatch, e.g. "60.789": big whole seconds, smaller milliseconds, a 3D extrusion with a
- * drop shadow in the theme's color, and diagonal stripes on the letters.
+ * Run stopwatch, e.g. "60.789": big whole seconds, smaller milliseconds, a 3D extrusion in the
+ * theme's color, and diagonal stripes on the letters.
  * The timer font isn't monospaced, so every digit is centered in a cell as wide as the widest
  * digit: the readout never shifts as the numbers change. Drawn at the top-right corner.
  * Each glyph is drawn once into a sprite and then only copied, so a frame costs a few image
- * copies instead of dozens of text draws and a blurred shadow (cheap without a GPU too).
+ * copies instead of dozens of text draws (cheap without a GPU too).
  */
 export function drawStopwatch(ctx: CanvasRenderingContext2D, map: MapData, ms: number, _now: number): void {
   const total = displayTime(ms);
