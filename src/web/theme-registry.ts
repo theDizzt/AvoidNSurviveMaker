@@ -1,3 +1,4 @@
+import { uniqueLevelIds } from '../core/record-identity';
 import { language, t as tr } from './i18n';
 import { assignSlots, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo, type ThemeEntry, type ThemeInfo } from './localized/theme-pack';
 import type { MapData, Theme } from '../core/types';
@@ -33,7 +34,7 @@ function loadBundled(): { folder: string; entry: ThemeEntry }[] {
       console.warn(`${path}: ${(err as Error).message}`);
       continue;
     }
-    const levels: MapData[] = [];
+    let levels: MapData[] = [];
     for (const lp of Object.keys(levelFiles).filter((p) => p.startsWith(`${prefix}levels/`)).sort().slice(0, official ? LEVELS_PER_THEME : MAX_PACK_LEVELS)) {
       try {
         levels.push(validateMap(levelFiles[lp]));
@@ -41,6 +42,8 @@ function loadBundled(): { folder: string; entry: ThemeEntry }[] {
         console.warn(`${lp}: ${(err as Error).message}`);
       }
     }
+    // Each level keeps its own records, even if a copied level file still carries another's id
+    levels = uniqueLevelIds(levels);
     const assets: Record<string, string> = {};
     for (const [p, url] of Object.entries(assetFiles)) if (p.startsWith(prefix)) assets[p.slice(prefix.length)] = url;
     const image = (name?: string) => (name ? assets[name] : undefined);
@@ -102,7 +105,7 @@ function entryFromStored(s: StoredTheme): ThemeEntry {
     const raw = localStorage.getItem(CUSTOM_KEY);
     if (!raw) return;
     const s = JSON.parse(raw) as StoredTheme;
-    const stored: StoredTheme = { info: validateThemeInfo(s.info), levels: (s.levels ?? []).map((m) => validateMap(m)), images: s.images ?? {} };
+    const stored: StoredTheme = { info: validateThemeInfo(s.info), levels: uniqueLevelIds((s.levels ?? []).map((m) => validateMap(m))), images: s.images ?? {} };
     customStored = stored;
     custom = entryFromStored(stored);
   } catch {

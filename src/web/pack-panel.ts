@@ -1,3 +1,4 @@
+import { uniqueLevelIds } from '../core/record-identity';
 import { t as tr } from './i18n';
 import { gameplayKey, levelLabel } from './localized/level';
 import { encodePack } from './localized/share';
@@ -150,7 +151,9 @@ export class PackPanel {
 
   private add(): void {
     if (this.pack.levels.length >= LIMITS.maxPackLevels) return alert(tr('pack.full', { max: LIMITS.maxPackLevels }));
-    const map = this.host.getMap();
+    // A new level: if the map's id is already in the pack (e.g. a level edited and added again),
+    // it gets its own, so the two levels don't share records
+    const [map] = uniqueLevelIds([this.host.getMap()], this.pack.levels.flatMap((m) => (m.id ? [m.id] : [])));
     this.pack.levels.push(map);
     this.verified.push(this.host.isVerified(map));
     this.opened = this.pack.levels.length - 1;

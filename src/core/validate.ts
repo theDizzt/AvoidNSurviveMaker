@@ -1,5 +1,5 @@
 import { t as defaultTranslate, type Translator } from './i18n';
-import { contentHash } from './record-identity';
+import { contentHash, uniqueLevelIds } from './record-identity';
 import { pointInPoly, pointInRect } from './geometry';
 import { compileObject, toWorld, transformAt, type Transform } from './object';
 import { createColorsApi } from './colors';
@@ -550,7 +550,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       }
     });
     if (levels.length === 0) fail(t('validate.packEmpty'));
-    return { pack: PACK_VERSION, name: text(o.name, 'name') || t('map.untitledPack'), author: text(o.author, 'author'), levels };
+    return { pack: PACK_VERSION, name: text(o.name, 'name') || t('map.untitledPack'), author: text(o.author, 'author'), levels: uniqueLevelIds(levels) };
   }
 
   /** Does the object (posed at time t) overlap the rect? Checks vertices both ways, good enough for warnings. */

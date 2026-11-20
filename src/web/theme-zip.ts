@@ -1,3 +1,4 @@
+import { uniqueLevelIds } from '../core/record-identity';
 import { language, t } from './i18n';
 import { strFromU8, strToU8, zipSync } from 'fflate';
 import { unpackBoundedZip, ZIP_LIMITS } from './localized/bounded-zip';
@@ -77,7 +78,7 @@ export async function readThemeZip(file: File): Promise<StoredTheme> {
     const type = FILE_TYPES[name.split('.').pop()?.toLowerCase() ?? ''];
     if (type) images[name] = toDataUrl(bytes, type);
   }
-  return { info, levels, images };
+  return { info, levels: uniqueLevelIds(levels), images };
 }
 
 /** Build the zip for a theme pack */
