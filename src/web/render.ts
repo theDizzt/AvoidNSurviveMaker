@@ -845,16 +845,19 @@ function drawCoin(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): 
   );
   tiltFrame(ctx, o);
   const { poly } = o.box;
-  ctx.beginPath();
-  ctx.moveTo(poly[0], poly[1]);
-  for (let i = 2; i < poly.length; i += 2) ctx.lineTo(poly[i], poly[i + 1]);
-  ctx.closePath();
-  ctx.shadowColor = 'rgba(160,110,0,0.35)';
-  ctx.shadowBlur = 4;
-  ctx.shadowOffsetY = 1;
+  const trace = (dy: number) => {
+    ctx.beginPath();
+    ctx.moveTo(poly[0], poly[1] + dy);
+    for (let i = 2; i < poly.length; i += 2) ctx.lineTo(poly[i], poly[i + 1] + dy);
+    ctx.closePath();
+  };
+  // A flat shadow 1 below (no blur: every coin is drawn every frame)
+  trace(1);
+  ctx.fillStyle = 'rgba(160,110,0,0.3)';
+  ctx.fill();
+  trace(0);
   ctx.fillStyle = COLORS.coin;
   ctx.fill();
-  ctx.shadowColor = 'transparent';
   ctx.strokeStyle = COLORS.coinEdge;
   ctx.lineWidth = 1.5;
   ctx.stroke();
@@ -1398,9 +1401,6 @@ function drawPivotScrew(ctx: CanvasRenderingContext2D, o: CompiledObject, t: num
   const r = Math.max(2.5, Math.min(6, Math.min(o.maxX - o.minX, o.maxY - o.minY) * 0.3));
   ctx.save();
   ctx.transform(tf.cos, tf.sin, -tf.sin, tf.cos, o.px + tf.dx, o.py + tf.dy);
-  ctx.shadowColor = 'rgba(0,0,0,0.3)';
-  ctx.shadowBlur = 2;
-  ctx.shadowOffsetY = 1;
   const g = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.1, 0, 0, r);
   g.addColorStop(0, '#f4f6f9');
   g.addColorStop(1, '#9aa3b0');
@@ -1935,18 +1935,9 @@ export function fillTextFx(ctx: CanvasRenderingContext2D, line: string, x: numbe
     const dy = fx.shadowY ?? off;
     ctx.save();
     ctx.globalAlpha *= 0.5;
-    if (fx.shadowBlur) {
-      // A soft shadow: canvas shadows are in device pixels, so scale with the zoom
-      const m = ctx.getTransform();
-      const zoom = Math.hypot(m.a, m.b);
-      ctx.shadowColor = fx.shadow;
-      ctx.shadowBlur = fx.shadowBlur * zoom;
-      // Draw the letters far away so only their shadow lands here
-      const far = 20000;
-      ctx.shadowOffsetX = (dx + far) * m.a + dy * m.c;
-      ctx.shadowOffsetY = (dx + far) * m.b + dy * m.d;
-      solid(-far, 0, fx.shadow);
-    } else solid(dx, dy, fx.shadow);
+    // The shadow's blur setting is not drawn: text effects are redrawn every frame, and a blur is
+    // the costliest canvas operation without a fast GPU. The shadow stays as a crisp offset copy
+    solid(dx, dy, fx.shadow);
     ctx.restore();
   }
   // 3D: stacked copies 1px apart toward the bottom right, the farthest first
@@ -1954,14 +1945,18 @@ export function fillTextFx(ctx: CanvasRenderingContext2D, line: string, x: numbe
   // Vine: the stretches behind the letters first
   if (fx.vine) drawVine(ctx, line, x, y, size, fx.vine, false);
   if (fx.glow) {
-    // shadowBlur is in screen pixels, so scale it with the current zoom
-    const m = ctx.getTransform();
+    // Glow without blur: two wide translucent strokes in the glow color around the letters
+    const spread = size * 0.18 * (fx.glowSize ?? 1);
     ctx.save();
-    ctx.shadowColor = fx.glow;
-    ctx.shadowBlur = size * 0.45 * (fx.glowSize ?? 1) * Math.hypot(m.a, m.b);
-    ctx.fillStyle = fx.glow;
-    ctx.fillText(line, x, y);
-    ctx.fillText(line, x, y);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = fx.glow;
+    ctx.globalAlpha *= 0.25;
+    ctx.lineWidth = spread * 2;
+    ctx.strokeText(line, x, y);
+    ctx.globalAlpha /= 0.25;
+    ctx.globalAlpha *= 0.4;
+    ctx.lineWidth = spread;
+    ctx.strokeText(line, x, y);
     ctx.restore();
   }
   if (ow > 0) {
@@ -2175,11 +2170,7 @@ function drawSaw(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, m:
     g.addColorStop(0.65, '#b9c1cc');
     g.addColorStop(1, '#7d8794');
     ctx.fillStyle = g;
-    ctx.shadowColor = SHADOW;
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetY = 2;
     ctx.fill();
-    ctx.shadowColor = 'transparent';
     ctx.strokeStyle = '#4b5361';
     ctx.lineWidth = 1;
     ctx.stroke();
@@ -2237,9 +2228,6 @@ function drawSaw(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, m:
     g.addColorStop(0.5, '#b4bcc8');
     g.addColorStop(1, '#848e9b');
     ctx.fillStyle = g;
-    ctx.shadowColor = SHADOW;
-    ctx.shadowBlur = 5;
-    ctx.shadowOffsetY = 2;
     ctx.beginPath();
     // Teeth along both edges
     const n = Math.max(3, Math.round(len / (tooth * 1.6 || 1)));
@@ -2675,8 +2663,14 @@ function drawSwitch(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number,
     const inset = s * (on ? 0.16 : 0.1);
     ctx.save();
     if (on) {
-      ctx.shadowColor = col;
-      ctx.shadowBlur = s * 0.5;
+      // Lit: a pale halo just around the face (no blurred glow: drawn every frame)
+      const halo = s * 0.08;
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.roundRect(x + inset - halo, y + inset - halo, w - (inset - halo) * 2, h - (inset - halo) * 2, r * 0.7 + halo);
+      ctx.fill();
+      ctx.globalAlpha = 1;
     }
     ctx.fillStyle = on ? col : `${col}b3`;
     ctx.beginPath();
@@ -2790,7 +2784,17 @@ export function drawTrail(ctx: CanvasRenderingContext2D, pts: readonly number[])
 }
 
 export function drawBanner(ctx: CanvasRenderingContext2D, map: MapData, title: string, sub = '', color = COLORS.ink): void {
-  const w = Math.min(map.width - 40, 460);
+  const titleFont = `700 22px ${FONT_TITLE}`;
+  const subFont = `400 15px ${FONT_MAIN}`;
+  // Fit the text: the banner grows with the longer line (at least the old 460 wide), and a line
+  // still too long for the map is squeezed horizontally instead of running past the edges
+  const pad = 24;
+  const maxW = Math.max(120, map.width - 40);
+  ctx.font = titleFont;
+  const titleW = ctx.measureText(title).width;
+  ctx.font = subFont;
+  const subW = sub ? ctx.measureText(sub).width : 0;
+  const w = Math.min(maxW, Math.max(Math.min(460, maxW), Math.max(titleW, subW) + pad * 2));
   const h = sub ? 76 : 50;
   const x = (map.width - w) / 2;
   const y = 16;
@@ -2805,13 +2809,14 @@ export function drawBanner(ctx: CanvasRenderingContext2D, map: MapData, title: s
   ctx.fill();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  const room = w - pad * 2;
   ctx.fillStyle = color;
-  ctx.font = `700 22px ${FONT_TITLE}`;
-  ctx.fillText(title, map.width / 2, y + (sub ? 26 : h / 2));
+  ctx.font = titleFont;
+  ctx.fillText(title, map.width / 2, y + (sub ? 26 : h / 2), room);
   if (sub) {
     ctx.fillStyle = 'rgba(36,52,80,0.65)';
-    ctx.font = `400 15px ${FONT_MAIN}`;
-    ctx.fillText(sub, map.width / 2, y + 54);
+    ctx.font = subFont;
+    ctx.fillText(sub, map.width / 2, y + 54, room);
   }
 }
 

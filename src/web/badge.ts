@@ -352,6 +352,23 @@ function gear(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, 
  * Draw the badge; returns the y below it (where the next top-left item goes). `hits` receives
  * where each part landed.
  */
+/**
+ * Fill a shape with a crisp drop shadow 2 px below it: the shape traced once in the shadow color,
+ * shifted, then once in its color. No canvas shadow: the badge is drawn every frame, and shadows
+ * (blurred or not) are the costliest canvas drawing without a fast GPU.
+ */
+function dropFill(ctx: CanvasRenderingContext2D, trace: () => void, fill: string | CanvasGradient | CanvasPattern, shadow: string): void {
+  ctx.save();
+  ctx.translate(0, 2);
+  trace();
+  ctx.fillStyle = shadow;
+  ctx.fill();
+  ctx.restore();
+  trace();
+  ctx.fillStyle = fill;
+  ctx.fill();
+}
+
 export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, style: BadgeStyle | undefined, image: HTMLImageElement | null, now: number, hits?: BadgeHit[]): number {
   frameNow = now;
   const b = animatedColors(style ?? DEFAULT_BADGE);
@@ -372,14 +389,10 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
       const cy = 52;
       const rad = 40;
       r.part('graphic', cx, cy, () => {
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.35)';
-        ctx.shadowBlur = 8;
-        ctx.fillStyle = b.primary;
-        ctx.beginPath();
-        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        dropFill(ctx, () => {
+          ctx.beginPath();
+          ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        }, b.primary, 'rgba(0,0,0,0.3)');
         ctx.strokeStyle = 'rgba(255,255,255,0.12)';
         ctx.lineWidth = 1;
         for (let k = 14; k < rad - 2; k += 4) {
@@ -425,11 +438,7 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
         ctx.lineCap = 'round';
         snowflake(ctx, cx, cy, 40);
         ctx.restore();
-        ctx.save();
-        ctx.shadowColor = b.secondary;
-        ctx.shadowBlur = 6;
         bigNumber(r, num, cx, cy, 54, 90, { outline: b.secondary });
-        ctx.restore();
         if (b.caption) {
           ctx.fillStyle = b.titleColor;
           ctx.font = `700 14px ${FONT_MAIN}`;
@@ -448,13 +457,7 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
       const cx = 52;
       const cy = 50;
       r.part('graphic', cx, cy, () => {
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.35)';
-        ctx.shadowBlur = 6;
-        ctx.fillStyle = b.primary;
-        gear(ctx, cx, cy, 40, 12);
-        ctx.fill();
-        ctx.restore();
+        dropFill(ctx, () => gear(ctx, cx, cy, 40, 12), b.primary, 'rgba(0,0,0,0.3)');
         ctx.save();
         ctx.fillStyle = b.secondary;
         ctx.globalAlpha = 0.35;
@@ -555,14 +558,10 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
       const cy = 52;
       const rad = 40;
       r.part('graphic', cx, cy, () => {
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.35)';
-        ctx.shadowBlur = 6;
-        ctx.fillStyle = b.secondary;
-        ctx.beginPath();
-        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        dropFill(ctx, () => {
+          ctx.beginPath();
+          ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        }, b.secondary, 'rgba(0,0,0,0.3)');
         ctx.fillStyle = b.primary;
         ctx.beginPath();
         ctx.arc(cx, cy, rad - 5, 0, Math.PI * 2);
@@ -632,12 +631,10 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
         ctx.save();
         ctx.fillStyle = b.primary;
         ctx.globalAlpha = 0.9;
-        ctx.shadowColor = 'rgba(58,96,150,0.2)';
-        ctx.shadowBlur = 10;
-        ctx.shadowOffsetY = 2;
-        ctx.beginPath();
-        ctx.roundRect(12, 12, w, h, 14);
-        ctx.fill();
+        dropFill(ctx, () => {
+          ctx.beginPath();
+          ctx.roundRect(12, 12, w, h, 14);
+        }, ctx.fillStyle, 'rgba(58,96,150,0.2)');
         ctx.restore();
         if (num) bigNumber(r, num, 28, base + 2, 40, 120, { align: 'left' });
         return { x: 12, y: 12, w, h };

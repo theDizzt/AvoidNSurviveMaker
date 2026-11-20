@@ -44,6 +44,13 @@ interface Run {
   showcaseUntil: number;
 }
 
+/**
+ * The menu's demo run (a real level played by an autopilot behind the menus) is switched off for
+ * now: it ran the game's whole simulation and rendering behind every menu, which lags low-end
+ * computers. The plain gradient background shows instead; set to true to bring it back.
+ */
+const DEMO_ENABLED = false;
+
 export class Backdrop {
   private readonly ctx: CanvasRenderingContext2D;
   private mode: BackdropMode = 'none';
@@ -57,7 +64,7 @@ export class Backdrop {
 
   constructor(private readonly root: HTMLElement, private readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
-    this.pool = OFFICIAL_THEMES.flatMap((t) => Array.from({ length: levelSlots(t) }, (_, i) => themedLevel(t, i))
+    this.pool = !DEMO_ENABLED ? [] : OFFICIAL_THEMES.flatMap((t) => Array.from({ length: levelSlots(t) }, (_, i) => themedLevel(t, i))
       .filter((m): m is MapData => !!m && demoPlayable(m)));
     window.addEventListener('resize', () => this.resize());
     document.addEventListener('visibilitychange', () => this.schedule());
@@ -89,8 +96,9 @@ export class Backdrop {
   }
 
   private schedule(): void {
-    this.canvas.style.visibility = options.animatedBackground ? '' : 'hidden';
-    const active = options.animatedBackground && this.mode === 'demo' && !document.hidden && this.pool.length > 0;
+    const enabled = DEMO_ENABLED && options.animatedBackground;
+    this.canvas.style.visibility = enabled ? '' : 'hidden';
+    const active = enabled && this.mode === 'demo' && !document.hidden && this.pool.length > 0;
     if (!active && this.run && this.pausedAt === null) this.pausedAt = performance.now();
     if (active && this.pausedAt !== null) {
       const gap = performance.now() - this.pausedAt;
@@ -112,6 +120,11 @@ export class Backdrop {
   }
 
   private resize(): void {
+    // Demo off: the canvas holds no pixels
+    if (!DEMO_ENABLED) {
+      this.canvas.width = this.canvas.height = 0;
+      return;
+    }
     const dpr = Math.min(renderScale(window.innerWidth, window.innerHeight),
       Math.sqrt(MAX_BACKGROUND_PIXELS / Math.max(1, window.innerWidth * window.innerHeight)));
     this.canvas.width = Math.round(window.innerWidth * dpr);

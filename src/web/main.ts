@@ -198,10 +198,13 @@ $('menu-theme-editor').addEventListener('click', () => show('themeEditor'));
 editor.onChange = () => syncMusic();
 
 const backdrop = new Backdrop($('app-bg'), $<HTMLCanvasElement>('demo-bg'));
-/** Background per screen; the map and theme editors share the world select grid */
+/**
+ * Background per screen: the world select grid everywhere (the menus too, while the demo run is
+ * switched off, see backdrop.ts), the theme's colors on level select, nothing behind play
+ */
 function syncBackdrop(): void {
-  const modes: Partial<Record<Screen, BackdropMode>> = { play: 'none', themes: 'grid', editor: 'grid', themeEditor: 'grid', levels: 'theme' };
-  backdrop.set(modes[current] ?? 'demo', campaign.currentTheme ?? campaignOf(currentKey)?.theme ?? OFFICIAL_THEMES[0]);
+  const modes: Partial<Record<Screen, BackdropMode>> = { play: 'none', levels: 'theme' };
+  backdrop.set(modes[current] ?? 'grid', campaign.currentTheme ?? campaignOf(currentKey)?.theme ?? OFFICIAL_THEMES[0]);
 }
 
 let current: Screen = 'preload';
