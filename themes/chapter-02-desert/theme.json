@@ -43,7 +43,77 @@
         },
         "edge": "#000000"
       }
-    }
+    },
+    "designs": [
+      {
+        "id": "desert",
+        "name": "Desert",
+        "levels": [
+          1,
+          13
+        ],
+        "i18n": {
+          "ko": "사막",
+          "zh": "沙漠"
+        },
+        "maze": {
+          "wall": {
+            "fill": {
+              "type": "pattern",
+              "pattern": "sand",
+              "color": "#574a24",
+              "background": "#cabd93",
+              "size": 40
+            },
+            "edge": "#000000"
+          },
+          "path": {
+            "fill": {
+              "type": "gradient",
+              "style": "linear",
+              "from": "#fae8b4",
+              "to": "#ffe180",
+              "angle": 90
+            },
+            "edge": "#000000"
+          }
+        }
+      },
+      {
+        "id": "ruins",
+        "name": "Ruins",
+        "levels": [
+          14,
+          21
+        ],
+        "i18n": {
+          "ko": "유적",
+          "zh": "遗迹"
+        },
+        "maze": {
+          "wall": {
+            "fill": {
+              "type": "pattern",
+              "pattern": "sandBrick",
+              "color": "#4a3b2a",
+              "background": "#9c8460",
+              "size": 40
+            },
+            "edge": "#1c140c"
+          },
+          "path": {
+            "fill": {
+              "type": "pattern",
+              "pattern": "egyptian",
+              "color": "#c9a96e",
+              "background": "#ecdcb4",
+              "size": 64
+            },
+            "edge": "#1c140c"
+          }
+        }
+      }
+    ]
   },
   "cover": "cover.png",
   "music": "audio/arabic-desert.mp3",

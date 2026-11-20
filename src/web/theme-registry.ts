@@ -1,6 +1,6 @@
 import { uniqueLevelIds } from '../core/record-identity';
 import { language, t as tr } from './i18n';
-import { assignSlots, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo, type ThemeEntry, type ThemeInfo } from './localized/theme-pack';
+import { assignSlots, levelDesign, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo, type ThemeEntry, type ThemeInfo } from './localized/theme-pack';
 import type { MapData, Theme } from '../core/types';
 import { validateMap } from './localized/validate';
 
@@ -133,6 +133,11 @@ export function setCustomTheme(s: StoredTheme): boolean {
   }
 }
 
+/** A sub-theme's entry in a flat list: indented under its theme */
+export function subThemeLabel(name: string): string {
+  return `\u3000└ ${name}`;
+}
+
 /** Official chapters that define maze colors, offered as map editor presets */
 export function chapterMazePresets(): { id: string; name: string; theme: Theme }[] {
   return OFFICIAL_THEMES.flatMap((t, i) => {
@@ -140,7 +145,7 @@ export function chapterMazePresets(): { id: string; name: string; theme: Theme }
     return [
       ...(t.info.style.maze ? [{ id: `chapter:${t.info.id}`, name, theme: t.info.style.maze }] : []),
       ...(t.info.style.designs ?? []).flatMap(d => d.maze
-        ? [{ id: `chapter:${t.info.id}:${d.id}`, name: `${name} · ${d.name}`, theme: d.maze }] : []),
+        ? [{ id: `chapter:${t.info.id}:${d.id}`, name: t.info.style.maze ? subThemeLabel(d.name) : `${name} · ${d.name}`, theme: d.maze }] : []),
     ];
   });
 }
@@ -155,7 +160,7 @@ export function themeFileMazePresets(): { id: string; name: string; theme: Theme
     ...CUSTOM_THEME_PRESETS.flatMap(t => [
       ...(t.info.style.maze ? [{ id: `preset:${t.info.id}`, name: t.info.name, theme: t.info.style.maze }] : []),
       ...(t.info.style.designs ?? []).flatMap(d => d.maze
-        ? [{ id: `preset:${t.info.id}:${d.id}`, name: `${t.info.name} · ${d.name}`, theme: d.maze }] : []),
+        ? [{ id: `preset:${t.info.id}:${d.id}`, name: t.info.style.maze ? subThemeLabel(d.name) : `${t.info.name} · ${d.name}`, theme: d.maze }] : []),
     ]),
   ];
 }
@@ -174,9 +179,13 @@ export function chapterMusicFor(theme: Theme | undefined): string | null {
   return t?.info.music ? t.assets[t.info.music] ?? null : null;
 }
 
-/** Level badge (number + title) design for a map on its own: its picked theme's, else the chapter its colors come from */
+/**
+ * Level badge (number + title) design for a map on its own: its picked theme's (or that theme's
+ * sub-theme the map picks or falls in by number), else the chapter its colors come from
+ */
 export function badgeFor(map: MapData): { style: ThemeEntry['info']['style']['badge']; imageUrl?: string } | null {
-  const t = (map.themeId ? bundledThemeById(map.themeId) : null) ?? chapterForTheme(map.theme);
+  const picked = map.themeId ? bundledThemeById(map.themeId) : null;
+  const t = picked ? levelThemeIn(picked, map) : chapterForTheme(map.theme);
   return t ? { style: t.info.style.badge, imageUrl: t.badgeUrl } : null;
 }
 
@@ -190,10 +199,10 @@ export function themeMusic(t: ThemeEntry | null): string | null {
   return t?.info.music ? t.assets[t.info.music] ?? null : null;
 }
 
-/** Music for a map on its own (editor, test play, shared link): its picked theme's, else its chapter preset's */
-export function musicFor(map: Pick<MapData, 'theme' | 'themeId'>): string | null {
+/** Music for a map on its own (editor, test play, shared link): its picked theme's (or sub-theme's), else its chapter preset's */
+export function musicFor(map: Pick<MapData, 'theme' | 'themeId' | 'themeDesign' | 'level'>): string | null {
   const t = map.themeId ? bundledThemeById(map.themeId) : null;
-  return t ? themeMusic(t) : chapterMusicFor(map.theme);
+  return t ? themeMusic(levelThemeIn(t, map)) : chapterMusicFor(map.theme);
 }
 
 /**
@@ -217,12 +226,22 @@ export function bundledThemeOptions(): { id: string; name: string; entry: ThemeE
 }
 
 /**
- * The theme a level of `pack` wears (badge, music): the bundled theme linked to its design, if
- * any, else the pack itself. A level's own `themeId` is ignored inside a pack.
+ * The theme a level of `pack` wears (badge, music): its sub-theme's own badge and music where it
+ * has them, else those of the bundled theme linked to the sub-theme, else the pack's.
+ * A level's own `themeId` is ignored inside a pack.
  */
-export function levelThemeIn(pack: ThemeEntry, map: MapData): ThemeEntry {
-  const design = pack.info.style.designs?.find((d) => d.id === map.themeDesign);
-  return (design?.themeId ? bundledThemeById(design.themeId) : null) ?? pack;
+export function levelThemeIn(pack: ThemeEntry, map: Pick<MapData, 'themeDesign' | 'level'>): ThemeEntry {
+  const design = levelDesign(pack.info.style, map);
+  if (!design) return pack;
+  const base = (design.themeId ? bundledThemeById(design.themeId) : null) ?? pack;
+  if (!design.badge && !design.music) return base;
+  const music = design.music && pack.assets[design.music] ? design.music : base.info.music;
+  return {
+    ...base,
+    info: { ...base.info, ...(music ? { music } : {}), style: { ...base.info.style, badge: design.badge ?? base.info.style.badge } },
+    badgeUrl: design.badge ? (design.badge.image ? pack.assets[design.badge.image] : undefined) : base.badgeUrl,
+    assets: design.music ? { ...base.assets, [design.music]: pack.assets[design.music] } : base.assets,
+  };
 }
 
 /** Title shown in the badge: the map's title, else its name without a "12. " prefix */

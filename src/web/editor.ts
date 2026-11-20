@@ -20,9 +20,9 @@ import { createEmptyMap, DEFAULT_BLINK, DEFAULT_FALL, DEFAULT_ICE_GRIP, DEFAULT_
 import { beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, fittedView, FONT_MAIN, fitCanvas, setCamera, staticPicture, traceObject, unitsPerPx, zonePath } from './render';
 import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
 import { renderThemePanel } from './theme-panel';
-import { badgeFor, badgeTitle, bundledThemeById, bundledThemeOptions, chapterMazePresets } from './theme-registry';
+import { badgeFor, badgeTitle, bundledThemeById, bundledThemeOptions, chapterMazePresets, subThemeLabel } from './theme-registry';
 import { badgeImage, drawLevelBadge } from './badge';
-import { DEFAULT_BADGE } from './localized/theme-pack';
+import { DEFAULT_BADGE, DEFAULT_DESIGN } from './localized/theme-pack';
 
 import { checkSymmetry, mirrorPoint, SYMMETRY_MODES, type SymmetryMode, type SymmetryReport } from '../core/symmetry';
 import { drawFogAreas } from './fog';
@@ -46,8 +46,8 @@ export class Editor {
   private get map(): MapData { return this.model.map; }
   private set map(value: MapData) { this.model.map = value; }
   /** Maze colors of the map being edited (picks the editor's music) */
-  get mapLook(): Pick<MapData, 'theme' | 'themeId'> {
-    return { theme: this.map.theme, themeId: this.map.themeId };
+  get mapLook(): Pick<MapData, 'theme' | 'themeId' | 'themeDesign' | 'level'> {
+    return { theme: this.map.theme, themeId: this.map.themeId, themeDesign: this.map.themeDesign, level: this.map.level };
   }
   private compiledCache: CompiledObject[] | null = null;
   private readonly routeCache = new WeakMap<CompiledObject, number[]>();
@@ -2001,12 +2001,19 @@ export class Editor {
     const picked = m.themeId ? bundledThemeById(m.themeId) : null;
     const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
     let current = '';
+    // Each theme as a group: the theme itself, then its sub-themes under it
     for (const { id, name, entry } of bundledThemeOptions()) {
       const style = entry.info.style;
-      sel.append(new Option(name, id));
-      for (const d of style.designs ?? []) sel.append(new Option(`${name} · ${d.name}`, `${id}#${d.id}`));
+      const designs = style.designs ?? [];
+      if (designs.length) {
+        const group = document.createElement('optgroup');
+        group.label = name;
+        group.append(new Option(name, id), ...designs.map((d) => new Option(subThemeLabel(d.name), `${id}#${d.id}`)));
+        sel.append(group);
+      } else sel.append(new Option(name, id));
       if (picked === entry) {
-        const design = (style.designs ?? []).find((d) => same(d.maze, m.theme) && !same(style.maze, m.theme));
+        const design = (m.themeDesign ? designs.find((d) => d.id === m.themeDesign) : undefined)
+          ?? designs.find((d) => same(d.maze, m.theme) && !same(style.maze, m.theme));
         current = design ? `${id}#${design.id}` : id;
       }
     }
@@ -2016,10 +2023,16 @@ export class Editor {
       const entry = id ? bundledThemeById(id) : null;
       if (!entry) {
         delete m.themeId;
+        delete m.themeDesign;
         return;
       }
       m.themeId = id;
-      const maze = (designId ? entry.info.style.designs?.find((d) => d.id === designId)?.maze : undefined) ?? entry.info.style.maze;
+      const design = designId ? entry.info.style.designs?.find((d) => d.id === designId) : undefined;
+      // The sub-theme (or the theme's own look) the level wears, also once it's in a pack
+      if (design) m.themeDesign = design.id;
+      else if (entry.info.style.designs?.length) m.themeDesign = DEFAULT_DESIGN;
+      else delete m.themeDesign;
+      const maze = design ? design.maze : entry.info.style.maze;
       if (maze) m.theme = clone(maze);
       else delete m.theme;
     }));
@@ -2040,7 +2053,7 @@ export class Editor {
   private renderedLevelMap: MapData | null = null;
   private renderLevel(): void {
     const m = this.map;
-    const json = JSON.stringify([m.title, m.name, m.level, m.stars, this.lastClearMs, m.darkness, m.difficulty, m.themeId, m.theme]);
+    const json = JSON.stringify([m.title, m.name, m.level, m.stars, this.lastClearMs, m.darkness, m.difficulty, m.themeId, m.themeDesign, m.theme]);
     if (json === this.renderedLevel && m === this.renderedLevelMap) return;
     this.renderedLevel = json;
     this.renderedLevelMap = m;

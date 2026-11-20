@@ -1,9 +1,49 @@
 import { describe, expect, it } from 'vitest';
 import { averageDifficulty, crystalSlots, localizeThemeInfo, maxStars, themedLevel, validateThemeInfo } from './localized/theme-pack';
-import { OFFICIAL_THEMES, CUSTOM_THEME_PRESETS } from './theme-registry';
+import { OFFICIAL_THEMES, CUSTOM_THEME_PRESETS, levelThemeIn } from './theme-registry';
+import { DEFAULT_DESIGN, levelDesign } from '../core/theme-pack';
 import { readThemeZip, writeThemeZip } from './theme-zip';
 
 describe('theme packs', () => {
+  it('sub-themes: a level wears the one it picks, else the one whose range holds its number', () => {
+    const info = validateThemeInfo({
+      format: 1,
+      style: {
+        maze: { wall: { fill: { type: 'solid', color: '#111111' }, edge: '#000000' }, path: { fill: { type: 'solid', color: '#eeeeee' }, edge: '#000000' } },
+        badge: { kind: 'pill', numberColor: '#123456' },
+        designs: [
+          { id: 'a', name: 'A', levels: [21, 14], i18n: { ko: '에이', xx_bad: 'no' }, music: 'audio/a.mp3', badge: { kind: 'disc' } },
+          { id: 'b', name: 'B', music: '../escape.mp3' },
+        ],
+      },
+    });
+    const [a, b] = info.style.designs!;
+    expect(a.levels).toEqual([14, 21]);
+    expect(a.i18n).toEqual({ ko: '에이' });
+    expect(a.badge?.kind).toBe('disc');
+    expect(b.music).toBeUndefined();
+    expect(levelDesign(info.style, { level: 13 })).toBeUndefined();
+    expect(levelDesign(info.style, { level: 14 })?.id).toBe('a');
+    expect(levelDesign(info.style, { level: 15, themeDesign: 'b' })?.id).toBe('b');
+    expect(levelDesign(info.style, { level: 15, themeDesign: DEFAULT_DESIGN })).toBeUndefined();
+    expect(localizeThemeInfo(info, 'ko').style.designs![0].name).toBe('에이');
+    // Own badge and music where it has them, the pack's otherwise
+    const pack = { info, levels: [], assets: { 'audio/a.mp3': 'data:a' }, official: false };
+    const worn = levelThemeIn(pack, { level: 20 });
+    expect(worn.info.style.badge.kind).toBe('disc');
+    expect(worn.assets[worn.info.music!]).toBe('data:a');
+    expect(levelThemeIn(pack, { level: 3 })).toBe(pack);
+    expect(() => validateThemeInfo({ format: 1, style: { designs: [{ id: 'default' }] } })).toThrow();
+  });
+
+  it('chapter 2: levels 1-13 wear the desert sub-theme, 14-21 the ruins', () => {
+    const desert = OFFICIAL_THEMES[1];
+    expect(desert.info.id).toBe('desert');
+    for (let n = 1; n <= 21; n++) expect(levelDesign(desert.info.style, { level: n })?.id, `level ${n}`).toBe(n <= 13 ? 'desert' : 'ruins');
+    const ruins = desert.info.style.designs!.find((d) => d.id === 'ruins')!;
+    expect(themedLevel({ ...desert, levels: [{ ...desert.levels[0], level: 14 }], slots: [13] }, 13)!.theme).toEqual(ruins.maze);
+  });
+
   it('reads badge placement, lettering and the extra text effects leniently', () => {
     const info = validateThemeInfo({
       format: 1,

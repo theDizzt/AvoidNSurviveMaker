@@ -68,12 +68,29 @@ export interface BadgeStyle {
   titlePlate?: boolean;
 }
 
+/**
+ * A sub-theme: a named look inside a theme. Levels wear it when they pick it (`themeDesign`) or
+ * when their number falls in its `levels` range. It has its own maze colors (none = the game's
+ * default look) and may have its own badge and music; without them it wears the linked bundled
+ * theme's (`themeId`), else the parent theme's.
+ */
 export interface ThemeDesign {
   id: string;
   name: string;
   maze?: Theme;
   themeId?: string;
+  /** Own level badge (none = the linked theme's, else the parent's) */
+  badge?: BadgeStyle;
+  /** Own music: a path in the pack (none = the linked theme's, else the parent's) */
+  music?: string;
+  /** Level numbers [first, last] that wear it unless they pick a design themselves */
+  levels?: [number, number];
+  /** Name in other languages: language id → name */
+  i18n?: Record<string, string>;
 }
+
+/** `themeDesign` value that picks the parent theme's own look, whatever the ranges say */
+export const DEFAULT_DESIGN = 'default';
 
 export interface ThemeStyle {
   /** Maze colors: walls and paths (the map editor's Theme) — applied to levels without their own */
@@ -99,10 +116,23 @@ export interface ThemeText {
   caption?: string;
 }
 
-/** Explicit design selection wins; otherwise preserve an individual level's colors. */
+/**
+ * The sub-theme a level wears: the one it picks (`themeDesign`), else the one whose level range
+ * holds its number; none for the parent theme's own look.
+ */
+export function levelDesign(style: ThemeStyle, map: Pick<MapData, 'themeDesign' | 'level'>): ThemeDesign | undefined {
+  if (map.themeDesign === DEFAULT_DESIGN) return undefined;
+  const picked = map.themeDesign ? style.designs?.find((d) => d.id === map.themeDesign) : undefined;
+  if (picked) return picked;
+  const n = map.level;
+  return n === undefined ? undefined : style.designs?.find((d) => d.levels && n >= d.levels[0] && n <= d.levels[1]);
+}
+
+/** Maze colors of a level: its sub-theme's, else its own (unless it picks the parent's look), else the theme's */
 export function levelMaze(style: ThemeStyle, map: MapData): Theme | undefined {
-  const design = style.designs?.find(d => d.id === map.themeDesign);
-  return design ? design.maze : map.theme ?? style.maze;
+  const design = levelDesign(style, map);
+  if (design) return design.maze;
+  return map.themeDesign === DEFAULT_DESIGN ? style.maze : map.theme ?? style.maze;
 }
 
 export interface ThemeInfo {
@@ -229,7 +259,72 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
     if (o.format !== THEME_FORMAT) throw new Error(t('themePack.format', { format: String(o.format) }));
     const base = blankThemeInfo();
     const style = (typeof o.style === 'object' && o.style ? o.style : {}) as Record<string, unknown>;
-    const b = (typeof style.badge === 'object' && style.badge ? style.badge : {}) as Record<string, unknown>;
+    const badge = readBadge(style.badge);
+    const info: ThemeInfo = {
+      format: THEME_FORMAT,
+      id: str(o.id, 60).replace(/[^a-zA-Z0-9_-]/g, '') || base.id,
+      name: str(o.name, 60) || t('themePack.untitled'),
+      description: str(o.description, 1000),
+      author: str(o.author, 60),
+      released: /^\d{4}-\d{2}-\d{2}$/.test(str(o.released)) ? str(o.released) : base.released,
+      unlockStars: typeof o.unlockStars === 'number' ? Math.max(0, Math.round(o.unlockStars)) : 0,
+      colors: Array.isArray(o.colors) ? [hex(o.colors[0], base.colors[0]), hex(o.colors[1], base.colors[1])] : base.colors,
+      style: { badge },
+    };
+    if (str(o.authorUrl)) info.authorUrl = str(o.authorUrl, 300);
+    if (str(o.cover)) info.cover = str(o.cover, 120);
+    const music = musicPath(o.music);
+    if (music) info.music = music;
+    if (str(o.credits)) info.credits = str(o.credits, 2000);
+    const fonts = readFonts(o.fonts);
+    if (fonts) info.fonts = fonts;
+    const screens = readScreens(o.screens);
+    if (screens) info.screens = screens;
+    const i18n = readThemeI18n(o.i18n);
+    if (i18n) info.i18n = i18n;
+    if (style.maze !== undefined) {
+      // Reuse the map validator for the maze colors
+      const probe = validateMap({ v: 2, width: 960, height: 540, start: { x: 0, y: 0, w: 10, h: 10 }, goal: { x: 20, y: 0, w: 10, h: 10 }, objects: [], theme: style.maze });
+      if (probe.theme) info.style.maze = probe.theme;
+    }
+    if (Array.isArray(style.designs)) {
+      const ids = new Set<string>();
+      info.style.designs = style.designs.map((raw: unknown) => {
+        if (!raw || typeof raw !== 'object') throw new Error('Invalid theme design');
+        const d = raw as Record<string, unknown>;
+        const id = str(d.id, 61);
+        if (!/^[A-Za-z0-9_-]{1,60}$/.test(id) || id === DEFAULT_DESIGN || ids.has(id)) throw new Error('Invalid or duplicate theme design id');
+        ids.add(id);
+        const design: ThemeDesign = { id, name: str(d.name, 60) || id };
+        if (typeof d.themeId === 'string' && /^[A-Za-z0-9_-]{1,60}$/.test(d.themeId)) design.themeId = d.themeId;
+        if (d.maze !== undefined) design.maze = validateMap({ v: 2, width: 960, height: 540,
+          start: { x: 0, y: 0, w: 10, h: 10 }, goal: { x: 20, y: 0, w: 10, h: 10 }, objects: [], theme: d.maze }).theme;
+        if (d.badge && typeof d.badge === 'object') design.badge = readBadge(d.badge);
+        const dm = musicPath(d.music);
+        if (dm) design.music = dm;
+        if (Array.isArray(d.levels) && d.levels.length === 2 && d.levels.every((n) => typeof n === 'number' && Number.isFinite(n))) {
+          const [a, b] = (d.levels as number[]).map((n) => Math.max(1, Math.min(9999, Math.round(n))));
+          design.levels = [Math.min(a, b), Math.max(a, b)];
+        }
+        if (d.i18n && typeof d.i18n === 'object' && !Array.isArray(d.i18n)) {
+          const names: Record<string, string> = {};
+          for (const [lang, name] of Object.entries(d.i18n as Record<string, unknown>).slice(0, 20)) {
+            if (/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(lang) && str(name).trim()) names[lang] = str(name, 60);
+          }
+          if (Object.keys(names).length) design.i18n = names;
+        }
+        return design;
+      });
+    }
+    return info;
+  }
+
+  const obj = (v: unknown): Record<string, unknown> | null => (typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Record<string, unknown> : null);
+  const fin = (v: unknown, min: number, max: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : undefined);
+
+  /** A level badge, read leniently (bad values fall back to the defaults) */
+  function readBadge(v: unknown): BadgeStyle {
+    const b = (typeof v === 'object' && v ? v : {}) as Record<string, unknown>;
     const badge: BadgeStyle = {
       kind: KINDS.includes(b.kind as BadgeKind) ? (b.kind as BadgeKind) : DEFAULT_BADGE.kind,
       primary: hex(b.primary, DEFAULT_BADGE.primary),
@@ -254,54 +349,15 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
     const titleFormat = readBadgeTextFormat(b.titleFormat);
     if (titleFormat) badge.titleFormat = titleFormat;
     if (typeof b.titlePlate === 'boolean') badge.titlePlate = b.titlePlate;
-    const info: ThemeInfo = {
-      format: THEME_FORMAT,
-      id: str(o.id, 60).replace(/[^a-zA-Z0-9_-]/g, '') || base.id,
-      name: str(o.name, 60) || t('themePack.untitled'),
-      description: str(o.description, 1000),
-      author: str(o.author, 60),
-      released: /^\d{4}-\d{2}-\d{2}$/.test(str(o.released)) ? str(o.released) : base.released,
-      unlockStars: typeof o.unlockStars === 'number' ? Math.max(0, Math.round(o.unlockStars)) : 0,
-      colors: Array.isArray(o.colors) ? [hex(o.colors[0], base.colors[0]), hex(o.colors[1], base.colors[1])] : base.colors,
-      style: { badge },
-    };
-    if (str(o.authorUrl)) info.authorUrl = str(o.authorUrl, 300);
-    if (str(o.cover)) info.cover = str(o.cover, 120);
-    const music = str(o.music, 200);
-    if (music && !music.startsWith('/') && !music.includes('\\') && !music.includes(':')
-      && !music.split('/').includes('..') && /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(music)) info.music = music;
-    if (str(o.credits)) info.credits = str(o.credits, 2000);
-    const fonts = readFonts(o.fonts);
-    if (fonts) info.fonts = fonts;
-    const screens = readScreens(o.screens);
-    if (screens) info.screens = screens;
-    const i18n = readThemeI18n(o.i18n);
-    if (i18n) info.i18n = i18n;
-    if (style.maze !== undefined) {
-      // Reuse the map validator for the maze colors
-      const probe = validateMap({ v: 2, width: 960, height: 540, start: { x: 0, y: 0, w: 10, h: 10 }, goal: { x: 20, y: 0, w: 10, h: 10 }, objects: [], theme: style.maze });
-      if (probe.theme) info.style.maze = probe.theme;
-    }
-    if (Array.isArray(style.designs)) {
-      const ids = new Set<string>();
-      info.style.designs = style.designs.map((raw: unknown) => {
-        if (!raw || typeof raw !== 'object') throw new Error('Invalid theme design');
-        const d = raw as Record<string, unknown>;
-        const id = str(d.id, 61);
-        if (!/^[A-Za-z0-9_-]{1,60}$/.test(id) || ids.has(id)) throw new Error('Invalid or duplicate theme design id');
-        ids.add(id);
-        const design: ThemeDesign = { id, name: str(d.name, 60) || id };
-        if (typeof d.themeId === 'string' && /^[A-Za-z0-9_-]{1,60}$/.test(d.themeId)) design.themeId = d.themeId;
-        if (d.maze !== undefined) design.maze = validateMap({ v: 2, width: 960, height: 540,
-          start: { x: 0, y: 0, w: 10, h: 10 }, goal: { x: 20, y: 0, w: 10, h: 10 }, objects: [], theme: d.maze }).theme;
-        return design;
-      });
-    }
-    return info;
+    return badge;
   }
 
-  const obj = (v: unknown): Record<string, unknown> | null => (typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Record<string, unknown> : null);
-  const fin = (v: unknown, min: number, max: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : undefined);
+  /** A pack-relative audio path, or '' */
+  function musicPath(v: unknown): string {
+    const music = str(v, 200);
+    return music && !music.startsWith('/') && !music.includes('\\') && !music.includes(':')
+      && !music.split('/').includes('..') && /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(music) ? music : '';
+  }
 
   /** Badge part placement; parts left at the design's spot are dropped */
   function readBadgeLayout(v: unknown): BadgeLayout | undefined {
@@ -356,13 +412,17 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
   /** The theme as shown in `lang`: its translated text where there is one, the default text elsewhere */
   function localizeThemeInfo(info: ThemeInfo, lang: string): ThemeInfo {
     const tx = info.i18n?.[lang];
-    if (!tx) return info;
+    const designs = info.style.designs?.some((d) => d.i18n?.[lang])
+      ? info.style.designs.map((d) => (d.i18n?.[lang] ? { ...d, name: d.i18n[lang] } : d))
+      : info.style.designs;
+    const style = designs !== info.style.designs ? { ...info.style, designs } : info.style;
+    if (!tx) return style === info.style ? info : { ...info, style };
     return {
       ...info,
       name: tx.name ?? info.name,
       description: tx.description ?? info.description,
       ...(tx.credits ?? info.credits ? { credits: tx.credits ?? info.credits } : {}),
-      style: tx.caption ? { ...info.style, badge: { ...info.style.badge, caption: tx.caption } } : info.style,
+      style: tx.caption ? { ...style, badge: { ...style.badge, caption: tx.caption } } : style,
     };
   }
 
@@ -434,7 +494,7 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
     const m = levelAt(entry, index);
     if (!m || index >= levelSlots(entry)) return null;
     const out: MapData = { ...m, level: m.level ?? index + 1, title: m.title ?? m.name.replace(/^\d+\.\s*/, '') };
-    out.theme = levelMaze(entry.info.style, m);
+    out.theme = levelMaze(entry.info.style, out);
     return out;
   }
   return { THEME_FORMAT, LEVELS_PER_THEME, MAX_PACK_LEVELS, STARS_PER_LEVEL, CRYSTALS_PER_THEME, STARS_PER_THEME, MIN_DIFFICULTY, MAX_DIFFICULTY, DEFAULT_BADGE, blankThemeInfo, validateThemeInfo, localizeThemeInfo, averageDifficulty, levelSlots, crystalSlots, maxStars, assignSlots, levelAt, filledSlots, themedLevel };

@@ -4,7 +4,7 @@ import { fontPicker } from './font-picker';
 import { gameAudio } from './audio';
 import { levelLabel } from './localized/level';
 import { compileMap } from '../core/object';
-import { levelMaze } from '../core/theme-pack';
+import { DEFAULT_DESIGN, levelDesign, levelMaze, type ThemeDesign } from '../core/theme-pack';
 import {
   averageDifficulty, blankThemeInfo, DEFAULT_BADGE, LEVELS_PER_THEME, localizeThemeInfo, MAX_PACK_LEVELS, validateThemeInfo,
   type BadgeFont, type BadgeKind, type BadgePart, type BadgePartId, type BadgeStyle, type BadgeTextFormat, type ThemeEntry, type ThemeInfo, type ThemeText,
@@ -13,11 +13,15 @@ import type { MapData } from '../core/types';
 import type { TextEffects } from '../core/text-effects';
 import { createEmptyMap, validateMap, validatePack } from './localized/validate';
 import { badgeImage, drawLevelBadge, type BadgeHit } from './badge';
-import { beginFrame, clientToMap, drawMap, fitCanvas, unitsPerPx } from './render';
+import { beginFrame, clientToMap, drawMap, fitCanvas, setCamera, unitsPerPx } from './render';
+import { floatingPanel, type FloatingPanel } from './float-panel';
 import { renderThemePanel } from './theme-panel';
 import { ScreenDesigner, type ScreenKind } from './screen-designer';
 import { ensureFonts } from './screen-render';
-import { bundledThemeById, bundledThemeOptions, customStoredTheme, OFFICIAL_THEMES, CUSTOM_THEME_PRESETS, setCustomTheme, themeFileMazePresets, type StoredTheme } from './theme-registry';
+import {
+  bundledThemeById, bundledThemeOptions, customStoredTheme, levelThemeIn, OFFICIAL_THEMES, CUSTOM_THEME_PRESETS, setCustomTheme,
+  subThemeLabel, themeFileMazePresets, type StoredTheme,
+} from './theme-registry';
 import { download, fileToDataUrl, readThemeZip, urlToDataUrl, writeThemeZip } from './theme-zip';
 
 /**
@@ -30,7 +34,7 @@ const DRAFT_KEY = 'avoid-n-survive:theme-draft';
 /** Which form sections are open (remembered per browser) */
 const OPEN_KEY = 'avoid-n-survive:theme-editor-open';
 /** Sections open the first time */
-const OPEN_DEFAULT = ['info', 'badge-design', 'badge-layout'];
+const OPEN_DEFAULT = ['info', 'sub', 'sub-maze', 'badge-design', 'badge-layout'];
 const HISTORY_MAX = 100;
 
 const PARTS: BadgePartId[] = ['graphic', 'number', 'title'];
@@ -84,8 +88,6 @@ export class ThemeEditor {
   private stageHost!: HTMLElement;
   private screenPanel!: HTMLElement;
   private designer!: ScreenDesigner;
-  /** Parts of the side column shown on the in-game tab */
-  private gameParts: HTMLElement[] = [];
   private previewIndex = 0;
   private visible = false;
   private readonly canvas: HTMLCanvasElement;
@@ -123,6 +125,18 @@ export class ThemeEditor {
   private histIndex = -1;
   private histAt = 0;
   private opened: Set<string>;
+  /** The sub-theme being edited (its design id), null = the theme itself */
+  private node: string | null = null;
+  private readonly badgeBody: HTMLElement;
+  private readonly badgeTitle: HTMLElement;
+  private readonly center: HTMLElement;
+  private readonly viewport: HTMLElement;
+  private readonly head: HTMLElement;
+  private readonly floats: { el: HTMLElement; panel: FloatingPanel }[] = [];
+  private gameTools!: HTMLElement;
+  private badgeFloat!: HTMLElement;
+  private levelsFloat!: HTMLElement;
+  private screenFloat!: HTMLElement;
 
   constructor(root: HTMLElement) {
     this.restoreDraft();
@@ -135,6 +149,10 @@ export class ThemeEditor {
     this.canvas = el('canvas', 'te-canvas');
     this.ctx = this.canvas.getContext('2d')!;
     this.form = el('div', 'te-form panel');
+    this.badgeBody = el('div', 'te-form panel');
+    this.badgeTitle = el('span', 'float-title', tr('te.levelBadge'));
+    this.center = el('div', 'te-center');
+    this.viewport = el('div', 'te-viewport');
     this.levelList = el('ol', 'te-levels');
     this.tilePreview = el('div', 'te-tile');
     this.status = el('p', 'te-status muted');
@@ -143,7 +161,8 @@ export class ThemeEditor {
     this.mapInput = Object.assign(el('input'), { type: 'file', accept: '.json,application/json', multiple: true, hidden: true });
     this.mapInput.addEventListener('change', () => void this.addMapFiles());
 
-    const head = el('header', 'dhead');
+    const head = el('header', 'dhead te-head');
+    this.head = head;
     const back = el('button', 'dback');
     back.type = 'button';
     back.title = tr('common.backEsc');
@@ -168,7 +187,7 @@ export class ThemeEditor {
     );
     head.append(back, titles, actions);
 
-    const side = el('div', 'te-side');
+    // The preview fills the screen; the panels float over it (like the map editor)
     const tabs = el('div', 'te-tabs');
     tabs.setAttribute('role', 'tablist');
     for (const [k, label] of [['game', tr('te.inGame')], ['select', tr('te.levelSelect')]] as const) {
@@ -181,9 +200,18 @@ export class ThemeEditor {
     }
     this.tabs = tabs;
     this.stageHost = el('div', 'te-stage');
-    this.screenPanel = el('section', 'te-screen-panel panel');
+    this.screenPanel = el('div', 'te-screen-panel panel');
     this.designer = new ScreenDesigner(this.stageHost, this.screenPanel, () => this.draft, () => this.save(), (f, folder) => this.storeFile(f, folder));
-    const levelsBox = el('section', 'te-levels-box panel');
+    this.canvas.dataset.fit = 'parent';
+    this.viewport.append(this.canvas, this.stageHost);
+    this.gameTools = this.previewToolbar();
+    const panelsBtn = btn(tr('editor.hidePanels'), () => this.togglePanels(), 'te-panels-btn');
+    panelsBtn.title = 'H';
+    const topbar = el('div', 'te-topbar');
+    topbar.append(tabs, this.gameTools, panelsBtn);
+    this.center.append(topbar, this.viewport, el('p', 'te-canvas-hint muted', tr('te.partHint')), this.status);
+    this.bindCanvas();
+
     const levelHead = el('div', 'te-levels-head');
     levelHead.append(el('h3', '', tr('te.levels')));
     const levelBtns = el('div', 'actions');
@@ -192,18 +220,28 @@ export class ThemeEditor {
       btn(tr('te.mapEditorPack'), () => this.addFromEditorPack()),
       btn(tr('te.openMap'), () => this.addEditorMap()),
     );
-    levelsBox.append(levelHead, this.levelList, levelBtns);
-    const previewRow = el('div', 'te-preview-row');
-    previewRow.append(this.tilePreview);
-    const canvasBox = el('div', 'te-canvas-box');
-    canvasBox.append(this.previewToolbar(), this.canvas, el('p', 'te-canvas-hint muted', tr('te.partHint')));
-    this.bindCanvas();
-    this.gameParts = [canvasBox, previewRow, levelsBox];
-    side.append(tabs, canvasBox, this.stageHost, previewRow, levelsBox, this.screenPanel, this.status);
+    const levelsBody = el('div', 'panel te-levels-body');
+    levelsBody.append(levelHead, this.levelList, levelBtns);
 
-    const body = el('div', 'te-body');
-    body.append(this.form, side);
-    root.replaceChildren(head, body, this.zipInput, this.mapInput);
+    const float = (id: string, cls: string, title: HTMLElement | string, body: HTMLElement) => {
+      const a = el('aside', `editor-float te-float ${cls}`);
+      const h = el('div', 'float-head');
+      h.title = tr('panel.moveHint');
+      const toggle = el('button', 'float-toggle', '−');
+      toggle.type = 'button';
+      toggle.setAttribute('aria-expanded', 'true');
+      h.append(typeof title === 'string' ? el('span', 'float-title', title) : title, toggle);
+      body.classList.add('float-body');
+      a.append(h, body);
+      this.floats.push({ el: a, panel: floatingPanel(a, `te-${id}`, { resizable: true }) });
+      return a;
+    };
+    const themeFloat = float('theme', 'te-float-theme', tr('te.panelTheme'), this.form);
+    this.badgeFloat = float('badge', 'te-float-badge', this.badgeTitle, this.badgeBody);
+    this.levelsFloat = float('levels', 'te-float-levels', tr('te.levels'), levelsBody);
+    this.screenFloat = float('screen', 'te-float-screen', tr('te.levelSelect'), this.screenPanel);
+
+    root.replaceChildren(head, this.center, themeFloat, this.badgeFloat, this.levelsFloat, this.screenFloat, this.zipInput, this.mapInput);
     root.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement)) this.onBack();
     });
@@ -221,19 +259,35 @@ export class ThemeEditor {
     this.renderForm();
     this.renderLevels();
     this.setTab(this.tab);
-    requestAnimationFrame(() => this.fit());
+    requestAnimationFrame(() => {
+      for (const f of this.floats) f.panel.refresh();
+      this.fit();
+    });
   }
 
   private setTab(tab: 'game' | ScreenKind): void {
     this.tab = tab;
     for (const t of this.tabs.querySelectorAll<HTMLElement>('button')) t.setAttribute('aria-selected', String(t.dataset.tab === tab));
     const game = tab === 'game';
-    for (const p of this.gameParts) p.hidden = !game;
+    this.canvas.hidden = !game;
+    this.gameTools.hidden = !game;
+    this.badgeFloat.hidden = !game;
+    this.levelsFloat.hidden = !game;
     this.stageHost.hidden = game;
-    this.screenPanel.hidden = game;
+    this.screenFloat.hidden = game;
     if (!game) this.designer.open(tab);
-    else requestAnimationFrame(() => this.fit());
+    requestAnimationFrame(() => this.fit());
     this.syncHistoryButtons();
+  }
+
+  /** Show or hide the floating panels (H), to see the whole preview */
+  private togglePanels(): void {
+    const root = this.center.parentElement;
+    if (!root) return;
+    const hidden = root.classList.toggle('panels-hidden');
+    const b = this.center.querySelector<HTMLButtonElement>('.te-panels-btn');
+    if (b) b.textContent = tr(hidden ? 'editor.showPanels' : 'editor.hidePanels');
+    requestAnimationFrame(() => this.fit());
   }
 
   /** Put an uploaded file into the pack under folder/, returning its path */
@@ -255,7 +309,14 @@ export class ThemeEditor {
   }
 
   private fit(): void {
+    // The work area starts below the header; panels default to the same top
+    const top = Math.round(this.head.getBoundingClientRect().bottom + 8);
+    this.center.parentElement?.style.setProperty('--te-top', `${top}px`);
     fitCanvas(this.canvas, this.previewMap());
+    // The level select stage: the largest 16:9 box in the preview area
+    const w = this.viewport.clientWidth, h = this.viewport.clientHeight;
+    const sw = Math.max(160, Math.floor(Math.min(w, h * 16 / 9)));
+    this.stageHost.style.width = `${sw}px`;
   }
 
   // ───────────────────────── State ─────────────────────────
@@ -310,6 +371,7 @@ export class ThemeEditor {
     this.draft = { info: structuredClone(('source' in entry ? entry.source : undefined) ?? entry.info), levels: structuredClone(entry.levels), images };
     this.previewIndex = 0;
     this.part = null;
+    this.node = null;
     this.resetHistory();
     this.save();
     this.renderForm();
@@ -568,7 +630,7 @@ export class ThemeEditor {
       if (f.size > 4 * 1024 * 1024) return alert(tr('te.pleaseUseAnImageUnder'));
       const ext = f.name.split('.').pop()?.toLowerCase() || 'png';
       const name = `${fallbackName}.${ext}`;
-      if (current && current !== name) delete this.draft.images[current];
+      if (current && current !== name && !this.fileInUse(current)) delete this.draft.images[current];
       this.draft.images[name] = await fileToDataUrl(f);
       apply(name);
       this.save();
@@ -587,10 +649,14 @@ export class ThemeEditor {
     return wrap;
   }
 
-  private musicControl(): HTMLElement {
+  /**
+   * Background music: the theme's, or a sub-theme's own (`inherit` names what plays without one).
+   * Files go to audio/<base>.<ext>.
+   */
+  private musicControl(get: () => string | undefined, set: (path: string | undefined) => void, base: string, inherit?: string): HTMLElement {
     const row = el('div', 'actions');
-    const info = this.draft.info;
-    row.append(el('span', 'muted', info.music ?? tr('te.noMusic')));
+    const current = get();
+    row.append(el('span', 'muted', current ?? inherit ?? tr('te.noMusic')));
     const input = el('input');
     input.type = 'file';
     input.accept = '.mp3,.ogg,.wav,.m4a,.aac,.flac';
@@ -608,10 +674,11 @@ export class ThemeEditor {
       try {
         const url = await fileToDataUrl(file);
         if (this.draft !== draft) return;
-        const name = `audio/background.${file.name.split('.').pop()!.toLowerCase()}`;
-        if (info.music) delete draft.images[info.music];
+        const name = `audio/${base}.${file.name.split('.').pop()!.toLowerCase()}`;
+        const old = get();
+        if (old) delete draft.images[old];
         draft.images[name] = url;
-        info.music = name;
+        set(name);
         gameAudio.setMusic(null);
         this.save();
         this.renderForm();
@@ -620,18 +687,22 @@ export class ThemeEditor {
     });
     const preview = el('button', '', tr('te.previewMusic'));
     preview.type = 'button';
-    preview.disabled = !info.music || !this.draft.images[info.music];
-    preview.addEventListener('click', () => gameAudio.setMusic(info.music ? this.draft.images[info.music] ?? null : null));
+    preview.disabled = !current || !this.draft.images[current];
+    preview.addEventListener('click', () => {
+      const path = get();
+      gameAudio.setMusic(path ? this.draft.images[path] ?? null : null);
+    });
     const stop = el('button', '', tr('te.stop'));
     stop.type = 'button';
     stop.addEventListener('click', () => gameAudio.setMusic(null));
     const remove = el('button', '', tr('te.removeMusic'));
     remove.type = 'button';
-    remove.disabled = !info.music;
+    remove.disabled = !current;
     remove.addEventListener('click', () => {
       gameAudio.setMusic(null);
-      if (info.music) delete this.draft.images[info.music];
-      delete info.music;
+      const old = get();
+      if (old) delete this.draft.images[old];
+      set(undefined);
       this.save();
       this.renderForm();
     });
@@ -672,17 +743,112 @@ export class ThemeEditor {
     });
   }
 
-  private renderForm(): void {
-    const info = this.draft.info;
-    const badge = info.style.badge;
-    const b = (patch: Partial<BadgeStyle>) => Object.assign(badge, patch);
+  /** The sub-theme being edited, if any */
+  private nodeDesign(): ThemeDesign | undefined {
+    return this.node ? this.draft.info.style.designs?.find((d) => d.id === this.node) : undefined;
+  }
 
-    // Start from an existing theme
+  /** The badge the badge panel and the preview handles edit: the sub-theme's own, else the theme's */
+  private editBadge(): BadgeStyle {
+    return this.nodeDesign()?.badge ?? this.draft.info.style.badge;
+  }
+
+  /** Whether the badge on the preview is the one being edited (a sub-theme may wear another's) */
+  private badgeEditable(): boolean {
+    const d = this.nodeDesign();
+    return !d || !!d.badge;
+  }
+
+  /** Level number a level shows (its own, else its place in the list) */
+  private levelNo(i: number): number {
+    return this.draft.levels[i]?.level ?? i + 1;
+  }
+
+  /** The sub-theme level `i` wears (undefined = the theme itself) */
+  private designOfLevel(i: number): ThemeDesign | undefined {
+    const m = this.draft.levels[i];
+    return m ? levelDesign(this.draft.info.style, { themeDesign: m.themeDesign, level: this.levelNo(i) }) : undefined;
+  }
+
+  private selectNode(id: string | null): void {
+    if (this.node === id) return;
+    this.node = id;
+    this.part = null;
+    // Show a level that wears it, when there is one
+    const k = this.draft.levels.findIndex((_, i) => (this.designOfLevel(i)?.id ?? null) === id);
+    if (k >= 0) this.previewIndex = k;
+    this.compiledFor = null;
+    this.renderForm();
+    this.renderLevels();
+  }
+
+  private group(...children: HTMLElement[]): HTMLElement {
+    const g = el('div', 'fields');
+    g.append(...children);
+    return g;
+  }
+
+  /** A collapsible section; which ones are open is remembered */
+  private section(id: string, title: string, ...children: HTMLElement[]): HTMLElement {
+    const d = el('details', 'theme-section te-section');
+    d.open = this.opened.has(id);
+    const sum = el('summary');
+    sum.append(el('h3', '', title));
+    const s = el('section');
+    s.append(...children);
+    d.append(sum, s);
+    d.addEventListener('toggle', () => {
+      if (d.open) this.opened.add(id);
+      else this.opened.delete(id);
+      this.saveOpened();
+    });
+    return d;
+  }
+
+  private foldButtons(box: HTMLElement): HTMLElement {
+    const fold = el('div', 'actions te-fold');
+    for (const [label, open] of [[tr('te.expandAll'), true], [tr('te.collapseAll'), false]] as const) {
+      const b = el('button', 'subtle', label);
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        for (const d of box.querySelectorAll<HTMLDetailsElement>('details.te-section')) d.open = open;
+      });
+      fold.append(b);
+    }
+    return fold;
+  }
+
+  /** Bundled themes for a picker, each with its sub-themes under it */
+  private themeOptions(select: HTMLSelectElement, value: string, skip?: string, withSubs = false): void {
+    for (const { id, name, entry } of bundledThemeOptions()) {
+      if (id === skip) continue;
+      const designs = withSubs ? entry.info.style.designs ?? [] : [];
+      if (designs.length) {
+        const g = el('optgroup');
+        g.label = name;
+        g.append(new Option(name, id, false, value === id), ...designs.map((d) => new Option(subThemeLabel(d.name), `${id}#${d.id}`, false, value === `${id}#${d.id}`)));
+        select.append(g);
+      } else select.append(new Option(name, id, false, value === id));
+    }
+  }
+
+  private renderForm(): void {
+    if (this.node && !this.nodeDesign()) this.node = null;
+    const info = this.draft.info;
+
+    // Start from an existing theme (sub-themes come along)
     const source = el('select');
     source.append(new Option(tr('te.startFrom'), ''), new Option(tr('te.blankTheme'), 'blank'));
     const chapters = el('optgroup');
     chapters.label = tr('te.officialChapters');
-    OFFICIAL_THEMES.forEach((t, i) => chapters.append(new Option(tr('te.chapterOption', { n: i + 1, name: t.info.name }), `o${i}`)));
+    OFFICIAL_THEMES.forEach((t, i) => {
+      chapters.append(new Option(tr('te.chapterOption', { n: i + 1, name: t.info.name }), `o${i}`));
+      for (const d of t.info.style.designs ?? []) {
+        const o = new Option(subThemeLabel(d.name), `o${i}`);
+        o.disabled = true;
+        chapters.append(o);
+      }
+    });
     const unused = el('optgroup');
     unused.label = tr('te.customThemePresets');
     CUSTOM_THEME_PRESETS.forEach((t, i) => unused.append(new Option(t.info.name, `u${i}`)));
@@ -698,6 +864,60 @@ export class ThemeEditor {
       else void this.load(OFFICIAL_THEMES[Number(v.slice(1))]);
     });
 
+    const design = this.nodeDesign();
+    this.form.replaceChildren(
+      this.group(this.field(tr('te.load'), source, true)),
+      this.themeTree(),
+      this.foldButtons(this.form),
+      ...(design ? this.subThemeSections(design) : this.mainSections(info)),
+    );
+    this.renderBadgePanel();
+    this.renderTile();
+  }
+
+  /** The theme and its sub-themes, as a tree to pick what to edit */
+  private themeTree(): HTMLElement {
+    const info = this.draft.info;
+    const designs = info.style.designs ?? [];
+    const counts = new Map<string | null, number>();
+    this.draft.levels.forEach((_, i) => {
+      const id = this.designOfLevel(i)?.id ?? null;
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    });
+    const tree = el('div', 'te-tree');
+    tree.setAttribute('role', 'tree');
+    const node = (id: string | null, name: string, meta: string, child: boolean) => {
+      const b = el('button', `te-tree-node${child ? ' child' : ''}${this.node === id ? ' on' : ''}`);
+      b.type = 'button';
+      b.setAttribute('role', 'treeitem');
+      b.setAttribute('aria-selected', String(this.node === id));
+      b.append(el('span', 'te-tree-name', child ? `└ ${name}` : name), el('small', 'te-tree-meta', meta));
+      b.addEventListener('click', () => this.selectNode(id));
+      return b;
+    };
+    tree.append(node(null, info.name, tr('te.treeLevels', { n: counts.get(null) ?? 0 }), false));
+    for (const d of designs) {
+      const range = d.levels ? tr('te.treeRange', { from: d.levels[0], to: d.levels[1] }) + ' · ' : '';
+      tree.append(node(d.id, d.name, range + tr('te.treeLevels', { n: counts.get(d.id) ?? 0 }), true));
+    }
+    const add = el('button', 'subtle te-tree-add', tr('te.addSubTheme'));
+    add.type = 'button';
+    add.addEventListener('click', () => {
+      const list = info.style.designs ??= [];
+      let n = 1;
+      while (list.some((d) => d.id === `design-${n}`)) n++;
+      const id = `design-${n}`;
+      list.push({ id, name: tr('te.designNumber', { n }), ...(info.style.maze ? { maze: structuredClone(info.style.maze) } : {}) });
+      this.save();
+      this.node = null;
+      this.selectNode(id);
+    });
+    tree.append(add);
+    return tree;
+  }
+
+  /** Sections of the theme itself */
+  private mainSections(info: ThemeInfo): HTMLElement[] {
     const maze = el('div', 'te-maze');
     const renderMaze = () => renderThemePanel(maze, info.style.maze, (next) => {
       if (next) info.style.maze = next;
@@ -706,118 +926,10 @@ export class ThemeEditor {
       renderMaze();
     }, themeFileMazePresets(), false);
     renderMaze();
-    const designs = el('div', 'te-designs');
-    const renderDesigns = () => {
-      designs.replaceChildren();
-      for (const design of info.style.designs ?? []) {
-        const card = el('section');
-        const name = this.text(design.name, value => {
-          design.name = value.trim() || design.id;
-          this.renderLevels();
-        }, { max: 60 });
-        const remove = el('button', '', tr('te.remove'));
-        remove.type = 'button';
-        remove.addEventListener('click', () => {
-          if (!confirm(tr('te.removeDesignConfirm'))) return;
-          info.style.designs = info.style.designs?.filter(d => d !== design);
-          for (const map of this.draft.levels) if (map.themeDesign === design.id) {
-            delete map.themeDesign;
-            delete map.theme;
-          }
-          this.save();
-          renderDesigns();
-          this.renderLevels();
-        });
-        const panel = el('div', 'te-maze');
-        const render = () => renderThemePanel(panel, design.maze, next => {
-          if (next) design.maze = next;
-          else delete design.maze;
-          this.save();
-          render();
-        }, themeFileMazePresets(), false);
-        render();
-        // Link a bundled theme: levels using this design wear its badge and music too
-        const linkOptions: [string, string][] = [['', tr('te.linkedThemeNone')],
-          ...bundledThemeOptions().filter(o => o.id !== info.id).map(o => [o.id, o.name] as [string, string])];
-        const link = this.select(design.themeId ?? '', linkOptions, value => {
-          const entry = value ? bundledThemeById(value) : null;
-          if (entry) {
-            design.themeId = value;
-            if (entry.info.style.maze) design.maze = structuredClone(entry.info.style.maze);
-            // A design still under its default name takes the theme's name
-            const n = /^design-(\d+)$/.exec(design.id)?.[1];
-            if (design.name === design.id || (n && design.name === tr('te.designNumber', { n: Number(n) }))) design.name = entry.info.name;
-          } else delete design.themeId;
-          this.save();
-          renderDesigns();
-          this.renderLevels();
-        });
-        card.append(this.field(tr('te.designName'), name), this.field(tr('te.linkedTheme'), link), el('p', 'muted', tr('te.linkedThemeNote')), remove, panel);
-        designs.append(card);
-      }
-      const add = el('button', '', tr('te.addDesign'));
-      add.type = 'button';
-      add.addEventListener('click', () => {
-        const list = info.style.designs ??= [];
-        let n = 1;
-        while (list.some(d => d.id === `design-${n}`)) n++;
-        list.push({ id: `design-${n}`, name: tr('te.designNumber', { n }),
-          ...(info.style.maze ? { maze: structuredClone(info.style.maze) } : {}) });
-        this.save();
-        renderDesigns();
-        this.renderLevels();
-      });
-      designs.append(add);
-    };
-    renderDesigns();
-
-    const showTitle = el('input');
-    showTitle.type = 'checkbox';
-    showTitle.checked = badge.showTitle;
-    showTitle.addEventListener('change', () => {
-      badge.showTitle = showTitle.checked;
-      this.save();
-    });
-    const toggle = el('label', 'toggle');
-    toggle.append(showTitle, el('span', '', tr('te.showTheLevelTitle')));
-
-    const group = (...children: HTMLElement[]) => {
-      const g = el('div', 'fields');
-      g.append(...children);
-      return g;
-    };
-    // Collapsible sections; which ones are open is remembered
-    const section = (id: string, title: string, ...children: HTMLElement[]) => {
-      const d = el('details', 'theme-section te-section');
-      d.open = this.opened.has(id);
-      const sum = el('summary');
-      sum.append(el('h3', '', title));
-      const s = el('section');
-      s.append(...children);
-      d.append(sum, s);
-      d.addEventListener('toggle', () => {
-        if (d.open) this.opened.add(id);
-        else this.opened.delete(id);
-        this.saveOpened();
-      });
-      return d;
-    };
-    const foldAll = (open: boolean) => () => {
-      for (const d of this.form.querySelectorAll<HTMLDetailsElement>('details.te-section')) d.open = open;
-    };
-    const fold = el('div', 'actions te-fold');
-    for (const [label, open] of [[tr('te.expandAll'), true], [tr('te.collapseAll'), false]] as const) {
-      const b = el('button', 'subtle', label);
-      b.type = 'button';
-      b.addEventListener('click', foldAll(open));
-      fold.append(b);
-    }
-    const tri = (v: boolean | undefined): '' | 'on' | 'off' => (v === undefined ? '' : v ? 'on' : 'off');
-
-    this.form.replaceChildren(
-      group(this.field(tr('te.load'), source, true)),
-      fold,
-      section('info', tr('te.themeInfo'), group(
+    const section = (id: string, title: string, ...children: HTMLElement[]) => this.section(id, title, ...children);
+    const group = (...children: HTMLElement[]) => this.group(...children);
+    return [
+      section('info', tr('te.themeInfo'), this.tilePreview, group(
         this.field(tr('te.name'), this.text(info.name, (v) => (info.name = v.trim() || tr('themePack.untitled')), { max: 60 }), true),
         this.field(tr('te.idForSaves'), this.text(info.id, (v) => (info.id = v.replace(/[^a-zA-Z0-9_-]/g, '') || 'my-theme'), { max: 60 })),
         this.field(tr('common.releaseDate'), this.text(info.released, (v) => (info.released = v), { type: 'date' })),
@@ -844,27 +956,187 @@ export class ThemeEditor {
       )),
       ...this.translationSections(info, section, group),
       section('fonts', tr('te.fonts'), this.fontsBox()),
-      section('music', tr('te.backgroundMusic'), this.musicControl()),
-      section('maze', tr('te.mazeColors'), el('h4', '', tr('te.defaultDesign')), maze, designs),
+      section('music', tr('te.backgroundMusic'), this.musicControl(() => info.music, (v) => {
+        if (v) info.music = v;
+        else delete info.music;
+      }, 'background')),
+      section('maze', tr('te.mazeColors'), maze),
+    ];
+  }
+
+  /** Sections of a sub-theme: name, levels, linked theme, music, maze colors */
+  private subThemeSections(design: ThemeDesign): HTMLElement[] {
+    const info = this.draft.info;
+    const name = this.text(design.name, (v) => (design.name = v.trim() || design.id), { max: 60 });
+    const names = LANGUAGES.filter((l) => l.id !== DEFAULT_LANGUAGE).map((l) => this.field(tr('te.nameIn', { language: l.label }), this.text(design.i18n?.[l.id] ?? '', (v) => {
+      const all = { ...design.i18n };
+      if (v.trim()) all[l.id] = v.trim().slice(0, 60);
+      else delete all[l.id];
+      if (Object.keys(all).length) design.i18n = all;
+      else delete design.i18n;
+    }, { max: 60 })));
+
+    // Level range: levels with these numbers wear it unless they pick another
+    const num = (value: number | undefined, apply: (v: number | undefined) => void) => {
+      const i = el('input');
+      i.type = 'number';
+      i.min = '1';
+      i.max = '9999';
+      i.placeholder = '—';
+      i.value = value === undefined ? '' : String(value);
+      i.addEventListener('change', () => {
+        const v = Math.round(Number(i.value));
+        apply(i.value.trim() && Number.isFinite(v) ? Math.max(1, Math.min(9999, v)) : undefined);
+        this.save();
+        this.renderForm();
+        this.renderLevels();
+      });
+      return i;
+    };
+    const setRange = (from: number | undefined, to: number | undefined) => {
+      if (from === undefined && to === undefined) delete design.levels;
+      else {
+        const a = from ?? to!, b = to ?? from!;
+        design.levels = [Math.min(a, b), Math.max(a, b)];
+      }
+    };
+
+    const link = el('select');
+    link.append(new Option(tr('te.linkedThemeNone'), ''));
+    this.themeOptions(link, design.themeId ?? '', info.id);
+    link.addEventListener('change', () => {
+      const value = link.value;
+      const entry = value ? bundledThemeById(value) : null;
+      if (entry) {
+        design.themeId = value;
+        if (entry.info.style.maze) design.maze = structuredClone(entry.info.style.maze);
+        const n = /^design-(\d+)$/.exec(design.id)?.[1];
+        if (design.name === design.id || (n && design.name === tr('te.designNumber', { n: Number(n) }))) design.name = entry.info.name;
+      } else delete design.themeId;
+      this.save();
+      this.renderForm();
+      this.renderLevels();
+    });
+
+    const linked = design.themeId ? bundledThemeById(design.themeId) : null;
+    const inherited = linked?.info.music ?? info.music;
+    const maze = el('div', 'te-maze');
+    const renderMaze = () => renderThemePanel(maze, design.maze, (next) => {
+      if (next) design.maze = next;
+      else delete design.maze;
+      this.save();
+      renderMaze();
+    }, themeFileMazePresets(), false);
+    renderMaze();
+
+    const remove = el('button', 'danger', tr('te.removeSubTheme'));
+    remove.type = 'button';
+    remove.addEventListener('click', () => {
+      if (!confirm(tr('te.removeDesignConfirm'))) return;
+      info.style.designs = info.style.designs?.filter((d) => d !== design);
+      if (!info.style.designs?.length) delete info.style.designs;
+      for (const map of this.draft.levels) if (map.themeDesign === design.id) delete map.themeDesign;
+      for (const f of [design.music, design.badge?.image]) if (f && !this.fileInUse(f, design)) delete this.draft.images[f];
+      this.node = null;
+      this.save();
+      this.renderForm();
+      this.renderLevels();
+    });
+    const toMain = el('button', 'subtle', tr('te.backToMainTheme'));
+    toMain.type = 'button';
+    toMain.addEventListener('click', () => this.selectNode(null));
+
+    return [
+      this.section('sub', tr('te.subTheme'), this.group(
+        this.field(tr('te.designName'), name, true),
+        ...names,
+        this.field(tr('te.levelsFrom'), num(design.levels?.[0], (v) => setRange(v, design.levels?.[1]))),
+        this.field(tr('te.levelsTo'), num(design.levels?.[1], (v) => setRange(design.levels?.[0], v))),
+        el('p', 'field wide muted', tr('te.levelsRangeNote')),
+        this.field(tr('te.linkedTheme'), link, true),
+        el('p', 'field wide muted', tr('te.linkedThemeNote')),
+      ), (() => {
+        const row = el('div', 'actions');
+        row.append(toMain, remove);
+        return row;
+      })()),
+      this.section('sub-music', tr('te.backgroundMusic'), this.musicControl(() => design.music, (v) => {
+        if (v) design.music = v;
+        else delete design.music;
+      }, `background-${design.id}`, inherited ? tr('te.inheritedMusic', { file: inherited }) : undefined)),
+      this.section('sub-maze', tr('te.mazeColors'), maze),
+    ];
+  }
+
+  /** Whether a pack file is still used by the theme or a sub-theme other than `except` */
+  private fileInUse(file: string, except?: ThemeDesign): boolean {
+    const info = this.draft.info;
+    return info.music === file || info.style.badge.image === file || info.cover === file
+      || (info.style.designs ?? []).some((d) => d !== except && (d.music === file || d.badge?.image === file));
+  }
+
+  /** The badge panel: the badge of the theme or of the sub-theme being edited */
+  private renderBadgePanel(): void {
+    const design = this.nodeDesign();
+    this.badgeTitle.textContent = design ? tr('te.badgeOf', { name: design.name }) : tr('te.levelBadge');
+    if (design && !design.badge) {
+      // Wears another badge: offer to make its own from it
+      const linked = design.themeId ? bundledThemeById(design.themeId) : null;
+      const make = el('button', 'primary', tr('te.makeOwnBadge'));
+      make.type = 'button';
+      make.addEventListener('click', () => {
+        const from = structuredClone(linked?.info.style.badge ?? this.draft.info.style.badge);
+        // A linked theme's picture isn't in this pack
+        if (from.image && !this.draft.images[from.image]) delete from.image;
+        design.badge = from;
+        this.save();
+        this.renderBadgePanel();
+      });
+      this.badgeBody.replaceChildren(
+        el('p', 'muted', tr(linked ? 'te.badgeFromLinked' : 'te.badgeFromMain', { name: linked?.info.name ?? this.draft.info.name })),
+        make,
+      );
+      this.renderChips();
+      return;
+    }
+    const badge = this.editBadge();
+    const b = (patch: Partial<BadgeStyle>) => Object.assign(badge, patch);
+    const showTitle = el('input');
+    showTitle.type = 'checkbox';
+    showTitle.checked = badge.showTitle;
+    showTitle.addEventListener('change', () => {
+      badge.showTitle = showTitle.checked;
+      this.save();
+    });
+    const toggle = el('label', 'toggle');
+    toggle.append(showTitle, el('span', '', tr('te.showTheLevelTitle')));
+    const tri = (v: boolean | undefined): '' | 'on' | 'off' => (v === undefined ? '' : v ? 'on' : 'off');
+    const section = (id: string, title: string, ...children: HTMLElement[]) => this.section(id, title, ...children);
+    const group = (...children: HTMLElement[]) => this.group(...children);
+
+    const reset = el('button', 'subtle', design ? tr('te.useMainBadge') : tr('te.resetBadge'));
+    reset.type = 'button';
+    reset.addEventListener('click', () => {
+      if (design) {
+        if (design.badge?.image && !this.fileInUse(design.badge.image, design)) delete this.draft.images[design.badge.image];
+        delete design.badge;
+      } else this.draft.info.style.badge = { ...DEFAULT_BADGE };
+      this.part = null;
+      this.save();
+      this.renderBadgePanel();
+    });
+
+    this.badgeBody.replaceChildren(
+      this.foldButtons(this.badgeBody),
       section('badge-design', tr('te.secBadgeDesign'), group(
         this.field(tr('te.design'), this.select(badge.kind, BADGE_KINDS, (v) => b({ kind: v }))),
         this.field(tr('te.mainColor'), this.color(badge.primary, (v) => b({ primary: v }))),
         this.field(tr('te.secondColor'), this.color(badge.secondary, (v) => b({ secondary: v }))),
-        this.field(tr('te.badgeImageCustomImageDesign'), this.image(badge.image, 'badge', (n) => {
+        this.field(tr('te.badgeImageCustomImageDesign'), this.image(badge.image, design ? `badge-${design.id}` : 'badge', (n) => {
           if (n) badge.image = n;
           else delete badge.image;
         }), true),
-      ), (() => {
-        const reset = el('button', 'subtle', tr('te.resetBadge'));
-        reset.type = 'button';
-        reset.addEventListener('click', () => {
-          info.style.badge = { ...DEFAULT_BADGE };
-          this.part = null;
-          this.save();
-          this.renderForm();
-        });
-        return reset;
-      })()),
+      ), reset),
       section('badge-layout', tr('te.secBadgeLayout'), this.placementBox),
       section('badge-number', tr('te.secBadgeNumber'), group(
         this.field(tr('te.numberFont'), fontPicker(this.select(badge.font, BADGE_FONTS, (v) => b({ font: v })), badge.font)),
@@ -906,7 +1178,7 @@ export class ThemeEditor {
       )),
     );
     this.renderPlacement();
-    this.renderTile();
+    this.renderChips();
   }
 
   /** Font files bundled in the pack, usable by name on the custom screens */
@@ -967,6 +1239,13 @@ export class ThemeEditor {
       label.addEventListener('click', () => {
         this.previewIndex = i;
         this.compiledFor = null;
+        // Edit what the level wears
+        const node = this.designOfLevel(i)?.id ?? null;
+        if (node !== this.node) {
+          this.node = node;
+          this.part = null;
+          this.renderForm();
+        }
         this.renderLevels();
       });
       const diffInput = el('input', 'te-diff');
@@ -996,19 +1275,20 @@ export class ThemeEditor {
         this.save();
         this.renderLevels();
       };
-      const designOptions: [string, string][] = [['', tr('te.defaultDesign')],
-        ...(m.theme ? [['@map', tr('te.levelOwnDesign')] as [string, string]] : []),
-        ...(this.draft.info.style.designs ?? []).map(d => [d.id, d.name] as [string, string])];
-      const designSelect = this.select(m.themeDesign ?? (m.theme ? '@map' : ''), designOptions, value => {
-        if (value === '@map') delete m.themeDesign;
-        else {
-          if (value) m.themeDesign = value;
-          else delete m.themeDesign;
-          // An explicit pack selection replaces the level's embedded override.
-          delete m.theme;
-        }
+      const style = this.draft.info.style;
+      const byRange = levelDesign(style, { level: this.levelNo(i) });
+      const autoName = byRange?.name ?? (m.theme ? tr('te.levelOwnDesign') : this.draft.info.name);
+      const designOptions: [string, string][] = [['', tr('te.autoDesign', { name: autoName })], [DEFAULT_DESIGN, this.draft.info.name],
+        ...(style.designs ?? []).map((d) => [d.id, subThemeLabel(d.name)] as [string, string])];
+      const designSelect = this.select(m.themeDesign && (m.themeDesign === DEFAULT_DESIGN || style.designs?.some((d) => d.id === m.themeDesign)) ? m.themeDesign : '', designOptions, (value) => {
+        if (value) m.themeDesign = value;
+        else delete m.themeDesign;
+        // A picked sub-theme replaces the level's embedded colors
+        if (value && value !== DEFAULT_DESIGN) delete m.theme;
         this.previewIndex = i;
+        this.node = this.designOfLevel(i)?.id ?? null;
         this.save();
+        this.renderForm();
         this.renderLevels();
       });
       designSelect.title = tr('te.design');
@@ -1064,40 +1344,54 @@ export class ThemeEditor {
       level: this.sample.level ?? m.level ?? this.previewIndex + 1,
       title: this.sample.title || (m.title ?? m.name.replace(/^\d+\.\s*/, '')),
     };
-    out.theme = levelMaze(style, m);
+    // Show the sub-theme being edited (or the theme's own look) on this level
+    const real = levelDesign(style, out);
+    if ((real?.id ?? null) !== this.node) out.themeDesign = this.node ?? DEFAULT_DESIGN;
+    out.theme = levelMaze(style, out);
     return out;
   }
 
+  /** The badge a preview map wears, with its picture */
+  private previewBadge(map: MapData): { style: BadgeStyle; image: string | undefined } {
+    const info = this.draft.info;
+    const pack: ThemeEntry = {
+      info, levels: this.draft.levels, assets: this.draft.images, official: false,
+      badgeUrl: info.style.badge.image ? this.draft.images[info.style.badge.image] : undefined,
+    };
+    const t = levelThemeIn(pack, map);
+    return { style: t.info.style.badge, image: t.badgeUrl };
+  }
+
   private drawPreview(): void {
+    if (this.canvas.hidden) return;
     const map = this.previewMap();
     if (!this.compiled || this.compiledFor === null) {
       this.compiled = compileMap(map);
       this.compiledFor = JSON.stringify(map);
       fitCanvas(this.canvas, map);
     }
+    // Zoomed in on the top-left corner, where the badge sits
+    setCamera(this.canvas, this.zoom === 1 ? null : { zoom: this.zoom, x: map.width / (2 * this.zoom), y: map.height / (2 * this.zoom) });
     const now = performance.now();
     beginFrame(this.ctx, map);
-    // Zoomed in on the top-left corner, where the badge sits
-    if (this.zoom !== 1) this.ctx.scale(this.zoom, this.zoom);
     drawMap(this.ctx, map, this.compiled, now % 600000, { now });
-    const badge = this.draft.info.style.badge;
-    const imgName = badge.image;
+    const badge = this.previewBadge(map);
     const hits: BadgeHit[] = [];
-    drawLevelBadge(this.ctx, map, badge, badgeImage(imgName ? this.draft.images[imgName] : undefined), now, hits);
+    drawLevelBadge(this.ctx, map, badge.style, badgeImage(badge.image), now, hits);
     this.hits = hits;
-    this.drawOverlay(map);
+    if (this.badgeEditable()) this.drawOverlay(map);
   }
 
   // ───────────────────────── Badge placement ─────────────────────────
 
   /** Placement of one part (a fresh empty one when it has none) */
   private placed(id: BadgePartId): BadgePart {
-    return this.draft.info.style.badge.layout?.[id] ?? {};
+    return this.editBadge().layout?.[id] ?? {};
   }
 
   /** Set a part's placement, dropping values back at the design's default */
   private setPlaced(id: BadgePartId, p: BadgePart): void {
-    const badge = this.draft.info.style.badge;
+    const badge = this.editBadge();
     const clean: BadgePart = {};
     if (p.x) clean.x = Math.round(p.x * 10) / 10;
     if (p.y) clean.y = Math.round(p.y * 10) / 10;
@@ -1237,9 +1531,9 @@ export class ThemeEditor {
     });
     const resetAll = el('button', 'subtle', tr('te.resetLayout'));
     resetAll.type = 'button';
-    resetAll.disabled = !this.draft.info.style.badge.layout;
+    resetAll.disabled = !this.editBadge().layout;
     resetAll.addEventListener('click', () => {
-      delete this.draft.info.style.badge.layout;
+      delete this.editBadge().layout;
       this.save();
       this.renderPlacement();
       this.renderChips();
@@ -1249,13 +1543,12 @@ export class ThemeEditor {
 
   /** Map point under the mouse (in the zoomed preview) */
   private pointer(e: MouseEvent): { x: number; y: number } {
-    const p = clientToMap(this.canvas, this.previewMap(), e.clientX, e.clientY);
-    return { x: p.x / this.zoom, y: p.y / this.zoom };
+    return clientToMap(this.canvas, this.previewMap(), e.clientX, e.clientY);
   }
 
   /** Map units per CSS pixel on the preview */
   private unit(map: MapData): number {
-    return unitsPerPx(this.canvas, map) / this.zoom;
+    return unitsPerPx(this.canvas, map);
   }
 
   /** The selected part's rotate and resize handles */
@@ -1269,6 +1562,7 @@ export class ThemeEditor {
   }
 
   private hitAt(p: { x: number; y: number }): { id: BadgePartId; mode: 'move' | 'rotate' | 'scale'; hit: BadgeHit } | null {
+    if (!this.badgeEditable()) return null;
     const map = this.previewMap();
     const u = this.unit(map);
     const sel = this.hits.find((h) => h.part === this.part);
@@ -1451,6 +1745,11 @@ export class ThemeEditor {
       this.redo();
       return;
     }
+    if (!mod && !e.altKey && k === 'h') {
+      e.preventDefault();
+      this.togglePanels();
+      return;
+    }
     if (this.tab !== 'game' || !this.part || mod) return;
     const step = e.shiftKey ? 10 : 1;
     const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
@@ -1512,6 +1811,7 @@ export class ThemeEditor {
     this.histIndex = index;
     this.histAt = 0;
     this.draft.info = JSON.parse(this.history[index]) as ThemeInfo;
+    if (this.node && !this.nodeDesign()) this.node = null;
     this.compiledFor = null;
     this.store();
     this.renderForm();
