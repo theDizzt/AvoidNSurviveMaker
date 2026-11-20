@@ -1,0 +1,22 @@
+Merge branch 'main' of https://github.com/theDizzt/AvoidNSurviveMaker into matchoi
+
+# Conflicts:
+#	docs/ACHIEVEMENTS.md
+#	docs/LIGHTING.md
+#	index.html
+#	src/core/achievements.ts
+#	src/core/lighting.ts
+#	src/core/types.ts
+#	src/core/validate.ts
+#	src/locale/en.json
+#	src/locale/ko.json
+#	src/locale/zh.json
+#	src/web/achievements-ui.ts
+#	src/web/achievements.ts
+#	src/web/auth/records.ts
+#	src/web/editor.ts
+#	src/web/main.ts
+#	src/web/play.ts
+#	src/web/progress.ts
+#	src/web/render.ts
+#	src/web/style.css

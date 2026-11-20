@@ -1,0 +1,248 @@
+{
+  "id": "9",
+  "v": 2,
+  "name": "desert10",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 180,
+    "y": 480,
+    "w": 120,
+    "h": 120
+  },
+  "goal": {
+    "x": 1680,
+    "y": 480,
+    "w": 120,
+    "h": 120
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 120,
+        "y": 420,
+        "w": 240,
+        "h": 240
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 360,
+        "y": 480,
+        "w": 240,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 600,
+        "y": 240,
+        "w": 360,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 600,
+        "y": 720,
+        "w": 360,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 960,
+        "y": 480,
+        "w": 360,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1320,
+        "y": 240,
+        "w": 360,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1320,
+        "y": 720,
+        "w": 360,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 720,
+        "y": 350,
+        "w": 120,
+        "h": 380
+      },
+      "rotation": {
+        "pivot": {
+          "x": 780,
+          "y": 550
+        },
+        "speed": 90,
+        "angle": 90,
+        "clockwise": true,
+        "repeat": "pingpong",
+        "easing": "none",
+        "delay": 0,
+        "showPivot": true
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1310,
+        "y": 480,
+        "w": 380,
+        "h": 120
+      },
+      "rotation": {
+        "pivot": {
+          "x": 1500,
+          "y": 540
+        },
+        "speed": 90,
+        "angle": 90,
+        "clockwise": true,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "showPivot": true
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 660,
+        "cy": 300,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 900,
+        "cy": 300,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 900,
+        "cy": 780,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 660,
+        "cy": 780,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1620,
+        "cy": 780,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1380,
+        "cy": 780,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1620,
+        "cy": 300,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1380,
+        "cy": 300,
+        "rx": 12,
+        "ry": 12
+      }
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "sand",
+        "color": "#574a24",
+        "background": "#cabd93",
+        "size": 40
+      },
+      "edge": "#000000"
+    },
+    "path": {
+      "fill": {
+        "type": "gradient",
+        "style": "linear",
+        "from": "#fae8b4",
+        "to": "#ffe180",
+        "angle": 90
+      },
+      "edge": "#000000"
+    }
+  },
+  "title": "Bridge 2",
+  "level": 10,
+  "difficulty": 1.75,
+  "stars": {
+    "three": 14000,
+    "two": 18000,
+    "one": 25000
+  }
+}

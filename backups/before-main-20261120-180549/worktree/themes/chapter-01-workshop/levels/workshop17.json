@@ -1,0 +1,321 @@
+{
+  "id": "16",
+  "v": 2,
+  "name": "workshop17",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 150,
+    "y": 270,
+    "w": 120,
+    "h": 120
+  },
+  "goal": {
+    "x": 150,
+    "y": 690,
+    "w": 120,
+    "h": 120
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 540,
+        "cy": 330,
+        "rx": 150,
+        "ry": 150
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 960,
+        "cy": 330,
+        "rx": 150,
+        "ry": 150
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1380,
+        "cy": 330,
+        "rx": 150,
+        "ry": 150
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 540,
+        "cy": 750,
+        "rx": 150,
+        "ry": 150
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 960,
+        "cy": 750,
+        "rx": 150,
+        "ry": 150
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1380,
+        "cy": 750,
+        "rx": 150,
+        "ry": 150
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 300,
+        "w": 1440,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 720,
+        "w": 1440,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1620,
+        "y": 360,
+        "w": 60,
+        "h": 360
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 520,
+        "y": 180,
+        "w": 40,
+        "h": 300
+      },
+      "rotation": {
+        "pivot": {
+          "x": 540,
+          "y": 330
+        },
+        "speed": 90,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 390,
+        "y": 310,
+        "w": 300,
+        "h": 40
+      },
+      "rotation": {
+        "pivot": {
+          "x": 540,
+          "y": 330
+        },
+        "speed": 90,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 940,
+        "y": 180,
+        "w": 40,
+        "h": 300
+      },
+      "rotation": {
+        "pivot": {
+          "x": 960,
+          "y": 330
+        },
+        "speed": 105,
+        "angle": 180,
+        "clockwise": false,
+        "repeat": "pingpong",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 1380,
+        "cy": 330,
+        "r": 150,
+        "start": 270,
+        "sweep": 90
+      },
+      "rotation": {
+        "pivot": {
+          "x": 1380,
+          "y": 330
+        },
+        "speed": 120,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 1380,
+        "cy": 750,
+        "r": 150,
+        "start": 270,
+        "sweep": 90
+      },
+      "rotation": {
+        "pivot": {
+          "x": 1380,
+          "y": 750
+        },
+        "speed": 135,
+        "angle": 360,
+        "clockwise": false,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 1380,
+        "cy": 750,
+        "r": 150,
+        "start": 90,
+        "sweep": 90
+      },
+      "rotation": {
+        "pivot": {
+          "x": 1380,
+          "y": 750
+        },
+        "speed": 135,
+        "angle": 360,
+        "clockwise": false,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1380,
+        "cy": 330,
+        "rx": 90,
+        "ry": 90
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1380,
+        "cy": 750,
+        "rx": 90,
+        "ry": 90
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 960,
+        "cy": 750,
+        "r": 150,
+        "start": 180,
+        "sweep": 180
+      },
+      "rotation": {
+        "pivot": {
+          "x": 960,
+          "y": 750
+        },
+        "speed": 150,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 540,
+        "cy": 750,
+        "r": 150,
+        "start": 180,
+        "sweep": 315
+      },
+      "rotation": {
+        "pivot": {
+          "x": 540,
+          "y": 750
+        },
+        "speed": 165,
+        "angle": 360,
+        "clockwise": false,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    }
+  ],
+  "title": "Sector",
+  "level": 17,
+  "difficulty": 2,
+  "stars": {
+    "three": 10500,
+    "two": 13000,
+    "one": 17000
+  }
+}

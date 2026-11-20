@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Avoid N Survive</title>
+  </head>
+  <body>
+    <div id="app-bg" class="app-bg" data-mode="demo" aria-hidden="true"><canvas id="demo-bg"></canvas></div>
+
+    <!-- Preloading screen -->
+    <div id="preload-screen" class="screen preload" role="status" aria-live="polite">
+      <div class="preload-inner">
+        <!-- A large diamond: the logo and the current step inside, the track fills around it and the percentage sits in the gap at the bottom -->
+        <div id="preload-dia" class="preload-dia">
+          <div class="preload-content">
+            <div class="logo logo-3d" role="img" aria-label="Avoid N Survive"><span class="logo-layer logo-back" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span><span class="logo-layer logo-mid" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span><span class="logo-layer logo-front" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span></div>
+            <p id="preload-text" class="preload-text" data-i18n="common.loading"></p>
+          </div>
+          <span id="preload-percent" class="preload-percent" aria-hidden="true">0%</span>
+        </div>
+        <p id="preload-version" class="menu-foot"></p>
+      </div>
+    </div>
+
+    <!-- Main menu -->
+    <div id="menu-screen" class="screen menu" hidden>
+      <div class="menu-inner menu-diamonds">
+        <h1 class="logo logo-3d" aria-label="Avoid N Survive"><span class="logo-layer logo-back" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span><span class="logo-layer logo-mid" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span><span class="logo-layer logo-front" aria-hidden="true">Avoid <b class="logo-n">N</b> Survive</span></h1>
+        <p class="tagline" data-i18n="menu.tagline"></p>
+        <!-- A grid turned 45°: every cell is a diamond; Start Game spans 2×2 -->
+        <nav class="dia-wrap" id="menu-dia" data-i18n-aria-label="menu.mainMenu">
+          <div class="dgrid" style="--cols: 4">
+            <button type="button" id="menu-start" class="dtile dtile-primary" style="grid-column: 1 / span 2; grid-row: 1 / span 2">
+              <span class="dtile-in"><svg class="dtile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg><strong data-i18n="menu.start"></strong></span>
+            </button>
+            <button type="button" id="menu-editor" class="dtile" style="grid-column: 3; grid-row: 1">
+              <span class="dtile-in"><svg class="dtile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6 L7.4 3.8 L7.4 18 L2 20.2Z M8.6 3.8 L15.4 6 L15.4 20.2 L8.6 18Z M16.6 6 L22 3.8 L22 18 L16.6 20.2Z"/></svg><strong data-i18n="menu.editor"></strong></span>
+            </button>
+            <button type="button" id="menu-theme-editor" class="dtile" style="grid-column: 3; grid-row: 2">
+              <span class="dtile-in"><svg class="dtile-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M12 2.5C6.5 2.5 2.5 6.6 2.5 11.8c0 5 4 9.7 9.3 9.7 1.7 0 2.4-1 2.4-2.1 0-1.4-1.2-1.9-1.2-3.2 0-1.1.9-1.9 2.1-1.9h2.3c3.2 0 4.6-2.1 4.6-4.6C22 5.6 17.6 2.5 12 2.5zM7 13.4a1.6 1.6 0 1 1 0-3.2 1.6 1.6 0 0 1 0 3.2zm2.6-4.4a1.6 1.6 0 1 1 0-3.2 1.6 1.6 0 0 1 0 3.2zm5-.6a1.6 1.6 0 1 1 0-3.2 1.6 1.6 0 0 1 0 3.2zm3.6 3.4a1.6 1.6 0 1 1 0-3.2 1.6 1.6 0 0 1 0 3.2z"/></svg><strong data-i18n="common.themeEditor"></strong></span>
+            </button>
+            <button type="button" id="menu-achievements" class="dtile" style="grid-column: 4; grid-row: 1">
+              <span class="dtile-in"><svg class="dtile-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M7 3h10v2h3.5v2.5c0 2.6-2 4.6-4.6 4.9A5 5 0 0 1 13 15.8V18h3.5v3h-9v-3H11v-2.2a5 5 0 0 1-2.9-3.4C5.5 12.1 3.5 10.1 3.5 7.5V5H7zM5.5 7v.5c0 1.4.8 2.5 1.9 2.8L7.2 7zM18.5 7h-1.7l-.2 3.3c1.1-.3 1.9-1.4 1.9-2.8z"/></svg><strong data-i18n="menu.achievements"></strong></span>
+            </button>
+            <button type="button" id="menu-stats" class="dtile" style="grid-column: 4; grid-row: 2">
+              <span class="dtile-in"><svg class="dtile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19h18v2H3z M4.5 11h3.4v6.5H4.5z M10.3 4.5h3.4v13h-3.4z M16.1 8h3.4v9.5h-3.4z"/></svg><strong data-i18n="menu.stats"></strong></span>
+            </button>
+            <button type="button" id="menu-options" class="dtile" style="grid-column: 1; grid-row: 3">
+              <span class="dtile-in"><svg class="dtile-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M19.29 10.73 L21.94 10.88 L21.94 13.12 L19.29 13.27 L18.05 16.26 L19.82 18.23 L18.23 19.82 L16.26 18.05 L13.27 19.29 L13.12 21.94 L10.88 21.94 L10.73 19.29 L7.74 18.05 L5.77 19.82 L4.18 18.23 L5.95 16.26 L4.71 13.27 L2.06 13.12 L2.06 10.88 L4.71 10.73 L5.95 7.74 L4.18 5.77 L5.77 4.18 L7.74 5.95 L10.73 4.71 L10.88 2.06 L13.12 2.06 L13.27 4.71 L16.26 5.95 L18.23 4.18 L19.82 5.77 L18.05 7.74Z M12 8.6a3.4 3.4 0 1 0 0 6.8a3.4 3.4 0 1 0 0-6.8Z"/></svg><strong data-i18n="menu.options"></strong></span>
+            </button>
+            <button type="button" id="menu-customize" class="dtile" style="grid-column: 2; grid-row: 3">
+              <span class="dtile-in"><svg class="dtile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.7 2.6a1.2 1.2 0 0 0-1.7 0L10 11.6l2.4 2.4 9-9a1.2 1.2 0 0 0 0-1.7z M8.6 13.1c-2 0-3.6 1.6-3.6 3.6 0 1.3-.9 2.4-2.5 2.8 1.2 1.3 3 2 4.8 2 2.8 0 4.9-2.1 4.9-4.8z"/></svg><strong data-i18n="menu.customize"></strong></span>
+            </button>
+            <button type="button" id="menu-account" class="dtile dtile-account" style="grid-column: 3; grid-row: 3">
+              <span class="dtile-in"><svg class="dtile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M7.2 6.2a8 8 0 1 0 9.6 0" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg><strong id="menu-account-label"></strong></span>
+            </button>
+            <span class="dtile dtile-stars" style="grid-column: 4; grid-row: 3">
+              <span class="dtile-in"><svg class="dtile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg><strong id="menu-stars">0</strong><small data-i18n="menu.stars"></small></span>
+            </span>
+            <!-- Lower-left edge: player, credits, Discord invite -->
+            <button type="button" id="menu-user" class="dtile dtile-user" style="grid-column: 1; grid-row: 4">
+              <span class="dtile-in"><svg class="dtile-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.8" r="4.3"/><path d="M3.5 21.5c0-4.9 3.8-8.3 8.5-8.3s8.5 3.4 8.5 8.3z"/></svg><strong id="menu-user-name"></strong><small id="menu-user-time"></small></span>
+            </button>
+            <button type="button" id="menu-credits" class="dtile" style="grid-column: 2; grid-row: 4">
+              <span class="dtile-in"><svg class="dtile-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9.5h18V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z M2.8 7.9 19.4 3.4l.7 2.5L3.5 10.4z"/></svg><strong data-i18n="menu.credits"></strong></span>
+            </button>
+            <a id="menu-discord" class="dtile dtile-discord" style="grid-column: 3; grid-row: 4" href="https://discord.gg/cxm5YZAeGB" target="_blank" rel="noopener noreferrer" data-i18n-title="menu.discordTitle"><span class="dtile-in"><svg class="dtile-icon dtile-icon-discord" viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z"/></svg><strong>Discord</strong></span></a>
+            <!-- The empty bottom cell shows the version -->
+            <span class="dtile dtile-version" style="grid-column: 4; grid-row: 4"><span class="dtile-in"><small id="menu-version"></small></span></span>
+          </div>
+        </nav>
+      </div>
+    </div>
+
+    <!-- Campaign: world (theme) select and level select, built by campaign-ui.ts -->
+    <div id="themes-screen" class="screen menu dscreen" hidden></div>
+    <div id="levels-screen" class="screen menu dscreen" hidden></div>
+    <!-- Theme editor: built by theme-editor.ts -->
+    <div id="theme-editor-screen" class="screen menu dscreen te-screen" hidden></div>
+
+    <!-- Account: sign in / create account -->
+    <div id="auth-screen" class="screen menu" hidden>
+      <div class="menu-inner auth-card">
+        <h2 class="logo logo-sm" data-i18n="common.account"></h2>
+        <div class="auth-tabs" role="tablist" data-i18n-aria-label="common.account">
+          <button type="button" role="tab" id="tab-signin" aria-selected="true" data-i18n="auth.signIn"></button>
+          <button type="button" role="tab" id="tab-signup" aria-selected="false" data-i18n="auth.createAccount"></button>
+        </div>
+        <p id="auth-unconfigured" class="form-note" hidden data-i18n="auth.unconfiguredNote"></p>
+
+        <form id="signin-form" class="auth-form" novalidate>
+          <label class="field wide"><span data-i18n="auth.email"></span><input type="email" name="email" autocomplete="email" maxlength="254" /></label>
+          <label class="field wide"><span data-i18n="auth.password"></span><input type="password" name="password" autocomplete="current-password" /></label>
+          <div id="signin-captcha" class="captcha"></div>
+          <p class="form-error" role="alert"></p>
+          <button type="submit" class="menu-btn primary" data-i18n="auth.signIn"></button>
+          <button type="button" id="signin-resend" class="link-btn" hidden data-i18n="auth.resendVerification"></button>
+        </form>
+
+        <form id="signup-form" class="auth-form" novalidate hidden>
+          <label class="field wide"><span data-i18n="auth.email"></span><input type="email" name="email" autocomplete="email" maxlength="254" /></label>
+          <label class="field wide"><span data-i18n="auth.password"></span><input type="password" name="password" autocomplete="new-password" /></label>
+          <label class="field wide"><span data-i18n="auth.confirmPassword"></span><input type="password" name="confirm" autocomplete="new-password" /></label>
+          <label class="field wide">
+            <span data-i18n="auth.nickname"></span>
+            <input type="text" name="nickname" autocomplete="nickname" spellcheck="false" />
+          </label>
+          <p class="nick-hint">
+            <span><span data-i18n="auth.appearAs"></span><strong id="nick-preview">Nickname#????</strong></span>
+            <span id="nick-bytes" class="nick-bytes"></span>
+          </p>
+          <p class="form-note" data-i18n="auth.passwordRule"></p>
+          <div id="signup-captcha" class="captcha"></div>
+          <p class="form-error" role="alert"></p>
+          <button type="submit" class="menu-btn primary" data-i18n="auth.createAccount"></button>
+        </form>
+
+        <button type="button" id="auth-back" class="dback dback-center" data-i18n-title="auth.backToMenu"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
+      </div>
+    </div>
+
+    <!-- After sign-up: verify email -->
+    <div id="verify-screen" class="screen menu" hidden>
+      <div class="menu-inner auth-card">
+        <h2 class="logo logo-sm" data-i18n="auth.checkEmail"></h2>
+        <p class="verify-text"><span data-i18n="auth.sentLinkTo"></span><strong id="verify-email"></strong><span data-i18n="auth.sentLinkAfter"></span></p>
+        <p class="form-note" data-i18n="auth.didntGetIt"></p>
+        <div id="verify-captcha" class="captcha"></div>
+        <p class="form-error" role="alert"></p>
+        <div class="menu-buttons">
+          <button type="button" id="verify-signin" class="menu-btn primary" data-i18n="auth.goToSignIn"></button>
+          <button type="button" id="verify-resend" class="menu-btn" data-i18n="auth.resend"></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+    <!-- Options -->
+    <div id="options-screen" class="screen menu" hidden>
+      <div class="menu-inner menu-diamonds">
+        <h2 class="logo logo-sm" data-i18n="menu.options"></h2>
+        <!-- Same 45°-turned grid as the main menu; menu music spans 2×2 -->
+        <div class="dia-wrap" id="options-dia">
+          <div class="dgrid dgrid-panel" style="--cols: 4">
+            <div class="dtile dtile-music" style="grid-column: 1 / span 2; grid-row: 1 / span 2">
+              <span class="dtile-in">
+                <span class="dicon" aria-hidden="true">♪</span>
+                <strong data-i18n="options.menuMusic"></strong>
+                <small id="menu-music-name" class="dmusic-name" role="status" data-i18n="music.none"></small>
+                <span class="dpill-row">
+                  <label class="dpill dpill-file"><input type="file" id="menu-music-file" class="visually-hidden" accept=".mp3,.ogg,.wav,.m4a,.aac,.flac" /><span data-i18n="options.chooseFile"></span></label>
+                  <button type="button" id="menu-music-remove" class="dpill" data-i18n="options.reset"></button>
+                </span>
+              </span>
+            </div>
+            <label class="dtile dvolume" for="opt-master-volume" style="grid-column: 3; grid-row: 1">
+              <span class="dtile-in">
+                <strong data-i18n="options.master"></strong>
+                <span class="ddial"><input type="range" id="opt-master-volume" class="visually-hidden" min="0" max="100" step="1" /></span>
+                <output id="opt-master-volume-value" for="opt-master-volume">80%</output>
+              </span>
+            </label>
+            <label class="dtile dvolume" for="opt-music-volume" style="grid-column: 4; grid-row: 1">
+              <span class="dtile-in">
+                <strong data-i18n="common.music"></strong>
+                <span class="ddial"><input type="range" id="opt-music-volume" class="visually-hidden" min="0" max="100" step="1" /></span>
+                <output id="opt-music-volume-value" for="opt-music-volume">60%</output>
+              </span>
+            </label>
+            <label class="dtile dvolume" for="opt-effects-volume" style="grid-column: 3; grid-row: 2">
+              <span class="dtile-in">
+                <strong data-i18n="options.effects"></strong>
+                <span class="ddial"><input type="range" id="opt-effects-volume" class="visually-hidden" min="0" max="100" step="1" /></span>
+                <output id="opt-effects-volume-value" for="opt-effects-volume">80%</output>
+              </span>
+            </label>
+            <div class="dtile drecords" style="grid-column: 4; grid-row: 2">
+              <span class="dtile-in">
+                <strong data-i18n="options.records"></strong>
+                <small id="records-status" data-i18n="records.signedOut"></small>
+                <span class="dpill-row">
+                  <button type="button" id="records-sync" class="dpill" disabled data-i18n="options.sync"></button>
+                  <button type="button" id="records-import-guest" class="dpill" disabled data-i18n="records.importGuest" data-i18n-title="records.importGuestHint"></button>
+                </span>
+              </span>
+            </div>
+            <button type="button" id="opt-graphics" class="dtile dgraphics" style="grid-column: 1; grid-row: 3" data-i18n-title="options.graphicsHint">
+              <span class="dtile-in"><strong data-i18n="options.graphics"></strong><span id="opt-graphics-value" class="dgraphics-value"></span><small data-i18n="options.graphicsSub"></small></span>
+            </button>
+            <button type="button" id="opt-polling" class="dtile dgraphics" style="grid-column: 2; grid-row: 3" data-i18n-title="options.pollingHint">
+              <span class="dtile-in"><strong data-i18n="options.polling"></strong><span id="opt-polling-value" class="dgraphics-value"></span><small data-i18n="options.graphicsSub"></small></span>
+            </button>
+            <label class="dtile dtoggle" style="grid-column: 3; grid-row: 3" data-i18n-title="options.debugHint">
+              <span class="dtile-in"><input type="checkbox" id="opt-debug" /><strong data-i18n="options.debug"></strong></span>
+            </label>
+            <label class="dtile dlanguage" for="opt-language" style="grid-column: 4; grid-row: 3">
+              <span class="dtile-in">
+                <span class="dicon" aria-hidden="true">文</span>
+                <strong data-i18n="options.language"></strong>
+                <select id="opt-language" class="dpill"></select>
+              </span>
+            </label>
+            <span class="dtile dtile-deco" style="grid-column: 1; grid-row: 4" aria-hidden="true"></span>
+            <button type="button" id="options-reset" class="dtile" style="grid-column: 2; grid-row: 4">
+              <span class="dtile-in"><strong data-i18n="options.reset"></strong><small data-i18n="options.resetSub"></small></span>
+            </button>
+            <button type="button" id="options-licenses" class="dtile" style="grid-column: 3; grid-row: 4">
+              <span class="dtile-in"><strong data-i18n="options.licenses"></strong><small data-i18n="options.licensesSub"></small></span>
+            </button>
+            <button type="button" id="options-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 4">
+              <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats: account summary on the same diamond grid; Stars spans 2×2 -->
+    <div id="stats-screen" class="screen menu" hidden>
+      <div class="menu-inner menu-diamonds">
+        <h2 class="logo logo-sm" data-i18n="menu.stats"></h2>
+        <p id="stats-message" class="tagline stats-message" role="status"></p>
+        <div class="dia-wrap" id="stats-dia">
+          <div class="dgrid dgrid-panel" style="--cols: 4">
+            <div class="dtile dtile-stars" style="grid-column: 1 / span 2; grid-row: 1 / span 2">
+              <span class="dtile-in"><span class="dtotal-star" aria-hidden="true">★</span><strong data-stat="stars">—</strong><small data-stat="stars-note" data-i18n="menu.stars"></small></span>
+            </div>
+            <div class="dtile dstat" style="grid-column: 3; grid-row: 1">
+              <span class="dtile-in"><small class="dstat-label" data-i18n="stats.player"></small><strong data-stat="player">—</strong><small data-stat="player-note"></small></span>
+            </div>
+            <div class="dtile dstat" style="grid-column: 4; grid-row: 1">
+              <span class="dtile-in"><small class="dstat-label" data-i18n="stats.playTime"></small><strong data-stat="time">—</strong><small data-stat="time-note"></small></span>
+            </div>
+            <div class="dtile dstat dstat-mint" style="grid-column: 3; grid-row: 2">
+              <span class="dtile-in"><small class="dstat-label" data-i18n="stats.cleared"></small><strong data-stat="cleared">—</strong><small data-stat="cleared-note"></small></span>
+            </div>
+            <div class="dtile dstat" style="grid-column: 4; grid-row: 2">
+              <span class="dtile-in"><small class="dstat-label" data-i18n="stats.lastRecord"></small><strong data-stat="last">—</strong></span>
+            </div>
+            <span class="dtile dtile-deco" style="grid-column: 1; grid-row: 3" aria-hidden="true"></span>
+            <div class="dtile dstat dstat-deaths" style="grid-column: 2; grid-row: 3">
+              <span class="dtile-in"><small class="dstat-label" data-i18n="stats.colDeaths"></small><strong data-stat="deaths">—</strong><small data-stat="deaths-note"></small></span>
+            </div>
+            <button type="button" id="stats-refresh" class="dtile" style="grid-column: 3; grid-row: 3">
+              <span class="dtile-in"><span class="dicon" aria-hidden="true">↻</span><strong data-i18n="stats.refresh"></strong></span>
+            </button>
+            <button type="button" id="stats-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 3">
+              <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
+            </button>
+          </div>
+        </div>
+        <!-- Per-level record tables: hidden for now (StatsUI.SHOW_LEVEL_RECORDS) -->
+        <div id="stats-records" class="stats-list" hidden></div>
+      </div>
+    </div>
+
+    <div id="achievements-screen" class="screen menu" hidden>
+      <div class="menu-inner menu-diamonds">
+        <h2 class="logo logo-sm" data-i18n="menu.achievements"></h2>
+<<<<<<< HEAD
+        <div id="achievements-content"></div>
+        <div class="menu-buttons">
+          <button type="button" id="achievements-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
+=======
+        <p id="achievements-status" class="tagline stats-message" role="status"></p>
+        <!-- A 4×4 diamond (summary in the middle, achievements around it) between the page buttons;
+             Status and Category on the left, Back on the right, so the grid gets the full height -->
+        <div class="dpage-row ach-row">
+          <div class="ach-side">
+            <button type="button" id="achievements-filter" class="dsmall"><span class="dtile-in"></span></button>
+            <button type="button" id="achievements-category" class="dsmall"><span class="dtile-in"></span></button>
+          </div>
+          <button type="button" id="achievements-prev" class="dpage" data-i18n-aria-label="customize.prevPage"><span>‹</span></button>
+          <div class="dia-wrap" id="achievements-dia">
+            <div class="dgrid dgrid-panel" id="achievements-grid" style="--cols: 4"></div>
+          </div>
+          <button type="button" id="achievements-next" class="dpage" data-i18n-aria-label="customize.nextPage"><span>›</span></button>
+          <div class="ach-side">
+            <button type="button" id="achievements-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
+          </div>
+>>>>>>> 33e5f4f737b41ce92384948a16016133a510cf06
+        </div>
+        <p id="achievements-page" class="dpage-label" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <div id="customize-screen" class="screen menu" hidden>
+      <div class="menu-inner menu-diamonds">
+        <h2 class="logo logo-sm" data-i18n="menu.customize"></h2>
+        <!-- Tiles are filled in by CustomizeUI; Back stays in the bottom corner -->
+        <div class="dia-wrap" id="customize-dia">
+          <div class="dgrid dgrid-panel" id="customize-grid" style="--cols: 4">
+            <button type="button" id="customize-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 4">
+              <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="licenses-screen" class="screen menu" hidden>
+      <div class="menu-inner licenses-inner">
+        <h2 id="licenses-title" class="logo logo-sm" data-i18n="options.licenses"></h2>
+        <p class="muted licenses-intro" data-i18n="licenses.intro"></p>
+        <div id="licenses-list" class="licenses-list"></div>
+        <div class="menu-buttons">
+          <button type="button" id="licenses-back" class="dback"><span class="dtile-in"><strong data-i18n="common.back"></strong></span></button>
+        </div>
+      </div>
+    </div>
+
+    <main>
+      <!-- Play: the canvas takes the largest 16:9 area of the window. The HUD panel is not shown; its
+           controls stay in the page as the state behind the keyboard shortcuts (R, N, F, Esc). -->
+      <section id="play-view" class="play-view" hidden>
+        <div class="stage play-stage"><canvas id="play-canvas" data-fit="screen"></canvas></div>
+        <!-- Back to the level list (or the editor) before a run starts; hidden while running -->
+        <button type="button" id="btn-play-back" class="play-back" title="Esc" data-i18n="common.back"></button>
+        <div class="play-hud" hidden>
+          <div class="hud-row">
+            <select id="level-select" data-i18n-aria-label="play.selectMap"></select>
+            <button type="button" id="btn-back-editor" hidden data-i18n="play.backToEditor"></button>
+            <button type="button" id="btn-next-level" title="N" hidden data-i18n="play.nextLevel"></button>
+            <button type="button" id="btn-play-edit" data-i18n="play.openInEditor"></button>
+            <button type="button" id="btn-fullscreen" class="btn-fullscreen" title="F" data-i18n="common.fullscreen"></button>
+            <button type="button" id="btn-play-menu" title="Esc" data-i18n="common.mainMenu"></button>
+          </div>
+          <p class="hud-keys" data-i18n="play.keys"></p>
+          <p id="play-status" class="status"></p>
+        </div>
+        <details id="debug-panel" class="debug play-debug" open>
+          <summary data-i18n="debug.title"></summary>
+          <dl id="debug-stats"></dl>
+          <p class="muted" data-i18n="debug.help"></p>
+        </details>
+      </section>
+
+      <!-- Editor: same full-window 16:9 canvas as play; tools and properties float on top (H hides them) -->
+      <section id="editor-view" class="editor-view" hidden>
+        <div class="stage editor-stage"><canvas id="editor-canvas" data-fit="screen"></canvas></div>
+        <div class="editor-bar">
+          <button type="button" id="btn-test" class="primary" title="T" data-i18n="editor.testPlay"></button>
+          <button type="button" id="btn-editor-menu" data-i18n-title="menu.mainMenu" data-i18n="common.mainMenu"></button>
+          <span class="bar-sep" aria-hidden="true"></span>
+          <label class="check" title="N"><input type="checkbox" id="opt-snap" checked /> <span data-i18n="editor.snap"></span></label>
+          <label class="check" title="P"><input type="checkbox" id="opt-preview" /> <span data-i18n="editor.previewMotion"></span></label>
+          <label class="check" data-i18n-title="editor.gridTopHint"><input type="checkbox" id="opt-grid-top" /> <span data-i18n="editor.gridTop"></span></label>
+          <label class="check" data-i18n-title="editor.centerLinesHint"><input type="checkbox" id="opt-center" /> <span data-i18n="editor.centerLines"></span></label>
+          <label class="sym-pick" data-i18n-title="editor.symmetryHint"><span data-i18n="editor.symmetry"></span> <select id="opt-symmetry"></select></label>
+          <span id="symmetry-status" class="sym-status" role="status" hidden></span>
+          <button type="button" id="btn-undo" title="Ctrl+Z" data-i18n="common.undo"></button>
+          <button type="button" id="btn-redo" title="Ctrl+Y" data-i18n="common.redo"></button>
+          <button type="button" id="btn-shortcuts" title="?" aria-pressed="false" data-i18n="editor.shortcuts"></button>
+          <span class="bar-sep" aria-hidden="true"></span>
+          <button type="button" id="btn-zoom-out" class="zoom-btn" data-i18n-title="editor.zoomOut">−</button>
+          <button type="button" id="btn-zoom-reset" class="zoom-level" data-i18n-title="editor.zoomReset">100%</button>
+          <button type="button" id="btn-zoom-in" class="zoom-btn" data-i18n-title="editor.zoomIn">+</button>
+          <span class="bar-sep" aria-hidden="true"></span>
+          <button type="button" id="btn-panels" title="H" aria-pressed="false" data-i18n="editor.hidePanels"></button>
+          <button type="button" id="btn-editor-fullscreen" class="btn-fullscreen" title="F" data-i18n="common.fullscreen"></button>
+        </div>
+        <aside id="tools-panel" class="editor-float float-left" data-i18n-aria-label="common.tools">
+          <div class="float-head" data-i18n-title="panel.moveHint">
+            <span class="float-title" data-i18n="common.tools"></span>
+            <button type="button" class="float-toggle" aria-expanded="true" data-i18n-title="panel.collapse">−</button>
+          </div>
+          <div id="palette" class="palette float-body"></div>
+        </aside>
+        <p id="editor-hint" class="editor-hint status"></p>
+        <!-- Object options: the selected object's properties -->
+        <aside id="object-panel" class="editor-float float-right float-object" data-i18n-aria-label="editor.object">
+          <div class="float-head" data-i18n-title="panel.moveHint">
+            <span class="float-title" data-i18n="editor.object"></span>
+            <button type="button" class="float-toggle" aria-expanded="true" data-i18n-title="panel.collapse">−</button>
+          </div>
+          <div class="panel float-body">
+            <section>
+              <div id="props"></div>
+            </section>
+          </div>
+        </aside>
+        <!-- Level metadata: map info, level settings, theme, verify & share -->
+        <aside id="level-info-panel" class="editor-float float-right" data-i18n-aria-label="common.level">
+          <div class="float-head" data-i18n-title="panel.moveHint">
+            <span class="float-title" data-i18n="common.level"></span>
+            <button type="button" class="float-toggle" aria-expanded="true" data-i18n-title="panel.collapse">−</button>
+          </div>
+          <div class="panel float-body">
+            <section>
+              <h3 data-i18n="editor.mapInfo"></h3>
+              <div class="fields">
+                <label class="field wide"><span data-i18n="editor.fileName"></span><input id="map-name" maxlength="60" /></label>
+                <label class="field wide"><span data-i18n="common.author"></span><input id="map-author" maxlength="60" /></label>
+                <label class="field wide"><span data-i18n="editor.size"></span><select id="map-size"></select></label>
+              </div>
+            </section>
+            <details class="theme-section" open>
+              <summary><h3 data-i18n="editor.levelSettings"></h3></summary>
+              <div id="level-panel"></div>
+            </details>
+            <details class="theme-section">
+              <summary><h3 data-i18n="editor.theme"></h3></summary>
+              <div id="theme-panel"></div>
+            </details>
+            <ul id="messages" class="messages"></ul>
+            <section>
+              <h3 data-i18n="editor.verifyShare"></h3>
+              <p id="verify-status" class="verify"></p>
+              <button type="button" id="btn-share" disabled data-i18n="editor.createShareLink"></button>
+              <input id="share-url" readonly data-i18n-placeholder="editor.shareLinkPlaceholder" />
+            </section>
+            <section class="actions">
+              <button type="button" id="btn-export" data-i18n="editor.exportJson"></button>
+              <button type="button" id="btn-import" data-i18n="editor.importJson"></button>
+              <input type="file" id="import-file" accept=".json,application/json" hidden />
+              <button type="button" id="btn-new" class="danger" data-i18n="map.new"></button>
+            </section>
+          </div>
+        </aside>
+      </section>
+    </main>
+    <script type="module" src="/src/web/main.ts"></script>
+  </body>
+</html>

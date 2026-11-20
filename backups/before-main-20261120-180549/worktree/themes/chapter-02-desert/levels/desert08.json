@@ -1,0 +1,557 @@
+{
+  "id": "7",
+  "v": 2,
+  "name": "desert08",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 180,
+    "y": 240,
+    "w": 120,
+    "h": 120
+  },
+  "goal": {
+    "x": 1620,
+    "y": 720,
+    "w": 120,
+    "h": 120
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 660,
+            "y": 180,
+            "smooth": true
+          },
+          {
+            "x": 120,
+            "y": 240,
+            "smooth": true
+          },
+          {
+            "x": 60,
+            "y": 540,
+            "smooth": true
+          },
+          {
+            "x": 120,
+            "y": 840,
+            "smooth": true
+          },
+          {
+            "x": 370,
+            "y": 960,
+            "smooth": true
+          },
+          {
+            "x": 660,
+            "y": 900,
+            "smooth": true
+          },
+          {
+            "x": 840,
+            "y": 720,
+            "smooth": true
+          },
+          {
+            "x": 1080,
+            "y": 660,
+            "smooth": true
+          },
+          {
+            "x": 1260,
+            "y": 840,
+            "smooth": true
+          },
+          {
+            "x": 1500,
+            "y": 960,
+            "smooth": true
+          },
+          {
+            "x": 1740,
+            "y": 900,
+            "smooth": true
+          },
+          {
+            "x": 1860,
+            "y": 660,
+            "smooth": true
+          },
+          {
+            "x": 1860,
+            "y": 420,
+            "smooth": true
+          },
+          {
+            "x": 1740,
+            "y": 240,
+            "smooth": true
+          },
+          {
+            "x": 1560,
+            "y": 120,
+            "smooth": true
+          },
+          {
+            "x": 1320,
+            "y": 120,
+            "smooth": true
+          },
+          {
+            "x": 1140,
+            "y": 240,
+            "smooth": true
+          },
+          {
+            "x": 1020,
+            "y": 360,
+            "smooth": true
+          },
+          {
+            "x": 840,
+            "y": 300,
+            "smooth": true
+          }
+        ],
+        "free": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 421.56532287597656,
+            "y": 388.8872528076172,
+            "smooth": true
+          },
+          {
+            "x": 541.5653228759766,
+            "y": 388.8872528076172,
+            "smooth": true
+          },
+          {
+            "x": 661.5653228759766,
+            "y": 508.8872528076172,
+            "smooth": true
+          },
+          {
+            "x": 661.5653228759766,
+            "y": 628.8872528076172,
+            "smooth": true
+          },
+          {
+            "x": 541.5653228759766,
+            "y": 748.8872528076172,
+            "smooth": true
+          },
+          {
+            "x": 361.56532287597656,
+            "y": 748.8872528076172,
+            "smooth": true
+          },
+          {
+            "x": 241.56532287597656,
+            "y": 628.8872528076172,
+            "smooth": true
+          },
+          {
+            "x": 181.56532287597656,
+            "y": 448.8872528076172,
+            "smooth": true
+          },
+          {
+            "x": 301.56532287597656,
+            "y": 388.8872528076172,
+            "smooth": true
+          }
+        ],
+        "free": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1500,
+            "y": 240,
+            "smooth": true
+          },
+          {
+            "x": 1380,
+            "y": 240,
+            "smooth": true
+          },
+          {
+            "x": 1260,
+            "y": 300,
+            "smooth": true
+          },
+          {
+            "x": 1200,
+            "y": 420,
+            "smooth": true
+          },
+          {
+            "x": 1200,
+            "y": 600,
+            "smooth": true
+          },
+          {
+            "x": 1320,
+            "y": 720,
+            "smooth": true
+          },
+          {
+            "x": 1440,
+            "y": 780,
+            "smooth": true
+          },
+          {
+            "x": 1560,
+            "y": 780,
+            "smooth": true
+          },
+          {
+            "x": 1620,
+            "y": 660,
+            "smooth": true
+          },
+          {
+            "x": 1620,
+            "y": 540,
+            "smooth": true
+          },
+          {
+            "x": 1680,
+            "y": 420,
+            "smooth": true
+          },
+          {
+            "x": 1620,
+            "y": 300,
+            "smooth": true
+          }
+        ],
+        "free": true
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 420,
+        "cy": 600,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1440,
+        "cy": 480,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 660,
+        "cy": 300,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 230,
+        "cy": 840,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 720,
+        "cy": 720,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1740,
+        "cy": 600,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1440,
+        "cy": 180,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1500,
+        "cy": 900,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1140,
+        "cy": 600,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1140,
+        "cy": 360,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1740,
+        "cy": 360,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 780,
+        "cy": 480,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 110,
+        "cy": 420,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 120,
+        "cy": 660,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 240,
+        "cy": 780,
+        "rx": 60,
+        "ry": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 660,
+            "y": 360
+          }
+        ],
+        "speed": 240,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "pierce": true
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1330,
+        "cy": 810,
+        "rx": 60,
+        "ry": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1540,
+            "y": 180
+          }
+        ],
+        "speed": 240,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "pierce": true
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 990,
+        "cy": 520,
+        "rx": 160,
+        "ry": 160
+      },
+      "motion": {
+        "type": "curve",
+        "points": [
+          {
+            "x": 660,
+            "y": 300
+          },
+          {
+            "x": 300,
+            "y": 300
+          },
+          {
+            "x": 110,
+            "y": 410
+          },
+          {
+            "x": 160,
+            "y": 660
+          },
+          {
+            "x": 310,
+            "y": 850
+          },
+          {
+            "x": 550,
+            "y": 840
+          },
+          {
+            "x": 760,
+            "y": 690
+          },
+          {
+            "x": 990,
+            "y": 520
+          },
+          {
+            "x": 1210,
+            "y": 260
+          },
+          {
+            "x": 1380,
+            "y": 180
+          },
+          {
+            "x": 1630,
+            "y": 210
+          },
+          {
+            "x": 1760,
+            "y": 380
+          },
+          {
+            "x": 1760,
+            "y": 590
+          },
+          {
+            "x": 1650,
+            "y": 840
+          },
+          {
+            "x": 1380,
+            "y": 840
+          },
+          {
+            "x": 1220,
+            "y": 710
+          },
+          {
+            "x": 990,
+            "y": 520
+          }
+        ],
+        "speed": 300,
+        "repeat": "pingpong",
+        "easing": "none",
+        "delay": 0,
+        "clockwise": true
+      }
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "sand",
+        "color": "#574a24",
+        "background": "#cabd93",
+        "size": 40
+      },
+      "edge": "#000000"
+    },
+    "path": {
+      "fill": {
+        "type": "gradient",
+        "style": "linear",
+        "from": "#fae8b4",
+        "to": "#ffe180",
+        "angle": 90
+      },
+      "edge": "#000000"
+    }
+  },
+  "title": "Loop",
+  "level": 8,
+  "difficulty": 2.75,
+  "stars": {
+    "three": 14000,
+    "two": 18000,
+    "one": 23000
+  }
+}

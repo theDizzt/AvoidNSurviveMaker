@@ -1,0 +1,186 @@
+{
+  "format": 1,
+  "id": "desert",
+  "name": "Hot Hot Ruin",
+  "description": "Sun-baked sand, buried paths and heat shimmering over ancient ruins. Hunt for treasure in the abandoned ruins of the desert!",
+  "author": "Avoid N Survive",
+  "released": "2026-12-01",
+  "unlockStars": 30,
+  "colors": [
+    "#f5bb58",
+    "#c55d36"
+  ],
+  "style": {
+    "badge": {
+      "kind": "image",
+      "primary": "#000000",
+      "secondary": "#000000",
+      "numberColor": "#ffcd75",
+      "titleColor": "#e4af53",
+      "font": "caesar-dressing",
+      "pad": 2,
+      "showTitle": true,
+      "image": "badge.svg"
+    },
+    "maze": {
+      "wall": {
+        "fill": {
+          "type": "pattern",
+          "pattern": "sand",
+          "color": "#574a24",
+          "background": "#cabd93",
+          "size": 40
+        },
+        "edge": "#000000"
+      },
+      "path": {
+        "fill": {
+          "type": "gradient",
+          "style": "linear",
+          "from": "#fae8b4",
+          "to": "#ffe180",
+          "angle": 90
+        },
+        "edge": "#000000"
+      }
+    }
+  },
+  "cover": "cover.png",
+  "music": "audio/arabic-desert.mp3",
+  "screens": {
+    "select": {
+      "background": {
+        "color": "#291b22",
+        "color2": "#291b22"
+      },
+      "elements": [
+        {
+          "id": "art",
+          "kind": "image",
+          "x": 0,
+          "y": 0,
+          "w": 440,
+          "h": 720,
+          "opacity": 0.5,
+          "src": "cover.svg"
+        },
+        {
+          "id": "chapter",
+          "kind": "text",
+          "x": 52,
+          "y": 54,
+          "w": 330,
+          "h": 32,
+          "text": "CHAPTER 02 / DESERT",
+          "font": "main",
+          "size": 19,
+          "color": "#f5bb58",
+          "align": "left"
+        },
+        {
+          "id": "title",
+          "kind": "text",
+          "x": 52,
+          "y": 105,
+          "w": 340,
+          "h": 160,
+          "text": "{theme}",
+          "font": "title",
+          "size": 42,
+          "color": "#f5bb58",
+          "align": "left"
+        },
+        {
+          "id": "description",
+          "kind": "text",
+          "x": 52,
+          "y": 290,
+          "w": 320,
+          "h": 140,
+          "text": "{description}",
+          "font": "main",
+          "size": 19,
+          "color": "#f5bb58",
+          "align": "left"
+        },
+        {
+          "id": "progress",
+          "kind": "text",
+          "x": 52,
+          "y": 485,
+          "w": 320,
+          "h": 46,
+          "text": "{cleared} / {total} CLEARED",
+          "font": "main",
+          "size": 21,
+          "color": "#f5bb58",
+          "align": "left"
+        },
+        {
+          "id": "grid",
+          "kind": "levelGrid",
+          "x": 470,
+          "y": 140,
+          "w": 750,
+          "h": 420,
+          "cols": 7,
+          "rows": 3,
+          "gap": 14,
+          "button": {
+            "shape": "diamond",
+            "fill": "#291b22",
+            "fill2": "#c55d36",
+            "clearedFill": "#c55d36",
+            "border": "#f5bb58",
+            "borderWidth": 2,
+            "font": "title",
+            "numberSize": 30,
+            "numberColor": "#f5bb58",
+            "pad": 2,
+            "showStars": true,
+            "showDifficulty": true
+          }
+        },
+        {
+          "id": "back",
+          "kind": "back",
+          "x": 52,
+          "y": 610,
+          "w": 190,
+          "h": 54,
+          "text": "BACK",
+          "font": "title",
+          "size": 23,
+          "color": "#f5bb58",
+          "fill": "#291b22",
+          "border": "#c55d36",
+          "borderWidth": 2,
+          "radius": 10
+        },
+        {
+          "id": "footer",
+          "kind": "text",
+          "x": 470,
+          "y": 600,
+          "w": 750,
+          "h": 38,
+          "opacity": 0.6,
+          "text": "SELECT A LEVEL",
+          "font": "main",
+          "size": 18,
+          "color": "#f5bb58"
+        }
+      ]
+    }
+  },
+  "i18n": {
+    "ko": {
+      "name": "뜨끈뜨끈 폐허",
+      "description": "햇볕에 달궈진 모래, 파묻힌 길, 고대 유적 위로 아른거리는 열기. 사막의 버려진 유적에서 보물을 찾아 보아요!"
+    },
+    "zh": {
+      "name": "Hot Hot Ruin",
+      "description": "Sun-baked sand, buried paths and heat shimmering over ancient ruins. Hunt for treasure in the abandoned ruins of the desert!"
+    }
+  }
+}

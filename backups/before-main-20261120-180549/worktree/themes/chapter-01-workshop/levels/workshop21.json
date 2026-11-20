@@ -1,0 +1,1151 @@
+{
+  "v": 2,
+  "name": "workshop21",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 360,
+    "y": 120,
+    "w": 60,
+    "h": 60
+  },
+  "goal": {
+    "x": 120,
+    "y": 120,
+    "w": 60,
+    "h": 60
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 300,
+        "y": 60,
+        "w": 180,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 60,
+        "w": 180,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 120,
+        "w": 1560,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 360,
+        "y": 240,
+        "w": 60,
+        "h": 360
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 250,
+        "y": 120,
+        "w": 40,
+        "h": 60
+      },
+      "link": {
+        "color": 9,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 300,
+        "y": 300,
+        "w": 180,
+        "h": 180
+      },
+      "motion": {
+        "type": "linear",
+        "points": [],
+        "speed": 150,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 540,
+        "y": 360,
+        "w": 180,
+        "h": 180
+      },
+      "motion": {
+        "type": "linear",
+        "points": [],
+        "speed": 150,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 660,
+        "y": 480,
+        "w": 180,
+        "h": 180
+      },
+      "motion": {
+        "type": "linear",
+        "points": [],
+        "speed": 150,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 780,
+        "y": 600,
+        "w": 180,
+        "h": 180
+      },
+      "motion": {
+        "type": "linear",
+        "points": [],
+        "speed": 150,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 600,
+        "y": 420,
+        "w": 60,
+        "h": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 720,
+        "y": 540,
+        "w": 60,
+        "h": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 840,
+        "y": 660,
+        "w": 60,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 360,
+        "w": 540,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 600,
+        "w": 360,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 420,
+        "w": 60,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 540,
+        "w": 60,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 780,
+        "y": 180,
+        "w": 60,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 780,
+            "y": 360
+          },
+          {
+            "x": 840,
+            "y": 420
+          },
+          {
+            "x": 960,
+            "y": 300
+          },
+          {
+            "x": 1020,
+            "y": 360
+          },
+          {
+            "x": 1080,
+            "y": 300
+          },
+          {
+            "x": 1200,
+            "y": 420
+          },
+          {
+            "x": 1260,
+            "y": 360
+          },
+          {
+            "x": 1320,
+            "y": 420
+          },
+          {
+            "x": 1380,
+            "y": 420
+          },
+          {
+            "x": 1260,
+            "y": 300
+          },
+          {
+            "x": 1200,
+            "y": 360
+          },
+          {
+            "x": 1080,
+            "y": 240
+          },
+          {
+            "x": 1020,
+            "y": 300
+          },
+          {
+            "x": 960,
+            "y": 240
+          },
+          {
+            "x": 840,
+            "y": 360
+          }
+        ]
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1260,
+        "y": 420,
+        "w": 180,
+        "h": 180
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1020,
+        "y": 600,
+        "w": 180,
+        "h": 180
+      },
+      "motion": {
+        "type": "linear",
+        "points": [],
+        "speed": 150,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 960,
+        "y": 660,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [],
+        "speed": 150,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 900,
+        "w": 1740,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 330,
+        "cy": 930,
+        "rx": 90,
+        "ry": 90
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 570,
+        "cy": 930,
+        "rx": 90,
+        "ry": 90
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 810,
+        "cy": 930,
+        "rx": 90,
+        "ry": 90
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 780,
+        "w": 120,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 420,
+        "y": 600,
+        "w": 60,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 300,
+        "w": 60,
+        "h": 60
+      }
+    },
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": 1090,
+        "y": 670,
+        "w": 40,
+        "h": 40
+      },
+      "trigger": {
+        "kind": "switch",
+        "color": 0,
+        "once": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 250,
+        "y": 360,
+        "w": 40,
+        "h": 60
+      },
+      "link": {
+        "color": 3,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 490,
+        "y": 120,
+        "w": 40,
+        "h": 60
+      },
+      "link": {
+        "color": 3,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1740,
+        "y": 180,
+        "w": 60,
+        "h": 780
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 360,
+        "y": 490,
+        "w": 60,
+        "h": 40
+      },
+      "link": {
+        "color": 0,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": 190,
+        "y": 550,
+        "w": 40,
+        "h": 40
+      },
+      "trigger": {
+        "kind": "switch",
+        "color": 3,
+        "once": true
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1440,
+        "cy": 840,
+        "rx": 180,
+        "ry": 180
+      }
+    },
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": 100,
+        "y": 820,
+        "w": 40,
+        "h": 40
+      },
+      "trigger": {
+        "kind": "switch",
+        "color": 5,
+        "once": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 780,
+        "y": 190,
+        "w": 60,
+        "h": 40
+      },
+      "link": {
+        "color": 5,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": 1330,
+        "y": 490,
+        "w": 40,
+        "h": 40
+      },
+      "trigger": {
+        "kind": "switch",
+        "color": 7,
+        "once": true
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1500,
+        "y": 300,
+        "w": 120,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1550,
+        "y": 180,
+        "w": 20,
+        "h": 120
+      }
+    },
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": 1540,
+        "y": 340,
+        "w": 40,
+        "h": 40
+      },
+      "trigger": {
+        "kind": "switch",
+        "color": 9,
+        "once": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1530,
+        "y": 190,
+        "w": 60,
+        "h": 40
+      },
+      "link": {
+        "color": 7,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1680,
+        "y": 300,
+        "w": 180,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1680,
+        "y": 420,
+        "w": 180,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1680,
+        "y": 540,
+        "w": 180,
+        "h": 60
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1680,
+        "y": 660,
+        "w": 180,
+        "h": 60
+      }
+    },
+    {
+      "role": "door",
+      "shape": {
+        "type": "rect",
+        "x": 900,
+        "y": 110,
+        "w": 60,
+        "h": 80
+      },
+      "door": {
+        "mode": "auto",
+        "color": 9,
+        "moveMs": 300,
+        "waitMs": 500
+      }
+    },
+    {
+      "role": "door",
+      "shape": {
+        "type": "rect",
+        "x": 1020,
+        "y": 110,
+        "w": 60,
+        "h": 80
+      },
+      "door": {
+        "mode": "auto",
+        "color": 9,
+        "moveMs": 300,
+        "waitMs": 500
+      }
+    },
+    {
+      "role": "door",
+      "shape": {
+        "type": "rect",
+        "x": 1140,
+        "y": 110,
+        "w": 60,
+        "h": 80
+      },
+      "door": {
+        "mode": "auto",
+        "color": 9,
+        "moveMs": 300,
+        "waitMs": 500
+      }
+    },
+    {
+      "role": "door",
+      "shape": {
+        "type": "rect",
+        "x": 1260,
+        "y": 110,
+        "w": 60,
+        "h": 80
+      },
+      "door": {
+        "mode": "auto",
+        "color": 9,
+        "moveMs": 300,
+        "waitMs": 500
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1680,
+        "y": 300,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1830,
+            "y": 330
+          }
+        ],
+        "speed": 250,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1680,
+        "y": 540,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1830,
+            "y": 570
+          }
+        ],
+        "speed": 250,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1800,
+        "y": 420,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1710,
+            "y": 450
+          }
+        ],
+        "speed": 250,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1800,
+        "y": 660,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1710,
+            "y": 690
+          }
+        ],
+        "speed": 250,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 540,
+        "y": 360,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 690,
+            "y": 390
+          },
+          {
+            "x": 690,
+            "y": 510
+          },
+          {
+            "x": 570,
+            "y": 510
+          },
+          {
+            "x": 570,
+            "y": 390
+          }
+        ],
+        "speed": 250,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 780,
+        "y": 600,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 930,
+            "y": 630
+          },
+          {
+            "x": 930,
+            "y": 750
+          },
+          {
+            "x": 810,
+            "y": 750
+          },
+          {
+            "x": 810,
+            "y": 630
+          }
+        ],
+        "speed": 250,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 660,
+        "y": 480,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 810,
+            "y": 510
+          },
+          {
+            "x": 810,
+            "y": 630
+          },
+          {
+            "x": 690,
+            "y": 630
+          },
+          {
+            "x": 690,
+            "y": 510
+          }
+        ],
+        "speed": 250,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 60,
+        "y": 360,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 90,
+            "y": 630
+          },
+          {
+            "x": 390,
+            "y": 630
+          },
+          {
+            "x": 390,
+            "y": 390
+          },
+          {
+            "x": 90,
+            "y": 390
+          }
+        ],
+        "speed": 550,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 720,
+        "y": 300,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1350,
+            "y": 330
+          }
+        ],
+        "speed": 250,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1420,
+        "y": 780,
+        "w": 40,
+        "h": 120
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1350,
+        "y": 740,
+        "w": 180,
+        "h": 40
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1170,
+        "y": 820,
+        "w": 180,
+        "h": 40
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1530,
+        "y": 820,
+        "w": 180,
+        "h": 40
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 1439.9972272655557,
+        "cy": 839.9972272655558,
+        "r": 180,
+        "start": 90,
+        "sweep": 270
+      },
+      "rotation": {
+        "pivot": {
+          "x": 1439.9972272655557,
+          "y": 839.9972272655558
+        },
+        "speed": 135,
+        "angle": 360,
+        "clockwise": false,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1350,
+        "y": 900,
+        "w": 180,
+        "h": 40
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 809.9944935569685,
+        "cy": 929.9944935569685,
+        "r": 90,
+        "start": 90,
+        "sweep": 270
+      },
+      "rotation": {
+        "pivot": {
+          "x": 809.9944935569685,
+          "y": 929.9944935569685
+        },
+        "speed": 135,
+        "angle": 360,
+        "clockwise": false,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 569.9944935569685,
+        "cy": 929.9944935569685,
+        "r": 90,
+        "start": 90,
+        "sweep": 270
+      },
+      "rotation": {
+        "pivot": {
+          "x": 569.9944935569685,
+          "y": 929.9944935569685
+        },
+        "speed": 135,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 329.99449355696845,
+        "cy": 929.9944935569685,
+        "r": 90,
+        "start": 90,
+        "sweep": 270
+      },
+      "rotation": {
+        "pivot": {
+          "x": 329.99449355696845,
+          "y": 929.9944935569685
+        },
+        "speed": 135,
+        "angle": 360,
+        "clockwise": false,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 330,
+        "cy": 930,
+        "rx": 60,
+        "ry": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 570,
+        "cy": 930,
+        "rx": 60,
+        "ry": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "ellipse",
+        "cx": 810,
+        "cy": 930,
+        "rx": 60,
+        "ry": 60
+      }
+    }
+  ],
+  "id": "20",
+  "title": "REMIX 1",
+  "level": 21,
+  "difficulty": 4,
+  "stars": {
+    "three": 70000,
+    "two": 84000,
+    "one": 112000
+  }
+}

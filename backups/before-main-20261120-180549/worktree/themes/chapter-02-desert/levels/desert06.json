@@ -1,0 +1,293 @@
+{
+  "v": 2,
+  "name": "desert06",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 420,
+    "w": 60,
+    "h": 240
+  },
+  "goal": {
+    "x": 1740,
+    "y": 420,
+    "w": 60,
+    "h": 240
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 420,
+        "w": 240,
+        "h": 240
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1500,
+        "y": 420,
+        "w": 240,
+        "h": 240
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 420,
+            "y": 420
+          },
+          {
+            "x": 600,
+            "y": 480
+          },
+          {
+            "x": 600,
+            "y": 600
+          },
+          {
+            "x": 420,
+            "y": 660
+          }
+        ]
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1500,
+            "y": 420
+          },
+          {
+            "x": 1320,
+            "y": 480
+          },
+          {
+            "x": 1320,
+            "y": 600
+          },
+          {
+            "x": 1500,
+            "y": 660
+          }
+        ]
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 600,
+        "y": 720,
+        "w": 360,
+        "h": 120
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 780,
+            "y": 300
+          }
+        ],
+        "speed": 350,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 960,
+        "y": 240,
+        "w": 360,
+        "h": 120
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1140,
+            "y": 780
+          }
+        ],
+        "speed": 350,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 780,
+        "cy": 300,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1140,
+        "cy": 780,
+        "rx": 12,
+        "ry": 12
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 390,
+        "y": 240,
+        "w": 210,
+        "h": 40
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 270,
+        "y": 160,
+        "w": 120,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1320,
+        "y": 800,
+        "w": 210,
+        "h": 40
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1530,
+        "y": 800,
+        "w": 120,
+        "h": 120
+      }
+    },
+    {
+      "role": "crystal",
+      "shape": {
+        "type": "rect",
+        "x": 1566,
+        "y": 836,
+        "w": 48,
+        "h": 48
+      }
+    },
+    {
+      "role": "secret",
+      "shape": {
+        "type": "rect",
+        "x": 210,
+        "y": 130,
+        "w": 390,
+        "h": 200
+      },
+      "secret": {
+        "radius": 60
+      }
+    },
+    {
+      "role": "secret",
+      "shape": {
+        "type": "rect",
+        "x": 1320,
+        "y": 760,
+        "w": 390,
+        "h": 190
+      },
+      "secret": {
+        "radius": 60
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1320,
+        "y": 800,
+        "w": 60,
+        "h": 40
+      },
+      "link": {
+        "color": 13,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": 310,
+        "y": 200,
+        "w": 40,
+        "h": 40
+      },
+      "trigger": {
+        "kind": "switch",
+        "color": 13,
+        "once": true
+      }
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "sand",
+        "color": "#574a24",
+        "background": "#cabd93",
+        "size": 40
+      },
+      "edge": "#000000"
+    },
+    "path": {
+      "fill": {
+        "type": "gradient",
+        "style": "linear",
+        "from": "#fae8b4",
+        "to": "#ffe180",
+        "angle": 90
+      },
+      "edge": "#000000"
+    }
+  },
+  "id": "5",
+  "title": "Lift",
+  "level": 6,
+  "difficulty": 2,
+  "stars": {
+    "three": 5500,
+    "two": 7000,
+    "one": 9000
+  }
+}

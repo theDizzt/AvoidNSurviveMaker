@@ -1,0 +1,60 @@
+{
+  "id": "0",
+  "v": 2,
+  "name": "workshop01",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 180,
+    "y": 420,
+    "w": 180,
+    "h": 180
+  },
+  "goal": {
+    "x": 1560,
+    "y": 420,
+    "w": 180,
+    "h": 180
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 360,
+        "y": 420,
+        "w": 1200,
+        "h": 180
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 480,
+        "y": 420,
+        "w": 960,
+        "h": 30
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 480,
+        "y": 570,
+        "w": 960,
+        "h": 30
+      }
+    }
+  ],
+  "title": "Linear",
+  "level": 1,
+  "difficulty": 1,
+  "stars": {
+    "three": 1000,
+    "two": 1400,
+    "one": 1800
+  }
+}

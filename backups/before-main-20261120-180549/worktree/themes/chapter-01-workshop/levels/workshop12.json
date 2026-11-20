@@ -1,0 +1,241 @@
+{
+  "id": "11",
+  "v": 2,
+  "name": "workshop12",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 240,
+    "w": 60,
+    "h": 120
+  },
+  "goal": {
+    "x": 120,
+    "y": 660,
+    "w": 60,
+    "h": 120
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 360,
+        "y": 360,
+        "w": 60,
+        "h": 300
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 240,
+        "w": 600,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 660,
+        "w": 1380,
+        "h": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 720,
+        "y": 360,
+        "w": 60,
+        "h": 300
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1500,
+        "y": 360,
+        "w": 60,
+        "h": 300
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1140,
+        "y": 360,
+        "w": 60,
+        "h": 300
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1140,
+        "y": 240,
+        "w": 600,
+        "h": 120
+      }
+    },
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": 1650,
+        "y": 270,
+        "w": 60,
+        "h": 60
+      },
+      "trigger": {
+        "kind": "switch",
+        "color": 0,
+        "once": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 660,
+        "w": 60,
+        "h": 120
+      },
+      "link": {
+        "color": 0,
+        "action": "remove"
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 360,
+        "y": 240,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 390,
+            "y": 750
+          },
+          {
+            "x": 390,
+            "y": 270
+          }
+        ],
+        "speed": 300,
+        "repeat": "loop",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 720,
+        "y": 240,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 750,
+            "y": 750
+          },
+          {
+            "x": 750,
+            "y": 270
+          }
+        ],
+        "speed": 300,
+        "repeat": "loop",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1140,
+        "y": 240,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1170,
+            "y": 750
+          },
+          {
+            "x": 1170,
+            "y": 270
+          }
+        ],
+        "speed": 300,
+        "repeat": "loop",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1500,
+        "y": 240,
+        "w": 60,
+        "h": 60
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1530,
+            "y": 750
+          },
+          {
+            "x": 1530,
+            "y": 270
+          }
+        ],
+        "speed": 300,
+        "repeat": "loop",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    }
+  ],
+  "title": "Switch 2",
+  "level": 12,
+  "difficulty": 1.5,
+  "stars": {
+    "three": 5500,
+    "two": 7500,
+    "one": 10000
+  }
+}
