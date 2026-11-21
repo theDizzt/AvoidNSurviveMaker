@@ -96,6 +96,11 @@ export class BeltPath {
   readonly width: number;
   /** px per ms */
   readonly speed: number;
+  /**
+   * Each run's area: its two edges between the diagonal folds at its corners (the miter lines),
+   * the same areas the belt is drawn with. A point belongs to the run whose area it is in.
+   */
+  private readonly runs: Float64Array[];
 
   constructor(c: Conveyor) {
     const pts = beltPoints(c);
@@ -108,6 +113,30 @@ export class BeltPath {
     this.sign = c.reverse ? -1 : 1;
     this.width = c.width;
     this.speed = c.speed / 1000;
+    const { left: L, right: R } = beltSides(c);
+    const n = L.length;
+    this.runs = [];
+    for (let k = 0; k + 1 < pts.length && n >= 2; k++) {
+      const a = k % n, b = (k + 1) % n;
+      this.runs.push(new Float64Array([L[a].x, L[a].y, L[b].x, L[b].y, R[b].x, R[b].y, R[a].x, R[a].y]));
+    }
+  }
+
+  /** Does the closed ring overlap the belt (not just touch its edges)? */
+  overlaps(ring: Float64Array): boolean {
+    return this.runs.some((run) => polysOverlap(run, ring));
+  }
+
+  /** The run whose area holds (x, y); on a fold between two, the one the belt runs into. −1 if none */
+  private runAt(x: number, y: number): number {
+    let found = -1;
+    for (let k = 0; k < this.runs.length; k++) {
+      if (!insideRing(x, y, this.runs[k]) && !onRingEdge(x, y, this.runs[k])) continue;
+      found = k;
+      // Running toward the first point: the earlier run is the one ahead
+      if (this.sign < 0) return k;
+    }
+    return found;
   }
 
   /** Distance along the belt of the centerline point nearest (x, y); `dir` gets that run's direction of travel */
@@ -115,7 +144,12 @@ export class BeltPath {
     const p = this.pts;
     let best = Infinity;
     let s = 0;
-    for (let i = 0; i + 3 < p.length; i += 2) {
+    // Inside a run's area (between the folds at its corners), that run alone decides: past a
+    // corner's fold the belt runs the new way, even where the old run is just as near
+    const run = this.runAt(x, y);
+    const from = run >= 0 ? run * 2 : 0;
+    const to = run >= 0 ? run * 2 + 4 : p.length;
+    for (let i = from; i + 3 < to; i += 2) {
       const ax = p[i], ay = p[i + 1], bx = p[i + 2], by = p[i + 3];
       const dx = bx - ax, dy = by - ay;
       const len2 = dx * dx + dy * dy;
@@ -173,6 +207,18 @@ function segmentsCross(ax: number, ay: number, bx: number, by: number, cx: numbe
   const d3 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
   const d4 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
   return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+/** Is (x, y) on an edge of the ring (within a hair)? */
+function onRingEdge(x: number, y: number, ring: Float64Array): boolean {
+  for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) {
+    const ax = ring[j], ay = ring[j + 1], bx = ring[i], by = ring[i + 1];
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const u = len2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2)) : 0;
+    if ((ax + dx * u - x) ** 2 + (ay + dy * u - y) ** 2 < 1e-12) return true;
+  }
+  return false;
 }
 
 function insideRing(x: number, y: number, ring: Float64Array): boolean {

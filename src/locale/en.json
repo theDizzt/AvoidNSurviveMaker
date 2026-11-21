@@ -1042,7 +1042,7 @@
   "ed.beltReverse": "Run the other way",
   "ed.beltLoop": "Loop (last point joins the first)",
   "ed.conveyorNote": "Safe to stand on. The cursor and luggage on it are carried along at its speed. Drag its points to reshape it; runs are always straight.",
-  "ed.luggageNote": "A wooden crate, deadly like a wall. Placed on a conveyor belt it rides along it; it stops against walls, doors and luggage that is not moving, and at the end of a one-way belt. A crate wider than the belt does not move.",
+  "ed.luggageNote": "A wooden crate, deadly like a wall. Placed on a conveyor belt it rides along it and turns at its corners. It stops against luggage that is not moving, against walls and doors lying across the belt (walls beside the belt don't stop it), and at the end of a one-way belt. A crate wider than the belt does not move.",
   "ed.turretRange": "Detection range",
   "ed.turretFireS": "Fire interval (s)",
   "ed.turretBulletSpeed": "Bullet speed",

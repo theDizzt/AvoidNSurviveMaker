@@ -144,3 +144,44 @@ describe('luggage (#70)', () => {
     expect(transformAt(again.objects[1], 0, tf).dx).toBe(0);
   });
 });
+
+describe('conveyor belt (#69) corners', () => {
+  // Right along y = 300 to x = 800, then down to y = 800
+  const corner = () => belt({ points: [{ x: 300, y: 300 }, { x: 800, y: 300 }, { x: 800, y: 800 }], speed: 400 });
+
+  it('turns the cursor at a corner and keeps it on the belt', () => {
+    const sim = hold(map([corner()]), 700, 300, 1000);
+    expect(sim.status).toBe('playing');
+    // 400 px along: 100 px to the corner, then 300 px down
+    expect(sim.x).toBeCloseTo(800, -1);
+    expect(sim.y).toBeGreaterThan(500);
+  });
+
+  it('turns the cursor from the outer part of a corner too', () => {
+    // Past the corner on the outside (beyond the vertex, inside the mitered corner)
+    const sim = hold(map([corner()]), 820, 290, 500);
+    expect(sim.status).toBe('playing');
+    expect(sim.y).toBeGreaterThan(400);
+    expect(sim.x).toBeLessThan(840);
+  });
+
+  it('turns a crate at a corner', () => {
+    const sim = hold(map([corner(), crate(600, 300)]), 200, 900, 1500);
+    const o = crateOffset(sim, 1);
+    expect(600 + o.dx).toBeCloseTo(800, -1);
+    expect(300 + o.dy).toBeGreaterThan(500);
+  });
+});
+
+describe('luggage (#70) at a corner beside walls', () => {
+  it('turns a crate as wide as the belt around the wall inside a loop', () => {
+    // A loop around a wall block that fills its middle, edge to edge with the belt
+    const loop = belt({ points: [{ x: 400, y: 300 }, { x: 900, y: 300 }, { x: 900, y: 700 }, { x: 400, y: 700 }], loop: true, width: 60, speed: 400 });
+    const inner = wall(430, 330, 440, 340);
+    const sim = hold(map([loop, inner, crate(800, 300, 60)]), 200, 900, 1000);
+    const o = crateOffset(sim, 2);
+    // 400 px along: 100 px to the corner, then 300 px down the right side
+    expect(800 + o.dx).toBeCloseTo(900, 0);
+    expect(300 + o.dy).toBeCloseTo(600, -1);
+  });
+});

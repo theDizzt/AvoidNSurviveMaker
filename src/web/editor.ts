@@ -824,7 +824,7 @@ export class Editor {
     const objs = this.compiled;
     const zoneTrigger = (i: number) => !isButton(this.map.objects[i]?.trigger?.kind);
     // Text boxes are drawn over everything, so they are picked first
-    for (const role of ['text', 'coin', 'crystal', 'torch', 'pulley', 'portal', 'laser', 'turret', 'trigger', 'wall', 'door', 'mirror'] as const) {
+    for (const role of ['text', 'coin', 'crystal', 'torch', 'pulley', 'portal', 'laser', 'turret', 'trigger', 'luggage', 'wall', 'door', 'mirror'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
@@ -832,8 +832,9 @@ export class Editor {
     }
     if (new ZoneArea(this.map.goal, this.map.goalShape).contains(p.x, p.y)) return { kind: 'goal' };
     if (new ZoneArea(this.map.start, this.map.startShape).contains(p.x, p.y)) return { kind: 'start' };
-    // Darkness and fog areas last, so whatever lies under one can still be clicked
-    for (const role of ['safe', 'path', 'trigger', 'dark', 'fog', 'secret'] as const) {
+    // Darkness and fog areas last, so whatever lies under one can still be clicked. Conveyor belts
+    // (#69) lie over paths; a loop's middle is not belt (even-odd, like its outline)
+    for (const role of ['safe', 'conveyor', 'path', 'trigger', 'dark', 'fog', 'secret'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && !zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };

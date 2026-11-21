@@ -499,10 +499,11 @@ export class Simulation {
   }
 
   /**
-   * Carry each crate (#70) along the belt under its center from ta to tb: toward a point a little
-   * ahead on the centerline, so it settles onto the middle and takes corners smoothly. It stays put
-   * when it is wider than the belt, at the end of a one-way belt, or when the move would run it
-   * into a wall, a door (where they are at tb) or another crate.
+   * Carry each crate (#70) along the belt under its center from ta to tb: along the centerline,
+   * turning at its corners (even where a real box as wide as the belt couldn't), while it drifts
+   * onto the middle at the belt's speed. It stays put when it is wider than the belt, at the end of
+   * a one-way belt, or when the move would run it into another crate, or into a wall or door
+   * (where they are at tb) that lies across the belt.
    */
   private moveCrates(ta: number, tb: number): void {
     const dt = tb - ta;
@@ -526,27 +527,35 @@ export class Simulation {
       // Wider than the belt: it doesn't fit, and isn't carried
       if (Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) > belt.width) continue;
       const s = belt.project(cx, cy);
+      const step = belt.speed * dt;
+      let to = s + belt.sign * step;
       if (!belt.loop) {
         // At the end of a one-way belt it stops, still on the belt
         const half = Math.max(o.maxX - o.minX, o.maxY - o.minY) / 2;
-        if (belt.sign > 0 ? s >= belt.length - half : s <= half) continue;
+        to = belt.sign > 0 ? Math.min(to, belt.length - half) : Math.max(to, half);
+        if (belt.sign > 0 ? to <= s : to >= s) continue;
       }
-      belt.pointAt(s + belt.sign * Math.max(belt.width / 2, 1), pB);
-      const dx = pB.x - cx;
-      const dy = pB.y - cy;
-      const len = Math.hypot(dx, dy);
-      if (len < 1e-9) continue;
-      const step = Math.min(len, belt.speed * dt);
-      const nx = m.x1 + (dx / len) * step;
-      const ny = m.y1 + (dy / len) * step;
-      if (this.crateBlocked(c.i, o, nx, ny)) continue;
+      // Where it is off the centerline, kept but shrinking by the distance traveled
+      belt.pointAt(s, pA);
+      const latX = cx - pA.x;
+      const latY = cy - pA.y;
+      const lat = Math.hypot(latX, latY);
+      const keep = lat > 0 ? Math.max(0, lat - step) / lat : 0;
+      belt.pointAt(to, pB);
+      const nx = m.x1 + pB.x + latX * keep - cx;
+      const ny = m.y1 + pB.y + latY * keep - cy;
+      if (nx === m.x1 && ny === m.y1) continue;
+      if (this.crateBlocked(c.i, o, nx, ny, belt)) continue;
       m.x1 = nx;
       m.y1 = ny;
     }
   }
 
-  /** Would crate `ci` overlap a wall, door or another crate if moved to offset (dx, dy)? */
-  private crateBlocked(ci: number, o: CompiledObject, dx: number, dy: number): boolean {
+  /**
+   * Would crate `ci` overlap another crate, or a wall or door lying across its `belt`, if moved to
+   * offset (dx, dy)? Walls beside the belt don't stop it: it turns corners past them.
+   */
+  private crateBlocked(ci: number, o: CompiledObject, dx: number, dy: number, belt: BeltPath): boolean {
     // The crate a hair smaller, so a crate resting against something can still slide along it
     if (this.crateScratch.length !== o.poly.length) this.crateScratch = new Float64Array(o.poly.length);
     const box = this.crateScratch;
@@ -592,7 +601,9 @@ export class Simulation {
         wy0 = Math.min(wy0, ring[j + 1]); wy1 = Math.max(wy1, ring[j + 1]);
       }
       if (wx1 <= minX || wx0 >= maxX || wy1 <= minY || wy0 >= maxY) continue;
-      if (polysOverlap(box, ring)) return true;
+      if (!polysOverlap(box, ring)) continue;
+      if (src >= 0 && this.objects[src].role === 'luggage') return true;
+      if (belt.overlaps(ring)) return true;
     }
     return false;
   }

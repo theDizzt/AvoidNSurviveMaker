@@ -1456,6 +1456,10 @@ function drawBelt(g: CanvasRenderingContext2D, o: CompiledObject, c: Conveyor, p
   ring.moveTo(o.poly[0], o.poly[1]);
   for (let k = 2; k < o.poly.length; k += 2) ring.lineTo(o.poly[k], o.poly[k + 1]);
   ring.closePath();
+  const sides = beltSides(c);
+  const L = sides.left;
+  const R = sides.right;
+  const n = L.length;
   g.save();
   g.fillStyle = '#3a3f47';
   g.fill(ring, 'evenodd');
@@ -1464,23 +1468,38 @@ function drawBelt(g: CanvasRenderingContext2D, o: CompiledObject, c: Conveyor, p
   // How far the belt has run: slats and arrows slide along with it
   const run = ((now / 1000) * c.speed) * path.sign;
   const p = path.pts;
-  const slats = new Path2D();
-  const arrows = new Path2D();
+  const a = Math.min(h * 0.45, 14);
   for (let k = 0; k + 3 < p.length; k += 2) {
     const ax = p[k], ay = p[k + 1], bx = p[k + 2], by = p[k + 3];
     const len = Math.hypot(bx - ax, by - ay);
-    if (len <= 0) continue;
+    const seg = k / 2;
+    if (len <= 0 || seg + 1 > n - (sides.loop ? 0 : 1)) continue;
     const ux = (bx - ax) / len, uy = (by - ay) / len;
     const nx = -uy, ny = ux;
-    const s0 = path.at[k / 2];
-    // Slats across the belt, continuing their spacing from one run to the next
-    for (let d = ((((run - s0) % SLAT_GAP) + SLAT_GAP) % SLAT_GAP); d <= len; d += SLAT_GAP) {
+    const s0 = path.at[seg];
+    // Each run's slats and arrows stay on its own side of the diagonal folds at its corners
+    const l0 = L[seg], l1 = L[(seg + 1) % n], r0 = R[seg], r1 = R[(seg + 1) % n];
+    g.save();
+    g.beginPath();
+    g.moveTo(l0.x, l0.y);
+    g.lineTo(l1.x, l1.y);
+    g.lineTo(r1.x, r1.y);
+    g.lineTo(r0.x, r0.y);
+    g.closePath();
+    g.clip();
+    // Slats across the belt, continuing their spacing from one run to the next, out to the folds
+    const reach = h * 3;
+    const slats = new Path2D();
+    for (let d = ((((run - s0) % SLAT_GAP) + SLAT_GAP) % SLAT_GAP) - Math.ceil(reach / SLAT_GAP) * SLAT_GAP; d <= len + reach; d += SLAT_GAP) {
       const x = ax + ux * d, y = ay + uy * d;
-      slats.moveTo(x + nx * h, y + ny * h);
-      slats.lineTo(x - nx * h, y - ny * h);
+      slats.moveTo(x + nx * h * 1.5, y + ny * h * 1.5);
+      slats.lineTo(x - nx * h * 1.5, y - ny * h * 1.5);
     }
+    g.strokeStyle = '#4d535d';
+    g.lineWidth = 3;
+    g.stroke(slats);
     // Arrows (chevrons) pointing the way the belt runs
-    const a = Math.min(h * 0.45, 14);
+    const arrows = new Path2D();
     const sx = ux * path.sign, sy = uy * path.sign;
     for (let d = ((((run - s0) % ARROW_GAP) + ARROW_GAP) % ARROW_GAP); d <= len; d += ARROW_GAP) {
       const x = ax + ux * d, y = ay + uy * d;
@@ -1488,19 +1507,29 @@ function drawBelt(g: CanvasRenderingContext2D, o: CompiledObject, c: Conveyor, p
       arrows.lineTo(x, y);
       arrows.lineTo(x - sx * a - nx * a, y - sy * a - ny * a);
     }
+    g.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    g.lineWidth = Math.max(2, Math.min(5, h * 0.18));
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.stroke(arrows);
+    g.restore();
   }
-  g.strokeStyle = '#4d535d';
-  g.lineWidth = 3;
-  g.stroke(slats);
-  g.strokeStyle = 'rgba(255, 255, 255, 0.28)';
-  g.lineWidth = Math.max(2, Math.min(5, h * 0.18));
-  g.lineCap = 'round';
-  g.lineJoin = 'round';
-  g.stroke(arrows);
+  // Diagonal folds where the belt turns: from each corner's outer edge to its inner edge
+  const folds = new Path2D();
+  for (let i = sides.loop ? 0 : 1; i < (sides.loop ? n : n - 1); i++) {
+    folds.moveTo(L[i].x, L[i].y);
+    folds.lineTo(R[i].x, R[i].y);
+  }
+  g.lineCap = 'butt';
+  g.strokeStyle = '#202329';
+  g.lineWidth = 3.5;
+  g.stroke(folds);
+  g.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+  g.lineWidth = 1;
+  g.stroke(folds);
   // Hazard stripes along both edges (half of each stroke lies inside the clip)
-  const sides = beltSides(c);
   const edge = new Path2D();
-  for (const side of [sides.left, sides.right]) {
+  for (const side of [L, R]) {
     if (side.length < 2) continue;
     edge.moveTo(side[0].x, side[0].y);
     for (let k = 1; k < side.length; k++) edge.lineTo(side[k].x, side[k].y);
@@ -1509,14 +1538,21 @@ function drawBelt(g: CanvasRenderingContext2D, o: CompiledObject, c: Conveyor, p
   const stripe = stripes(g, '#1d1f24', '#f5c518');
   g.strokeStyle = stripe ?? '#f5c518';
   g.lineWidth = Math.max(6, Math.min(14, c.width * 0.16));
-  g.lineCap = 'butt';
   g.lineJoin = 'miter';
   g.stroke(edge);
   g.restore();
-  // A thin dark rim around the belt
+  // A thin dark rim along the edges (and across the ends of a one-way belt), but not along the
+  // seam that joins a loop's outer and inner edges in its outline
+  const rim = new Path2D(edge);
+  if (!sides.loop && n >= 2) {
+    rim.moveTo(L[0].x, L[0].y);
+    rim.lineTo(R[0].x, R[0].y);
+    rim.moveTo(L[n - 1].x, L[n - 1].y);
+    rim.lineTo(R[n - 1].x, R[n - 1].y);
+  }
   g.strokeStyle = '#1d1f24';
   g.lineWidth = 1.5;
-  g.stroke(ring);
+  g.stroke(rim);
 }
 
 /** A crate (#70) where its belt has carried it: a wooden box with planks, a frame and a cross brace */
