@@ -157,13 +157,38 @@ describe('Simulation', () => {
   });
 
   it('advances one tick per 1ms boundary', () => {
-    const sim = new Simulation(baseMap());
+    const sim = new Simulation(baseMap(), undefined, 1);
     sim.start(10, 10);
     sim.feed(3.4, 12, 10);
     expect(sim.ticks).toBe(3);
     sim.feed(7.9, 14, 10);
     expect(sim.ticks).toBe(7);
     expect(sim.status).toBe('playing');
+  });
+
+  it('judges in 4 ms steps, moving obstacles included, and still clears at the exact time', () => {
+    const mover = wall({ x: 300, y: 300, w: 20, h: 20 }, { motion: motion({ points: [{ x: 400, y: 300 }] }) });
+    const sim = new Simulation(baseMap([mover]));
+    expect(sim.simulationStepMs).toBe(4);
+    sim.start(10, 10);
+    sim.feed(20, 30, 10);
+    expect(sim.ticks).toBe(20); // 4 ms boundaries only
+    // GOAL (x = 700) is reached inside the 20–24 ms step: its time is interpolated, not rounded to 24
+    sim.feed(21, 699, 10);
+    sim.feed(30, 708, 10);
+    expect(sim.status).toBe('cleared');
+    expect(sim.endTime).toBeCloseTo(22, 6);
+  });
+
+  it('still hits a moving obstacle that crosses the cursor within one step', () => {
+    // The wall sweeps 100 px/s to the right through x = 100..120 at the cursor's height
+    const mover = wall({ x: 60, y: 100, w: 20, h: 20 }, { motion: motion({ points: [{ x: 160, y: 100 }], repeat: 'once' }) });
+    const sim = new Simulation(baseMap([mover]));
+    sim.start(10, 10);
+    sim.feed(4, 110, 110);
+    for (let t = 8; sim.status === 'playing' && t < 2000; t += 8) sim.feed(t, 110, 110);
+    expect(sim.status).toBe('dead');
+    expect(sim.endReason).toBe('mover');
   });
 
   it('clears at the exact time GOAL is reached', () => {

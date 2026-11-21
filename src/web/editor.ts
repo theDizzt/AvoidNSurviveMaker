@@ -12,6 +12,7 @@ import { formatSeconds } from '../core/simulation';
 import { initialChannels } from '../core/switches';
 import { type MergeOp } from '../core/merge';
 import { flattenShape, normalizeTilt, polyOutline, rotatePoint, shapeBounds, shapeCenter, tiltedBounds, translateShape } from '../core/shape';
+import { conveyorOutline, DEFAULT_BELT_SPEED, DEFAULT_BELT_WIDTH } from '../core/conveyor';
 import { encodeMap } from './localized/share';
 import type { FogKind, MapData, MapObject, Point, PolyPoint, Rect, Shape, TriggerKind } from '../core/types';
 import { switchColor } from './localized/colors';
@@ -627,6 +628,11 @@ export class Editor {
     addButton(row, door, `${svg('<rect x="2" y="9" width="9" height="6"/><rect x="13" y="9" width="9" height="6"/><path d="M8 6 L5 6 M16 6 L19 6" />')}<span class="pal-num">40</span>`, tr('ed.palAutoDoor'), 'pal-door');
     const pulleyTool: ObjectTool = { kind: 'object', role: 'pulley', behavior: 'static', shape: 'ellipse' };
     addButton(row, pulleyTool, `${svg('<circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 5 L12 19 M5.9 8.5 L18.1 15.5 M5.9 15.5 L18.1 8.5" stroke-width="1.6"/><circle cx="12" cy="12" r="2.4"/>')}<span class="pal-num">52</span>`, tr('ed.palPulley'), 'pal-switch');
+    // Conveyor belt (#69): points one by one; crate (#70): a box dropped on a belt
+    const conveyorTool: ObjectTool = { kind: 'object', role: 'conveyor', behavior: 'static', shape: 'poly' };
+    addButton(row, conveyorTool, `${svg('<rect x="2" y="7" width="20" height="10" rx="1.5"/><path d="M2 7 L22 7 M2 17 L22 17" stroke="#f5c518" stroke-width="2" stroke-dasharray="2 2"/><path d="M9 9.5 L12 12 L9 14.5 M13 9.5 L16 12 L13 14.5" fill="none" stroke="#fff" stroke-width="1.5"/>')}<span class="pal-num">69</span>`, tr('ed.palConveyor'), 'pal-belt');
+    const luggageTool: ObjectTool = { kind: 'object', role: 'luggage', behavior: 'static', shape: 'rect' };
+    addButton(row, luggageTool, `${svg('<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 4 L20 20 M20 4 L4 20" stroke-width="1.6"/><rect x="4" y="4" width="16" height="16" rx="1" fill="none" stroke-width="2.2"/>')}<span class="pal-num">70</span>`, tr('ed.palLuggage'), 'pal-crate');
 
     // Collectibles: coin and crystal star
     row = section(tr('ed.catCollect'));
@@ -773,6 +779,8 @@ export class Editor {
       text = m?.type === 'circle'
         ? tr('ed.hintOrbit')
         : tr('ed.hintMarkers', { n: m?.points.length ?? 0 });
+    } else if (this.draft?.tool.kind === 'object' && this.draft.tool.role === 'conveyor') {
+      text = tr('ed.hintBelt', { n: this.draft.points.length });
     } else if (this.draft) {
       text = this.draft.tool.shape === 'free'
         ? tr('ed.hintFree', { n: this.draft.points.length })
@@ -889,6 +897,11 @@ export class Editor {
       // Multi-selection: one tilt handle above the whole selection
       const g = this.groupRotate();
       if (g) out.push({ h: { kind: 'rotate' }, p: g.p });
+      return out;
+    }
+    // A conveyor belt (#69): only the points of its centerline
+    if (o.conveyor) {
+      o.conveyor.points.forEach((p, j) => out.push({ h: { kind: 'belt', j }, p }));
       return out;
     }
     if (o.rotation) out.push({ h: { kind: 'pivot' }, p: o.rotation.pivot });
@@ -1012,7 +1025,7 @@ export class Editor {
       const first = pts[0];
       const r = HANDLE_PX * 1.5 * unitsPerPx(this.el.canvas, this.map);
       if (pts.length >= 3 && Math.hypot(first.x - raw.x, first.y - raw.y) <= r) {
-        this.closeDraft();
+        this.closeDraft(true);
       } else if (pts.length < LIMITS.maxPolyPoints) {
         pts.push(this.draft.tool.shape === 'free' && !e.shiftKey ? { ...p, smooth: true } : p);
         this.updateHint();
@@ -1184,6 +1197,12 @@ export class Editor {
     }
     const o = this.selectedObject();
     if (!o || !('shape' in d.orig)) return;
+    if (h.kind === 'belt' && o.conveyor) {
+      o.conveyor.points[h.j] = this.snapPoint(raw);
+      o.shape = { type: 'poly', points: conveyorOutline(o.conveyor) };
+      this.dirty();
+      return;
+    }
     if (h.kind === 'rotate') {
       const c = shapeCenter(d.orig.shape);
       const from = d.orig.tilt ?? 0;
@@ -1340,6 +1359,8 @@ export class Editor {
     }
     // Turrets and missile launchers are always 60×60, centered on the click
     if (tool.role === 'turret') r = { x: d.x0 - LIMITS.turretSize / 2, y: d.y0 - LIMITS.turretSize / 2, w: LIMITS.turretSize, h: LIMITS.turretSize };
+    // Crates (#70): a plain click drops one 40×40
+    if (tool.role === 'luggage' && r.w < 4 && r.h < 4) r = { x: d.x0 - 20, y: d.y0 - 20, w: 40, h: 40 };
     // Torches 24×40, centered on the click
     if (tool.role === 'torch' && r.w < 4 && r.h < 4) r = { x: d.x0 - 12, y: d.y0 - 20, w: 24, h: 40 };
     // Coins are always 24×24, centered on the click
@@ -1405,9 +1426,15 @@ export class Editor {
     return out;
   }
 
-  private closeDraft(): void {
+  /** `loop`: closed by clicking the first point (a conveyor belt then runs round as a loop) */
+  private closeDraft(loop = false): void {
     const draft = this.draft;
     this.draft = null;
+    if (draft?.tool.kind === 'object' && draft.tool.role === 'conveyor') {
+      if (draft.points.length < 2) return this.updateHint();
+      const conveyor = { points: draft.points.map((p) => ({ x: p.x, y: p.y })), loop: loop && draft.points.length >= 3, width: DEFAULT_BELT_WIDTH, speed: DEFAULT_BELT_SPEED };
+      return this.addObject(draft.tool, { type: 'poly', points: conveyorOutline(conveyor) }, { conveyor });
+    }
     if (!draft || draft.points.length < 3) return this.updateHint();
     const shape: Shape = draft.tool.shape === 'free'
       ? { type: 'poly', points: draft.points, free: true }
@@ -1432,9 +1459,9 @@ export class Editor {
     this.updateHint();
   }
 
-  private addObject(tool: ObjectTool, shape: Shape): void {
+  private addObject(tool: ObjectTool, shape: Shape, extra: Partial<MapObject> = {}): void {
     if (this.map.objects.length >= LIMITS.maxObjects) return;
-    const o: MapObject = { role: tool.role, shape };
+    const o: MapObject = { role: tool.role, shape, ...extra };
     if (tool.behavior === 'rotating') o.rotation = defaultRotation(o);
     if (tool.behavior === 'blinking') o.blink = { ...DEFAULT_BLINK };
     if (tool.ice) o.ice = { grip: DEFAULT_ICE_GRIP };
@@ -1480,7 +1507,8 @@ export class Editor {
   private onDoubleClick(e: MouseEvent): void {
     if (this.tool.kind !== 'select' || this.draft || this.markerMode !== null) return;
     const o = this.selectedObject();
-    if (!o || o.shape.type !== 'poly') return;
+    // A conveyor belt's outline comes from its centerline: no vertices to add or round off
+    if (!o || o.shape.type !== 'poly' || o.conveyor) return;
     const shape = o.shape;
     const raw = this.pointer(e);
     const h = this.hitHandle(raw);
@@ -1837,7 +1865,7 @@ export class Editor {
     if (this.draft) {
       const pts = this.draft.points.length;
       return openContextMenu(x, y, [
-        { label: tr('ed.finishShape'), keys: 'Enter', disabled: pts < 3, action: () => this.closeDraft() },
+        { label: tr('ed.finishShape'), keys: 'Enter', disabled: pts < (this.draft.tool.kind === 'object' && this.draft.tool.role === 'conveyor' ? 2 : 3), action: () => this.closeDraft() },
         { label: tr('ed.removeLastPoint'), keys: 'Backspace', action: () => {
           this.draft?.points.pop();
           if (this.draft && !this.draft.points.length) this.draft = null;
@@ -2724,7 +2752,17 @@ export class Editor {
     // Polygon / freeform in progress
     if (this.draft) {
       const pts = this.hover ? [...this.draft.points, this.snapPoint(this.hover)] : this.draft.points;
-      if (pts.length >= 3) {
+      const belt = this.draft.tool.kind === 'object' && this.draft.tool.role === 'conveyor';
+      if (belt && pts.length >= 2) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(58,63,71,0.45)';
+        ctx.lineWidth = DEFAULT_BELT_WIDTH;
+        ctx.lineJoin = 'miter';
+        ctx.beginPath();
+        pts.forEach((p, k) => (k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+        ctx.stroke();
+        ctx.restore();
+      } else if (pts.length >= 3) {
         const ring = polyOutline(pts);
         ctx.fillStyle = 'rgba(58,159,240,0.1)';
         ctx.beginPath();

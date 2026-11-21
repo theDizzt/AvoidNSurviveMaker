@@ -74,7 +74,7 @@ export const ICONS: Record<ShapeKind, string> = {
 export const SPECIAL_IDS = {
   sectorPath: 27, sectorWall: 28, spike: 29, boulder: 30, coin: 31, laser: 37, mirror: 38, portal: 39, door: 40, dark: 41, globalDark: 42,
   disc: 43, blade: 44, movingDisc: 45, movingBlade: 46, text: 47, safe: 48, fog: 49, sand: 50,
-  fall: 51, pulley: 52, ringPath: 53, ringWall: 54, secret: 55, secretFree: 56, torch: 57, carryTorch: 58, crystal: 59, turret: 60, missile: 61, rotatingSaw: 62,
+  fall: 51, pulley: 52, ringPath: 53, ringWall: 54, secret: 55, secretFree: 56, torch: 57, carryTorch: 58, crystal: 59, turret: 60, missile: 61, rotatingSaw: 62, conveyor: 69, luggage: 70,
 } as const;
 
 export const TRIGGER_IDS: Record<TriggerKind, number> = { switch: 32, timer: 33, hold: 34, startZone: 35, stopZone: 36 };
@@ -88,6 +88,7 @@ export const isButton = (k: TriggerKind | undefined) => k === 'switch' || k === 
 export const ROLE_NAMES: Record<Role, string> = {
   path: tr('ed.namePath'), wall: tr('ed.nameWall'), coin: tr('ed.nameCoin'), dark: tr('ed.nameDark'), trigger: tr('ed.nameSwitch'), door: tr('ed.nameDoor'), laser: tr('ed.laser'), mirror: tr('ed.mirror'), portal: tr('ed.namePortal'),
   text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'), torch: tr('ed.nameTorch'), secret: tr('ed.nameSecret'), crystal: tr('ed.nameCrystal'), pulley: tr('ed.namePulley'), turret: tr('ed.nameTurret'),
+  conveyor: tr('ed.nameConveyor'), luggage: tr('ed.nameLuggage'),
 };
 
 export const fogName = (kind: FogKind | undefined) => tr(kind === 'sand' ? 'ed.nameSand' : 'ed.nameFog');
@@ -155,6 +156,8 @@ export function objectToolId(o: MapObject): number {
   if (o.role === 'torch') return o.torch?.carry ? SPECIAL_IDS.carryTorch : SPECIAL_IDS.torch;
   if (o.role === 'secret') return isFreeform(o.shape) ? SPECIAL_IDS.secretFree : SPECIAL_IDS.secret;
   if (o.role === 'crystal') return SPECIAL_IDS.crystal;
+  if (o.role === 'conveyor') return SPECIAL_IDS.conveyor;
+  if (o.role === 'luggage') return SPECIAL_IDS.luggage;
   if (o.role === 'pulley') return SPECIAL_IDS.pulley;
   if (o.role === 'turret') return o.turret?.kind === 'missile' ? SPECIAL_IDS.missile : SPECIAL_IDS.turret;
   if (o.fall) return SPECIAL_IDS.fall;
@@ -194,6 +197,8 @@ export type Handle =
   | { kind: 'arc'; part: 'start' | 'end' | 'radius' | 'inner' }
   /** Laser: beam direction */
   | { kind: 'aim' }
+  /** Conveyor belt (#69): a point of its centerline */
+  | { kind: 'belt'; j: number }
   /** Tilt: turns the object about its center */
   | { kind: 'rotate' };
 

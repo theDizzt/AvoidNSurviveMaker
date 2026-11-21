@@ -1,3 +1,4 @@
+import { LuggageMover } from './conveyor';
 import { BladeMotion, FallMover, FallSpin, Roller, SawSpin, SawTurn, SpikeMover } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
 import { flattenShape, ringBounds, rotateRing, shapeCenter, type FlatShape } from './shape';
@@ -71,7 +72,9 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
     ? new SawTurn(new CompiledRotation(o.rotation), saw.kind === 'disc' ? new SawSpin(saw) : null,
       saw.kind === 'blade' ? new BladeMotion(null, axis, saw) : null, route?.moves ? route : null, tc, o.rotation.pivot)
     : null;
-  const motion = sawTurn ? sawTurn
+  // A crate (#70) goes wherever its belt carries it: moved step by step by the simulation
+  const motion = o.role === 'luggage' ? new LuggageMover()
+    : sawTurn ? sawTurn
     : o.fall ? new FallMover(o.fall)
     : o.spike ? new SpikeMover(o.spike)
     : saw?.kind === 'blade' ? new BladeMotion(route?.moves ? route : null, axis, saw)
@@ -110,6 +113,8 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
     travelBounds = { minX: flat.minX + minDX - 1e-7, minY: flat.minY + minDY - 1e-7,
       maxX: flat.maxX + maxDX + 1e-7, maxY: flat.maxY + maxDY + 1e-7 };
   }
+  // A crate can be carried anywhere: no bounds rule it out
+  if (o.role === 'luggage') travelBounds = { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
   let interactionBounds = travelBounds;
   if (!interactionBounds) {
     // Rotation can pass through the cursor even when both endpoint poses miss it.

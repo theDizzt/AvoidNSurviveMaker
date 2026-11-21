@@ -43,8 +43,25 @@ export type Shape =
  *   when the cursor carries it to GOAL.
  * turret: a gun turret (#60) or homing missile launcher (#61), always 60×60, whose body is deadly
  *   like a wall and which shoots at the cursor once it comes within range (see `turret`).
+ * conveyor: a conveyor belt (#69): safe floor like a path (without turning the rest of the map into
+ *   wall) that carries the cursor and luggage along its centerline (see `conveyor`).
+ * luggage: a wooden crate (#70), deadly like a wall, carried along the conveyor belt it sits on;
+ *   it stops against walls, doors and luggage that doesn't move, and at the end of a one-way belt.
  */
-export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret' | 'crystal' | 'pulley' | 'turret';
+export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret' | 'crystal' | 'pulley' | 'turret' | 'conveyor' | 'luggage';
+
+/**
+ * Conveyor belt (#69): straight runs between `points` (map space; the belt's shape is generated
+ * from them), `width` px wide. `loop`: the last point joins back to the first. It runs from the
+ * first point toward the last (`reverse`: the other way) at `speed` px/s.
+ */
+export interface Conveyor {
+  points: Point[];
+  loop: boolean;
+  width: number;
+  speed: number;
+  reverse?: boolean;
+}
 
 /** fog: grey-white fog (#49) · sand: blowing sand dust (#50) */
 export type FogKind = 'fog' | 'sand';
@@ -359,6 +376,8 @@ export interface MapObject {
   portal?: Portal;
   /** role 'turret' (#60 / #61) */
   turret?: Turret;
+  /** role 'conveyor' (#69) */
+  conveyor?: Conveyor;
   /** Grinder / saw blade (#43–46), on a wall */
   saw?: Saw;
   /** role 'text' */

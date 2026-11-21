@@ -1,5 +1,6 @@
 import { flattenShape, normalizeTilt, rotatePoint, shapeCenter, tiltedBounds, translateShape } from './shape';
 import type { MapObject, Point, Rect, Shape } from './types';
+import { conveyorOutline } from './conveyor';
 
 /**
  * Editing operations on whole objects: moving, 90° rotation, flipping, alignment, z-order.
@@ -11,6 +12,7 @@ export function translateObject(o: MapObject, dx: number, dy: number): MapObject
   const out: MapObject = { ...structuredClone(o), shape: translateShape(o.shape, dx, dy) };
   if (out.motion) out.motion.points = out.motion.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
   if (out.rotation) out.rotation.pivot = { x: out.rotation.pivot.x + dx, y: out.rotation.pivot.y + dy };
+  if (out.conveyor) out.conveyor.points = out.conveyor.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
   return out;
 }
 
@@ -82,6 +84,10 @@ export function turnObjects(objs: readonly MapObject[], t: Turn): MapObject[] {
     out.shape = turnShape(o.shape, c, t);
     const after = shapeCenter(out.shape);
     if (out.rotation) out.rotation.pivot = turnPoint(out.rotation.pivot, c, t);
+    if (out.conveyor) {
+      out.conveyor.points = out.conveyor.points.map((p) => turnPoint(p, c, t));
+      out.shape = { type: 'poly', points: conveyorOutline(out.conveyor) };
+    }
     // Directions turn too: a spike's thrust, a laser's beam
     const turnAngle = (a: number) => {
       const r = t === 'cw' ? a + 90 : t === 'ccw' ? a - 90 : t === 'flipH' ? 180 - a : -a;
@@ -187,6 +193,17 @@ export function shapeCentroid(s: Shape): Point {
  */
 export function tiltObject(from: MapObject, deg: number): MapObject {
   const out = structuredClone(from);
+  // A conveyor belt (#69) has no tilt: its centerline turns instead
+  if (out.conveyor) {
+    const c = shapeCenter(from.shape);
+    out.conveyor.points = out.conveyor.points.map((p) => {
+      const q = rotatePoint(p, c, deg);
+      return { x: Math.round(q.x * 100) / 100, y: Math.round(q.y * 100) / 100 };
+    });
+    out.shape = { type: 'poly', points: conveyorOutline(out.conveyor) };
+    delete out.tilt;
+    return out;
+  }
   const total = normalizeTilt((from.tilt ?? 0) + deg);
   if (total) out.tilt = total;
   else delete out.tilt;

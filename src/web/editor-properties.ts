@@ -4,6 +4,7 @@ import { t as tr } from './i18n';
 import { objectsBounds, tiltObject } from '../core/arrange';
 
 import { shapeCenter } from '../core/shape';
+import { conveyorOutline } from '../core/conveyor';
 
 import type { Easing, FogKind, LinkAction, MapData, MapObject, Motion, MotionType, Rect, Repeat, Role, Rotation } from '../core/types';
 import { SWITCH_COLORS, switchColor } from './localized/colors';
@@ -42,6 +43,46 @@ export class EditorPropertiesPanel {
     span.textContent = label;
     wrap.append(span, control);
     return wrap;
+  }
+
+  /** Conveyor belt (#69): speed, width, which way it runs, and whether it loops */
+  private conveyorProps(o: MapObject): HTMLElement[] {
+    const c = o.conveyor;
+    if (!c) return [];
+    // The belt's shape follows its centerline
+    const set = (apply: () => void) => () => {
+      apply();
+      o.shape = { type: 'poly', points: conveyorOutline(c) };
+    };
+    return [
+      this.heading(tr('ed.nameConveyor')),
+      this.group(
+        this.numField(tr('ed.speedPxS'), c.speed, (v) => set(() => (c.speed = Math.round(Math.min(LIMITS.maxSpeed, Math.max(1, v)))))(), 10),
+        this.numField(tr('ed.beltWidth'), c.width, (v) => set(() => (c.width = Math.round(Math.min(LIMITS.maxBeltWidth, Math.max(LIMITS.minBeltWidth, v)))))(), 5),
+      ),
+      this.toggle(tr('ed.beltReverse'), !!c.reverse, (on) => set(() => {
+        if (on) c.reverse = true;
+        else delete c.reverse;
+      })()),
+      this.toggle(tr('ed.beltLoop'), c.loop, (on) => set(() => (c.loop = on))()),
+      this.note(tr('ed.conveyorNote')),
+    ];
+  }
+
+  /** Crate (#70): its box, and how belts carry it */
+  private luggageProps(o: MapObject): HTMLElement[] {
+    const s = o.shape;
+    const out: HTMLElement[] = [this.heading(tr('ed.nameLuggage'))];
+    if (s.type === 'rect') {
+      out.push(this.group(
+        this.numField('X', s.x, (v) => (s.x = Math.round(v))),
+        this.numField('Y', s.y, (v) => (s.y = Math.round(v))),
+        this.numField(tr('common.width'), s.w, (v) => (s.w = Math.max(1, Math.round(v)))),
+        this.numField(tr('common.height'), s.h, (v) => (s.h = Math.max(1, Math.round(v)))),
+      ));
+    }
+    out.push(this.note(tr('ed.luggageNote')));
+    return out;
   }
 
   numField(label: string, value: number, apply: (v: number) => void, step = 1): HTMLElement {
@@ -149,6 +190,13 @@ export class EditorPropertiesPanel {
     const title = document.createElement('h4');
     title.textContent = `#${idx + 1} · ID ${objectToolId(o)} · ${describeObject(o)}${o.group !== undefined ? ` · ${tr('ed.groupN', { n: o.group })}` : ''}`;
     const parts: HTMLElement[] = [title];
+
+    // Conveyor belts (#69) and crates (#70) have only their own settings
+    if (o.role === 'conveyor' || o.role === 'luggage') {
+      parts.push(...(o.role === 'conveyor' ? this.conveyorProps(o) : this.luggageProps(o)), ...this.arrangeProps(false), this.editActions());
+      box.replaceChildren(...parts);
+      return;
+    }
 
     if ((o.role === 'path' || o.role === 'wall') && !o.saw) {
       parts.push(this.group(

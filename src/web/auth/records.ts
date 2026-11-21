@@ -1,5 +1,5 @@
 import { t } from '../i18n';
-import { allRecords, guestRecords, mergeRecords, setOnRecord, setProgressUser, type LevelRecord } from '../progress';
+import { allRecords, currentRecords, guestRecords, mergeRecords, setOnRecord, setProgressUser, type LevelRecord } from '../progress';
 import type { Account } from './account';
 import { supabase } from './supabase';
 import { recordTime } from '../../core/time';
@@ -206,7 +206,8 @@ export class RecordSync {
     }
     try {
       const saved = JSON.parse(localStorage.getItem(PENDING_PREFIX + id) ?? '{}') as Record<string, LevelRecord>;
-      if (saved && typeof saved === 'object') this.pending = saved;
+      // Re-keyed like saves, so a queued record under an old shared key goes to its level
+      if (saved && typeof saved === 'object') this.pending = currentRecords(saved);
     } catch {
       /* storage unavailable or unreadable */
     }

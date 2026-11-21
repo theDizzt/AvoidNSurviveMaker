@@ -151,9 +151,23 @@ export class PlayController {
    * canvas under them (hiding it is part of the challenge), not on the layer above
    */
   private coveredCursor = false;
+  /**
+   * The letterbox and the static floor / walls, under the game canvas: painted only when they
+   * change (map, size, quality), so a frame clears and draws just what moves (render.ts paintBackground)
+   */
+  private readonly bgLayer: HTMLCanvasElement;
+  private readonly bgCtx: CanvasRenderingContext2D;
+  /** Where the background canvas was last placed (CSS size and offset of the game canvas) */
+  private bgPlace = '';
 
   constructor(private readonly el: PlayElements) {
     this.ctx = el.canvas.getContext('2d')!;
+    // Static layer: one canvas under the game canvas, made once and reused for every map
+    this.bgLayer = document.createElement('canvas');
+    this.bgLayer.className = 'play-bg';
+    this.bgLayer.setAttribute('aria-hidden', 'true');
+    this.bgCtx = this.bgLayer.getContext('2d')!;
+    el.canvas.before(this.bgLayer);
     this.cursorLayer = document.createElement('canvas');
     this.cursorLayer.className = 'play-cursor';
     this.cursorLayer.style.visibility = 'hidden';
@@ -216,7 +230,7 @@ export class PlayController {
 
   load(map: MapData): void {
     this.map = map;
-    this.drifts = map.objects.some((o) => !!o.ice || o.role === 'portal');
+    this.drifts = map.objects.some((o) => !!o.ice || o.role === 'portal' || o.role === 'conveyor');
     this.coveredCursor = !!map.darkness || map.objects.some((o) => o.role === 'fog' || o.role === 'dark');
     this.mapKey = JSON.stringify(map);
     this.reset(true);
@@ -229,7 +243,7 @@ export class PlayController {
     this.usedStats.reset();
     this.burst = null;
     this.deathNotified = false;
-    this.sim = new Simulation(this.map, recompile ? undefined : this.sim.objects, options.lowSpecSimulation);
+    this.sim = new Simulation(this.map, recompile ? undefined : this.sim.objects);
     this.trail = [];
     this.carried = new Uint8Array(this.map.objects.length);
     this.notified = false;
@@ -282,7 +296,7 @@ export class PlayController {
     }
     const p = clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
     if (!new ZoneArea(this.map.start, this.map.startShape).contains(p.x, p.y)) return;
-    const sim = new Simulation(this.map, this.sim.objects, options.lowSpecSimulation);
+    const sim = new Simulation(this.map, this.sim.objects);
     if (!sim.start(p.x, p.y)) return;
     e.preventDefault();
     this.sim = sim;
@@ -571,16 +585,29 @@ export class PlayController {
     return this.sim.status === 'playing' ? this.sim.time : now - this.t0;
   }
 
+  /** Keep the background canvas exactly under the game canvas (its backing size follows in paintBackground) */
+  private placeBackground(): void {
+    const c = this.el.canvas;
+    const place = `${c.style.width}|${c.style.height}|${c.offsetLeft}|${c.offsetTop}`;
+    if (place === this.bgPlace) return;
+    this.bgPlace = place;
+    const s = this.bgLayer.style;
+    s.width = c.style.width;
+    s.height = c.style.height;
+    s.transform = `translate(${c.offsetLeft}px, ${c.offsetTop}px)`;
+  }
+
   private draw(now: number): void {
     const { ctx, map, sim } = this;
     const t = sim.status === 'ready' ? 0 : sim.time;
-    beginFrame(ctx, map);
+    this.placeBackground();
+    beginFrame(ctx, map, true);
     this.mapTransform = ctx.getTransform();
     const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle, turretAim: sim.guns.aim };
     const playing = sim.status === 'playing';
     const carried = playing ? this.carried : undefined;
     drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried,
-      secretCursor: playing ? { x: sim.x, y: sim.y } : null });
+      secretCursor: playing ? { x: sim.x, y: sim.y } : null, background: this.bgCtx });
     if (options.cursorTrail) drawSkinTrail(ctx, skin, this.trail, unitsPerPx(this.el.canvas, map));
     // Bullets, missiles and explosions
     if (sim.status !== 'ready' && sim.guns.any) drawShots(ctx, sim.guns.shots, sim.guns.blasts, this.shotClock(now));

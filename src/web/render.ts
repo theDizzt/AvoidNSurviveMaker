@@ -8,12 +8,13 @@ import type { Beam } from '../core/laser';
 import { BLAST_MS, MISSILE_R, type Blast, type Shot } from '../core/turret';
 import { autoDoorOpen, doorPanels, initialChannels } from '../core/switches';
 import { isLibraryFont } from './localized/font-catalog';
-import type { Fall, Fill, MapData, MapObject, Point, Pulley, Rect, TextBox, Turret, ZoneShape } from '../core/types';
+import type { Conveyor, Fall, Fill, MapData, MapObject, Point, Pulley, Rect, TextBox, Turret, ZoneShape } from '../core/types';
 import { blinkState, fallState } from '../core/hazards';
 import { libraryFontCss } from './library-fonts';
 import { CompiledMotion } from '../core/motion';
 import { shapeCenter } from '../core/shape';
 import { zoneRing } from '../core/zone';
+import { BeltPath, beltSides } from '../core/conveyor';
 import type { LightSource } from '../core/lighting';
 import { renderScale } from './graphics';
 import { options } from './options';
@@ -152,8 +153,12 @@ export function fitCanvas(canvas: HTMLCanvasElement, map: MapData): void {
   views.set(canvas, { cssW, cssH, s, ox: (cssW - map.width * s) / 2, oy: (cssH - map.height * s) / 2 });
 }
 
-/** Clear the frame (bars included) and make subsequent drawing use map coordinates, clipped to the map */
-export function beginFrame(ctx: CanvasRenderingContext2D, map: MapData): void {
+/**
+ * Clear the frame (bars included) and make subsequent drawing use map coordinates, clipped to the map.
+ * `layered`: the letterbox and the static scene are on a background canvas under this one
+ * (DrawMapOptions.background), so the frame is cleared to transparent instead of painted.
+ */
+export function beginFrame(ctx: CanvasRenderingContext2D, map: MapData, layered = false): void {
   const canvas = ctx.canvas;
   const v = viewOf(canvas, map);
   const k = canvas.width / v.cssW; // device px per CSS px
@@ -161,8 +166,11 @@ export function beginFrame(ctx: CanvasRenderingContext2D, map: MapData): void {
   ctx.restore();
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = COLORS.letterbox;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (layered) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  else {
+    ctx.fillStyle = COLORS.letterbox;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   ctx.setTransform(k * v.s, 0, 0, k * v.s, k * v.ox, k * v.oy);
   ctx.beginPath();
   ctx.rect(0, 0, map.width, map.height);
@@ -343,6 +351,8 @@ interface StaticLayer {
   anim?: HTMLCanvasElement;
   /** Secret-wall overlay at exactly the same resolution as the wall mass. */
   secret?: HTMLCanvasElement;
+  /** Scratch canvas for conveyor belts (#69), drawn under the wall mass every frame */
+  belts?: HTMLCanvasElement;
   secretReady?: boolean;
   /** Where the static walls are, for grinder dust (built on first use) */
   mask?: WallMask;
@@ -402,7 +412,7 @@ function freeStaticLayer(st: StaticLayer): void {
     freeCanvas(secretLayers.get(sg));
     secretLayers.delete(sg);
   }
-  for (const c of [st.layer, st.walls, st.anim, st.secret, st.dyn?.floor, st.dyn?.outside, st.dyn?.wallPieces, st.dyn?.frame, st.dyn?.composite]) freeCanvas(c);
+  for (const c of [st.layer, st.walls, st.anim, st.secret, st.belts, st.dyn?.floor, st.dyn?.outside, st.dyn?.wallPieces, st.dyn?.frame, st.dyn?.composite]) freeCanvas(c);
 }
 
 /**
@@ -475,6 +485,13 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
     }
     // nonzero: overlapping floor pieces cut out as one union
     v.fill('nonzero');
+    // Conveyor belts (#69) are floor too; each one on its own, even-odd (a loop is a ring)
+    for (const o of objects) {
+      if (o.role !== 'conveyor') continue;
+      v.beginPath();
+      traceStatic(v, o);
+      v.fill('evenodd');
+    }
     v.globalCompositeOperation = 'source-over';
   }
   // Wall pieces, with wall-piercing paths cut out of them
@@ -840,6 +857,48 @@ export interface DrawMapOptions {
   turretAim?: ArrayLike<number>;
   /** Opacity of the parts of grinders / saw blades hidden inside walls (the editor shows a ghost); default 0 */
   sawGhost?: number;
+  /**
+   * A canvas under this one, the same size and place: the letterbox and the static floor / walls
+   * go there and are painted again only when they change, not every frame. The frame must then
+   * start with beginFrame(ctx, map, true)
+   */
+  background?: CanvasRenderingContext2D;
+}
+
+/** What each background canvas shows now, so it is painted only when that changes */
+const backgroundShown = new WeakMap<CanvasRenderingContext2D, { layer: HTMLCanvasElement | null; key: string }>();
+
+/**
+ * Paint the background canvas: letterbox, then `layer` (the static scene, or nothing while the
+ * scene is composed every frame on the canvas above), at the transform `ctx` draws the map with.
+ * Kept the size of `ctx`'s canvas; skipped when nothing about it changed.
+ */
+function paintBackground(bg: CanvasRenderingContext2D, ctx: CanvasRenderingContext2D, map: MapData, layer: HTMLCanvasElement | null): void {
+  const c = bg.canvas;
+  const main = ctx.canvas;
+  let resized = false;
+  if (c.width !== main.width || c.height !== main.height) {
+    c.width = main.width;
+    c.height = main.height;
+    resized = true;
+  }
+  const m = ctx.getTransform();
+  const key = `${c.width}x${c.height}|${m.a},${m.b},${m.c},${m.d},${m.e},${m.f}|${options.antialias ? 1 : 0}`;
+  const shown = backgroundShown.get(bg);
+  if (!resized && shown && shown.layer === layer && shown.key === key) return;
+  backgroundShown.set(bg, { layer, key });
+  bg.save();
+  bg.setTransform(1, 0, 0, 1, 0, 0);
+  bg.fillStyle = COLORS.letterbox;
+  bg.fillRect(0, 0, c.width, c.height);
+  if (layer) {
+    bg.setTransform(m);
+    bg.beginPath();
+    bg.rect(0, 0, map.width, map.height);
+    bg.clip();
+    bg.drawImage(layer, 0, 0, map.width, map.height);
+  }
+  bg.restore();
 }
 
 /** A coin: gold disc with a rim and a highlight, in the object's own (posed) frame */
@@ -1025,9 +1084,13 @@ export function drawMap(
   const isSaw = (i: number) => !!map.objects[i]?.saw;
   const moving = objects.some((o, i) => movesWallMass(map, o, i) || isDoor(map.objects[i]));
   const dyn = st.dyn;
+  const bg = opts.background;
   if (!dyn || (!moving && !conceal)) {
-    ctx.drawImage(st.layer, 0, 0, map.width, map.height);
+    // Static scene: on the background canvas, painted once, or drawn here every frame
+    if (bg) paintBackground(bg, ctx, map, st.layer);
+    else ctx.drawImage(st.layer, 0, 0, map.width, map.height);
   } else {
+    if (bg) paintBackground(bg, ctx, map, null);
     const scale = st.scale;
     const full: PixelRect = { x: 0, y: 0, w: dyn.frame.width, h: dyn.frame.height };
     // Only the parts that changed are composed again: where each moving piece, door or (while
@@ -1171,6 +1234,8 @@ export function drawMap(
   // Animated floor / walls: drawn over the surfaces, masked by this frame's wall mass. Off at low
   // graphics quality: a whole-screen layer more every frame
   if ((theme?.path.anim || theme?.wall.anim) && options.graphics !== 'low') drawSurfaceAnims(ctx, map, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t);
+  // Conveyor belts (#69): on the floor, under the walls that cross them
+  if (objects.some((o, i) => o.role === 'conveyor' && shown(i))) drawBelts(ctx, map, objects, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t, shown);
 
   zone(ctx, map.start, COLORS.start, COLORS.startEdge, tr('zone.start'), true, map.startShape);
   // Locked GOAL (coins still to collect): dark gray, with the coins collected so far, e.g. "3/10"
@@ -1268,6 +1333,10 @@ export function drawMap(
     ctx.restore();
     for (const spray of sprays) spray(ctx);
   }
+  // Crates (#70), where their belts have carried them
+  objects.forEach((o, i) => {
+    if (o.role === 'luggage' && shown(i)) drawCrate(ctx, o, timeOf(i));
+  });
   // Ice floors (#71–74): a pale blue sheen with glints and fine cracks over the floor
   objects.forEach((o, i) => {
     if (o.role === 'path' && map.objects[i]?.ice && shown(i)) drawIce(ctx, o, timeOf(i), i);
@@ -1345,6 +1414,166 @@ export function drawMap(
     if (o.role === 'safe' && shown(i)) drawSafeZone(ctx, o, timeOf(i));
   });
   if (opts.gridOnTop) drawGrid(ctx, map, COLORS.gridTop);
+}
+
+const beltPaths = new WeakMap<Conveyor, BeltPath>();
+/** Spacing of a belt's slats (map units) */
+const SLAT_GAP = 18;
+/** Spacing of the arrows showing which way a belt runs (map units) */
+const ARROW_GAP = 90;
+
+/**
+ * Conveyor belts (#69): a dark rubber belt whose slats and arrows travel at the belt's speed, with
+ * thin black-and-yellow hazard stripes along both edges. Drawn on a scratch layer and cut by this
+ * frame's wall mass, so walls across a belt stay on top of it.
+ */
+function drawBelts(
+  ctx: CanvasRenderingContext2D, map: MapData, objects: readonly CompiledObject[], st: StaticLayer,
+  walls: HTMLCanvasElement, now: number, shown: (i: number) => boolean,
+): void {
+  const canvas = st.belts ??= offscreen(st.layer.width, st.layer.height)[0];
+  const g = canvas.getContext('2d')!;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'source-over';
+  g.clearRect(0, 0, canvas.width, canvas.height);
+  g.setTransform(st.scale, 0, 0, st.scale, 0, 0);
+  objects.forEach((o, i) => {
+    const c = map.objects[i]?.conveyor;
+    if (o.role !== 'conveyor' || !c || !shown(i)) return;
+    let path = beltPaths.get(c);
+    if (!path) beltPaths.set(c, (path = new BeltPath(c)));
+    drawBelt(g, o, c, path, now);
+  });
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'destination-out';
+  g.drawImage(walls, 0, 0);
+  g.globalCompositeOperation = 'source-over';
+  ctx.drawImage(canvas, 0, 0, map.width, map.height);
+}
+
+function drawBelt(g: CanvasRenderingContext2D, o: CompiledObject, c: Conveyor, path: BeltPath, now: number): void {
+  const ring = new Path2D();
+  ring.moveTo(o.poly[0], o.poly[1]);
+  for (let k = 2; k < o.poly.length; k += 2) ring.lineTo(o.poly[k], o.poly[k + 1]);
+  ring.closePath();
+  g.save();
+  g.fillStyle = '#3a3f47';
+  g.fill(ring, 'evenodd');
+  g.clip(ring, 'evenodd');
+  const h = c.width / 2;
+  // How far the belt has run: slats and arrows slide along with it
+  const run = ((now / 1000) * c.speed) * path.sign;
+  const p = path.pts;
+  const slats = new Path2D();
+  const arrows = new Path2D();
+  for (let k = 0; k + 3 < p.length; k += 2) {
+    const ax = p[k], ay = p[k + 1], bx = p[k + 2], by = p[k + 3];
+    const len = Math.hypot(bx - ax, by - ay);
+    if (len <= 0) continue;
+    const ux = (bx - ax) / len, uy = (by - ay) / len;
+    const nx = -uy, ny = ux;
+    const s0 = path.at[k / 2];
+    // Slats across the belt, continuing their spacing from one run to the next
+    for (let d = ((((run - s0) % SLAT_GAP) + SLAT_GAP) % SLAT_GAP); d <= len; d += SLAT_GAP) {
+      const x = ax + ux * d, y = ay + uy * d;
+      slats.moveTo(x + nx * h, y + ny * h);
+      slats.lineTo(x - nx * h, y - ny * h);
+    }
+    // Arrows (chevrons) pointing the way the belt runs
+    const a = Math.min(h * 0.45, 14);
+    const sx = ux * path.sign, sy = uy * path.sign;
+    for (let d = ((((run - s0) % ARROW_GAP) + ARROW_GAP) % ARROW_GAP); d <= len; d += ARROW_GAP) {
+      const x = ax + ux * d, y = ay + uy * d;
+      arrows.moveTo(x - sx * a + nx * a, y - sy * a + ny * a);
+      arrows.lineTo(x, y);
+      arrows.lineTo(x - sx * a - nx * a, y - sy * a - ny * a);
+    }
+  }
+  g.strokeStyle = '#4d535d';
+  g.lineWidth = 3;
+  g.stroke(slats);
+  g.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+  g.lineWidth = Math.max(2, Math.min(5, h * 0.18));
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  g.stroke(arrows);
+  // Hazard stripes along both edges (half of each stroke lies inside the clip)
+  const sides = beltSides(c);
+  const edge = new Path2D();
+  for (const side of [sides.left, sides.right]) {
+    if (side.length < 2) continue;
+    edge.moveTo(side[0].x, side[0].y);
+    for (let k = 1; k < side.length; k++) edge.lineTo(side[k].x, side[k].y);
+    if (sides.loop) edge.closePath();
+  }
+  const stripe = stripes(g, '#1d1f24', '#f5c518');
+  g.strokeStyle = stripe ?? '#f5c518';
+  g.lineWidth = Math.max(6, Math.min(14, c.width * 0.16));
+  g.lineCap = 'butt';
+  g.lineJoin = 'miter';
+  g.stroke(edge);
+  g.restore();
+  // A thin dark rim around the belt
+  g.strokeStyle = '#1d1f24';
+  g.lineWidth = 1.5;
+  g.stroke(ring);
+}
+
+/** A crate (#70) where its belt has carried it: a wooden box with planks, a frame and a cross brace */
+function drawCrate(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): void {
+  transformAt(o, t, tf);
+  const n = o.poly.length / 2;
+  if (n < 3) return;
+  const pts: Point[] = [];
+  for (let k = 0; k < o.poly.length; k += 2) pts.push({ ...toWorld(o, tf, o.poly[k], o.poly[k + 1], { x: 0, y: 0 }) });
+  const outline = new Path2D();
+  outline.moveTo(pts[0].x, pts[0].y);
+  for (const q of pts.slice(1)) outline.lineTo(q.x, q.y);
+  outline.closePath();
+  ctx.save();
+  if (options.shadows) {
+    ctx.save();
+    ctx.translate(3, 4);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.fill(outline);
+    ctx.restore();
+  }
+  ctx.fillStyle = '#c08a50';
+  ctx.fill(outline);
+  ctx.clip(outline);
+  const lerp = (a: Point, b: Point, k: number): Point => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
+  if (n === 4) {
+    const [a, b, c, d] = pts;
+    // Planks along the long side
+    const long = Math.hypot(b.x - a.x, b.y - a.y) >= Math.hypot(d.x - a.x, d.y - a.y);
+    const planks = new Path2D();
+    for (const k of [1 / 3, 2 / 3]) {
+      const p0 = long ? lerp(a, d, k) : lerp(a, b, k);
+      const p1 = long ? lerp(b, c, k) : lerp(d, c, k);
+      planks.moveTo(p0.x, p0.y);
+      planks.lineTo(p1.x, p1.y);
+    }
+    ctx.strokeStyle = '#94612f';
+    ctx.lineWidth = 1.5;
+    ctx.stroke(planks);
+    // Cross brace
+    const brace = new Path2D();
+    brace.moveTo(a.x, a.y);
+    brace.lineTo(c.x, c.y);
+    brace.moveTo(b.x, b.y);
+    brace.lineTo(d.x, d.y);
+    ctx.strokeStyle = '#7a4b22';
+    ctx.lineWidth = 4;
+    ctx.stroke(brace);
+  }
+  // Frame (inside the clip: half of the stroke shows)
+  ctx.strokeStyle = '#7a4b22';
+  ctx.lineWidth = 8;
+  ctx.stroke(outline);
+  ctx.restore();
+  ctx.strokeStyle = '#5a3415';
+  ctx.lineWidth = 1.5;
+  ctx.stroke(outline);
 }
 
 /** Ice (#71–74), in the object's posed frame: frosty fill, diagonal glints and a few cracks */

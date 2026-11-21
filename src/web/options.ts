@@ -21,13 +21,14 @@ export interface Options {
   pollingRate: PollingRate;
   graphics: GraphicsLevel;
   frameLimit: FrameLimit;
-  lowSpecSimulation: boolean;
   /** Lower Graphics quality by itself when play runs slowly (see auto-quality.ts) */
   autoQuality: boolean;
   /** Smooth (interpolated) scaling of images and canvases; off = nearest pixel (see graphics.ts) */
   antialias: boolean;
   /** Drop shadows in the game and the menus */
   shadows: boolean;
+  /** See-through menu panels and tiles; off = opaque (see .no-transparency in style.css) */
+  transparency: boolean;
   cursorTrail: boolean;
   decorativeEffects: boolean;
   animatedBackground: boolean;
@@ -46,10 +47,10 @@ export const DEFAULT_OPTIONS: Readonly<Options> = {
   pollingRate: 0,
   graphics: 'high',
   frameLimit: 0,
-  lowSpecSimulation: false,
   autoQuality: true,
   antialias: true,
   shadows: true,
+  transparency: true,
   cursorTrail: true,
   decorativeEffects: true,
   animatedBackground: true,
@@ -63,7 +64,7 @@ function load(): Options {
   const out = { ...DEFAULT_OPTIONS };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, unknown>;
-    for (const k of ['showDebug', 'showFps', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation', 'autoQuality', 'antialias', 'shadows'] as const) {
+    for (const k of ['showDebug', 'showFps', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'autoQuality', 'antialias', 'shadows', 'transparency'] as const) {
       if (typeof saved[k] === 'boolean') out[k] = saved[k];
     }
     for (const k of VOLUME_KEYS) {
@@ -109,7 +110,7 @@ export function resetOptions(): void {
 }
 
 /** Options shown on the Graphics screen */
-const GRAPHICS_KEYS = ['graphics', 'frameLimit', 'showFps', 'autoQuality', 'antialias', 'shadows', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation'] as const;
+const GRAPHICS_KEYS = ['graphics', 'frameLimit', 'showFps', 'autoQuality', 'antialias', 'shadows', 'transparency', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects'] as const;
 
 /** Restore only the Graphics screen's options (one commit, so canvases refit once). */
 export function resetGraphicsOptions(): void {
@@ -131,8 +132,7 @@ export function applyOptions(patch: Partial<Options>): void {
 export function applyLowSpecOptions(): void {
   Object.assign(options as Options, {
     graphics: 'low', frameLimit: 60, pollingRate: -1, showDebug: false,
-    lowSpecSimulation: true,
-    cursorTrail: false, decorativeEffects: false, animatedBackground: false, interfaceEffects: false,
+    cursorTrail: false, decorativeEffects: false, animatedBackground: false, interfaceEffects: false, transparency: false,
   } satisfies Partial<Options>);
   commit();
 }
