@@ -152,8 +152,12 @@ export function fitCanvas(canvas: HTMLCanvasElement, map: MapData): void {
   views.set(canvas, { cssW, cssH, s, ox: (cssW - map.width * s) / 2, oy: (cssH - map.height * s) / 2 });
 }
 
-/** Clear the frame (bars included) and make subsequent drawing use map coordinates, clipped to the map */
-export function beginFrame(ctx: CanvasRenderingContext2D, map: MapData): void {
+/**
+ * Clear the frame (bars included) and make subsequent drawing use map coordinates, clipped to the map.
+ * `layered`: the letterbox and the static scene are on a background canvas under this one
+ * (DrawMapOptions.background), so the frame is cleared to transparent instead of painted.
+ */
+export function beginFrame(ctx: CanvasRenderingContext2D, map: MapData, layered = false): void {
   const canvas = ctx.canvas;
   const v = viewOf(canvas, map);
   const k = canvas.width / v.cssW; // device px per CSS px
@@ -161,8 +165,11 @@ export function beginFrame(ctx: CanvasRenderingContext2D, map: MapData): void {
   ctx.restore();
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = COLORS.letterbox;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (layered) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  else {
+    ctx.fillStyle = COLORS.letterbox;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   ctx.setTransform(k * v.s, 0, 0, k * v.s, k * v.ox, k * v.oy);
   ctx.beginPath();
   ctx.rect(0, 0, map.width, map.height);
@@ -840,6 +847,48 @@ export interface DrawMapOptions {
   turretAim?: ArrayLike<number>;
   /** Opacity of the parts of grinders / saw blades hidden inside walls (the editor shows a ghost); default 0 */
   sawGhost?: number;
+  /**
+   * A canvas under this one, the same size and place: the letterbox and the static floor / walls
+   * go there and are painted again only when they change, not every frame. The frame must then
+   * start with beginFrame(ctx, map, true)
+   */
+  background?: CanvasRenderingContext2D;
+}
+
+/** What each background canvas shows now, so it is painted only when that changes */
+const backgroundShown = new WeakMap<CanvasRenderingContext2D, { layer: HTMLCanvasElement | null; key: string }>();
+
+/**
+ * Paint the background canvas: letterbox, then `layer` (the static scene, or nothing while the
+ * scene is composed every frame on the canvas above), at the transform `ctx` draws the map with.
+ * Kept the size of `ctx`'s canvas; skipped when nothing about it changed.
+ */
+function paintBackground(bg: CanvasRenderingContext2D, ctx: CanvasRenderingContext2D, map: MapData, layer: HTMLCanvasElement | null): void {
+  const c = bg.canvas;
+  const main = ctx.canvas;
+  let resized = false;
+  if (c.width !== main.width || c.height !== main.height) {
+    c.width = main.width;
+    c.height = main.height;
+    resized = true;
+  }
+  const m = ctx.getTransform();
+  const key = `${c.width}x${c.height}|${m.a},${m.b},${m.c},${m.d},${m.e},${m.f}|${options.antialias ? 1 : 0}`;
+  const shown = backgroundShown.get(bg);
+  if (!resized && shown && shown.layer === layer && shown.key === key) return;
+  backgroundShown.set(bg, { layer, key });
+  bg.save();
+  bg.setTransform(1, 0, 0, 1, 0, 0);
+  bg.fillStyle = COLORS.letterbox;
+  bg.fillRect(0, 0, c.width, c.height);
+  if (layer) {
+    bg.setTransform(m);
+    bg.beginPath();
+    bg.rect(0, 0, map.width, map.height);
+    bg.clip();
+    bg.drawImage(layer, 0, 0, map.width, map.height);
+  }
+  bg.restore();
 }
 
 /** A coin: gold disc with a rim and a highlight, in the object's own (posed) frame */
@@ -1025,9 +1074,13 @@ export function drawMap(
   const isSaw = (i: number) => !!map.objects[i]?.saw;
   const moving = objects.some((o, i) => movesWallMass(map, o, i) || isDoor(map.objects[i]));
   const dyn = st.dyn;
+  const bg = opts.background;
   if (!dyn || (!moving && !conceal)) {
-    ctx.drawImage(st.layer, 0, 0, map.width, map.height);
+    // Static scene: on the background canvas, painted once, or drawn here every frame
+    if (bg) paintBackground(bg, ctx, map, st.layer);
+    else ctx.drawImage(st.layer, 0, 0, map.width, map.height);
   } else {
+    if (bg) paintBackground(bg, ctx, map, null);
     const scale = st.scale;
     const full: PixelRect = { x: 0, y: 0, w: dyn.frame.width, h: dyn.frame.height };
     // Only the parts that changed are composed again: where each moving piece, door or (while

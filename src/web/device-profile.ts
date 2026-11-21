@@ -59,7 +59,7 @@ export function recommendOptions(d: DeviceInfo): Partial<Options> {
   if (gpu === 'software' || lowCpu) {
     return {
       graphics: 'low', frameLimit: 60, pollingRate: -1, lowSpecSimulation: true, autoQuality: true,
-      cursorTrail: false, decorativeEffects: false, animatedBackground: false, interfaceEffects: false,
+      cursorTrail: false, decorativeEffects: false, animatedBackground: false, interfaceEffects: false, transparency: false,
     };
   }
 

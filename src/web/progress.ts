@@ -1,7 +1,7 @@
 import { gameplayKey, starsFor } from './localized/level';
 import { recordTime } from '../core/time';
 import { CRYSTALS_PER_THEME, filledSlots, levelAt, STARS_PER_LEVEL, type ThemeEntry } from './localized/theme-pack';
-import { recordIdentity, SHARED_LEVEL_KEYS } from '../core/record-identity';
+import { recordIdentity, sharedKeyTarget } from '../core/record-identity';
 import type { MapData } from '../core/types';
 import { OFFICIAL_THEMES } from './theme-registry';
 
@@ -37,7 +37,6 @@ function load(user: string | null = activeUser): Record<string, LevelRecord> {
         out[k] = { stars: Math.max(0, Math.min(STARS_PER_LEVEL, Math.round(v.stars))), best: recordTime(v.best), ...(v.crystal === true ? { crystal: true } : {}) };
       }
     }
-    moveSharedKeys(out, storageKey(user));
     // Chapter 1 reuses the old Pastel maps; carry existing records forward once.
     for (const [k, record] of Object.entries(out)) {
       if (k.startsWith('pastel/')) out[k.replace(/^pastel\//, 'workshop/')] ??= record;
@@ -45,37 +44,6 @@ function load(user: string | null = activeUser): Record<string, LevelRecord> {
     return currentRecords(out);
   } catch {
     return {};
-  }
-}
-
-/**
- * Once per save: records under keys several levels shared by mistake move to the level they
- * belong to (SHARED_LEVEL_KEYS), keeping the better of two. Written back right away, with a flag,
- * so a later record of the level that now owns the old key is never moved.
- */
-function moveSharedKeys(out: Record<string, LevelRecord>, store: string): void {
-  const flag = `${store}:shared-keys-moved`;
-  try {
-    if (localStorage.getItem(flag)) return;
-    let moved = false;
-    for (const [from, to] of SHARED_LEVEL_KEYS) {
-      for (const k of Object.keys(out)) {
-        if (k.split('@')[0] !== from) continue;
-        const r = out[k];
-        const prev = out[to];
-        out[to] = prev ? {
-          stars: Math.max(prev.stars, r.stars),
-          best: Math.min(prev.best, r.best),
-          ...(prev.crystal || r.crystal ? { crystal: true } : {}),
-        } : r;
-        delete out[k];
-        moved = true;
-      }
-    }
-    if (moved) localStorage.setItem(store, JSON.stringify(out));
-    localStorage.setItem(flag, '1');
-  } catch {
-    /* storage unavailable: nothing saved to move */
   }
 }
 
@@ -220,11 +188,14 @@ function currentKey(k: string): string {
   return currentKeys.get(k.split('@')[0]) ?? k;
 }
 
-/** Re-key records to the current levels, keeping the best of any that land on the same level */
-function currentRecords(input: Record<string, LevelRecord>): Record<string, LevelRecord> {
+/**
+ * Re-key records to the current levels, keeping the best of any that land on the same level.
+ * Records under a key several levels once shared go to the level they belong to (SHARED_LEVEL_KEYS).
+ */
+export function currentRecords(input: Record<string, LevelRecord>): Record<string, LevelRecord> {
   const out: Record<string, LevelRecord> = {};
   for (const [k, r] of Object.entries(input)) {
-    const to = currentKey(k);
+    const to = currentKey(sharedKeyTarget(k, r.best) ?? k);
     const prev = out[to];
     out[to] = prev ? {
       stars: Math.max(prev.stars, r.stars),

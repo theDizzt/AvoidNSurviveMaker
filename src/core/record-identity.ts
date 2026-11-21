@@ -65,17 +65,27 @@ export function recordIdentity(themeId: string, map: MapData, official: boolean)
 
 /**
  * Record keys several official levels shared by mistake (level files copied with the same id),
- * moved once to the level they mostly belong to. Chapter 3 had only level 1 under "wood/5" until
+ * moved to the level they mostly belong to. Chapter 3 had only level 1 under "wood/5" until
  * levels 2–7 were added with the same id; chapter 2 levels 11–13 shared one id from the start, so
  * their records go to level 11. Those levels now have ids "level − 1" like the other chapters
- * ("wood/0"…"wood/6", "desert/10"…"desert/12"). The server moves them too: migration
- * 20261121050000_split_shared_level_keys.sql. Applied only once per save, because "wood/5" is now
- * level 6's own key.
+ * ("wood/0"…"wood/6", "desert/10"…"desert/12"). The server moves them too: migrations
+ * 20261121050000_split_shared_level_keys.sql and 20261121060000_misfiled_wood_records.sql.
+ *
+ * `below`: "wood/5" is level 6's own key now, so only records faster than any level 6 clear
+ * (3-star time 7.5 s) move; those are chapter 3 level 1 times (3-star time 1 s). Applied to every
+ * record that comes in (saves, the upload queue, the server), so an old record downloaded from the
+ * server or sent by an older client never settles on level 6 again.
  */
-export const SHARED_LEVEL_KEYS: ReadonlyMap<string, string> = new Map([
-  ['wood/5', 'wood/0'],
-  ['desert/74030fc3f293a41f1025f88e725018ff', 'desert/10'],
+export const SHARED_LEVEL_KEYS: ReadonlyMap<string, { to: string; below?: number }> = new Map([
+  ['wood/5', { to: 'wood/0', below: 3000 }],
+  ['desert/74030fc3f293a41f1025f88e725018ff', { to: 'desert/10' }],
 ]);
+
+/** The key a record belongs under, given its key (an "@<hash>" suffix is dropped) and best time */
+export function sharedKeyTarget(key: string, best: number): string | null {
+  const shared = SHARED_LEVEL_KEYS.get(key.split('@')[0]);
+  return shared && (shared.below === undefined || best < shared.below) ? shared.to : null;
+}
 
 /**
  * Give every level of one theme / pack its own id. A level's id is the key its records are saved

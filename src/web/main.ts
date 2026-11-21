@@ -431,7 +431,7 @@ for (const screen of [screens.menu, screens.options, screens.graphics, screens.s
 
 // ───────────────────────── Options ─────────────────────────
 
-type ToggleOption = 'showDebug' | 'showFps' | 'cursorTrail' | 'decorativeEffects' | 'animatedBackground' | 'interfaceEffects' | 'lowSpecSimulation' | 'autoQuality' | 'antialias' | 'shadows';
+type ToggleOption = 'showDebug' | 'showFps' | 'cursorTrail' | 'decorativeEffects' | 'animatedBackground' | 'interfaceEffects' | 'lowSpecSimulation' | 'autoQuality' | 'antialias' | 'shadows' | 'transparency';
 type VolumeOption = 'masterVolume' | 'musicVolume' | 'effectsVolume';
 const optionInputs: Record<ToggleOption, HTMLInputElement> = {
   showDebug: $<HTMLInputElement>('opt-debug'),
@@ -444,6 +444,7 @@ const optionInputs: Record<ToggleOption, HTMLInputElement> = {
   autoQuality: $<HTMLInputElement>('opt-auto-quality'),
   antialias: $<HTMLInputElement>('opt-antialias'),
   shadows: $<HTMLInputElement>('opt-shadows'),
+  transparency: $<HTMLInputElement>('opt-transparency'),
 };
 
 const volumeInputs: Record<VolumeOption, HTMLInputElement> = {
@@ -472,6 +473,7 @@ function syncOptions(): void {
   document.documentElement.classList.toggle('simple-interface', !options.interfaceEffects);
   document.documentElement.classList.toggle('aa-off', !options.antialias);
   document.documentElement.classList.toggle('no-shadows', !options.shadows);
+  document.documentElement.classList.toggle('no-transparency', !options.transparency);
 }
 
 for (const [k, input] of Object.entries(optionInputs) as [ToggleOption, HTMLInputElement][]) {

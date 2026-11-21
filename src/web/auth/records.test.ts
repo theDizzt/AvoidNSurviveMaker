@@ -6,7 +6,7 @@ vi.mock('./supabase', () => ({ supabase: {
   rpc,
   auth: { getSession: async () => ({ data: { session: { user: { id: 'player' }, access_token: 'test-token' } } }) },
 } }));
-vi.mock('../progress', () => ({ allRecords: () => ({}), guestRecords: () => ({}), mergeRecords: () => 0, setOnRecord: () => {}, setProgressUser: () => {} }));
+vi.mock('../progress', () => ({ allRecords: () => ({}), currentRecords: (r: unknown) => r, guestRecords: () => ({}), mergeRecords: () => 0, setOnRecord: () => {}, setProgressUser: () => {} }));
 import { RecordSync } from './records';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetAllMocks(); });
