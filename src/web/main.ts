@@ -431,7 +431,7 @@ for (const screen of [screens.menu, screens.options, screens.graphics, screens.s
 
 // ───────────────────────── Options ─────────────────────────
 
-type ToggleOption = 'showDebug' | 'showFps' | 'cursorTrail' | 'decorativeEffects' | 'animatedBackground' | 'interfaceEffects' | 'lowSpecSimulation' | 'autoQuality' | 'antialias' | 'shadows' | 'transparency';
+type ToggleOption = 'showDebug' | 'showFps' | 'cursorTrail' | 'decorativeEffects' | 'animatedBackground' | 'interfaceEffects' | 'autoQuality' | 'antialias' | 'shadows' | 'transparency';
 type VolumeOption = 'masterVolume' | 'musicVolume' | 'effectsVolume';
 const optionInputs: Record<ToggleOption, HTMLInputElement> = {
   showDebug: $<HTMLInputElement>('opt-debug'),
@@ -440,7 +440,6 @@ const optionInputs: Record<ToggleOption, HTMLInputElement> = {
   decorativeEffects: $<HTMLInputElement>('opt-effects'),
   animatedBackground: $<HTMLInputElement>('opt-background'),
   interfaceEffects: $<HTMLInputElement>('opt-interface'),
-  lowSpecSimulation: $<HTMLInputElement>('opt-simulation'),
   autoQuality: $<HTMLInputElement>('opt-auto-quality'),
   antialias: $<HTMLInputElement>('opt-antialias'),
   shadows: $<HTMLInputElement>('opt-shadows'),

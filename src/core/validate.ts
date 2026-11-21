@@ -4,10 +4,11 @@ import { pointInPoly, pointInRect } from './geometry';
 import { compileObject, toWorld, transformAt, type Transform } from './object';
 import { createColorsApi } from './colors';
 import { normalizeTilt, shapeBounds, shapeCenter } from './shape';
+import { beltPoints, conveyorOutline } from './conveyor';
 import {
   MAP_VERSION, PACK_VERSION,
   type Door, type Easing, type Fill, type MapData, type MapPack, type Trigger, type TriggerKind, type MapObject, type Motion, type PatternKind, type Point, type PolyPoint, type Rect,
-  type Repeat, type Rotation, type Shape, type SurfaceAnim, type SurfaceStyle, type Theme, type Wave, type Fall, type Pulley, type Turret, type Blink, type ZoneShape,
+  type Repeat, type Rotation, type Shape, type SurfaceAnim, type SurfaceStyle, type Theme, type Wave, type Fall, type Pulley, type Turret, type Blink, type ZoneShape, type Conveyor,
 } from './types';
 
 export class MapValidationError extends Error {}
@@ -43,6 +44,10 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     maxCrystals: 1,
     /** Turrets (#60) and missile launchers (#61) are always this size (square) */
     turretSize: 60,
+    /** Conveyor belts (#69): centerline points, belt width (px) */
+    maxBeltPoints: 64,
+    minBeltWidth: 20,
+    maxBeltWidth: 300,
     maxTurretRange: 4000,
     minFireMs: 50,
     /** Global darkness light radius */
@@ -231,7 +236,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
   function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
     const o = obj(v, name);
     const out: MapObject = {
-      role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret', 'crystal', 'pulley', 'turret'] as const),
+      role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret', 'crystal', 'pulley', 'turret', 'conveyor', 'luggage'] as const),
       shape: shape(o.shape, `${name}.shape`, W, H),
     };
     if (o.motion !== undefined) out.motion = motion(o.motion, `${name}.motion`, W, H);
@@ -275,6 +280,28 @@ export function createValidateApi(t: Translator = defaultTranslate) {
         lifeMs: opt('lifeMs', 100, LIMITS.maxDelay),
         pierce: tu.pierce === true,
       };
+    }
+    if (out.role === 'conveyor') {
+      const c = obj(o.conveyor, `${name}.conveyor`);
+      const conveyor: Conveyor = {
+        points: arr(c.points, `${name}.conveyor.points`, LIMITS.maxBeltPoints).map((p, i) => point(p, `${name}.conveyor.points[${i}]`, W, H)),
+        loop: c.loop === true,
+        width: num(c.width, `${name}.conveyor.width`, LIMITS.minBeltWidth, LIMITS.maxBeltWidth),
+        speed: num(c.speed, `${name}.conveyor.speed`, 1, LIMITS.maxSpeed),
+        ...(c.reverse === true ? { reverse: true } : {}),
+      };
+      if (beltPoints(conveyor).length < 2) fail(t('validate.beltPoints', { name }));
+      out.conveyor = conveyor;
+      // The belt's shape always comes from its centerline; it stays where it is drawn
+      out.shape = { type: 'poly', points: conveyorOutline(conveyor) };
+      delete out.motion;
+      delete out.rotation;
+      delete out.tilt;
+    }
+    // A crate's only movement is the belt carrying it
+    if (out.role === 'luggage') {
+      delete out.motion;
+      delete out.rotation;
     }
     if (out.role === 'path' && o.pierce === true) out.pierce = true;
     if (out.role === 'path' && o.ice !== undefined) out.ice = { grip: num(obj(o.ice, `${name}.ice`).grip, `${name}.ice.grip`, 1, 100) };

@@ -19,7 +19,7 @@ describe('gpuClass', () => {
 describe('recommendOptions', () => {
   it('uses the low spec preset for software rendering or a weak CPU', () => {
     expect(recommendOptions(dev({ gpu: 'SwiftShader' })).graphics).toBe('low');
-    expect(recommendOptions(dev({ cores: 2 }))).toMatchObject({ graphics: 'low', lowSpecSimulation: true, frameLimit: 60 });
+    expect(recommendOptions(dev({ cores: 2 }))).toMatchObject({ graphics: 'low', frameLimit: 60 });
   });
 
   it('picks ultra only for a strong desktop on a 1080p / 1440p screen', () => {

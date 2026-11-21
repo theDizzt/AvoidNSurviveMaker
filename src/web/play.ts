@@ -230,7 +230,7 @@ export class PlayController {
 
   load(map: MapData): void {
     this.map = map;
-    this.drifts = map.objects.some((o) => !!o.ice || o.role === 'portal');
+    this.drifts = map.objects.some((o) => !!o.ice || o.role === 'portal' || o.role === 'conveyor');
     this.coveredCursor = !!map.darkness || map.objects.some((o) => o.role === 'fog' || o.role === 'dark');
     this.mapKey = JSON.stringify(map);
     this.reset(true);
@@ -243,7 +243,7 @@ export class PlayController {
     this.usedStats.reset();
     this.burst = null;
     this.deathNotified = false;
-    this.sim = new Simulation(this.map, recompile ? undefined : this.sim.objects, options.lowSpecSimulation);
+    this.sim = new Simulation(this.map, recompile ? undefined : this.sim.objects);
     this.trail = [];
     this.carried = new Uint8Array(this.map.objects.length);
     this.notified = false;
@@ -296,7 +296,7 @@ export class PlayController {
     }
     const p = clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
     if (!new ZoneArea(this.map.start, this.map.startShape).contains(p.x, p.y)) return;
-    const sim = new Simulation(this.map, this.sim.objects, options.lowSpecSimulation);
+    const sim = new Simulation(this.map, this.sim.objects);
     if (!sim.start(p.x, p.y)) return;
     e.preventDefault();
     this.sim = sim;

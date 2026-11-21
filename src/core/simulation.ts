@@ -8,11 +8,17 @@ import { ZoneArea, zoneShape } from './zone';
 import { blinkState, fallState } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
 import { rotatePoint, shapeCenter } from './shape';
+import { BeltPath, LuggageMover, polysOverlap } from './conveyor';
 
 /** How long a portal pulls the cursor to its center before teleporting (ms) */
 export const PORTAL_PULL_MS = 160;
 /** A coin is collected once the cursor comes this close to its center (map units; the coin's radius is 12) */
 export const COIN_MAGNET = 36;
+/**
+ * Step of the simulation (ms): the finest a browser's input and timers resolve anyway. Every event
+ * inside a step (GOAL, coins, hits) is still placed at its exact, interpolated time
+ */
+export const SIM_STEP_MS = 4;
 /** How long a collected coin takes to fly into the cursor (ms, drawing only) */
 export const COIN_PULL_MS = 180;
 /** A crystal star (#59, 48×48) is picked up this close to its center */
@@ -41,7 +47,7 @@ export interface ReplaySample {
 export interface Replay {
   v: 1;
   /** Omitted in legacy replays (1 ms). The map can still require fine steps. */
-  simulationStepMs?: 8;
+  simulationStepMs?: 4 | 8;
   samples: ReplaySample[];
   /** Clicks during the run (click-activated switches), in time order */
   clicks?: ReplaySample[];
@@ -54,11 +60,12 @@ const pA: Point = { x: 0, y: 0 };
 const pB: Point = { x: 0, y: 0 };
 
 /**
- * Deterministic simulation, normally split at 1 ms boundaries.
- * Low-spec mode batches segments away from moving hazards into at most 8 ms;
- * nearby interactions and stateful mechanics retain the original 1 ms stepping.
+ * Deterministic simulation, judged in 4 ms steps (SIM_STEP_MS). Each step is swept as a whole, so
+ * the clear time, coin pickups and hits are placed at their exact time inside it: records keep
+ * 1 ms precision. Maps with stateful mechanisms (ice, switches, doors, portals, pulleys, lasers,
+ * turrets) keep 1 ms steps: their state advances per step.
  *
- * - Input samples define line segments, split at 1 ms (or eligible low-spec 8 ms) boundaries.
+ * - Input samples define line segments, split at 4 ms (or 1 ms) boundaries.
  * - Each piece is tested against every object in that object's own local frame: the cursor
  *   endpoints are mapped through the inverse of the object's pose at the start and end of the
  *   piece. That turns moving and rotating objects into static polygons and the cursor's motion
@@ -98,6 +105,10 @@ export class Simulation {
   private readonly hasPaths: boolean;
   /** Ice floors (#71–74) */
   private readonly ices: readonly number[];
+  /** Conveyor belts (#69): object index and centerline */
+  private readonly belts: readonly { i: number; path: BeltPath }[];
+  /** Crates (#70): object index and the mover the simulation steps */
+  private readonly crates: readonly { i: number; mover: LuggageMover }[];
   /** The cursor's velocity (map units / ms) while sliding on ice */
   vx = 0;
   vy = 0;
@@ -193,6 +204,9 @@ export class Simulation {
   private readonly relevant: Int32Array;
   private relevantCount = 0;
   private readonly crossings: number[] = [];
+  /** Scratch rings for crate collision checks */
+  private crateScratch = new Float64Array(0);
+  private wallScratch = new Float64Array(0);
   /** Last endpoint pose per solid; reused as the next segment's start pose. */
   private readonly solidPoseTime: Float64Array;
   private readonly solidPose: Transform[];
@@ -200,27 +214,26 @@ export class Simulation {
   private tick = 0;
   private samples: ReplaySample[] = [];
   private abortReason: AbortReason | null = null;
-  /** Maximum step for this run; fixed at construction so changing settings cannot alter a replay. */
-  readonly simulationStepMs: 1 | 8;
-  private readonly fineStepObjects: readonly number[];
+  /** Maximum step for this run; fixed at construction so a replay always runs the same way. */
+  readonly simulationStepMs: 1 | 4 | 8;
 
-  constructor(map: MapData, objects: readonly CompiledObject[] = compileMap(map), lowSpec = false) {
+  /** `stepMs`: the step where the map allows more than 1 ms (replays keep the one they were made with) */
+  constructor(map: MapData, objects: readonly CompiledObject[] = compileMap(map), stepMs: 1 | 4 | 8 = SIM_STEP_MS) {
     this.map = map;
     this.objects = objects;
     // Integrators and mechanisms with nonlocal effects still need the original event order.
-    // Analytic motion, rotation, falling and blinking are handled by spatial guards below.
+    // Analytic motion, rotation, falling and blinking are judged in whole steps.
     const needsFineSteps = map.objects.some(o =>
       o.ice || o.link ||
       o.role === 'trigger' || o.role === 'door' || o.role === 'portal' ||
-      o.role === 'pulley' || o.role === 'laser' || o.role === 'turret');
-    this.simulationStepMs = lowSpec && !needsFineSteps ? 8 : 1;
-    this.fineStepObjects = objects.flatMap((o, i) => {
-      if (o.role === 'coin' || o.role === 'crystal') return [i];
-      return (o.dynamic || o.src?.fall || o.src?.blink) &&
-        (o.role === 'wall' || o.role === 'path' || o.role === 'safe') ? [i] : [];
-    });
+      o.role === 'pulley' || o.role === 'laser' || o.role === 'turret' || o.role === 'conveyor');
+    this.simulationStepMs = needsFineSteps ? 1 : stepMs;
     this.hasPaths = this.objects.some((o) => o.role === 'path');
     this.ices = map.objects.flatMap((o, i) => (o.role === 'path' && o.ice ? [i] : []));
+    this.belts = map.objects.flatMap((o, i) => (o.role === 'conveyor' && o.conveyor ? [{ i, path: new BeltPath(o.conveyor) }] : []));
+    this.crates = this.objects.flatMap((o, i) => (o.role === 'luggage' && o.motion instanceof LuggageMover ? [{ i, mover: o.motion }] : []));
+    // Every run starts with the crates where they were placed
+    for (const c of this.crates) c.mover.reset();
     // Coins, triggers, darkness areas and text don't block or support the cursor. A door is two
     // sliding wall halves. Safe zones come first: inside one, nothing else matters.
     const solids: CompiledObject[] = [];
@@ -236,9 +249,9 @@ export class Simulation {
     });
     this.safeCount = solids.length;
     this.objects.forEach((o, i) => {
-      if (o.role === 'path' || o.role === 'wall' || o.role === 'laser' || o.role === 'turret') {
-        // A laser emitter's or a turret's body is as deadly as a wall
-        solids.push(o.role === 'laser' || o.role === 'turret' ? { ...o, role: 'wall' } : o);
+      if (o.role === 'path' || o.role === 'wall' || o.role === 'laser' || o.role === 'turret' || o.role === 'conveyor' || o.role === 'luggage') {
+        // A laser emitter's, a turret's or a crate's body is as deadly as a wall; a belt is floor
+        solids.push(o.role === 'laser' || o.role === 'turret' || o.role === 'luggage' ? { ...o, role: 'wall' } : o);
         src.push(i);
         doorOf.push(-1);
         slide.push(0, 0);
@@ -393,7 +406,7 @@ export class Simulation {
         sy = this.y;
         continue;
       }
-      if (this.ices.length) {
+      if (this.ices.length || this.belts.length) {
         this.slideStep(t, rx, ry);
         if (this.status !== 'playing' || this.time === t) return;
         continue;
@@ -401,7 +414,7 @@ export class Simulation {
       // Where the cursor is heading: the mouse plus the teleport offset
       const tx = rx + this.offX;
       const ty = ry + this.offY;
-      const boundary = this.nextBoundary(t, tx, ty);
+      const boundary = this.nextBoundary();
       if (t < boundary) {
         this.checkSegment(this.time, this.x, this.y, t, tx, ty);
         if (this.status === 'playing') {
@@ -425,34 +438,17 @@ export class Simulation {
     }
   }
 
-  private nextBoundary(t: number, x: number, y: number): number {
-    const fine = Math.floor(this.time) + 1;
-    if (this.simulationStepMs === 1) return fine;
-    const coarse = (Math.floor(this.time / 8) + 1) * 8;
-    const f = (Math.min(t, coarse) - this.time) / (t - this.time);
-    const bx = this.x + (x - this.x) * f;
-    const by = this.y + (y - this.y) * f;
-    const minX = Math.min(this.x, bx), maxX = Math.max(this.x, bx);
-    const minY = Math.min(this.y, by), maxY = Math.max(this.y, by);
-    // Use full-motion bounds: an off-screen/hidden object may move or blink into
-    // the path during this interval. Never infer safety from endpoint poses alone.
-    for (const i of this.fineStepObjects) {
-      if (this.collected[i]) continue;
-      const o = this.objects[i];
-      const b = o.interactionBounds;
-      if (!b) return fine; // Custom compiled objects without a bound stay exact.
-      // Preserve collection/GOAL ordering, including a crystal beyond the finish line.
-      const pad = o.role === 'coin' ? COIN_MAGNET : o.role === 'crystal' ? CRYSTAL_MAGNET : 0;
-      if (maxX >= b.minX - pad && minX <= b.maxX + pad &&
-          maxY >= b.minY - pad && minY <= b.maxY + pad) return fine;
-    }
-    return coarse;
+  /** End of the next step */
+  private nextBoundary(): number {
+    const step = this.simulationStepMs;
+    return (Math.floor(this.time / step) + 1) * step;
   }
 
   /**
    * One piece (up to the next 1 ms boundary) of the cursor's way toward the mouse sample (rx, ry)
-   * at time t, on a map with ice. Off the ice the cursor follows the mouse (plus the offset); on it,
-   * the cursor's velocity eases toward the mouse's and the difference builds up in the offset.
+   * at time t, on a map with ice or conveyor belts. Off the ice the cursor follows the mouse (plus
+   * the offset); on it, the cursor's velocity eases toward the mouse's and the difference builds up
+   * in the offset. A belt under the cursor adds its own travel to the offset.
    */
   private slideStep(t: number, rx: number, ry: number): void {
     const end = Math.min(t, this.tick + 1);
@@ -476,6 +472,7 @@ export class Simulation {
       this.vx = mvx;
       this.vy = mvy;
     }
+    if (this.belts.length) this.beltPush(this.x, this.y, dt);
     const bx = mx1 + this.offX;
     const by = my1 + this.offY;
     this.checkSegment(this.time, this.x, this.y, end, bx, by);
@@ -484,6 +481,120 @@ export class Simulation {
     this.x = bx;
     this.y = by;
     if (end === this.tick + 1) this.tick = end;
+  }
+
+  /** The belt (#69) under (x, y): the cursor travels with it for `dt` ms (the fastest one if belts overlap) */
+  private beltPush(x: number, y: number, dt: number): void {
+    let best: BeltPath | null = null;
+    for (const b of this.belts) {
+      if (this.hidden[b.i]) continue;
+      const o = this.objects[b.i];
+      if (x < o.minX || x > o.maxX || y < o.minY || y > o.maxY || !pointInPoly(x, y, o.poly)) continue;
+      if (!best || b.path.speed > best.speed) best = b.path;
+    }
+    if (!best) return;
+    best.project(x, y, pA);
+    this.offX += pA.x * best.speed * dt;
+    this.offY += pA.y * best.speed * dt;
+  }
+
+  /**
+   * Carry each crate (#70) along the belt under its center from ta to tb: toward a point a little
+   * ahead on the centerline, so it settles onto the middle and takes corners smoothly. It stays put
+   * when it is wider than the belt, at the end of a one-way belt, or when the move would run it
+   * into a wall, a door (where they are at tb) or another crate.
+   */
+  private moveCrates(ta: number, tb: number): void {
+    const dt = tb - ta;
+    for (const c of this.crates) {
+      const m = c.mover;
+      m.begin(ta, tb);
+      if (this.hidden[c.i] || dt <= 0) continue;
+      const o = this.objects[c.i];
+      const cx = o.cx + m.x1;
+      const cy = o.cy + m.y1;
+      let belt: BeltPath | null = null;
+      for (const b of this.belts) {
+        if (this.hidden[b.i]) continue;
+        const bo = this.objects[b.i];
+        if (cx >= bo.minX && cx <= bo.maxX && cy >= bo.minY && cy <= bo.maxY && pointInPoly(cx, cy, bo.poly)) {
+          belt = b.path;
+          break;
+        }
+      }
+      if (!belt || belt.length <= 0) continue;
+      // Wider than the belt: it doesn't fit, and isn't carried
+      if (Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) > belt.width) continue;
+      const s = belt.project(cx, cy);
+      if (!belt.loop) {
+        // At the end of a one-way belt it stops, still on the belt
+        const half = Math.max(o.maxX - o.minX, o.maxY - o.minY) / 2;
+        if (belt.sign > 0 ? s >= belt.length - half : s <= half) continue;
+      }
+      belt.pointAt(s + belt.sign * Math.max(belt.width / 2, 1), pB);
+      const dx = pB.x - cx;
+      const dy = pB.y - cy;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-9) continue;
+      const step = Math.min(len, belt.speed * dt);
+      const nx = m.x1 + (dx / len) * step;
+      const ny = m.y1 + (dy / len) * step;
+      if (this.crateBlocked(c.i, o, nx, ny)) continue;
+      m.x1 = nx;
+      m.y1 = ny;
+    }
+  }
+
+  /** Would crate `ci` overlap a wall, door or another crate if moved to offset (dx, dy)? */
+  private crateBlocked(ci: number, o: CompiledObject, dx: number, dy: number): boolean {
+    // The crate a hair smaller, so a crate resting against something can still slide along it
+    if (this.crateScratch.length !== o.poly.length) this.crateScratch = new Float64Array(o.poly.length);
+    const box = this.crateScratch;
+    const shrink = 1e-3;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let k = 0; k < o.poly.length; k += 2) {
+      const x = o.poly[k] + dx + Math.sign(o.cx - o.poly[k]) * shrink;
+      const y = o.poly[k + 1] + dy + Math.sign(o.cy - o.poly[k + 1]) * shrink;
+      box[k] = x;
+      box[k + 1] = y;
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    }
+    for (let k = this.safeCount; k < this.solids.length; k++) {
+      const w = this.solids[k];
+      const src = this.solidSrc[k];
+      if (w.role !== 'wall' || src === ci || (src >= 0 && this.hidden[src])) continue;
+      const door = this.solidDoor[k];
+      let ring = w.poly;
+      if (door >= 0 || w.dynamic) {
+        if (this.wallScratch.length !== w.poly.length) this.wallScratch = new Float64Array(w.poly.length);
+        const world = this.wallScratch;
+        if (door >= 0) {
+          const ox = this.solidSlide[k * 2] * this.openB[door];
+          const oy = this.solidSlide[k * 2 + 1] * this.openB[door];
+          for (let j = 0; j < w.poly.length; j += 2) {
+            world[j] = w.poly[j] + ox;
+            world[j + 1] = w.poly[j + 1] + oy;
+          }
+        } else {
+          transformAt(w, this.clockB[src] ?? 0, tfA);
+          for (let j = 0; j < w.poly.length; j += 2) {
+            toWorld(w, tfA, w.poly[j], w.poly[j + 1], pA);
+            world[j] = pA.x;
+            world[j + 1] = pA.y;
+          }
+        }
+        ring = world;
+      }
+      let wx0 = Infinity, wy0 = Infinity, wx1 = -Infinity, wy1 = -Infinity;
+      for (let j = 0; j < ring.length; j += 2) {
+        wx0 = Math.min(wx0, ring[j]); wx1 = Math.max(wx1, ring[j]);
+        wy0 = Math.min(wy0, ring[j + 1]); wy1 = Math.max(wy1, ring[j + 1]);
+      }
+      if (wx1 <= minX || wx0 >= maxX || wy1 <= minY || wy0 >= maxY) continue;
+      if (polysOverlap(box, ring)) return true;
+    }
+    return false;
   }
 
   /** Grip of the ice under (x, y), or 0 when it isn't on ice */
@@ -579,7 +690,7 @@ export class Simulation {
 
   getReplay(): Replay {
     const r: Replay = { v: 1, samples: this.samples.slice() };
-    if (this.simulationStepMs === 8) r.simulationStepMs = 8;
+    if (this.simulationStepMs !== 1) r.simulationStepMs = this.simulationStepMs;
     if (this.clicks.length) r.clicks = this.clicks.slice();
     if (this.abortReason) r.abort = { reason: this.abortReason };
     return r;
@@ -596,9 +707,6 @@ export class Simulation {
       const o = solids[i];
       const srcIdx = this.solidSrc[i];
       if (srcIdx >= 0 && this.hidden[srcIdx]) continue; // removed by a switch
-      // nextBoundary certified that a batched segment misses every dynamic solid's
-      // full orbit. Do not manufacture a long local-frame chord for a rotating object.
-      if (this.simulationStepMs === 8 && tb - ta > 1 && (o.dynamic || o.src?.fall || o.src?.blink)) continue;
       let ax = xa;
       let ay = ya;
       let bx = xb;
@@ -851,6 +959,8 @@ export class Simulation {
         this.openB[d] = Math.min(1, Math.max(0, this.doorOpen[d] + (dir * dt) / door.moveMs));
       }
     }
+    // Crates move against the walls and doors where they are at the end of this piece
+    if (this.crates.length) this.moveCrates(ta, tb);
   }
 
   /** Commit the segment, then let triggers react to where the cursor went */
@@ -1057,8 +1167,6 @@ export class Simulation {
     list: readonly number[], magnet: number,
   ): number {
     let latest = -Infinity;
-    // Every collectible was ruled out by nextBoundary before batching this interval.
-    if (this.simulationStepMs === 8 && tb - ta > 1) return latest;
     for (const i of list) {
       if (this.collected[i]) continue;
       const o = this.objects[i];
@@ -1125,7 +1233,8 @@ export class Simulation {
 
 /** Re-run a replay from scratch (for server-side record verification) */
 export function runReplay(map: MapData, replay: Replay, checkBudget: () => void = () => {}): Simulation {
-  const sim = new Simulation(map, undefined, replay.simulationStepMs === 8);
+  // Replays without a step are from before steps were batched: 1 ms
+  const sim = new Simulation(map, undefined, replay.simulationStepMs ?? 1);
   const [first, ...rest] = replay.samples;
   if (!first || first.t !== 0 || !sim.start(first.x, first.y)) return sim;
   const clicks = replay.clicks ?? [];

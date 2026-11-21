@@ -680,6 +680,8 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .pal-crystal svg { fill: #6fd6ff; stroke: #4b3fb8; }
 .pal-ice svg { fill: #d6f0ff; stroke: #4aa3d8; }
 .pal-turret svg { fill: #4a505c; stroke: #1d2027; }
+.pal-belt svg { fill: #3a3f47; stroke: #1d1f24; }
+.pal-crate svg { fill: #c08a50; stroke: #7a4b22; }
 .pal-dark svg { fill: #1b1f27; stroke: #000; }
 .pal-global-dark svg { fill: #1b1f27; stroke: #000; }
 .pal-global-dark[aria-pressed="true"] { background: #2a2f3a; }

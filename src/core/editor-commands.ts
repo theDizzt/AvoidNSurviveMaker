@@ -103,6 +103,8 @@ export type MergeResult = { ok: true; count: number } | { ok: false; reason: 'in
 export function mergeSelection(doc: EditorDocument, op: MergeOp): MergeResult {
   const ids = doc.selectedIds(), objects = doc.map.objects;
   if (ids.length < 2) return { ok: false, reason: 'empty' };
+  // Conveyor belts (#69) and crates (#70) keep their own shapes
+  if (ids.some((i) => objects[i].role === 'conveyor' || objects[i].role === 'luggage')) return { ok: false, reason: 'invalid' };
   const first = objects[ids[0]];
   let results: Shape[][];
   try { results = mergeShapes(op, ids.map(i => bakeTilt(objects[i].shape, objects[i].tilt)), LIMITS.maxPolyPoints); }

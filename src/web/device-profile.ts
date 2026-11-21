@@ -58,7 +58,7 @@ export function recommendOptions(d: DeviceInfo): Partial<Options> {
   // Same as the Low Spec button
   if (gpu === 'software' || lowCpu) {
     return {
-      graphics: 'low', frameLimit: 60, pollingRate: -1, lowSpecSimulation: true, autoQuality: true,
+      graphics: 'low', frameLimit: 60, pollingRate: -1, autoQuality: true,
       cursorTrail: false, decorativeEffects: false, animatedBackground: false, interfaceEffects: false, transparency: false,
     };
   }
@@ -69,7 +69,7 @@ export function recommendOptions(d: DeviceInfo): Partial<Options> {
   else if (gpu === 'discrete' && d.cores >= 8 && d.screenPixels * 2.25 <= 3840 * 2160 * 1.05) graphics = 'ultra';
   else graphics = 'high';
 
-  const out: Partial<Options> = { graphics, frameLimit: 0, lowSpecSimulation: false, autoQuality: true };
+  const out: Partial<Options> = { graphics, frameLimit: 0, autoQuality: true };
   if (d.reducedMotion) Object.assign(out, { animatedBackground: false, interfaceEffects: false });
   return out;
 }
