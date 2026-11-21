@@ -9,7 +9,7 @@ const PAUSE_MS = 250;
 
 /**
  * Automatic graphics quality: while a run is being played, if the frame rate stays well under
- * what it should be for a few seconds, step the Graphics quality down (high → medium → low).
+ * what it should be for a few seconds, step the Graphics quality down (ultra → high → medium → low).
  * Only lowers, never raises, so it can't flip back and forth; the player can raise it again.
  */
 export class AutoQuality {

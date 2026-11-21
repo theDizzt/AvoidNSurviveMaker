@@ -22,6 +22,7 @@ import { refreshSkinGate, setSkinGate } from './skin';
 import { CustomizeUI } from './customize-ui';
 import { PlayController } from './play';
 import { FONT_TASKS, runPreload, type PreloadTask } from './preload';
+import { deviceCheckOnRequest, firstRunDeviceCheck } from './device-consent';
 import { Backdrop, type BackdropMode } from './backdrop';
 import { floatingPanel } from './float-panel';
 import { Account } from './auth/account';
@@ -97,6 +98,7 @@ const play = new PlayController({
   canvas: $<HTMLCanvasElement>('play-canvas'),
   status: $('play-status'),
   debug: $('debug-stats'),
+  fps: $('play-fps'),
 });
 
 const editor = new Editor({
@@ -429,10 +431,11 @@ for (const screen of [screens.menu, screens.options, screens.graphics, screens.s
 
 // ───────────────────────── Options ─────────────────────────
 
-type ToggleOption = 'showDebug' | 'cursorTrail' | 'decorativeEffects' | 'animatedBackground' | 'interfaceEffects' | 'lowSpecSimulation' | 'autoQuality' | 'antialias' | 'shadows';
+type ToggleOption = 'showDebug' | 'showFps' | 'cursorTrail' | 'decorativeEffects' | 'animatedBackground' | 'interfaceEffects' | 'lowSpecSimulation' | 'autoQuality' | 'antialias' | 'shadows';
 type VolumeOption = 'masterVolume' | 'musicVolume' | 'effectsVolume';
 const optionInputs: Record<ToggleOption, HTMLInputElement> = {
   showDebug: $<HTMLInputElement>('opt-debug'),
+  showFps: $<HTMLInputElement>('opt-fps'),
   cursorTrail: $<HTMLInputElement>('opt-trail'),
   decorativeEffects: $<HTMLInputElement>('opt-effects'),
   animatedBackground: $<HTMLInputElement>('opt-background'),
@@ -465,6 +468,7 @@ function syncOptions(): void {
     $(`${input.id}-value`).textContent = `${options[k]}%`;
   }
   debugPanel.hidden = !options.showDebug;
+  $('play-fps').hidden = !options.showFps;
   document.documentElement.classList.toggle('simple-interface', !options.interfaceEffects);
   document.documentElement.classList.toggle('aa-off', !options.antialias);
   document.documentElement.classList.toggle('no-shadows', !options.shadows);
@@ -485,7 +489,7 @@ const pollingTile = $<HTMLButtonElement>('opt-polling');
 pollingTile.addEventListener('click', () => {
   setOption('pollingRate', POLLING_RATES[(POLLING_RATES.indexOf(options.pollingRate) + 1) % POLLING_RATES.length]);
 });
-// The Options tile opens the Graphics screen; its Quality tile steps High → Medium → Low
+// The Options tile opens the Graphics screen; its Quality tile steps Ultra → High → Medium → Low
 const graphicsTile = $<HTMLButtonElement>('opt-graphics');
 graphicsTile.addEventListener('click', () => show('graphics'));
 const qualityTile = $<HTMLButtonElement>('opt-graphics-level');
@@ -519,6 +523,10 @@ syncPerformance();
 
 $('options-back').addEventListener('click', () => show('menu'));
 $('options-low-spec').addEventListener('click', applyLowSpecOptions);
+$('graphics-auto').addEventListener('click', async () => {
+  const level = await deviceCheckOnRequest();
+  if (level) showToast(t('device.applied', { level }), 'ok');
+});
 $('graphics-reset').addEventListener('click', resetGraphicsOptions);
 $('graphics-back').addEventListener('click', () => show('options'));
 screens.graphics.addEventListener('keydown', (e) => {
@@ -846,6 +854,10 @@ async function boot(): Promise<void> {
 
   // Result of an email verification link, if the player just came back from one
   if (account.notice) showToast(account.notice.text, account.notice.kind);
+
+  // First launch: offer to set the options for this device (not over a shared map being played)
+  const level = sharedMap || playPack ? null : await firstRunDeviceCheck();
+  if (level) showToast(t('device.applied', { level }), 'ok');
 }
 
 window.addEventListener('hashchange', async () => {

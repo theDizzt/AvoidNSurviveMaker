@@ -7,12 +7,14 @@ export const FRAME_LIMITS = [0, 240, 144, 120, 60, 30] as const;
 export type FrameLimit = (typeof FRAME_LIMITS)[number];
 
 /** Rendering quality: canvas resolution and menu background frame rate (see graphics.ts) */
-export const GRAPHICS_LEVELS = ['high', 'medium', 'low'] as const;
+export const GRAPHICS_LEVELS = ['ultra', 'high', 'medium', 'low'] as const;
 export type GraphicsLevel = (typeof GRAPHICS_LEVELS)[number];
 
 /** Player options, persisted per browser. */
 export interface Options {
   showDebug: boolean;
+  /** Frame rate counter in the corner of the play screen */
+  showFps: boolean;
   masterVolume: number;
   musicVolume: number;
   effectsVolume: number;
@@ -37,6 +39,7 @@ const VOLUME_KEYS: readonly VolumeKey[] = ['masterVolume', 'musicVolume', 'effec
 
 export const DEFAULT_OPTIONS: Readonly<Options> = {
   showDebug: false,
+  showFps: false,
   masterVolume: 25,
   musicVolume: 60,
   effectsVolume: 80,
@@ -60,7 +63,7 @@ function load(): Options {
   const out = { ...DEFAULT_OPTIONS };
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, unknown>;
-    for (const k of ['showDebug', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation', 'autoQuality', 'antialias', 'shadows'] as const) {
+    for (const k of ['showDebug', 'showFps', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation', 'autoQuality', 'antialias', 'shadows'] as const) {
       if (typeof saved[k] === 'boolean') out[k] = saved[k];
     }
     for (const k of VOLUME_KEYS) {
@@ -106,11 +109,21 @@ export function resetOptions(): void {
 }
 
 /** Options shown on the Graphics screen */
-const GRAPHICS_KEYS = ['graphics', 'frameLimit', 'autoQuality', 'antialias', 'shadows', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation'] as const;
+const GRAPHICS_KEYS = ['graphics', 'frameLimit', 'showFps', 'autoQuality', 'antialias', 'shadows', 'cursorTrail', 'decorativeEffects', 'animatedBackground', 'interfaceEffects', 'lowSpecSimulation'] as const;
 
 /** Restore only the Graphics screen's options (one commit, so canvases refit once). */
 export function resetGraphicsOptions(): void {
   for (const k of GRAPHICS_KEYS) (options as Record<string, unknown>)[k] = DEFAULT_OPTIONS[k];
+  commit();
+}
+
+/** Set several options in one commit (listeners resize/repaint once); invalid values are skipped. */
+export function applyOptions(patch: Partial<Options>): void {
+  const next = { ...options, ...patch } as Options;
+  if (!(GRAPHICS_LEVELS as readonly unknown[]).includes(next.graphics)) next.graphics = options.graphics;
+  if (!(FRAME_LIMITS as readonly unknown[]).includes(next.frameLimit)) next.frameLimit = options.frameLimit;
+  if (!(POLLING_RATES as readonly unknown[]).includes(next.pollingRate)) next.pollingRate = options.pollingRate;
+  Object.assign(options as Options, next);
   commit();
 }
 

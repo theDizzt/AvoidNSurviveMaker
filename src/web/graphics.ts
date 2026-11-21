@@ -3,15 +3,18 @@ import { options, type GraphicsLevel } from './options';
 /**
  * Graphics quality. Only how the game is drawn changes: the simulation, collision checks and
  * records are identical at every level.
+ * - ultra: supersampled, 1.5× the device resolution up to about 3840×2160 pixels per canvas
+ *   (smoother edges on 1080p / 1440p screens; never below high); menu background at 60 fps
  * - high: full device resolution (sharpest on HiDPI / 4K screens)
- * - medium: at most 1.5 device px per CSS px and about 2560×1440 pixels per canvas
+ * - medium: at most 1.5 device px per CSS px and about 1600×900 pixels per canvas
  * - low: at most 1 device px per CSS px and about 960×540 pixels; menu background at 15 fps;
  *   (canvas shadows are never blurred, see below)
  */
-const LEVELS: Record<GraphicsLevel, { maxDpr: number; maxPixels: number; backdropFps: number }> = {
-  high: { maxDpr: Infinity, maxPixels: Infinity, backdropFps: 30 },
-  medium: { maxDpr: 1.5, maxPixels: 2560 * 1440, backdropFps: 30 },
-  low: { maxDpr: 1, maxPixels: 960 * 540, backdropFps: 15 },
+const LEVELS: Record<GraphicsLevel, { maxDpr: number; maxPixels: number; backdropFps: number; supersample: number }> = {
+  ultra: { maxDpr: Infinity, maxPixels: 3840 * 2160, backdropFps: 60, supersample: 1.5 },
+  high: { maxDpr: Infinity, maxPixels: Infinity, backdropFps: 30, supersample: 1 },
+  medium: { maxDpr: 1.5, maxPixels: 1600 * 900, backdropFps: 30, supersample: 1 },
+  low: { maxDpr: 1, maxPixels: 960 * 540, backdropFps: 15, supersample: 1 },
 };
 
 /** Backing pixels per CSS pixel for a canvas of this CSS size */
@@ -19,6 +22,8 @@ export function renderScale(cssW: number, cssH: number): number {
   const q = LEVELS[options.graphics];
   const dpr = window.devicePixelRatio || 1;
   const byPixels = Math.sqrt(q.maxPixels / Math.max(1, cssW * cssH));
+  // Supersampling: extra pixels up to the cap, but never fewer than the device's own
+  if (q.supersample > 1) return Math.max(dpr, Math.min(dpr * q.supersample, byPixels));
   // Never below half a pixel per CSS px, so text and edges stay legible
   return Math.max(0.5, Math.min(dpr, q.maxDpr, byPixels));
 }

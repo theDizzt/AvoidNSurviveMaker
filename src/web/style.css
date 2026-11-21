@@ -347,11 +347,35 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   position: absolute;
   right: 12px;
   bottom: 12px;
-  max-width: min(420px, calc(100% - 24px));
+  width: max-content;
+  max-width: min(340px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
   margin: 0;
-  font-size: 13px;
+  padding: 8px 12px;
+  font-size: 12px;
   transition: opacity 0.2s ease;
 }
+.play-debug summary { font-size: 12px; }
+.play-debug dl { gap: 1px 10px; margin: 6px 0 0; font-size: 11px; line-height: 1.35; }
+.play-debug dt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+.play-debug dd { overflow-wrap: anywhere; }
+/* Show FPS option: small counter bottom-left (above the Back button until a run starts) */
+.play-fps {
+  position: absolute;
+  left: 16px;
+  bottom: 64px;
+  z-index: 3;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(20, 30, 50, 0.6);
+  color: #fff;
+  font: 700 12px/1.4 var(--font-main);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.play-view.running .play-fps { bottom: 16px; }
+.play-fps[hidden] { display: none; }
 /* Back button on the ready screen (bottom-left, clear of the level badge and the stopwatch) */
 .play-back {
   position: absolute;
@@ -389,12 +413,10 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
   -webkit-backdrop-filter: none;
   background: rgba(255, 255, 255, 0.9);
   padding: 6px 10px;
-  font-size: 12px;
 }
-.play-view.running .play-debug > summary,
-.play-view.running .play-debug > p { display: none; }
+.play-view.running .play-debug > summary { display: none; }
 .play-view.running .play-debug:not([open]) { display: none; }
-.play-view.running .play-debug dl { margin: 0; font-size: 12px; gap: 2px 12px; }
+.play-view.running .play-debug dl { margin: 0; }
 
 /* Glass panels */
 .panel, .palette, .debug {
@@ -1594,9 +1616,9 @@ label.dtile:hover, label.dtile:focus-within, .dgrid-panel div.dtile:focus-within
 .dgraphics .dtile-in { gap: 4px; }
 .dgraphics-value { font-family: var(--font-title); font-size: 30px; font-weight: 700; color: #326bc0; line-height: 1.1; }
 .dgraphics-value { white-space: nowrap; }
-.dgraphics:is([data-level="high"], [data-level="max"]) { background: var(--gradient); color: #fff; border-color: transparent; }
-.dgraphics:is([data-level="high"], [data-level="max"]) .dgraphics-value { color: #fff; }
-.dgraphics:is([data-level="high"], [data-level="max"]) .dtile-in { text-shadow: 0 1px 0 rgba(20, 30, 60, 0.3); }
+.dgraphics:is([data-level="ultra"], [data-level="high"], [data-level="max"]) { background: var(--gradient); color: #fff; border-color: transparent; }
+.dgraphics:is([data-level="ultra"], [data-level="high"], [data-level="max"]) .dgraphics-value { color: #fff; }
+.dgraphics:is([data-level="ultra"], [data-level="high"], [data-level="max"]) .dtile-in { text-shadow: 0 1px 0 rgba(20, 30, 60, 0.3); }
 
 /* Language picker */
 .dlanguage .dtile-in { gap: 4px; }
@@ -1894,3 +1916,15 @@ button.cz-list-item.is-locked:hover, button.cz-list-item.is-locked:focus-visible
 .te-anim { display: flex; flex-direction: column; gap: 8px; }
 .te-anim-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 6px; align-items: end; }
 .te-anim-row .field input { width: 100%; }
+
+/* Device check consent (device-consent.ts) */
+.consent-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(22, 32, 52, 0.62); }
+.consent-card { width: min(460px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; padding: 24px 24px 20px; border-radius: 18px; background: var(--surface-solid); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow); }
+.consent-card h3 { margin: 0 0 10px; font-family: var(--font-title); font-size: 28px; text-align: center; }
+.consent-card p { margin: 0 0 10px; line-height: 1.5; }
+.consent-list { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 14px; }
+.consent-note { color: var(--muted); font-size: 14px; }
+.consent-buttons { display: flex; gap: 10px; margin-top: 16px; }
+.consent-buttons button { flex: 1; min-height: 44px; padding: 10px 14px; border-radius: 12px; font-weight: 700; font-size: 16px; }
+.consent-deny { background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); }
+.consent-allow { background: var(--go-gradient); color: #fff; border: 1px solid transparent; }

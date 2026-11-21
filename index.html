@@ -259,7 +259,13 @@
             <button type="button" id="graphics-reset" class="dtile" style="grid-column: 4; grid-row: 3">
               <span class="dtile-in"><strong data-i18n="options.reset"></strong><small data-i18n="options.graphicsResetSub"></small></span>
             </button>
-            <button type="button" id="graphics-back" class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 4">
+            <label class="dtile dtoggle" style="grid-column: 2; grid-row: 4" data-i18n-title="options.fpsHint">
+              <span class="dtile-in"><input type="checkbox" id="opt-fps" /><strong data-i18n="options.fps"></strong><small data-i18n="options.fpsSub"></small></span>
+            </label>
+            <button type="button" id="graphics-auto" class="dtile" style="grid-column: 3; grid-row: 4" data-i18n-title="device.autoHint">
+              <span class="dtile-in"><strong data-i18n="device.auto"></strong><small data-i18n="device.autoSub"></small></span>
+            </button>
+            <button type="button" id="graphics-back"class="dtile dtile-primary dtile-back" style="grid-column: 4; grid-row: 4">
               <span class="dtile-in"><strong data-i18n="common.back"></strong></span>
             </button>
           </div>
@@ -374,10 +380,10 @@
           <p class="hud-keys" data-i18n="play.keys"></p>
           <p id="play-status" class="status"></p>
         </div>
+        <div id="play-fps" class="play-fps" aria-hidden="true" hidden>– FPS</div>
         <details id="debug-panel" class="debug play-debug" open>
-          <summary data-i18n="debug.title"></summary>
+          <summary data-i18n="debug.title" data-i18n-title="debug.help"></summary>
           <dl id="debug-stats"></dl>
-          <p class="muted" data-i18n="debug.help"></p>
         </details>
       </section>
 

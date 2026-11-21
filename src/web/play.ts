@@ -2,6 +2,7 @@ import { t as tr } from './i18n';
 import { FrameLimiter } from './graphics';
 import { AutoQuality } from './auto-quality';
 import { canvasUsage, formatBytes, gpuName, jsHeap } from './resource-monitor';
+import { shortGpuName } from './device-profile';
 import { levelLabel, starGoals, starsFor, starText } from './localized/level';
 import { recordTime } from '../core/time';
 import { ZoneArea } from '../core/zone';
@@ -46,6 +47,8 @@ export interface PlayElements {
   canvas: HTMLCanvasElement;
   status: HTMLElement;
   debug: HTMLElement;
+  /** Frame rate counter (Show FPS option) */
+  fps: HTMLElement;
 }
 
 export class PlayController {
@@ -537,6 +540,7 @@ export class PlayController {
       this.simAt = now;
       this.frames = 0;
       this.fpsAt = now;
+      if (options.showFps) this.el.fps.textContent = `${Math.round(this.fps)} FPS`;
     }
     if (now - this.lastDebug > 200) {
       this.lastDebug = now;
@@ -706,41 +710,38 @@ export class PlayController {
     if (!options.showDebug) return;
     const s = this.stats.summary();
     const used = this.usedStats.summary();
+    // Compact: related numbers share a row, so the panel stays small over the map
+    const ms = (v: number | null, digits = 2) => (v !== null ? `${v.toFixed(digits)} ms` : '-');
     const rows: [string, string][] = [
-      [tr('debug.inputEvent'), `${this.input.source}${this.input.coalesced ? ' + getCoalescedEvents' : tr('debug.noCoalesced')}`],
-      [tr('debug.sampleInterval'), s.medianMs !== null ? `${s.medianMs.toFixed(3)} ms` : tr('debug.keepMoving')],
-      [tr('debug.rawPollingRate'), s.hz !== null ? `${Math.round(s.hz)} Hz` : '-'],
+      [tr('debug.inputEvent'), `${this.input.source}${this.input.coalesced ? ' + coalesced' : tr('debug.noCoalesced')}`],
+      [tr('debug.rawPollingRate'), s.hz !== null ? `${Math.round(s.hz)} Hz · ${ms(s.medianMs, 3)}` : tr('debug.keepMoving')],
       [tr('options.polling'), options.pollingRate === -1
         ? `${tr('options.pollingAuto')} (${this.autoPolling.rate} Hz)`
         : options.pollingRate ? `${options.pollingRate} Hz` : tr('options.pollingMax')],
-      [tr('debug.usedPollingRate'), used.hz !== null ? `${Math.round(used.hz)} Hz` : tr('debug.usedPending')],
-      [tr('debug.usedInterval'), used.medianMs !== null ? `${used.medianMs.toFixed(3)} ms` : '-'],
-      [tr('debug.usedSamples'), String(used.total)],
-      [tr('debug.minInterval'), s.minMs !== null ? `${s.minMs.toFixed(3)} ms` : '-'],
-      [tr('debug.samplesPerEvent'), `${s.avgPerEvent.toFixed(1)} / ${s.maxPerEvent}`],
-      [tr('debug.totalSamples'), String(s.total)],
-      [tr('debug.ticks'), String(sim.ticks)],
-      [tr('options.simulation'), `${sim.simulationStepMs} ms`],
-      [tr('debug.simTime'), `${this.simMsPerSec.toFixed(2)} ms/s · ${tr('debug.simMax')} ${this.simMaxMs.toFixed(2)} ms`],
+      [tr('debug.usedPollingRate'), used.hz !== null ? `${Math.round(used.hz)} Hz · ${ms(used.medianMs, 3)} · ${used.total}` : tr('debug.usedPending')],
+      [tr('debug.samplesPerEvent'), `${s.avgPerEvent.toFixed(1)} / ${s.maxPerEvent} · ${tr('debug.min')} ${ms(s.minMs, 3)}`],
+      [tr('debug.ticks'), `${sim.simulationStepMs} ms · ${sim.ticks}`],
+      [tr('debug.simTime'), `${this.simMsPerSec.toFixed(2)} ms/s · ${tr('debug.simMax')} ${ms(this.simMaxMs)}`],
       [tr('debug.fps'), this.fps.toFixed(0)],
-      [tr('debug.drawTime'), `${this.drawMs.toFixed(2)} / ${this.drawMaxMs.toFixed(2)} ms`],
-      [tr('debug.frameGap'), `${this.gapMs.toFixed(2)} / ${this.gapMaxMs.toFixed(2)} ms`],
+      [tr('debug.drawTime'), `${this.drawMs.toFixed(2)} / ${ms(this.drawMaxMs)}`],
+      [tr('debug.frameGap'), `${this.gapMs.toFixed(2)} / ${ms(this.gapMaxMs)}`],
     ];
     if (!this.canvasStats || now - this.canvasStatsAt >= 1000) {
       this.canvasStats = canvasUsage();
       this.canvasStatsAt = now;
     }
     const canvases = this.canvasStats;
-    rows.push([tr('debug.canvasMemory'), `${formatBytes(canvases.bytes)} (${tr('debug.canvasCount', { n: canvases.count })})`]);
+    rows.push([tr('debug.canvasMemory'), `${formatBytes(canvases.bytes)} · ${tr('debug.canvasCount', { n: canvases.count })}`]);
     // The biggest users, by where they are or what made them
     for (const g of canvases.groups.slice(0, DEBUG_CANVAS_GROUPS)) {
-      rows.push([`↳ ${g.label}${g.count > 1 ? ` ×${g.count}` : ''}`, `${formatBytes(g.bytes)} · ${g.w}×${g.h}`]);
+      const label = g.label.replace(/ \([\w.-]+\.ts\)/, '').replace(/ · (offscreen|hidden)$/, '');
+      rows.push([`↳ ${label}${g.count > 1 ? ` ×${g.count}` : ''}`, `${formatBytes(g.bytes)} · ${g.w}×${g.h}`]);
     }
     const heap = jsHeap();
     rows.push([tr('debug.jsHeap'), heap ? `${formatBytes(heap.used)} / ${formatBytes(heap.limit)}` : tr('debug.unavailable')]);
-    rows.push([tr('debug.gpu'), gpuName() ?? tr('debug.unavailable')]);
+    rows.push([tr('debug.gpu'), shortGpuName(gpuName()) ?? tr('debug.unavailable')]);
     const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-    rows.push([tr('debug.device'), `${navigator.hardwareConcurrency || '?'} ${tr('debug.cores')}${deviceMemory ? ` · ${deviceMemory} GB RAM` : ''}`]);
+    rows.push([tr('debug.device'), `${navigator.hardwareConcurrency || '?'} ${tr('debug.cores')}${deviceMemory ? ` · ${deviceMemory} GB` : ''}`]);
     // Shown during runs too: update the rows in place instead of rebuilding them every 200 ms
     const list = this.el.debug;
     if (list.children.length !== rows.length * 2) {
@@ -756,7 +757,7 @@ export class PlayController {
 }
 
 /** Canvas memory groups listed in the debug panel */
-const DEBUG_CANVAS_GROUPS = 8;
+const DEBUG_CANVAS_GROUPS = 4;
 
 /**
  * With the system cursor (pointer skin #0) on a map where the cursor drifts (ice, portals): a ring
