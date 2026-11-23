@@ -602,7 +602,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     return v.toLowerCase();
   }
 
-  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'soil', 'snow', 'snowDirt', 'snowPile', 'ice', 'iceCrystal', 'concrete', 'epoxy'] as const satisfies readonly PatternKind[];
+  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'soil', 'snow', 'snowDirt', 'snowPile', 'ice', 'iceCrystal', 'concrete', 'epoxy', 'clouds', 'basalt', 'hotrock', 'magma'] as const satisfies readonly PatternKind[];
 
   function fill(v: unknown, name: string): Fill {
     const o = obj(v, name);
@@ -622,7 +622,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       pattern: oneOf(o.pattern, `${name}.pattern`, PATTERNS),
       color: color(o.color, `${name}.color`),
       background: color(o.background, `${name}.background`),
-      size: num(o.size, `${name}.size`, 4, 64),
+      size: num(o.size, `${name}.size`, 4, 256),
     };
   }
 
@@ -634,6 +634,10 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     if (o.line !== undefined) {
       const l = obj(o.line, `${name}.line`);
       out.line = { color: color(l.color, `${name}.line.color`), width: num(l.width, `${name}.line.width`, 1, 40), inset: num(l.inset, `${name}.line.inset`, 0, 80) };
+    }
+    if (o.glow !== undefined) {
+      const gl = obj(o.glow, `${name}.glow`);
+      out.glow = { color: color(gl.color, `${name}.glow.color`), width: num(gl.width, `${name}.glow.width`, 1, 200) };
     }
     return out;
   }

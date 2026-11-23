@@ -1,0 +1,191 @@
+{
+  "v": 2,
+  "name": "aero01",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 180,
+    "y": 480,
+    "w": 120,
+    "h": 120
+  },
+  "goal": {
+    "x": 1620,
+    "y": 480,
+    "w": 120,
+    "h": 120
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 300,
+        "y": 480,
+        "w": 480,
+        "h": 120
+      },
+      "id": 1
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1140,
+        "y": 480,
+        "w": 480,
+        "h": 120
+      },
+      "id": 2
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 660,
+        "y": 240,
+        "w": 600,
+        "h": 120
+      },
+      "id": 3
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 660,
+        "y": 720,
+        "w": 600,
+        "h": 120
+      },
+      "id": 4
+    },
+    {
+      "role": "portal",
+      "shape": {
+        "type": "rect",
+        "x": 700,
+        "y": 520,
+        "w": 40,
+        "h": 40
+      },
+      "portal": {
+        "color": 0,
+        "order": 0,
+        "mode": "both"
+      },
+      "id": 5
+    },
+    {
+      "role": "portal",
+      "shape": {
+        "type": "rect",
+        "x": 1180,
+        "y": 280,
+        "w": 40,
+        "h": 40
+      },
+      "portal": {
+        "color": 0,
+        "order": 1,
+        "mode": "both"
+      },
+      "id": 6
+    },
+    {
+      "role": "portal",
+      "shape": {
+        "type": "rect",
+        "x": 700,
+        "y": 280,
+        "w": 40,
+        "h": 40
+      },
+      "portal": {
+        "color": 3,
+        "order": 2,
+        "mode": "both"
+      },
+      "id": 7
+    },
+    {
+      "role": "portal",
+      "shape": {
+        "type": "rect",
+        "x": 700,
+        "y": 760,
+        "w": 40,
+        "h": 40
+      },
+      "portal": {
+        "color": 5,
+        "order": 3,
+        "mode": "both"
+      },
+      "id": 8
+    },
+    {
+      "role": "portal",
+      "shape": {
+        "type": "rect",
+        "x": 1180,
+        "y": 760,
+        "w": 40,
+        "h": 40
+      },
+      "portal": {
+        "color": 3,
+        "order": 4,
+        "mode": "both"
+      },
+      "id": 9
+    },
+    {
+      "role": "portal",
+      "shape": {
+        "type": "rect",
+        "x": 1180,
+        "y": 520,
+        "w": 40,
+        "h": 40
+      },
+      "portal": {
+        "color": 5,
+        "order": 5,
+        "mode": "both"
+      },
+      "id": 10
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "clouds",
+        "color": "#ffffff",
+        "background": "#7cc5f2",
+        "size": 256
+      },
+      "edge": "#cfe8f8",
+      "anim": {
+        "type": "scroll",
+        "speed": 10,
+        "amount": 1,
+        "angle": 0
+      }
+    },
+    "path": {
+      "fill": {
+        "type": "solid",
+        "color": "#ffffff"
+      },
+      "edge": "#9fd0f0"
+    }
+  },
+  "themeId": "aero",
+  "id": "d50010935ec067c608dae563a987abd8",
+  "level": 1,
+  "title": "Teleport",
+  "difficulty": 2
+}

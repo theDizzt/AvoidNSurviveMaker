@@ -2,6 +2,7 @@ import { compilePressCylinder, toWorld, transformAt, type CompiledObject, type T
 import type { Aura, MapData, MapObject, Point, Power, Rad, Spot } from '../core/types';
 import { auraRadius, auraReach } from '../core/radiation';
 import { WIRE_WIDTH } from '../core/electric';
+import { libraryFontCss } from './library-fonts';
 
 /**
  * Drawing for thorn vines (#83 / #84), lily pads (#85), ponds and radioactive water (#86 / #87),
@@ -490,29 +491,6 @@ export function drawWire(ctx: CanvasRenderingContext2D, points: readonly Point[]
 
 // ───────────────────────── Electric devices (#94–97) ─────────────────────────
 
-/** Segments a–g lit for each digit 0–9 (bit 0 = a) */
-const SEGMENTS = [0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f];
-
-/** One seven-segment digit, `w` × `h`, at (x, y) */
-function drawDigit(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, digit: number, on: string, off: string): void {
-  const th = Math.max(1, w * 0.2);
-  const hh = h / 2;
-  const bars: [number, number, number, number][] = [
-    [x + th, y, w - 2 * th, th], // a
-    [x + w - th, y + th * 0.7, th, hh - th * 1.2], // b
-    [x + w - th, y + hh + th * 0.5, th, hh - th * 1.2], // c
-    [x + th, y + h - th, w - 2 * th, th], // d
-    [x, y + hh + th * 0.5, th, hh - th * 1.2], // e
-    [x, y + th * 0.7, th, hh - th * 1.2], // f
-    [x + th, y + hh - th / 2, w - 2 * th, th], // g
-  ];
-  const bits = SEGMENTS[digit] ?? 0;
-  bars.forEach(([bx, by, bw, bh], k) => {
-    ctx.fillStyle = bits & (1 << k) ? on : off;
-    ctx.fillRect(bx, by, bw, bh);
-  });
-}
-
 /** An LCD panel showing `seconds` with one decimal, centered on (cx, bottom edge at y) */
 function drawLcd(ctx: CanvasRenderingContext2D, cx: number, y: number, width: number, seconds: number, running: boolean): void {
   const text = (Math.min(999.9, Math.max(0, Math.ceil(seconds * 10 - 1e-6) / 10))).toFixed(1);
@@ -532,21 +510,29 @@ function drawLcd(ctx: CanvasRenderingContext2D, cx: number, y: number, width: nu
   ctx.fill();
   ctx.stroke();
   const on = running ? '#7dff6a' : 'rgba(125,255,106,0.45)';
-  const off = 'rgba(125,255,106,0.08)';
-  const innerW = n * dw + (n - 1) * gap;
-  let x = cx - innerW / 2;
-  const dy = y0 + h * 0.16;
-  const dh = h * 0.68;
-  for (let k = 0; k < n; k++) {
-    drawDigit(ctx, x, dy, dw, dh, Number(digits[k]), on, off);
-    // Decimal point before the last digit
-    if (k === n - 2) {
-      ctx.fillStyle = on;
-      ctx.fillRect(x + dw + gap * 0.3, dy + dh - dw * 0.2, dw * 0.2, dw * 0.2);
-    }
-    x += dw + gap;
+  // LT Stopwatch digits over faint unlit "8"s, like a real LCD
+  ctx.save();
+  let size = h * 0.78;
+  const unlit = text.replace(/[0-9]/g, '8');
+  ctx.font = `${size}px ${LCD_FONT()}`;
+  const fit = w - dw * 0.6;
+  const tw = ctx.measureText(unlit).width;
+  if (tw > fit) ctx.font = `${(size *= fit / tw)}px ${LCD_FONT()}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(125,255,106,0.1)';
+  ctx.fillText(unlit, cx, y0 + h / 2 + 1);
+  ctx.fillStyle = on;
+  if (running) {
+    ctx.shadowColor = 'rgba(125,255,106,0.8)';
+    ctx.shadowBlur = h * 0.25;
   }
+  ctx.fillText(text, cx, y0 + h / 2 + 1);
+  ctx.restore();
 }
+
+/** The LCD font of electric timers (#96): LT Stopwatch, loaded on first use */
+const LCD_FONT = () => libraryFontCss('lt-stopwatch');
 
 /** A lightning bolt `s` tall centered on (cx, cy) */
 function bolt(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, color: string): void {

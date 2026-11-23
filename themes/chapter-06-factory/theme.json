@@ -5,7 +5,7 @@
     "description":  "Faulty production lines, hazard stripes and industrial steel.",
     "author":  "Avoid N Survive",
     "released":  "2026-11-17",
-    "unlockStars":  0,
+    "unlockStars":  220,
     "colors":  [
                    "#e9ba42",
                    "#7c939a"
@@ -21,7 +21,7 @@
         "numberColor": "#6dff86",
         "titleColor": "#e9ba42",
         "caption": "CHAPTER 06 / FACTORY",
-        "font": "title",
+        "font": "lt-stopwatch",
         "pad": 2,
         "showTitle": true
       },

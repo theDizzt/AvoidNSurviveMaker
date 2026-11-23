@@ -482,6 +482,46 @@ function paintFloorLine(f: CanvasRenderingContext2D, walls: HTMLCanvasElement, l
   freeCanvas(inner);
 }
 
+/** Bands the wall glow is built from (more = smoother fade) */
+const GLOW_BANDS = 8;
+
+/**
+ * The theme's wall glow for the wall mass `walls` (layer pixels): its color inside the walls,
+ * strongest along the floor and fading out over `width` map units. Returned as a layer to paint
+ * over the walls.
+ */
+function paintWallGlow(walls: HTMLCanvasElement, glow: { color: string; width: number }, scale: number): HTMLCanvasElement {
+  const w = walls.width;
+  const h = walls.height;
+  // The floor: everything that isn't wall
+  const [floor, f] = offscreen(w, h);
+  f.fillStyle = '#000';
+  f.fillRect(0, 0, w, h);
+  f.globalCompositeOperation = 'destination-out';
+  f.drawImage(walls, 0, 0);
+  const [heat, out] = offscreen(w, h);
+  const [band, b] = offscreen(w, h);
+  // Each band reaches a little farther into the walls; where they all overlap (by the floor) the
+  // glow is full, farther in fewer of them add up
+  for (let k = 1; k <= GLOW_BANDS; k++) {
+    growMask(b, floor, (glow.width * scale * k) / GLOW_BANDS);
+    b.globalCompositeOperation = 'source-in';
+    b.fillStyle = glow.color;
+    b.globalAlpha = 1 / GLOW_BANDS + 0.04;
+    b.fillRect(0, 0, w, h);
+    b.globalAlpha = 1;
+    b.globalCompositeOperation = 'source-over';
+    out.drawImage(band, 0, 0);
+  }
+  // Only inside the walls
+  out.globalCompositeOperation = 'destination-in';
+  out.drawImage(walls, 0, 0);
+  out.globalCompositeOperation = 'source-over';
+  freeCanvas(floor);
+  freeCanvas(band);
+  return heat;
+}
+
 /** The static wall mass at a coarse resolution: 1 = wall */
 interface WallMask {
   data: Uint8Array;
@@ -564,6 +604,25 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   const [wallCanvas, g] = offscreen(w, h);
   g.drawImage(outside, 0, 0);
   g.drawImage(wallPieces, 0, 0);
+  // Walls glowing along the floor (theme wall `glow`): painted onto both sources of the wall mass,
+  // so a frame composed from them again (moving walls, doors) keeps it
+  const glow = theme?.wall.glow;
+  if (glow) {
+    const heat = paintWallGlow(wallCanvas, glow, scale);
+    for (const c of [outside, wallPieces]) {
+      const cg = c.getContext('2d')!;
+      cg.save();
+      cg.setTransform(1, 0, 0, 1, 0, 0);
+      cg.globalCompositeOperation = 'source-atop';
+      cg.drawImage(heat, 0, 0);
+      cg.restore();
+    }
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, w, h);
+    g.drawImage(outside, 0, 0);
+    g.drawImage(wallPieces, 0, 0);
+    freeCanvas(heat);
+  }
 
   // Floor, then the wall mass with its shadow and rim on top
   const [floor, f] = offscreen(w, h);
@@ -780,6 +839,44 @@ function doorReach(m: MapObject): Bounds {
 }
 
 /** Map-unit bounds → the layer's pixels, padded (more below, for the shadow) and clamped */
+function padBounds(b: Bounds, pad: number): Bounds {
+  return pad ? { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad } : b;
+}
+
+let lineScratch: [HTMLCanvasElement, CanvasRenderingContext2D] | null = null;
+
+/**
+ * The theme's floor line around the moving walls and doors of this frame (`walls`, map units),
+ * inside the layer rectangle r of the composite `c`: the band from `inset` to `inset + width` out
+ * from their outline. The walls drawn over it afterwards hide its inner half.
+ */
+function paintMovingLine(c: CanvasRenderingContext2D, walls: Path2D, line: { color: string; width: number; inset: number }, scale: number, r: PixelRect): void {
+  const W = c.canvas.width;
+  const H = c.canvas.height;
+  if (!lineScratch || lineScratch[0].width !== W || lineScratch[0].height !== H) lineScratch = offscreen(W, H);
+  const g = lineScratch[1];
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.beginPath();
+  g.rect(r.x, r.y, r.w, r.h);
+  g.clip();
+  g.clearRect(r.x, r.y, r.w, r.h);
+  g.setTransform(scale, 0, 0, scale, 0, 0);
+  g.lineJoin = 'round';
+  g.strokeStyle = line.color;
+  g.lineWidth = 2 * (line.inset + line.width);
+  g.stroke(walls);
+  if (line.inset > 0) {
+    g.globalCompositeOperation = 'destination-out';
+    g.lineWidth = 2 * line.inset;
+    g.stroke(walls);
+    g.fill(walls, 'nonzero');
+    g.globalCompositeOperation = 'source-over';
+  }
+  g.restore();
+  c.drawImage(lineScratch[0], r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+}
+
 function toPixels(b: Bounds, scale: number, full: PixelRect): PixelRect {
   const x0 = Math.max(0, Math.floor((b.minX - DIRTY_PAD) * scale));
   const y0 = Math.max(0, Math.floor((b.minY - DIRTY_PAD) * scale));
@@ -1161,6 +1258,9 @@ export function drawMap(
     const cursor = conceal ? opts.secretCursor ?? null : null;
     const dirty: PixelRect[] = [];
     const redrawAll = !dyn.valid || dyn.conceal !== conceal;
+    // A floor line runs around moving walls as well: their changed area reaches out to it
+    const floorLine = theme?.path.line && objects.some((o) => o.role === 'path') ? theme.path.line : null;
+    const linePad = floorLine ? floorLine.inset + floorLine.width + 1 : 0;
     // Plain numbers compared in place: nothing is allocated per piece on a frame where it stays put
     const stamp = ++dyn.stamp;
     objects.forEach((o, i) => {
@@ -1188,7 +1288,7 @@ export function drawMap(
         && Object.is(piece.cx, cx) && Object.is(piece.cy, cy);
       if (piece) piece.stamp = stamp;
       if (same) return;
-      const box = door ? doorReach(m!) : posedBounds(o, tf);
+      const box = padBounds(door ? doorReach(m!) : posedBounds(o, tf), linePad);
       if (piece) dirty.push(toPixels(piece.box, scale, full));
       dirty.push(toPixels(box, scale, full));
       if (!piece) dyn.pieces.set(i, piece = { stamp, on, a, b, c, d, cx, cy, box });
@@ -1286,6 +1386,8 @@ export function drawMap(
         c.clip();
         c.clearRect(r.x, r.y, r.w, r.h);
         c.drawImage(dyn.floor, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+        // The floor line (theme path `line`) around moving walls and doors too, under them
+        if (floorLine) paintMovingLine(c, walls, floorLine, scale, r);
         drawWallMass(c, dyn.frame, scale, r);
         c.restore();
       }

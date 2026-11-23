@@ -7,9 +7,9 @@ $chapters = @(
   @(4, 'botany', 'Realm of the Wicked Bulbs', '#b5e965', '#b759b8', '#142c27', 'ring', 'leaf', 'dots', 'A moonlit greenhouse of luminous bulbs, curling roots and poisonous blooms.'),
   @(5, 'frost', 'Eternal Frost', '#b6ecff', '#6e92dd', '#17283e', 'emblem', 'diamond', 'diagonal', 'Frozen spires, blue ice and drifting snow beneath a pale winter sky.'),
   @(6, 'factory', 'Defective Processing Plant', '#e9ba42', '#7c939a', '#20272c', 'plate', 'square', 'stripes', 'Faulty production lines, hazard stripes and industrial steel.'),
-  @(7, 'sky', 'Sky - Title TBD', '#a2e5f3', '#eab6dd', '#314866', 'pill', 'rounded', 'dots', 'Floating islands and wind-swept cloud bridges. Chapter title to be announced.'),
-  @(8, 'magma', 'Magma - Title TBD', '#ffb34d', '#ee4b39', '#302028', 'slant', 'diamond', 'diagonal', 'Cracked basalt and molten rivers beneath a volcanic glow. Chapter title to be announced.'),
-  @(9, 'optics', 'Optics - Title TBD', '#72f0e1', '#d57af0', '#181f3a', 'plate', 'diamond', 'grid', 'Prisms, split beams and geometric chambers of light. Chapter title to be announced.'),
+  @(7, 'sky', 'Sky, Wind, Stars and Poetry', '#a2e5f3', '#eab6dd', '#314866', 'pill', 'rounded', 'dots', 'White paths drifting through a clear, cloud-strewn sky.'),
+  @(8, 'magma', 'Hot Hot Hot Lava Cave', '#ffb34d', '#ee4b39', '#302028', 'slant', 'diamond', 'diagonal', 'Black basalt paths through a cave of searing, glowing rock.'),
+  @(9, 'optics', 'PlaceholDer''s Optics Lab', '#72f0e1', '#d57af0', '#181f3a', 'plate', 'diamond', 'grid', 'A dark lab drawn in white lines, with laser beams and exit signs.'),
   @(10, 'ocean', 'Ocean - Title TBD', '#5fdddf', '#4385c7', '#102e47', 'pill', 'drop', 'dots', 'Deep blue water, coral silhouettes and luminous currents. Chapter title to be announced.'),
   @(11, 'cavern', 'Cavern - Title TBD', '#a59be0', '#64c4b1', '#252238', 'plate', 'diamond', 'diagonal', 'Faceted crystals and narrow passages below the surface. Chapter title to be announced.'),
   @(12, 'galaxy', 'Galaxy - Title TBD', '#b5a4fa', '#ec91c1', '#1c203d', 'disc', 'circle', 'dots', 'Orbital paths, distant stars and violet nebulae. Chapter title to be announced.'),
@@ -39,7 +39,8 @@ $motifs = @{
 foreach ($chapter in $chapters) {
   $number, $concept, $name, $light, $accent, $dark, $badgeKind, $shape, $pattern, $description = $chapter
   $nn = '{0:D2}' -f [int]$number
-  $id = if ($concept -eq 'unknown') { "chapter-$nn" } else { $concept }
+  # Chapter 7's folder and art are 'sky'; its theme id became 'aero'
+  $id = if ($concept -eq 'unknown') { "chapter-$nn" } elseif ($concept -eq 'sky') { 'aero' } else { $concept }
   $folder = Join-Path $themeRoot "chapter-$nn-$concept"
   [IO.Directory]::CreateDirectory($folder) | Out-Null
   $motif = $motifs[$concept]

@@ -1,187 +1,223 @@
 {
-    "format":  1,
-    "id":  "sky",
-    "name":  "Sky - Title TBD",
-    "description":  "Floating islands and wind-swept cloud bridges. Chapter title to be announced.",
-    "author":  "Avoid N Survive",
-    "released":  "2026-11-17",
-    "unlockStars":  0,
-    "colors":  [
-                   "#a2e5f3",
-                   "#eab6dd"
-               ],
-    "cover":  "cover.svg",
-    "music": "audio/for-science.mp3",
-    "credits": "Music: - For Science! by Or4nges. https://www.newgrounds.com/audio/listen/447794 - CC BY-NC-SA 3.0: https://creativecommons.org/licenses/by-nc-sa/3.0/ . Original audio, unmodified.",
-    "style":  {
-                  "maze":  {
-                               "wall":  {
-                                            "edge":  "#a2e5f3",
-                                            "fill":  {
-                                                         "background":  "#314866",
-                                                         "color":  "#eab6dd",
-                                                         "pattern":  "dots",
-                                                         "size":  16,
-                                                         "type":  "pattern"
-                                                     }
-                                        },
-                               "path":  {
-                                            "edge":  "#eab6dd",
-                                            "fill":  {
-                                                         "angle":  90,
-                                                         "from":  "#314866",
-                                                         "style":  "linear",
-                                                         "to":  "#eab6dd",
-                                                         "type":  "gradient"
-                                                     }
-                                        }
-                           },
-                  "badge":  {
-                                "caption":  "CHAPTER 07 / SKY",
-                                "kind":  "pill",
-                                "pad":  2,
-                                "primary":  "#314866",
-                                "titleColor":  "#a2e5f3",
-                                "showTitle":  true,
-                                "secondary":  "#eab6dd",
-                                "font":  "title",
-                                "numberColor":  "#a2e5f3"
-                            }
-              },
-    "screens":  {
-                    "select":  {
-                                   "background":  {
-                                                      "color2":  "#314866",
-                                                      "color":  "#314866"
-                                                  },
-                                   "elements":  [
-                                                    {
-                                                        "id":  "art",
-                                                        "w":  440,
-                                                        "opacity":  0.5,
-                                                        "y":  0,
-                                                        "x":  0,
-                                                        "kind":  "image",
-                                                        "src":  "cover.svg",
-                                                        "h":  720
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "chapter",
-                                                        "kind":  "text",
-                                                        "size":  19,
-                                                        "y":  54,
-                                                        "w":  330,
-                                                        "h":  32,
-                                                        "color":  "#a2e5f3",
-                                                        "text":  "CHAPTER 07 / SKY",
-                                                        "font":  "main"
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "title",
-                                                        "kind":  "text",
-                                                        "size":  42,
-                                                        "y":  105,
-                                                        "w":  340,
-                                                        "h":  160,
-                                                        "color":  "#a2e5f3",
-                                                        "text":  "{theme}",
-                                                        "font":  "title"
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "description",
-                                                        "kind":  "text",
-                                                        "size":  19,
-                                                        "y":  290,
-                                                        "w":  320,
-                                                        "h":  140,
-                                                        "color":  "#a2e5f3",
-                                                        "text":  "{description}",
-                                                        "font":  "main"
-                                                    },
-                                                    {
-                                                        "x":  52,
-                                                        "align":  "left",
-                                                        "id":  "progress",
-                                                        "kind":  "text",
-                                                        "size":  21,
-                                                        "y":  485,
-                                                        "w":  320,
-                                                        "h":  46,
-                                                        "color":  "#a2e5f3",
-                                                        "text":  "{cleared} / {total} CLEARED",
-                                                        "font":  "main"
-                                                    },
-                                                    {
-                                                        "x":  470,
-                                                        "id":  "grid",
-                                                        "kind":  "levelGrid",
-                                                        "gap":  14,
-                                                        "y":  140,
-                                                        "w":  750,
-                                                        "button":  {
-                                                                       "borderWidth":  2,
-                                                                       "showStars":  true,
-                                                                       "showDifficulty":  true,
-                                                                       "shape":  "rounded",
-                                                                       "clearedFill":  "#eab6dd",
-                                                                       "border":  "#a2e5f3",
-                                                                       "fill":  "#314866",
-                                                                       "fill2":  "#eab6dd",
-                                                                       "pad":  2,
-                                                                       "numberColor":  "#a2e5f3",
-                                                                       "font":  "title",
-                                                                       "numberSize":  30
-                                                                   },
-                                                        "h":  420,
-                                                        "rows":  3,
-                                                        "cols":  7
-                                                    },
-                                                    {
-                                                        "size":  23,
-                                                        "id":  "back",
-                                                        "y":  610,
-                                                        "color":  "#a2e5f3",
-                                                        "border":  "#eab6dd",
-                                                        "fill":  "#314866",
-                                                        "borderWidth":  2,
-                                                        "kind":  "back",
-                                                        "x":  52,
-                                                        "w":  190,
-                                                        "radius":  10,
-                                                        "text":  "BACK",
-                                                        "font":  "title",
-                                                        "h":  54
-                                                    },
-                                                    {
-                                                        "x":  470,
-                                                        "id":  "footer",
-                                                        "kind":  "text",
-                                                        "size":  18,
-                                                        "y":  600,
-                                                        "w":  750,
-                                                        "h":  38,
-                                                        "color":  "#a2e5f3",
-                                                        "text":  "SELECT A LEVEL",
-                                                        "font":  "main",
-                                                        "opacity":  0.6
-                                                    }
-                                                ]
-                               }
-                },
-    "i18n":  {
-        "ko":  {
-            "name":  "하늘 - 제목 미정",
-            "description":  "떠다니는 섬과 바람에 휩쓸리는 구름 다리. 챕터 제목은 추후 공개됩니다."
+  "format": 1,
+  "id": "aero",
+  "name": "Sky, Wind, Stars and Poetry",
+  "description": "White paths drifting through a clear, cloud-strewn sky.",
+  "author": "Avoid N Survive",
+  "released": "2026-11-17",
+  "unlockStars": 275,
+  "colors": [
+    "#a2e5f3",
+    "#eab6dd"
+  ],
+  "style": {
+    "badge": {
+      "kind": "image",
+      "primary": "#5fb2ea",
+      "secondary": "#ffffff",
+      "numberColor": "#ffffff",
+      "titleColor": "#ffffff",
+      "font": "ggoltong-robot",
+      "pad": 2,
+      "showTitle": true,
+      "numberFx": {
+        "outline": "#1a2233",
+        "outlineWidth": 2,
+        "depthColor": "#1a2233",
+        "depth": 4,
+        "gradient": "#e1ffff"
+      },
+      "image": "badge.png",
+      "layout": {
+        "graphic": {
+          "scale": 1.2
         },
-        "zh":  {
-            "name":  "Sky - Title TBD",
-            "description":  "Floating islands and wind-swept cloud bridges. Chapter title to be announced."
+        "number": {
+          "x": -4,
+          "scale": 0.7
+        },
+        "title": {
+          "x": -4
         }
+      },
+      "titlePlate": false,
+      "titleFormat": {
+        "italic": true
+      },
+      "titleFx": {
+        "depthColor": "#1a2233",
+        "depth": 4,
+        "outline": "#1a2233",
+        "outlineWidth": 2,
+        "gradient": "#e1ffff"
+      },
+      "numberFormat": {
+        "italic": true
+      }
+    },
+    "maze": {
+      "wall": {
+        "fill": {
+          "type": "pattern",
+          "pattern": "clouds",
+          "color": "#ffffff",
+          "background": "#7cc5f2",
+          "size": 256
+        },
+        "edge": "#cfe8f8",
+        "anim": {
+          "type": "scroll",
+          "speed": 10,
+          "amount": 1,
+          "angle": 0
+        }
+      },
+      "path": {
+        "fill": {
+          "type": "solid",
+          "color": "#ffffff"
+        },
+        "edge": "#9fd0f0"
+      }
     }
+  },
+  "cover": "cover.svg",
+  "music": "audio/for-science.mp3",
+  "credits": "Music: - For Science! by Or4nges. https://www.newgrounds.com/audio/listen/447794 - CC BY-NC-SA 3.0: https://creativecommons.org/licenses/by-nc-sa/3.0/ . Original audio, unmodified.",
+  "screens": {
+    "select": {
+      "background": {
+        "color": "#314866",
+        "color2": "#314866"
+      },
+      "elements": [
+        {
+          "id": "art",
+          "kind": "image",
+          "x": 0,
+          "y": 0,
+          "w": 440,
+          "h": 720,
+          "opacity": 0.5,
+          "src": "cover.svg"
+        },
+        {
+          "id": "chapter",
+          "kind": "text",
+          "x": 52,
+          "y": 54,
+          "w": 330,
+          "h": 32,
+          "text": "CHAPTER 07 / AERO",
+          "font": "main",
+          "size": 19,
+          "color": "#a2e5f3",
+          "align": "left"
+        },
+        {
+          "id": "title",
+          "kind": "text",
+          "x": 52,
+          "y": 105,
+          "w": 340,
+          "h": 160,
+          "text": "{theme}",
+          "font": "title",
+          "size": 42,
+          "color": "#a2e5f3",
+          "align": "left"
+        },
+        {
+          "id": "description",
+          "kind": "text",
+          "x": 52,
+          "y": 290,
+          "w": 320,
+          "h": 140,
+          "text": "{description}",
+          "font": "main",
+          "size": 19,
+          "color": "#a2e5f3",
+          "align": "left"
+        },
+        {
+          "id": "progress",
+          "kind": "text",
+          "x": 52,
+          "y": 485,
+          "w": 320,
+          "h": 46,
+          "text": "{cleared} / {total} CLEARED",
+          "font": "main",
+          "size": 21,
+          "color": "#a2e5f3",
+          "align": "left"
+        },
+        {
+          "id": "grid",
+          "kind": "levelGrid",
+          "x": 470,
+          "y": 140,
+          "w": 750,
+          "h": 420,
+          "cols": 7,
+          "rows": 3,
+          "gap": 14,
+          "button": {
+            "shape": "rounded",
+            "fill": "#314866",
+            "fill2": "#eab6dd",
+            "clearedFill": "#eab6dd",
+            "border": "#a2e5f3",
+            "borderWidth": 2,
+            "font": "title",
+            "numberSize": 30,
+            "numberColor": "#a2e5f3",
+            "pad": 2,
+            "showStars": true,
+            "showDifficulty": true
+          }
+        },
+        {
+          "id": "back",
+          "kind": "back",
+          "x": 52,
+          "y": 610,
+          "w": 190,
+          "h": 54,
+          "text": "BACK",
+          "font": "title",
+          "size": 23,
+          "color": "#a2e5f3",
+          "fill": "#314866",
+          "border": "#eab6dd",
+          "borderWidth": 2,
+          "radius": 10
+        },
+        {
+          "id": "footer",
+          "kind": "text",
+          "x": 470,
+          "y": 600,
+          "w": 750,
+          "h": 38,
+          "opacity": 0.6,
+          "text": "SELECT A LEVEL",
+          "font": "main",
+          "size": 18,
+          "color": "#a2e5f3"
+        }
+      ]
+    }
+  },
+  "i18n": {
+    "ko": {
+      "name": "하늘과 바람과 별과 시",
+      "description": "구름이 낀 맑은 하늘 사이로 하얀 길이 이어집니다."
+    },
+    "zh": {
+      "name": "Sky, Wind, Stars and Poetry",
+      "description": "White paths drifting through a clear, cloud-strewn sky."
+    }
+  }
 }

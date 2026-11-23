@@ -28,7 +28,7 @@ export interface AchievementDefinition {
 
 /** Official chapters in order (theme ids); the server's refresh_achievements() uses the same list */
 export const CHAPTER_IDS = [
-  'workshop', 'desert', 'wood', 'botany', 'frost', 'factory', 'sky', 'magma',
+  'workshop', 'desert', 'wood', 'botany', 'frost', 'factory', 'aero', 'magma',
   'optics', 'ocean', 'cavern', 'galaxy', 'chapter-13', 'chapter-14', 'cyberfunk', 'chapter-16',
 ] as const;
 export const LEVELS_PER_CHAPTER = 21;

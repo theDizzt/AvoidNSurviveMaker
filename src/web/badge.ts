@@ -224,6 +224,21 @@ class Rec {
   }
 }
 
+/** `text` with every digit replaced by the font's widest digit (ctx.font set) */
+function widestDigits(ctx: CanvasRenderingContext2D, text: string): string {
+  if (!/[0-9]/.test(text)) return text;
+  let widest = '0';
+  let w = -1;
+  for (const d of '0123456789') {
+    const dw = ctx.measureText(d).width;
+    if (dw > w) {
+      w = dw;
+      widest = d;
+    }
+  }
+  return text.replace(/[0-9]/g, widest);
+}
+
 /** The level number with an outline, fit to `maxW`, as the 'number' part */
 function bigNumber(r: Rec, text: string, x: number, y: number, size: number, maxW: number, opts: { italic?: boolean; outline?: string; align?: CanvasTextAlign } = {}): void {
   if (!text) return;
@@ -234,7 +249,10 @@ function bigNumber(r: Rec, text: string, x: number, y: number, size: number, max
     spaced(ctx, fmt?.spacing);
     let s = size;
     ctx.font = fontOf(fmt, 900, s, FONTS[b.font], opts.italic);
-    while (ctx.measureText(shown).width > maxW && s > 10) {
+    // Fit by the widest digits, not these ones: in a proportional font "11" is narrower than
+    // "08", and the number would change size from level to level
+    const fitText = widestDigits(ctx, shown);
+    while (ctx.measureText(fitText).width > maxW && s > 10) {
       s -= 2;
       ctx.font = fontOf(fmt, 900, s, FONTS[b.font], opts.italic);
     }
@@ -283,10 +301,12 @@ function titleBlock(r: Rec, map: MapData, b: BadgeStyle, x: number, cy: number, 
   const ctx = r.ctx;
   const fmt = b.titleFormat;
   const family = titleFontCss(b, FONTS[b.font === 'timer' ? 'title' : b.font]);
+  // An LCD badge set in a bundled font (e.g. LT Stopwatch) writes its caption in it too
+  const capFamily = b.kind === 'lcd' && isLibraryFont(b.font) ? FONTS[b.font] : FONT_MAIN;
   r.part('title', x, cy, () => {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.font = `600 ${sizes.caption}px ${FONT_MAIN}`;
+    ctx.font = `600 ${sizes.caption}px ${capFamily}`;
     const cw = cap ? ctx.measureText(cap).width : 0;
     spaced(ctx, fmt?.spacing);
     ctx.font = fontOf(fmt, sizes.weight, sizes.title, family);
@@ -308,7 +328,7 @@ function titleBlock(r: Rec, map: MapData, b: BadgeStyle, x: number, cy: number, 
       spaced(ctx, 0);
       ctx.fillStyle = b.titleColor;
       ctx.globalAlpha = 0.85;
-      ctx.font = `600 ${sizes.caption}px ${FONT_MAIN}`;
+      ctx.font = `600 ${sizes.caption}px ${capFamily}`;
       ctx.fillText(cap, x + 2, cy - (title ? sizes.title / 2 : 0));
       ctx.restore();
     }
@@ -706,7 +726,27 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
         ctx.restore();
         return { x: x0 - 6, y: y0 - 6, w: sw + 12, h: sh + 12 };
       });
-      if (/^[0-9 -]+$/.test(num)) {
+      if (isLibraryFont(b.font)) {
+        // A bundled LCD font (e.g. LT Stopwatch): its own digits, over faint unlit "8"s
+        r.part('number', x0 + sw / 2, cy, () => {
+          const fmt = b.numberFormat;
+          let size = 52;
+          const unlit = '8'.repeat(num.length || 1);
+          ctx.font = fontOf(fmt, 400, size, FONTS[b.font]);
+          while (ctx.measureText(unlit).width > sw - 16 && size > 12) ctx.font = fontOf(fmt, 400, (size -= 2), FONTS[b.font]);
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = b.numberColor;
+          ctx.globalAlpha = 0.12;
+          ctx.fillText(unlit, x0 + sw / 2, cy + 1);
+          ctx.globalAlpha = 1;
+          ctx.shadowColor = b.numberColor;
+          ctx.shadowBlur = 8;
+          ctx.fillText(num, x0 + sw / 2, cy + 1);
+          ctx.shadowBlur = 0;
+          return { x: x0 + 6, y: cy - size / 2 - 2, w: sw - 12, h: size + 4 };
+        });
+      } else if (/^[0-9 -]+$/.test(num)) {
         r.part('number', x0 + sw / 2, cy, () => {
           const dw = 20;
           const dh = 42;
@@ -757,7 +797,8 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
       ctx.save();
       spaced(ctx, b.numberFormat?.spacing);
       ctx.font = fontOf(b.numberFormat, 900, 40, FONTS[b.font]);
-      const nw = num ? Math.min(120, ctx.measureText(cased(num, b.numberFormat)).width) : 0;
+      // The number's slot fits the widest digits, so the plate keeps its size from level to level
+      const nw = num ? Math.min(120, ctx.measureText(widestDigits(ctx, cased(num, b.numberFormat))).width) : 0;
       spaced(ctx, b.titleFormat?.spacing);
       ctx.font = fontOf(b.titleFormat, 600, 15, titleFontCss(b, FONT_MAIN));
       const tw = title ? ctx.measureText(title).width : 0;
@@ -779,7 +820,7 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
           ctx.roundRect(12, 12, w, h, 14);
         }, ctx.fillStyle, 'rgba(58,96,150,0.2)');
         ctx.restore();
-        if (num) bigNumber(r, num, 28, base + 2, 40, 120, { align: 'left' });
+        if (num) bigNumber(r, num, 28 + nw / 2, base + 2, 40, 120);
         return { x: 12, y: 12, w, h };
       });
       if (inPlate) {

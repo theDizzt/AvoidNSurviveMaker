@@ -29,6 +29,10 @@ const PATTERNS: [PatternKind, string][] = [
   ['iceCrystal', t('pattern.iceCrystal')],
   ['concrete', t('pattern.concrete')],
   ['epoxy', t('pattern.epoxy')],
+  ['clouds', t('pattern.clouds')],
+  ['basalt', t('pattern.basalt')],
+  ['hotrock', t('pattern.hotrock')],
+  ['magma', t('pattern.magma')],
 ];
 const CATEGORIES: [keyof Theme, string][] = [['wall', t('themePanel.walls')], ['path', t('common.paths')]];
 
@@ -159,7 +163,7 @@ export function renderThemePanel(
       const set = (patch: Partial<typeof f>) => update(key, (s) => (s.fill = { ...f, ...patch }));
       fields.push(
         label(t('common.pattern'), select(f.pattern, PATTERNS, (pattern) => set({ pattern }))),
-        label(t('themePanel.size'), numberInput(f.size, 4, 64, 2, (size) => set({ size }))),
+        label(t('themePanel.size'), numberInput(f.size, 4, 256, 2, (size) => set({ size }))),
         label(t('common.color'), colorInput(f.color, (color) => set({ color }))),
         label(t('common.background'), colorInput(f.background, (background) => set({ background }))),
       );

@@ -23,6 +23,57 @@ function mix(a: string, b: string, k: number): string {
   return `#${ch(16)}${ch(8)}${ch(0)}`;
 }
 
+/** #rrggbb → [r, g, b] */
+function rgbOf(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1, 7), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/**
+ * Cracked-rock tiles (basalt, searing rock, lava): `n` random cells that wrap around the tile, so
+ * it repeats without seams. For each pixel `paint` gets its cell, the distance to the nearest cell
+ * border (`edge`, tile pixels) and a little grain, and returns its color.
+ */
+function crackedTile(tile: HTMLCanvasElement, n: number, seed: number, paint: (cell: number, edge: number, grain: number, out: number[]) => void): void {
+  const W = tile.width;
+  const g = tile.getContext('2d');
+  if (!g || W <= 0) return;
+  const random = seeded(seed);
+  const px = Array.from({ length: n }, () => random() * W);
+  const py = Array.from({ length: n }, () => random() * W);
+  const img = g.createImageData(W, W);
+  const d = img.data;
+  const out = [0, 0, 0];
+  const grainSeed = seeded(seed + 1);
+  for (let y = 0; y < W; y++) {
+    for (let x = 0; x < W; x++) {
+      let d1 = Infinity, d2 = Infinity, a = 0;
+      for (let k = 0; k < n; k++) {
+        let dx = Math.abs(x - px[k]);
+        let dy = Math.abs(y - py[k]);
+        if (dx > W / 2) dx = W - dx;
+        if (dy > W / 2) dy = W - dy;
+        const dd = dx * dx + dy * dy;
+        if (dd < d1) { d2 = d1; d1 = dd; a = k; } else if (dd < d2) d2 = dd;
+      }
+      // Distance to the border between the two nearest cells (half the gap of their distances)
+      const edge = (Math.sqrt(d2) - Math.sqrt(d1)) / 2;
+      paint(a, edge, grainSeed() - 0.5, out);
+      const i = (y * W + x) * 4;
+      d[i] = out[0]; d[i + 1] = out[1]; d[i + 2] = out[2]; d[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+}
+
+/** Mix of two rgb triples into `out` */
+function mixInto(out: number[], a: readonly number[], b: readonly number[], k: number): void {
+  const t = Math.max(0, Math.min(1, k));
+  out[0] = a[0] + (b[0] - a[0]) * t;
+  out[1] = a[1] + (b[1] - a[1]) * t;
+  out[2] = a[2] + (b[2] - a[2]) * t;
+}
+
 /** Shared tile renderer for the game and editor swatches. */
 export function createPatternTile(f: Extract<Fill, { type: 'pattern' }>): HTMLCanvasElement {
   const s = f.size;
@@ -765,6 +816,101 @@ export function createPatternTile(f: Extract<Fill, { type: 'pattern' }>): HTMLCa
         g.arc(s * x, s * y, s * 0.035, 0, Math.PI * 2);
         g.fill();
       }
+      break;
+    }
+    case 'clouds': {
+      // Clear sky with puffy clouds (chapter 7 walls). `background` is the sky, `color` the clouds.
+      const random = seeded(7071);
+      const TAU = Math.PI * 2;
+      const shadow = mix(f.color, f.background, 0.3);
+      // Two big clouds and a small one, kept apart so the tile doesn't read as a grid
+      const clouds = [
+        { x: s * 0.28, y: s * 0.32, w: s * (0.26 + random() * 0.05) },
+        { x: s * 0.74, y: s * 0.74, w: s * (0.2 + random() * 0.05) },
+        { x: s * 0.82, y: s * 0.2, w: s * (0.1 + random() * 0.03) },
+      ];
+      for (const c of clouds) {
+        // A row of puffs, tallest in the middle, on a flat base
+        const puffs = Array.from({ length: 5 }, (_, k) => {
+          const u = k / 4 - 0.5;
+          const r = c.w * (0.34 + random() * 0.1) * (1 - Math.abs(u) * 0.75);
+          return { x: c.x + u * c.w * 1.5, y: c.y - r * 0.55 + Math.abs(u) * c.w * 0.25, r };
+        });
+        // Shadowed underside, then the lit body, then a bright top
+        for (const [fill, oy, k, alpha] of [[shadow, 0.07, 1, 0.85], [f.color, 0, 0.96, 1], ['#ffffff', -0.06, 0.62, 0.6]] as const) {
+          g.globalAlpha = alpha;
+          g.fillStyle = fill;
+          wrapped(s, (dx, dy) => {
+            g.beginPath();
+            for (const p of puffs) {
+              g.moveTo(p.x + dx + p.r * k, p.y + dy + oy * c.w);
+              g.arc(p.x + dx, p.y + dy + oy * c.w, p.r * k, 0, TAU);
+            }
+            g.roundRect(c.x + dx - c.w * 0.85, c.y + dy - c.w * 0.12 + oy * c.w, c.w * 1.7, c.w * 0.3 * k, c.w * 0.15);
+            g.fill();
+          });
+        }
+      }
+      break;
+    }
+    case 'basalt': {
+      // Black basalt (chapter 8 paths): columnar joints seen from above, each column a slightly
+      // different dark gray. `background` is the rock, `color` the light catching the cracks.
+      const rock = rgbOf(f.background);
+      const lit = rgbOf(f.color);
+      const dark = rgbOf(mix(f.background, '#000000', 0.55));
+      const random = seeded(8081);
+      const tone = Array.from({ length: 22 }, () => (random() - 0.5) * 0.16);
+      const W = tile.width;
+      const crack = W * 0.011;
+      crackedTile(tile, 22, 8082, (cell, edge, grain, out) => {
+        const k = tone[cell] + grain * 0.06;
+        out[0] = rock[0] * (1 + k); out[1] = rock[1] * (1 + k); out[2] = rock[2] * (1 + k);
+        if (edge < crack) mixInto(out, out, dark, 1 - edge / crack);
+        else if (edge < crack * 2.2) mixInto(out, out, lit, 0.35 * (1 - (edge - crack) / (crack * 1.2)));
+      });
+      break;
+    }
+    case 'hotrock': {
+      // Searing cave rock (chapter 8 walls): dark rock split by cracks glowing from the heat inside,
+      // white-yellow at their core. `background` is the rock, `color` the glow.
+      const rock = rgbOf(f.background);
+      const glow = rgbOf(f.color);
+      const core = rgbOf('#ffe27a');
+      const random = seeded(8091);
+      const tone = Array.from({ length: 16 }, () => (random() - 0.5) * 0.3);
+      const W = tile.width;
+      const reach = W * 0.014;
+      const hot = W * 0.004;
+      crackedTile(tile, 16, 8092, (cell, edge, grain, out) => {
+        const k = tone[cell] + grain * 0.12;
+        out[0] = rock[0] * (1 + k); out[1] = rock[1] * (1 + k); out[2] = rock[2] * (1 + k);
+        mixInto(out, out, glow, Math.exp(-edge / reach) * 0.85);
+        if (edge < hot) mixInto(out, out, core, 1 - edge / hot);
+      });
+      break;
+    }
+    case 'magma': {
+      // Molten lava: plates of dark crust drifting on glowing rock, yellow where it runs between
+      // them. `background` is the lava, `color` the crust.
+      const lava = rgbOf(f.background);
+      const crust = rgbOf(f.color);
+      const bright = rgbOf('#ffd84a');
+      const random = seeded(8101);
+      const tone = Array.from({ length: 12 }, () => (random() - 0.5) * 0.35);
+      const W = tile.width;
+      const gap = W * 0.045;
+      crackedTile(tile, 12, 8102, (cell, edge, grain, out) => {
+        if (edge < gap) {
+          // Running lava, brightest in the middle of the gap
+          mixInto(out, lava, bright, (1 - edge / gap) ** 1.5);
+          return;
+        }
+        const k = tone[cell] + grain * 0.15;
+        out[0] = crust[0] * (1 + k); out[1] = crust[1] * (1 + k); out[2] = crust[2] * (1 + k);
+        // The crust glows red near its edge
+        mixInto(out, out, lava, Math.exp(-(edge - gap) / (W * 0.02)) * 0.7);
+      });
       break;
     }
     case 'concrete': {
