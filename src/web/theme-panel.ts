@@ -27,6 +27,8 @@ const PATTERNS: [PatternKind, string][] = [
   ['snow', t('pattern.snow')],
   ['ice', t('pattern.ice')],
   ['iceCrystal', t('pattern.iceCrystal')],
+  ['concrete', t('pattern.concrete')],
+  ['epoxy', t('pattern.epoxy')],
 ];
 const CATEGORIES: [keyof Theme, string][] = [['wall', t('themePanel.walls')], ['path', t('common.paths')]];
 

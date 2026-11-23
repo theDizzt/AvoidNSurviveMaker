@@ -12,40 +12,45 @@
                ],
     "cover":  "cover.svg",
     "style":  {
-                  "maze":  {
-                               "wall":  {
-                                            "edge":  "#e9ba42",
-                                            "fill":  {
-                                                         "background":  "#20272c",
-                                                         "color":  "#7c939a",
-                                                         "pattern":  "stripes",
-                                                         "size":  16,
-                                                         "type":  "pattern"
-                                                     }
-                                        },
-                               "path":  {
-                                            "edge":  "#7c939a",
-                                            "fill":  {
-                                                         "angle":  90,
-                                                         "from":  "#20272c",
-                                                         "style":  "linear",
-                                                         "to":  "#7c939a",
-                                                         "type":  "gradient"
-                                                     }
-                                        }
-                           },
-                  "badge":  {
-                                "caption":  "CHAPTER 06 / FACTORY",
-                                "kind":  "plate",
-                                "pad":  2,
-                                "primary":  "#20272c",
-                                "titleColor":  "#e9ba42",
-                                "showTitle":  true,
-                                "secondary":  "#7c939a",
-                                "font":  "title",
-                                "numberColor":  "#e9ba42"
-                            }
-              },
+      "badge": {
+        "kind": "lcd",
+        "primary": "#0f2a16",
+        "secondary": "#4a5056",
+        "numberColor": "#6dff86",
+        "titleColor": "#e9ba42",
+        "caption": "CHAPTER 06 / FACTORY",
+        "font": "title",
+        "pad": 2,
+        "showTitle": true
+      },
+      "maze": {
+        "wall": {
+          "fill": {
+            "type": "pattern",
+            "pattern": "concrete",
+            "color": "#5d6266",
+            "background": "#8e9397",
+            "size": 64
+          },
+          "edge": "#4b5054"
+        },
+        "path": {
+          "fill": {
+            "type": "pattern",
+            "pattern": "epoxy",
+            "color": "#2c7444",
+            "background": "#3a925a",
+            "size": 64
+          },
+          "edge": "#2a6a3f",
+          "line": {
+            "color": "#f2c230",
+            "width": 4,
+            "inset": 7
+          }
+        }
+      }
+    },
     "screens":  {
                     "select":  {
                                    "background":  {

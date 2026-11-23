@@ -1,6 +1,7 @@
 import { LuggageMover } from './conveyor';
-import { BladeMotion, FallMover, FallSpin, Roller, SawSpin, SawTurn, SpikeMover } from './hazards';
+import { BladeMotion, FallMover, FallSpin, LilyDrift, Roller, SawSpin, SawTurn, SpikeMover, thornRing } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
+import { gearRing, handRing, PendulumSwing, pendulumParts, pendulumRing, pressParts, PressMover } from './machines';
 import { flattenShape, ringBounds, rotateRing, shapeCenter, type FlatShape } from './shape';
 import type { MapData, MapObject, Point, Rect, Role } from './types';
 
@@ -57,8 +58,27 @@ export function compileObject(o: MapObject): CompiledObject {
 
 /** `tiltCenter` overrides the point the tilt turns about (door panels turn about their whole door) */
 export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledObject {
-  const box = flattenShape(o.shape);
   const center = shapeCenter(o.shape);
+  // A thorn vine's thorns are part of its outline (#83 / #84)
+  const plain = flattenShape(o.shape);
+  const wall = o.role === 'wall';
+  // Machines (#111–114) are drawn from their box: their outline is the machine itself
+  const rect = o.shape.type === 'rect' ? o.shape : null;
+  const box = o.vine && wall ? ringBounds(thornRing(plain.poly, center.x * 13 + center.y * 7))
+    : wall && rect && o.gear ? ringBounds(gearRing(rect, o.gear))
+      : wall && rect && o.hand ? ringBounds(handRing(rect))
+        : wall && rect && o.pendulum ? ringBounds(pendulumRing(rect))
+          : wall && rect && o.press ? ringBounds(pressParts(rect, o.press).head)
+            : plain;
+  const press = wall && rect && o.press ? new PressMover(o.press, o.tilt ?? 0) : null;
+  // A pendulum swings about the top of its box (turned with the tilt)
+  let swingPivot: Point | null = null;
+  if (wall && rect && o.pendulum) {
+    const p = pendulumParts(rect).pivot;
+    const a = ((o.tilt ?? 0) * Math.PI) / 180;
+    const dx = p.x - center.x, dy = p.y - center.y;
+    swingPivot = { x: center.x + Math.cos(a) * dx - Math.sin(a) * dy, y: center.y + Math.sin(a) * dx + Math.cos(a) * dy };
+  }
   const tc = tiltCenter ?? center;
   const tilt = o.tilt ? (o.tilt * Math.PI) / 180 : 0;
   const flat = tilt ? ringBounds(rotateRing(box.poly, tc, o.tilt!)) : box;
@@ -73,26 +93,37 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
       saw.kind === 'blade' ? new BladeMotion(null, axis, saw) : null, route?.moves ? route : null, tc, o.rotation.pivot)
     : null;
   // A crate (#70) goes wherever its belt carries it: moved step by step by the simulation
-  const motion = o.role === 'luggage' ? new LuggageMover()
+  // A lily pad (#85) bobs on the water, along its route if it has one
+  const lily = o.role === 'lily' ? new LilyDrift(center.x * 3 + center.y * 5, route?.moves ? route : null) : null;
+  // A metal box (#98) goes wherever magnets drag it, moved the same way
+  const motion = o.role === 'luggage' || o.role === 'metal' ? new LuggageMover()
+    : lily ? lily
     : sawTurn ? sawTurn
     : o.fall ? new FallMover(o.fall)
     : o.spike ? new SpikeMover(o.spike)
+    : press ? press
     : saw?.kind === 'blade' ? new BladeMotion(route?.moves ? route : null, axis, saw)
       : route;
   // A boulder spins about its own center by the distance it has rolled; a grinder spins steadily
   const rotation = sawTurn ? sawTurn
+    : lily && !o.rotation ? lily
     : o.fall ? new FallSpin(o.fall)
+    : swingPivot ? new PendulumSwing(o.pendulum!)
     : o.boulder && route?.moves
     ? new Roller(route, Math.min(box.maxX - box.minX, box.maxY - box.minY) / 2)
     : saw?.kind === 'disc' ? new SawSpin(saw)
       : saw ? null
         : o.rotation ? new CompiledRotation(o.rotation) : null;
-  const pivot = o.boulder || saw || o.fall ? center : o.rotation?.pivot ?? { x: 0, y: 0 };
+  const pivot = swingPivot ?? (o.boulder || saw || o.fall || (lily && !o.rotation) ? center : o.rotation?.pivot ?? { x: 0, y: 0 });
   let travelBounds: CompiledObject['travelBounds'];
   if (!rotation || rotation.dur <= 0) {
     let minDX = 0, minDY = 0, maxDX = 0, maxDY = 0;
     if (o.fall) minDY = -o.fall.height;
-    else if (o.spike) {
+    else if (press) {
+      const d = press.reach;
+      minDX = Math.min(0, d.x); maxDX = Math.max(0, d.x);
+      minDY = Math.min(0, d.y); maxDY = Math.max(0, d.y);
+    } else if (o.spike) {
       const a = o.spike.angle * Math.PI / 180;
       const dx = Math.cos(a) * o.spike.reach;
       const dy = Math.sin(a) * o.spike.reach;
@@ -104,6 +135,10 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
         minDX = Math.min(minDX, dx); maxDX = Math.max(maxDX, dx);
         minDY = Math.min(minDY, dy); maxDY = Math.max(maxDY, dy);
       }
+      // A lily pad drifts up to 8 px either way
+      if (lily) {
+        minDX -= 8; maxDX += 8; minDY -= 7; maxDY += 7;
+      }
       if (saw?.kind === 'blade') {
         const x = Math.abs(axis.x * saw.stroke / 2), y = Math.abs(axis.y * saw.stroke / 2);
         minDX -= x; maxDX += x; minDY -= y; maxDY += y;
@@ -114,7 +149,7 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
       maxX: flat.maxX + maxDX + 1e-7, maxY: flat.maxY + maxDY + 1e-7 };
   }
   // A crate can be carried anywhere: no bounds rule it out
-  if (o.role === 'luggage') travelBounds = { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
+  if (o.role === 'luggage' || o.role === 'metal') travelBounds = { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
   let interactionBounds = travelBounds;
   if (!interactionBounds) {
     // Rotation can pass through the cursor even when both endpoint poses miss it.
@@ -128,7 +163,7 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
       routeRadius = Math.max(routeRadius, Math.hypot(leg.pts[k] - center.x, leg.pts[k + 1] - center.y));
     }
     radius += routeRadius + Math.abs(o.fall?.height ?? 0) + Math.abs(o.spike?.reach ?? 0)
-      + Math.abs(saw?.stroke ?? 0) / 2;
+      + Math.abs(saw?.stroke ?? 0) / 2 + (lily ? 12 : 0);
     if (sawTurn && o.rotation) radius += 2 * Math.hypot(center.x - o.rotation.pivot.x, center.y - o.rotation.pivot.y);
     radius += 1e-7;
     interactionBounds = { minX: pivot.x - radius, minY: pivot.y - radius,
@@ -154,6 +189,13 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
       ? { jumps: (a: number, b: number) => !!route?.jumps(a, b) || (rotation instanceof CompiledRotation && rotation.jumps(a, b)) }
       : {}),
   };
+}
+
+/** A hydraulic press's fixed cylinder (#112): a static wall behind its head, turned with its tilt */
+export function compilePressCylinder(o: MapObject): CompiledObject | null {
+  if (o.role !== 'wall' || !o.press || o.shape.type !== 'rect') return null;
+  const { cylinder } = pressParts(o.shape, o.press);
+  return compileTiltedAbout({ role: 'wall', shape: { type: 'rect', ...cylinder }, ...(o.tilt ? { tilt: o.tilt } : {}) }, shapeCenter(o.shape));
 }
 
 /** A static rectangular safe area (START / GOAL count as floor when the map has paths) */

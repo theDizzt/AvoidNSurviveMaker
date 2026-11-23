@@ -2,6 +2,7 @@ import type { MapData, MapObject } from './types';
 import { gameplayKey } from './level';
 import { createValidateApi } from './validate';
 import { t, type Translator } from './i18n';
+import { assignObjectIds } from './object-ids';
 
 export type EditorSelection = { kind: 'objects'; ids: number[] } | { kind: 'start' | 'goal' } | null;
 export interface EditorDraft { map: MapData; verifiedJson: string | null }
@@ -24,6 +25,7 @@ export class EditorDocument {
   constructor(map?: MapData, translate: Translator = t, private readonly historyLimit = 200) {
     this.validation = createValidateApi(translate);
     this.map = cloneMapValue(map ?? this.validation.createEmptyMap());
+    assignObjectIds(this.map.objects);
   }
 
   get canUndo(): boolean { return this.history.length > 0; }
@@ -41,6 +43,8 @@ export class EditorDocument {
     const selection = cloneMapValue(this.selection);
     try { command(this); }
     catch (error) { this.map = JSON.parse(before) as MapData; this.selection = selection; throw error; }
+    // New objects (placed, pasted, duplicated, merged) get their own number
+    assignObjectIds(this.map.objects);
     this.snapshot(before);
     this.reconcileSelection();
   }
@@ -125,6 +129,7 @@ export class EditorDocument {
   draft(): EditorDraft { return { map: cloneMapValue(this.map), verifiedJson: this.verifiedJson }; }
   restore(draft: EditorDraft): void {
     this.map = cloneMapValue(draft.map);
+    assignObjectIds(this.map.objects);
     this.verifiedJson = draft.verifiedJson;
     this.lastClearMs = null;
     this.selection = null;

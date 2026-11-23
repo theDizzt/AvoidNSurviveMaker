@@ -7,7 +7,7 @@ import { readTextEffects, type TextEffects } from './text-effects';
 import { createValidateApi } from './validate';
 
 /** In-game level badge (top-left): the level number and title */
-export type BadgeKind = 'pill' | 'disc' | 'emblem' | 'plate' | 'slant' | 'ring' | 'image';
+export type BadgeKind = 'pill' | 'disc' | 'emblem' | 'plate' | 'slant' | 'ring' | 'image' | 'lcd';
 /** A base font, or the id of a bundled library font (see font-catalog) */
 export type BadgeFont = 'title' | 'main' | 'serif' | 'heavy' | 'timer' | (string & {});
 
@@ -257,7 +257,7 @@ export function createThemePackApi(t: Translator = defaultTranslate) {
   }
 
   const HEX = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/;
-  const KINDS: BadgeKind[] = ['pill', 'disc', 'emblem', 'plate', 'slant', 'ring', 'image'];
+  const KINDS: BadgeKind[] = ['pill', 'disc', 'emblem', 'plate', 'slant', 'ring', 'image', 'lcd'];
   const FONTS: BadgeFont[] = ['title', 'main', 'serif', 'heavy', 'timer'];
 
   function str(v: unknown, max = 400): string {

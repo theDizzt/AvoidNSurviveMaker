@@ -15,7 +15,9 @@ import { CompiledMotion } from '../core/motion';
 import { shapeCenter } from '../core/shape';
 import { zoneRing } from '../core/zone';
 import { BeltPath, beltSides } from '../core/conveyor';
-import type { LightSource } from '../core/lighting';
+import { lightLit, type LightSource } from '../core/lighting';
+import { elecEffect, initialPower } from '../core/electric';
+import { drawLily, drawMachine, drawMagnet, drawMagnetField, drawMetalBox, drawRadAura, drawRadWaste, drawRadZone, drawLiquids, drawPowerDevice, drawSpotBeam, drawSpotFixture, drawThornVine, drawWire } from './render-objects';
 import { renderScale } from './graphics';
 import { options } from './options';
 
@@ -387,9 +389,14 @@ function isPanelDoor(m: MapObject | undefined): boolean {
   return m?.role === 'door' && !!m.door && m.shape.type === 'rect';
 }
 
-/** A moving path or wall (not a grinder / saw) that cuts into or adds to the wall mass */
+/** Walls drawn on their own instead of as part of the wall mass: grinders / saws, thorn vines (#83 / #84) */
+function ownLook(m: MapObject | undefined): boolean {
+  return !!m?.saw || !!m?.vine;
+}
+
+/** A moving path or wall (not a grinder / saw or thorn vine) that cuts into or adds to the wall mass */
 function movesWallMass(map: MapData, o: CompiledObject, i: number): boolean {
-  return o.dynamic && (o.role === 'path' || (o.role === 'wall' && !map.objects[i]?.saw));
+  return o.dynamic && (o.role === 'path' || (o.role === 'wall' && !ownLook(map.objects[i])));
 }
 
 /**
@@ -431,6 +438,48 @@ export function releaseRenderCaches(ctx: CanvasRenderingContext2D, objects?: rea
   secretLayers.delete(ctx);
   freeCanvas(sawLayers.get(ctx)?.[0]);
   sawLayers.delete(ctx);
+}
+
+/** Directions a mask is shifted in to grow it by a radius (enough for a smooth outline) */
+const GROW_STEPS = 24;
+
+/** `mask` grown by `r` layer pixels into `out` (cleared first): copies of it shifted all around */
+function growMask(out: CanvasRenderingContext2D, mask: HTMLCanvasElement, r: number): void {
+  out.setTransform(1, 0, 0, 1, 0, 0);
+  out.globalCompositeOperation = 'source-over';
+  out.clearRect(0, 0, out.canvas.width, out.canvas.height);
+  out.drawImage(mask, 0, 0);
+  if (r <= 0) return;
+  for (let k = 0; k < GROW_STEPS; k++) {
+    const a = (k / GROW_STEPS) * Math.PI * 2;
+    out.drawImage(mask, Math.cos(a) * r, Math.sin(a) * r);
+  }
+}
+
+/**
+ * Paint the theme's floor line onto the floor `f` (scaled to map units): the band between `inset`
+ * and `inset + width` map units out from the wall mass `walls` (layer pixels), in the line's color.
+ */
+function paintFloorLine(f: CanvasRenderingContext2D, walls: HTMLCanvasElement, line: { color: string; width: number; inset: number }, scale: number): void {
+  const w = walls.width;
+  const h = walls.height;
+  const [band, g] = offscreen(w, h);
+  const [inner, i] = offscreen(w, h);
+  growMask(g, walls, (line.inset + line.width) * scale);
+  growMask(i, walls, line.inset * scale);
+  // The band: the outer growth minus the inner one, then colored
+  g.globalCompositeOperation = 'destination-out';
+  g.drawImage(inner, 0, 0);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = line.color;
+  g.fillRect(0, 0, w, h);
+  g.globalCompositeOperation = 'source-over';
+  f.save();
+  f.setTransform(1, 0, 0, 1, 0, 0);
+  f.drawImage(band, 0, 0);
+  f.restore();
+  freeCanvas(band);
+  freeCanvas(inner);
 }
 
 /** The static wall mass at a coarse resolution: 1 = wall */
@@ -498,7 +547,7 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   const [wallPieces, p] = offscreen(w, h);
   p.scale(scale, scale);
   p.beginPath();
-  for (const o of objects) if (o.role === 'wall' && !o.dynamic) traceStatic(p, o);
+  for (const o of objects) if (o.role === 'wall' && !o.dynamic && !o.src?.vine) traceStatic(p, o);
   p.fillStyle = theme ? fillStyle(p, theme.wall.fill, whole) : COLORS.wall;
   p.fill('nonzero');
   // Grow the pieces by about half a pixel: where a wall's edge lies exactly on the edge of the
@@ -523,6 +572,9 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   f.fillRect(0, 0, map.width, map.height);
   // Default grid sits on the floor, under the walls ("Grid on top" draws another one over everything)
   drawGrid(f, map, COLORS.grid);
+  // A line painted on the floor along the walls (theme path `line`), under the walls' shadow
+  const line = theme?.path.line;
+  if (line && paths) paintFloorLine(f, wallCanvas, line, scale);
   const [layer, s] = offscreen(w, h);
   s.drawImage(floor, 0, 0);
   drawWallMass(s, wallCanvas, scale);
@@ -853,6 +905,8 @@ export interface DrawMapOptions {
   carried?: ArrayLike<number>;
   /** Per object index (pulleys, #52): how far it has turned (radians) */
   pulleyAngle?: ArrayLike<number>;
+  /** Per object index: powered by the circuit (#91, #94–97); default: as it starts */
+  power?: ArrayLike<number>;
   /** Per object index (turrets, #60): the barrel's turn from its rest direction (radians) */
   turretAim?: ArrayLike<number>;
   /** Opacity of the parts of grinders / saw blades hidden inside walls (the editor shows a ghost); default 0 */
@@ -1046,7 +1100,12 @@ export function drawGlobalDark(
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grad;
     g.beginPath();
-    g.arc(l.x, l.y, l.r, 0, Math.PI * 2);
+    // A spotlight (#88–90) lights a cone
+    if (l.dir !== undefined && l.sweep !== undefined && l.sweep < Math.PI * 2 - 1e-6) {
+      g.moveTo(l.x, l.y);
+      g.arc(l.x, l.y, l.r, l.dir - l.sweep / 2, l.dir + l.sweep / 2);
+      g.closePath();
+    } else g.arc(l.x, l.y, l.r, 0, Math.PI * 2);
     g.fill();
   }
   g.globalCompositeOperation = 'source-over';
@@ -1073,6 +1132,10 @@ export function drawMap(
   };
   const shown = (i: number) => !opts.hidden?.[i] && !blinkFlicker(i);
   const channels = opts.channels ?? initialChannels(map);
+  // Electricity (#91, #94–97): which objects are wired, and the power now (as it starts, outside a run)
+  const circuitStart = map.objects.some((m) => m.role === 'wire' || m.role === 'power') ? initialPower(map, objects) : null;
+  const power = opts.power ?? circuitStart?.power;
+  const wired = circuitStart?.circuit.isTarget;
   const doorOpenAt = (m: MapObject, i: number) => opts.doorOpen?.[i] ?? (m.door!.mode === 'auto' ? autoDoorOpen(m.door!, t) : channels[m.door!.color] ? 1 : 0);
   const isDoor = isPanelDoor;
 
@@ -1081,7 +1144,7 @@ export function drawMap(
   const st = staticLayer(ctx, map, objects);
   st.secretReady = false;
   const conceal = opts.secretCursor !== undefined && objects.some((o, i) => o.role === 'secret' && shown(i));
-  const isSaw = (i: number) => !!map.objects[i]?.saw;
+  const isSaw = (i: number) => ownLook(map.objects[i]);
   const moving = objects.some((o, i) => movesWallMass(map, o, i) || isDoor(map.objects[i]));
   const dyn = st.dyn;
   const bg = opts.background;
@@ -1236,6 +1299,26 @@ export function drawMap(
   if ((theme?.path.anim || theme?.wall.anim) && options.graphics !== 'low') drawSurfaceAnims(ctx, map, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t);
   // Conveyor belts (#69): on the floor, under the walls that cross them
   if (objects.some((o, i) => o.role === 'conveyor' && shown(i))) drawBelts(ctx, map, objects, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t, shown);
+  // Ponds and radioactive water (#86 / #87); lily pads (#85) float on them
+  if (objects.some((o, i) => o.role === 'liquid' && shown(i))) drawLiquids(ctx, map, objects, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t, shown, timeOf);
+  objects.forEach((o, i) => {
+    if (o.role === 'lily' && shown(i)) drawLily(ctx, o, timeOf(i), i);
+  });
+  // Radiation (#115–117): zones on the floor, then the waste's growing auras, then the waste itself
+  if (objects.some((o) => o.role === 'rad')) {
+    const now = opts.now ?? t;
+    objects.forEach((o, i) => {
+      if (o.role === 'rad' && o.src?.rad?.kind === 'zone' && shown(i)) drawRadZone(ctx, o, timeOf(i), now, i);
+    });
+    objects.forEach((o, i) => {
+      const a = o.src?.rad?.aura;
+      if (o.role === 'rad' && a && shown(i)) drawRadAura(ctx, o, a, timeOf(i), now);
+    });
+    objects.forEach((o, i) => {
+      const r = o.src?.rad;
+      if (o.role === 'rad' && r && r.kind !== 'zone' && shown(i)) drawRadWaste(ctx, o, r.kind, timeOf(i), now, i);
+    });
+  }
 
   zone(ctx, map.start, COLORS.start, COLORS.startEdge, tr('zone.start'), true, map.startShape);
   // Locked GOAL (coins still to collect): dark gray, with the coins collected so far, e.g. "3/10"
@@ -1337,6 +1420,46 @@ export function drawMap(
   objects.forEach((o, i) => {
     if (o.role === 'luggage' && shown(i)) drawCrate(ctx, o, timeOf(i));
   });
+  // Magnets (#99), their fields while on, and the metal boxes (#98) they drag
+  if (objects.some((o) => o.role === 'magnet' || o.role === 'metal')) {
+    const now = opts.now ?? t;
+    const magnetOn = (m: MapObject, i: number) => {
+      const link = m.link;
+      if (link && (link.action === 'start' || link.action === 'stop') && (channels[link.color] === 1) !== (link.action === 'start')) return false;
+      if (wired?.[i]) {
+        const e = elecEffect(m);
+        if ((e === 'start' && !power?.[i]) || (e === 'stop' && power?.[i])) return false;
+      }
+      return true;
+    };
+    objects.forEach((o, i) => {
+      const m = map.objects[i];
+      if (o.role === 'magnet' && m?.magnet && shown(i) && magnetOn(m, i) && m.magnet.strength > 0) drawMagnetField(ctx, o, m.magnet.range, timeOf(i), now);
+    });
+    objects.forEach((o, i) => {
+      if (o.role === 'metal' && shown(i)) drawMetalBox(ctx, o, timeOf(i));
+    });
+    objects.forEach((o, i) => {
+      const m = map.objects[i];
+      if (o.role === 'magnet' && m && shown(i)) drawMagnet(ctx, o, timeOf(i), magnetOn(m, i));
+    });
+  }
+  // Thorn vines (#83 / #84)
+  objects.forEach((o, i) => {
+    if (o.role !== 'wall' || !map.objects[i]?.vine || !shown(i)) return;
+    // The same look as the walls: their fill (laid out in the vine's own frame) and outline
+    const fill = theme ? fillStyle(ctx, theme.wall.fill, o.box) : COLORS.wall;
+    drawThornVine(ctx, o, timeOf(i), i, fill, theme ? theme.wall.edge : COLORS.wallEdge);
+  });
+  // Machines (#111–114): a press's cylinder, the hubs of gears, hands and pendulums
+  objects.forEach((o, i) => {
+    const m = map.objects[i];
+    if (o.role === 'wall' && m && (m.press || m.gear || m.hand || m.pendulum) && shown(i)) drawMachine(ctx, o, m, timeOf(i));
+  });
+  // Wires (#91): glowing while they carry power
+  map.objects.forEach((m, i) => {
+    if (m.role === 'wire' && m.wire && shown(i)) drawWire(ctx, m.wire.points, !!power?.[i], opts.now ?? t, i);
+  });
   // Ice floors (#71–74): a pale blue sheen with glints and fine cracks over the floor
   objects.forEach((o, i) => {
     if (o.role === 'path' && map.objects[i]?.ice && shown(i)) drawIce(ctx, o, timeOf(i), i);
@@ -1370,6 +1493,11 @@ export function drawMap(
     if (!trig || trig.kind === 'startZone' || trig.kind === 'stopZone' || !shown(i)) return;
     drawSwitch(ctx, o, timeOf(i), map.objects[i], channels[trig.color] === 1, opts.progress?.[i] ?? 0);
   });
+  // Electric switches, pulleys, timers and inverters (#94–97)
+  objects.forEach((o, i) => {
+    const m = map.objects[i];
+    if (o.role === 'power' && m?.power && shown(i)) drawPowerDevice(ctx, o, m, m.power, !!power?.[i], opts.progress?.[i] ?? 0, opts.pulleyAngle?.[i] ?? 0, opts.now ?? t);
+  });
   objects.forEach((o, i) => {
     if (o.role === 'coin' && shown(i)) drawCoin(ctx, o, timeOf(i));
   });
@@ -1388,9 +1516,19 @@ export function drawMap(
   objects.forEach((o, i) => {
     if (o.role === 'crystal' && shown(i)) drawCrystal(ctx, o, timeOf(i), opts.now ?? t);
   });
-  // Torches (#57 / #58), unless being carried
+  // Torches (#57 / #58), unless being carried (or dark: a wire can switch one off)
+  const lightState = { channels, power, wired };
   objects.forEach((o, i) => {
-    if (o.role === 'torch' && shown(i) && !opts.carried?.[i]) drawTorch(ctx, o, timeOf(i), opts.now ?? t, i);
+    const m = map.objects[i];
+    if (o.role === 'torch' && shown(i) && !opts.carried?.[i] && (!m || lightLit(m, i, lightState))) drawTorch(ctx, o, timeOf(i), opts.now ?? t, i);
+  });
+  // Spotlights (#88–90): the beam, then the lamp
+  objects.forEach((o, i) => {
+    const m = map.objects[i];
+    if (o.role !== 'spot' || !m?.spot || !shown(i)) return;
+    const lit = lightLit(m, i, lightState);
+    if (lit) drawSpotBeam(ctx, o, m.spot, timeOf(i));
+    drawSpotFixture(ctx, o, m.spot, timeOf(i), lit);
   });
   objects.forEach((o, i) => {
     if (!shown(i)) return;
@@ -1456,6 +1594,10 @@ function drawBelt(g: CanvasRenderingContext2D, o: CompiledObject, c: Conveyor, p
   ring.moveTo(o.poly[0], o.poly[1]);
   for (let k = 2; k < o.poly.length; k += 2) ring.lineTo(o.poly[k], o.poly[k + 1]);
   ring.closePath();
+  const sides = beltSides(c);
+  const L = sides.left;
+  const R = sides.right;
+  const n = L.length;
   g.save();
   g.fillStyle = '#3a3f47';
   g.fill(ring, 'evenodd');
@@ -1464,23 +1606,38 @@ function drawBelt(g: CanvasRenderingContext2D, o: CompiledObject, c: Conveyor, p
   // How far the belt has run: slats and arrows slide along with it
   const run = ((now / 1000) * c.speed) * path.sign;
   const p = path.pts;
-  const slats = new Path2D();
-  const arrows = new Path2D();
+  const a = Math.min(h * 0.45, 14);
   for (let k = 0; k + 3 < p.length; k += 2) {
     const ax = p[k], ay = p[k + 1], bx = p[k + 2], by = p[k + 3];
     const len = Math.hypot(bx - ax, by - ay);
-    if (len <= 0) continue;
+    const seg = k / 2;
+    if (len <= 0 || seg + 1 > n - (sides.loop ? 0 : 1)) continue;
     const ux = (bx - ax) / len, uy = (by - ay) / len;
     const nx = -uy, ny = ux;
-    const s0 = path.at[k / 2];
-    // Slats across the belt, continuing their spacing from one run to the next
-    for (let d = ((((run - s0) % SLAT_GAP) + SLAT_GAP) % SLAT_GAP); d <= len; d += SLAT_GAP) {
+    const s0 = path.at[seg];
+    // Each run's slats and arrows stay on its own side of the diagonal folds at its corners
+    const l0 = L[seg], l1 = L[(seg + 1) % n], r0 = R[seg], r1 = R[(seg + 1) % n];
+    g.save();
+    g.beginPath();
+    g.moveTo(l0.x, l0.y);
+    g.lineTo(l1.x, l1.y);
+    g.lineTo(r1.x, r1.y);
+    g.lineTo(r0.x, r0.y);
+    g.closePath();
+    g.clip();
+    // Slats across the belt, continuing their spacing from one run to the next, out to the folds
+    const reach = h * 3;
+    const slats = new Path2D();
+    for (let d = ((((run - s0) % SLAT_GAP) + SLAT_GAP) % SLAT_GAP) - Math.ceil(reach / SLAT_GAP) * SLAT_GAP; d <= len + reach; d += SLAT_GAP) {
       const x = ax + ux * d, y = ay + uy * d;
-      slats.moveTo(x + nx * h, y + ny * h);
-      slats.lineTo(x - nx * h, y - ny * h);
+      slats.moveTo(x + nx * h * 1.5, y + ny * h * 1.5);
+      slats.lineTo(x - nx * h * 1.5, y - ny * h * 1.5);
     }
+    g.strokeStyle = '#4d535d';
+    g.lineWidth = 3;
+    g.stroke(slats);
     // Arrows (chevrons) pointing the way the belt runs
-    const a = Math.min(h * 0.45, 14);
+    const arrows = new Path2D();
     const sx = ux * path.sign, sy = uy * path.sign;
     for (let d = ((((run - s0) % ARROW_GAP) + ARROW_GAP) % ARROW_GAP); d <= len; d += ARROW_GAP) {
       const x = ax + ux * d, y = ay + uy * d;
@@ -1488,19 +1645,29 @@ function drawBelt(g: CanvasRenderingContext2D, o: CompiledObject, c: Conveyor, p
       arrows.lineTo(x, y);
       arrows.lineTo(x - sx * a - nx * a, y - sy * a - ny * a);
     }
+    g.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    g.lineWidth = Math.max(2, Math.min(5, h * 0.18));
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.stroke(arrows);
+    g.restore();
   }
-  g.strokeStyle = '#4d535d';
-  g.lineWidth = 3;
-  g.stroke(slats);
-  g.strokeStyle = 'rgba(255, 255, 255, 0.28)';
-  g.lineWidth = Math.max(2, Math.min(5, h * 0.18));
-  g.lineCap = 'round';
-  g.lineJoin = 'round';
-  g.stroke(arrows);
+  // Diagonal folds where the belt turns: from each corner's outer edge to its inner edge
+  const folds = new Path2D();
+  for (let i = sides.loop ? 0 : 1; i < (sides.loop ? n : n - 1); i++) {
+    folds.moveTo(L[i].x, L[i].y);
+    folds.lineTo(R[i].x, R[i].y);
+  }
+  g.lineCap = 'butt';
+  g.strokeStyle = '#202329';
+  g.lineWidth = 3.5;
+  g.stroke(folds);
+  g.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+  g.lineWidth = 1;
+  g.stroke(folds);
   // Hazard stripes along both edges (half of each stroke lies inside the clip)
-  const sides = beltSides(c);
   const edge = new Path2D();
-  for (const side of [sides.left, sides.right]) {
+  for (const side of [L, R]) {
     if (side.length < 2) continue;
     edge.moveTo(side[0].x, side[0].y);
     for (let k = 1; k < side.length; k++) edge.lineTo(side[k].x, side[k].y);
@@ -1509,14 +1676,21 @@ function drawBelt(g: CanvasRenderingContext2D, o: CompiledObject, c: Conveyor, p
   const stripe = stripes(g, '#1d1f24', '#f5c518');
   g.strokeStyle = stripe ?? '#f5c518';
   g.lineWidth = Math.max(6, Math.min(14, c.width * 0.16));
-  g.lineCap = 'butt';
   g.lineJoin = 'miter';
   g.stroke(edge);
   g.restore();
-  // A thin dark rim around the belt
+  // A thin dark rim along the edges (and across the ends of a one-way belt), but not along the
+  // seam that joins a loop's outer and inner edges in its outline
+  const rim = new Path2D(edge);
+  if (!sides.loop && n >= 2) {
+    rim.moveTo(L[0].x, L[0].y);
+    rim.lineTo(R[0].x, R[0].y);
+    rim.moveTo(L[n - 1].x, L[n - 1].y);
+    rim.lineTo(R[n - 1].x, R[n - 1].y);
+  }
   g.strokeStyle = '#1d1f24';
   g.lineWidth = 1.5;
-  g.stroke(ring);
+  g.stroke(rim);
 }
 
 /** A crate (#70) where its belt has carried it: a wooden box with planks, a frame and a cross brace */

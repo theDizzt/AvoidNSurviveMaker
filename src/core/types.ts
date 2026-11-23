@@ -47,8 +47,106 @@ export type Shape =
  *   wall) that carries the cursor and luggage along its centerline (see `conveyor`).
  * luggage: a wooden crate (#70), deadly like a wall, carried along the conveyor belt it sits on;
  *   it stops against walls, doors and luggage that doesn't move, and at the end of a one-way belt.
+ * liquid: a pond (#86) or radioactive water (#87), deadly except on a lily pad (see `liquid`).
+ * lily: a lily pad (#85) floating on a liquid: safe floor (like a belt, it doesn't turn the rest
+ *   of the map into wall) that also keeps the cursor out of the liquid under it.
+ * spot: a spotlight (#88–90), a harmless cone of light (see `spot`).
+ * wire: an electric wire (#91): deadly while it carries power (see `wire`).
+ * power: an electric device (#94–97): switch, pulley, timer or inverter feeding the wires touching
+ *   it (see `power`).
+ * metal: a metal box (#98): deadly like a wall, dragged toward magnets that pull it.
+ * magnet: a magnet (#99): a deadly block that, while on, pulls the cursor and metal boxes (see `magnet`).
+ * rad: a radioactive zone (#115, deadly to touch) or a piece of radioactive waste (#116 box /
+ *   #117 drum) whose round radioactive area grows and shrinks around it (see `rad`).
  */
-export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret' | 'crystal' | 'pulley' | 'turret' | 'conveyor' | 'luggage';
+export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret' | 'crystal' | 'pulley' | 'turret' | 'conveyor' | 'luggage'
+  | 'liquid' | 'lily' | 'spot' | 'wire' | 'power' | 'rad' | 'metal' | 'magnet';
+
+/**
+ * Magnet (#99): while on, it pulls what lies within `range` px of its center toward it, at up to
+ * `strength` px/s (strongest next to it, nothing at the edge of its range). The cursor is pulled
+ * like on ice (it drifts off the mouse); metal boxes (#98) slide until something stops them.
+ * On unless a switch link or a wire says otherwise.
+ */
+export interface Magnet {
+  range: number;
+  strength: number;
+  cursor: boolean;
+  metal: boolean;
+}
+
+/**
+ * Round radioactive area around a piece of waste (#116 / #117), centered on it: `min` px wide
+ * (radius) at rest, it grows to `max` over `growMs`, stays `holdMs`, shrinks back over `shrinkMs`
+ * and rests `restMs`, over and over. Before `delay` ms it rests (a negative delay starts partway).
+ */
+export interface Aura {
+  min: number;
+  max: number;
+  growMs: number;
+  holdMs: number;
+  shrinkMs: number;
+  restMs: number;
+  delay: number;
+}
+
+/** Radioactive zone (#115, any shape) or waste: a box (#116) or a drum (#117) with an `aura` */
+export interface Rad {
+  kind: 'zone' | 'box' | 'drum';
+  /** box / drum only */
+  aura?: Aura;
+}
+
+/** Pond water (#86) or glowing radioactive water (#87). Touching liquids blend where they meet. */
+export interface Liquid {
+  kind: 'pond' | 'toxic';
+}
+
+/**
+ * Spotlight (#88–90): a cone of light from the fixture's center along `angle` (degrees, map space,
+ * turning with the object's rotation), `sweep` degrees wide and `range` px long.
+ */
+export interface Spot {
+  angle: number;
+  sweep: number;
+  range: number;
+  /** 0–100 (omitted = 100) */
+  intensity?: number;
+}
+
+/**
+ * Electric wire (#91): a cable along `points` (map space; its shape is generated from them). Each
+ * end connects to the device, wire or object it lies on; power flows through connected wires.
+ */
+export interface Wire {
+  points: Point[];
+}
+
+/**
+ * Electric devices (#94–97): `switch` toggles its power when touched (or clicked); `timer` powers
+ * for `duration` ms once touched (or clicked); `pulley` powers while the cursor turns it;
+ * `inverter` powers the wires on its output side (right, turning with its tilt) while the wires on
+ * its input side (left) carry no power.
+ */
+export type PowerKind = 'switch' | 'timer' | 'pulley' | 'inverter';
+
+export interface Power {
+  kind: PowerKind;
+  /** switch / timer: activated by clicking on it instead of touching it */
+  click?: boolean;
+  /** switch: starts ON */
+  initial?: boolean;
+  /** switch / timer: works only once */
+  once?: boolean;
+  /** timer: how long it powers (ms) */
+  duration?: number;
+}
+
+/**
+ * What an object a wire ends on does while the wire carries power: start / stop moving, be removed,
+ * or appear (it is gone while unpowered; a light only goes dark).
+ */
+export type ElecAction = 'start' | 'stop' | 'remove' | 'show';
 
 /**
  * Conveyor belt (#69): straight runs between `points` (map space; the belt's shape is generated
@@ -308,7 +406,7 @@ export interface Blink {
 }
 
 /**
- * Ice (#71–74), on a path: while the cursor is on it, it keeps sliding — its velocity only slowly
+ * Ice (#71–74, #100–110), on a path: while the cursor is on it, it keeps sliding — its velocity only slowly
  * follows the mouse's, so it drifts on after the mouse stops and lags behind a change of direction.
  * `grip` 1–100: how quickly it catches up (higher = less slippery).
  */
@@ -335,9 +433,57 @@ export interface Rotation {
   delay: number;
   /** Draw a screw on the pivot in game */
   showPivot?: boolean;
+  /**
+   * Turn a beat at a time like a clock hand (#111 / #113): `angle` degrees over `moveMs` (with the
+   * rotation's easing), then a stop of `waitMs`. Replaces `speed`; `angle` / `repeat` of the
+   * rotation still bound the sweep.
+   */
+  tick?: RotationTick;
+}
+
+export interface RotationTick {
+  angle: number;
+  moveMs: number;
+  waitMs: number;
+}
+
+/** Gear (#111), on a wall: a toothed wheel filling its square, `teeth` teeth `depth` % of its radius tall */
+export interface Gear {
+  teeth: number;
+  depth: number;
+}
+
+/**
+ * Pendulum (#114), on a wall: a rod hanging from the top of its box with a round bob at the bottom
+ * (as wide as the box), swinging `amplitude` degrees to each side, one full swing there and back
+ * every `periodMs`. `delay`: ms before it starts (negative = partway).
+ */
+export interface Pendulum {
+  amplitude: number;
+  periodMs: number;
+  delay: number;
+}
+
+/**
+ * Hydraulic press (#112), on a wall: its box is the press head, driven by a rod out of a fixed
+ * cylinder behind it (above, turned with the tilt). Each beat on its own: it waits open `waitMs`,
+ * slams `reach` px down in `downMs`, stays shut `holdMs` and rises back in `upMs`.
+ */
+export interface Press {
+  reach: number;
+  downMs: number;
+  holdMs: number;
+  upMs: number;
+  waitMs: number;
+  delay: number;
 }
 
 export interface MapObject {
+  /**
+   * The object's own number, unique in its map (shown as "#id" in the editor). Given when it is
+   * placed and kept through edits, reordering and the removal of other objects; copies get a new one.
+   */
+  id?: number;
   role: Role;
   shape: Shape;
   /**
@@ -358,7 +504,7 @@ export interface MapObject {
   trigger?: Trigger;
   /** role 'door' */
   door?: Door;
-  /** Reacts to a switch color (paths, walls, coins, darkness / fog areas) */
+  /** Reacts to a switch color (paths, walls, coins, darkness / fog areas, liquids, lily pads, spotlights) */
   link?: Link;
   /** Wall that thrusts like a spear (#29) */
   spike?: Spike;
@@ -390,9 +536,33 @@ export interface MapObject {
   secret?: { radius: number };
   /** Future light-source objects: clear global darkness around the moving shape center. */
   light?: { radius: number; intensity?: number };
+  /** Thorn vine (#83 / #84), on a wall: thorns all around its outline (part of its shape) */
+  vine?: boolean;
+  /** Gear (#111), on a wall: its teeth are part of its outline */
+  gear?: Gear;
+  /** Clock hand (#113), on a wall: a tapered hand along its box's long side, its hub at one end */
+  hand?: boolean;
+  /** Pendulum (#114), on a wall */
+  pendulum?: Pendulum;
+  /** Hydraulic press (#112), on a wall */
+  press?: Press;
+  /** role 'liquid' (#86 / #87) */
+  liquid?: Liquid;
+  /** role 'spot' (#88–90) */
+  spot?: Spot;
+  /** role 'wire' (#91) */
+  wire?: Wire;
+  /** role 'power' (#94–97) */
+  power?: Power;
+  /** role 'rad' (#115–117) */
+  rad?: Rad;
+  /** role 'magnet' (#99) */
+  magnet?: Magnet;
+  /** How the object reacts to a powered wire ending on it (omitted = a default for its kind) */
+  elec?: { action: ElecAction };
 }
 
-export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal' | 'egyptian' | 'sandBrick' | 'bark' | 'woodGrain' | 'thicket' | 'mud' | 'soil' | 'snow' | 'snowDirt' | 'snowPile' | 'ice' | 'iceCrystal';
+export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal' | 'egyptian' | 'sandBrick' | 'bark' | 'woodGrain' | 'thicket' | 'mud' | 'soil' | 'snow' | 'snowDirt' | 'snowPile' | 'ice' | 'iceCrystal' | 'concrete' | 'epoxy';
 
 /** Colors are '#rrggbb'. Gradients and patterns are laid out in the object's own frame, so they move and rotate with it. */
 export type Fill =
@@ -406,6 +576,11 @@ export interface SurfaceStyle {
   edge: string;
   /** Animated look (drawn over the surface every frame) */
   anim?: SurfaceAnim;
+  /**
+   * Paths only: a line painted on the floor along its edge with the walls, `inset` px in from the
+   * wall and `width` px wide (like the safety lines on a factory floor)
+   */
+  line?: { color: string; width: number; inset: number };
 }
 
 /**

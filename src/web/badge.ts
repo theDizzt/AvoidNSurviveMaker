@@ -337,6 +337,83 @@ function snowflake(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: num
   ctx.stroke();
 }
 
+/** Lit segments of each character a seven-segment readout can show (a top, b/c right, d bottom, e/f left, g middle) */
+const SEGMENTS: Record<string, string> = {
+  '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abgcd', '4': 'fgbc', '5': 'afgcd', '6': 'afgedc', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg', '-': 'g', ' ': '',
+};
+
+/** #rrggbb darkened (k < 0, toward black) or lightened (k > 0, toward white) */
+function shadeHex(hex: string, k: number): string {
+  const n = parseInt(hex.slice(1, 7), 16);
+  const to = k < 0 ? 0 : 255;
+  const a = Math.abs(k);
+  const ch = (shift: number) => Math.round(((n >> shift) & 255) * (1 - a) + to * a).toString(16).padStart(2, '0');
+  return `#${ch(16)}${ch(8)}${ch(0)}`;
+}
+
+/**
+ * One seven-segment digit in a w×h box (top-left x, y), slanted a little like an LCD: the lit
+ * segments in `color` with a soft glow, the others faintly showing through the glass.
+ */
+function sevenSegment(ctx: CanvasRenderingContext2D, ch: string, x: number, y: number, w: number, h: number, color: string): void {
+  const lit = SEGMENTS[ch] ?? '';
+  const t = Math.max(2, w * 0.2); // segment thickness
+  const half = h / 2;
+  const seg = (id: string): Path2D => {
+    const p = new Path2D();
+    // Horizontal (a, g, d) or vertical (b, c, e, f) bar with pointed ends
+    const horiz = (cy: number) => {
+      p.moveTo(x + t * 0.5, cy);
+      p.lineTo(x + t, cy - t / 2);
+      p.lineTo(x + w - t, cy - t / 2);
+      p.lineTo(x + w - t * 0.5, cy);
+      p.lineTo(x + w - t, cy + t / 2);
+      p.lineTo(x + t, cy + t / 2);
+      p.closePath();
+    };
+    const vert = (cx: number, top: number) => {
+      p.moveTo(cx, top + t * 0.5);
+      p.lineTo(cx + t / 2, top + t);
+      p.lineTo(cx + t / 2, top + half - t);
+      p.lineTo(cx, top + half - t * 0.5);
+      p.lineTo(cx - t / 2, top + half - t);
+      p.lineTo(cx - t / 2, top + t);
+      p.closePath();
+    };
+    if (id === 'a') horiz(y + t / 2);
+    else if (id === 'g') horiz(y + half);
+    else if (id === 'd') horiz(y + h - t / 2);
+    else if (id === 'b') vert(x + w - t / 2, y);
+    else if (id === 'c') vert(x + w - t / 2, y + half);
+    else if (id === 'e') vert(x + t / 2, y + half);
+    else vert(x + t / 2, y);
+    return p;
+  };
+  ctx.save();
+  // A slight forward slant, about the digit's middle
+  ctx.translate(x + w / 2, y + half);
+  ctx.transform(1, 0, -0.1, 1, 0, 0);
+  ctx.translate(-(x + w / 2), -(y + half));
+  for (const id of 'abcdefg') {
+    const p = seg(id);
+    if (!lit.includes(id)) {
+      ctx.globalAlpha = 0.1;
+      ctx.fillStyle = color;
+      ctx.fill(p);
+      continue;
+    }
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.stroke(p);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = color;
+    ctx.fill(p);
+  }
+  ctx.restore();
+}
+
 function gear(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, teeth: number): void {
   ctx.beginPath();
   for (let k = 0; k < teeth * 2; k++) {
@@ -588,6 +665,69 @@ export function drawLevelBadge(ctx: CanvasRenderingContext2D, map: MapData, styl
       });
       titleBlock(r, map, b, cx + rad + 14, cy, true);
       bottom = cy + rad + 10;
+      break;
+    }
+    case 'lcd': {
+      // A green LCD readout in a metal bezel: seven-segment digits with the unlit segments
+      // faintly showing, scanlines and a glass sheen
+      const digits = num.length || 1;
+      const cellW = 28;
+      const sw = digits * cellW + 22;
+      const x0 = 8;
+      const y0 = 12;
+      const sh = 64;
+      const cy = y0 + sh / 2;
+      r.part('graphic', x0 + sw / 2, cy, () => {
+        // Bezel with four screws
+        dropFill(ctx, () => {
+          ctx.beginPath();
+          ctx.roundRect(x0 - 6, y0 - 6, sw + 12, sh + 12, 9);
+        }, b.secondary, 'rgba(0,0,0,0.35)');
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillRect(x0 - 3, y0 - 4, sw + 6, 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        for (const [sx, sy] of [[x0 - 1, y0 - 1], [x0 + sw + 1, y0 - 1], [x0 - 1, y0 + sh + 1], [x0 + sw + 1, y0 + sh + 1]]) {
+          ctx.beginPath();
+          ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Screen
+        const screen = ctx.createLinearGradient(0, y0, 0, y0 + sh);
+        screen.addColorStop(0, b.primary);
+        screen.addColorStop(1, shadeHex(b.primary, -0.35));
+        ctx.fillStyle = screen;
+        ctx.beginPath();
+        ctx.roundRect(x0, y0, sw, sh, 4);
+        ctx.fill();
+        ctx.save();
+        ctx.clip();
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        for (let y = y0 + 1; y < y0 + sh; y += 3) ctx.fillRect(x0, y, sw, 1);
+        ctx.restore();
+        return { x: x0 - 6, y: y0 - 6, w: sw + 12, h: sh + 12 };
+      });
+      if (/^[0-9 -]+$/.test(num)) {
+        r.part('number', x0 + sw / 2, cy, () => {
+          const dw = 20;
+          const dh = 42;
+          const left = x0 + 11 + (cellW - dw) / 2;
+          for (let k = 0; k < num.length; k++) sevenSegment(ctx, num[k], left + k * cellW, cy - dh / 2, dw, dh, b.numberColor);
+          return { x: x0 + 6, y: cy - dh / 2 - 2, w: sw - 12, h: dh + 4 };
+        });
+      } else bigNumber(r, num, x0 + sw / 2, cy, 40, sw - 12);
+      // Glass sheen over the readout
+      ctx.save();
+      const sheen = ctx.createLinearGradient(x0, y0, x0 + sw * 0.6, y0 + sh);
+      sheen.addColorStop(0, 'rgba(255,255,255,0.16)');
+      sheen.addColorStop(0.45, 'rgba(255,255,255,0.03)');
+      sheen.addColorStop(0.46, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sheen;
+      ctx.beginPath();
+      ctx.roundRect(x0, y0, sw, sh, 4);
+      ctx.fill();
+      ctx.restore();
+      titleBlock(r, map, b, x0 + sw + 20, cy, true);
+      bottom = y0 + sh + 16;
       break;
     }
     case 'image': {

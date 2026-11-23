@@ -767,6 +767,91 @@ export function createPatternTile(f: Extract<Fill, { type: 'pattern' }>): HTMLCa
       }
       break;
     }
+    case 'concrete': {
+      // Poured cement wall (chapter 6 walls): mottled gray, fine grit, small air pores, a formwork
+      // seam and two tie holes. `color` is the darker cement, `background` the lighter.
+      const random = seeded(6061);
+      const TAU = Math.PI * 2;
+      const light = mix(f.background, '#ffffff', 0.18);
+      for (let i = 0; i < 16; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.08 + random() * 0.14);
+        g.fillStyle = random() < 0.5 ? f.color : light;
+        g.globalAlpha = 0.08 + random() * 0.1;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.ellipse(x + dx, y + dy, r, r * (0.6 + random() * 0.3), random() * TAU, 0, TAU);
+          g.fill();
+        });
+      }
+      // Grit
+      for (let i = 0; i < 140; i++) {
+        g.globalAlpha = 0.15 + random() * 0.25;
+        g.fillStyle = random() < 0.6 ? f.color : light;
+        const r = s * (0.004 + random() * 0.006);
+        g.fillRect(random() * s, random() * s, r, r);
+      }
+      // Air pores: a dark hole with a lit lower rim
+      for (let i = 0; i < 9; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.008 + random() * 0.012);
+        wrapped(s, (dx, dy) => {
+          g.globalAlpha = 0.55;
+          g.fillStyle = mix(f.color, '#000000', 0.35);
+          g.beginPath();
+          g.arc(x + dx, y + dy, r, 0, TAU);
+          g.fill();
+          g.globalAlpha = 0.35;
+          g.strokeStyle = light;
+          g.lineWidth = s * 0.004;
+          g.beginPath();
+          g.arc(x + dx, y + dy, r, 0.2, Math.PI - 0.2);
+          g.stroke();
+        });
+      }
+      // Formwork seam along the bottom edge, and the tie holes left by the forms
+      g.globalAlpha = 0.35;
+      g.fillStyle = f.color;
+      g.fillRect(0, s * 0.985, s, s * 0.015);
+      g.globalAlpha = 0.25;
+      g.fillStyle = light;
+      g.fillRect(0, 0, s, s * 0.01);
+      for (const [x, y] of [[0.25, 0.5], [0.75, 0.5]]) {
+        g.globalAlpha = 0.6;
+        g.fillStyle = mix(f.color, '#000000', 0.3);
+        g.beginPath();
+        g.arc(s * x, s * y, s * 0.028, 0, TAU);
+        g.fill();
+        g.globalAlpha = 0.3;
+        g.strokeStyle = light;
+        g.lineWidth = s * 0.008;
+        g.beginPath();
+        g.arc(s * x, s * y, s * 0.04, 0, TAU);
+        g.stroke();
+      }
+      break;
+    }
+    case 'epoxy': {
+      // Epoxy floor (chapter 6 paths): an even green coat with soft cloudy patches and fine
+      // flecks. `color` is the deeper green, `background` the coat.
+      const random = seeded(6062);
+      const TAU = Math.PI * 2;
+      for (let i = 0; i < 12; i++) {
+        const x = random() * s, y = random() * s, r = s * (0.12 + random() * 0.18);
+        g.fillStyle = random() < 0.6 ? f.color : mix(f.background, '#ffffff', 0.12);
+        g.globalAlpha = 0.07 + random() * 0.07;
+        wrapped(s, (dx, dy) => {
+          g.beginPath();
+          g.ellipse(x + dx, y + dy, r, r * (0.5 + random() * 0.4), random() * TAU, 0, TAU);
+          g.fill();
+        });
+      }
+      for (let i = 0; i < 70; i++) {
+        g.globalAlpha = 0.18 + random() * 0.2;
+        g.fillStyle = random() < 0.5 ? f.color : mix(f.background, '#ffffff', 0.35);
+        const r = s * (0.003 + random() * 0.004);
+        g.fillRect(random() * s, random() * s, r, r);
+      }
+      break;
+    }
   }
   return tile;
 }
