@@ -297,7 +297,20 @@ export class CompiledRotation {
   readonly dur: number;
 
   constructor(readonly src: Rotation) {
-    this.dur = src.speed > 0 && src.angle > 0 ? (src.angle / src.speed) * 1000 : 0;
+    const k = src.tick;
+    this.dur = k
+      ? (k.angle > 0 && src.angle > 0 && k.moveMs + k.waitMs > 0 ? (src.angle / k.angle) * (k.moveMs + k.waitMs) : 0)
+      : src.speed > 0 && src.angle > 0 ? (src.angle / src.speed) * 1000 : 0;
+  }
+
+  /** Beat by beat (`tick`): degrees turned by tt, each beat eased, then still until the next */
+  private tickDegrees(tt: number): number {
+    const k = this.src.tick!;
+    const cycle = k.moveMs + k.waitMs;
+    const n = Math.floor(tt / cycle);
+    const p = tt - n * cycle;
+    const f = p < k.moveMs ? ease(this.src.easing, p / k.moveMs) : 1;
+    return (n + f) * k.angle;
   }
 
   angleAt(t: number): number {
@@ -305,6 +318,18 @@ export class CompiledRotation {
     if (this.dur <= 0) return 0;
     const tt = t - r.delay;
     if (tt <= 0) return 0;
+    if (r.tick) {
+      const raw = this.tickDegrees(tt);
+      const A = r.angle;
+      let deg: number;
+      if (r.repeat === 'once') deg = Math.min(raw, A);
+      else if (r.repeat === 'pingpong') {
+        const m = raw % (2 * A);
+        deg = m <= A ? m : 2 * A - m;
+      } else if (r.repeat === 'restart') deg = raw % A;
+      else deg = raw;
+      return ((r.clockwise ? 1 : -1) * deg * Math.PI) / 180;
+    }
     const dur = this.dur;
     let deg: number;
     if (r.repeat === 'once') {

@@ -1,10 +1,12 @@
-import { transformAt, type CompiledObject, type Transform } from '../core/object';
-import type { MapData, MapObject, Point, Power, Spot } from '../core/types';
+import { compilePressCylinder, toWorld, transformAt, type CompiledObject, type Transform } from '../core/object';
+import type { Aura, MapData, MapObject, Point, Power, Rad, Spot } from '../core/types';
+import { auraRadius, auraReach } from '../core/radiation';
 import { WIRE_WIDTH } from '../core/electric';
 
 /**
  * Drawing for thorn vines (#83 / #84), lily pads (#85), ponds and radioactive water (#86 / #87),
- * spotlights (#88–90), wires (#91) and electric devices (#94–97). Everything is in map units.
+ * spotlights (#88–90), wires (#91), electric devices (#94–97) and radiation (#115–117). Everything is
+ * in map units.
  */
 
 const tf: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
@@ -700,5 +702,317 @@ export function drawPowerDevice(
   }
   void m;
   void now;
+  ctx.restore();
+}
+
+// ───────────────────────── Radiation (#115–117) ─────────────────────────
+
+/** The radiation trefoil: three blades around a dot, `r` = blade length */
+function trefoil(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string): void {
+  const inner = r * 0.34;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let k = 0; k < 3; k++) {
+    const mid = -Math.PI / 2 + (k * Math.PI * 2) / 3;
+    const a0 = mid - Math.PI / 6;
+    const a1 = mid + Math.PI / 6;
+    ctx.moveTo(cx + Math.cos(a0) * inner, cy + Math.sin(a0) * inner);
+    ctx.arc(cx, cy, r, a0, a1);
+    ctx.arc(cx, cy, inner, a1, a0, true);
+    ctx.closePath();
+  }
+  ctx.moveTo(cx + r * 0.22, cy);
+  ctx.arc(cx, cy, r * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** 0–1, slowly breathing (for the glow) */
+function breathe(now: number, seed: number): number {
+  return 0.5 + 0.5 * Math.sin(now / 520 + seed * 1.7);
+}
+
+/** Radioactive zone (#115): a sickly glowing area with a hazard-striped rim and trefoils */
+export function drawRadZone(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, now: number, seed: number): void {
+  ctx.save();
+  enterPose(ctx, o, t);
+  const area = new Path2D();
+  ringPath(area, o.box.poly);
+  const k = breathe(now, seed);
+  ctx.fillStyle = `rgba(176,236,44,${0.42 + 0.12 * k})`;
+  ctx.shadowColor = 'rgba(170,255,60,0.8)';
+  ctx.shadowBlur = 10 + 8 * k;
+  ctx.fill(area);
+  ctx.shadowBlur = 0;
+  // Faint trefoils on a grid inside it
+  ctx.save();
+  ctx.clip(area);
+  const gap = 90;
+  const r = 16;
+  for (let y = Math.floor(o.box.minY / gap) * gap + gap / 2; y < o.box.maxY + gap; y += gap) {
+    for (let x = Math.floor(o.box.minX / gap) * gap + gap / 2 + ((Math.floor(y / gap) % 2) * gap) / 2; x < o.box.maxX + gap; x += gap) {
+      trefoil(ctx, x, y, r, 'rgba(48,60,14,0.28)');
+    }
+  }
+  ctx.restore();
+  // Hazard rim: yellow and black dashes
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#f4d21c';
+  ctx.stroke(area);
+  ctx.setLineDash([9, 9]);
+  ctx.lineDashOffset = -now / 60;
+  ctx.strokeStyle = '#2a2a22';
+  ctx.stroke(area);
+  ctx.restore();
+}
+
+/** The radioactive area around a piece of waste (#116 / #117), as large as it is now; a faint ring marks its reach */
+export function drawRadAura(ctx: CanvasRenderingContext2D, o: CompiledObject, a: Aura, t: number, now: number): void {
+  const c = posedCenter(o, t);
+  const r = auraRadius(a, t);
+  ctx.save();
+  const reach = auraReach(a);
+  if (reach > 0) {
+    ctx.setLineDash([4, 6]);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(120,170,20,0.45)';
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, reach, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  if (r > 0) {
+    const grad = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
+    grad.addColorStop(0, 'rgba(190,255,70,0.55)');
+    grad.addColorStop(0.75, 'rgba(170,245,50,0.38)');
+    grad.addColorStop(1, 'rgba(150,235,40,0.28)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Its edge, shimmering
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(110,190,10,0.9)';
+    ctx.setLineDash([10, 6]);
+    ctx.lineDashOffset = now / 40;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** A piece of radioactive waste: a yellow box (#116) or drum (#117) marked with the trefoil */
+export function drawRadWaste(ctx: CanvasRenderingContext2D, o: CompiledObject, kind: Rad['kind'], t: number, now: number, seed: number): void {
+  ctx.save();
+  enterPose(ctx, o, t);
+  const b = o.box;
+  const w = b.maxX - b.minX;
+  const h = b.maxY - b.minY;
+  const cx = b.minX + w / 2;
+  const cy = b.minY + h / 2;
+  const size = Math.min(w, h);
+  const body = new Path2D();
+  if (kind === 'drum') body.arc(cx, cy, size / 2, 0, Math.PI * 2);
+  else body.roundRect(b.minX, b.minY, w, h, Math.min(6, size * 0.12));
+  ctx.shadowColor = 'rgba(170,255,60,0.9)';
+  ctx.shadowBlur = 8 + 8 * breathe(now, seed);
+  const grad = ctx.createLinearGradient(b.minX, b.minY, b.maxX, b.maxY);
+  grad.addColorStop(0, '#ffe04a');
+  grad.addColorStop(1, '#e0a800');
+  ctx.fillStyle = grad;
+  ctx.fill(body);
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = Math.max(1.5, size * 0.05);
+  ctx.strokeStyle = '#3b3a30';
+  ctx.stroke(body);
+  if (kind === 'drum') {
+    // The lid's rim
+    ctx.lineWidth = Math.max(1, size * 0.03);
+    ctx.strokeStyle = 'rgba(59,58,48,0.55)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, size * 0.4, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    // Hazard stripes along the top and bottom edges
+    ctx.save();
+    ctx.clip(body);
+    const band = Math.max(3, h * 0.14);
+    ctx.fillStyle = '#2a2a22';
+    for (const y0 of [b.minY, b.maxY - band]) {
+      for (let x = b.minX - band * 2; x < b.maxX + band; x += band * 2) {
+        ctx.beginPath();
+        ctx.moveTo(x, y0 + band);
+        ctx.lineTo(x + band, y0);
+        ctx.lineTo(x + band * 2, y0);
+        ctx.lineTo(x + band, y0 + band);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+  trefoil(ctx, cx, cy, size * 0.3, '#2a2a22');
+  ctx.restore();
+}
+
+// ───────────────────────── Machines (#111–114) ─────────────────────────
+
+const cylinders = new WeakMap<MapObject, CompiledObject | null>();
+
+function bolt3(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+  g.addColorStop(0, '#f4f6f8');
+  g.addColorStop(1, '#7d8794');
+  ctx.fillStyle = g;
+  ctx.strokeStyle = '#3a414b';
+  ctx.lineWidth = Math.max(1, r * 0.18);
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+/**
+ * The parts a machine wall doesn't show by itself: a press's steel cylinder (over its rod), a
+ * gear's hub, a clock hand's cap and a pendulum's hanger.
+ */
+export function drawMachine(ctx: CanvasRenderingContext2D, o: CompiledObject, m: MapObject, t: number): void {
+  if (m.press) {
+    let c = cylinders.get(m);
+    if (c === undefined) cylinders.set(m, (c = compilePressCylinder(m)));
+    if (!c) return;
+    const path = new Path2D();
+    ringPath(path, c.poly);
+    ctx.save();
+    const g = ctx.createLinearGradient(c.minX, c.minY, c.maxX, c.minY);
+    g.addColorStop(0, '#59626e');
+    g.addColorStop(0.45, '#c9d0d8');
+    g.addColorStop(1, '#4d5560');
+    ctx.fillStyle = g;
+    ctx.fill(path);
+    ctx.strokeStyle = '#2b3038';
+    ctx.lineWidth = 2;
+    ctx.stroke(path);
+    // Hazard band at its mouth, toward the head
+    ctx.clip(path);
+    ctx.strokeStyle = 'rgba(244,210,28,0.9)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([6, 6]);
+    ctx.stroke(path);
+    ctx.restore();
+    return;
+  }
+  transformAt(o, t, tf);
+  const p = { x: 0, y: 0 };
+  if (m.gear) {
+    toWorld(o, tf, o.cx, o.cy, p);
+    const r = Math.max(3, Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) * 0.14);
+    bolt3(ctx, p.x, p.y, r);
+    ctx.fillStyle = '#2b3038';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (m.hand || m.pendulum) {
+    toWorld(o, tf, o.px, o.py, p);
+    const w = Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY);
+    bolt3(ctx, p.x, p.y, Math.max(3, m.hand ? w * 0.22 : w * 0.12));
+  }
+}
+
+// ───────────────────────── Metal box / magnet (#98 / #99) ─────────────────────────
+
+/** A metal box (#98): a riveted steel plate, where the magnets have dragged it */
+export function drawMetalBox(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number): void {
+  ctx.save();
+  enterPose(ctx, o, t);
+  const b = o.box;
+  const w = b.maxX - b.minX;
+  const h = b.maxY - b.minY;
+  const g = ctx.createLinearGradient(b.minX, b.minY, b.maxX, b.maxY);
+  g.addColorStop(0, '#d4dbe3');
+  g.addColorStop(0.5, '#9aa5b2');
+  g.addColorStop(1, '#c3cbd5');
+  ctx.fillStyle = g;
+  ctx.strokeStyle = '#3f4752';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(b.minX, b.minY, w, h, Math.min(4, Math.min(w, h) * 0.1));
+  ctx.fill();
+  ctx.stroke();
+  // Brushed lines and rivets
+  ctx.strokeStyle = 'rgba(63,71,82,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let y = b.minY + h / 3; y < b.maxY - 1; y += h / 3) {
+    ctx.moveTo(b.minX + 2, y);
+    ctx.lineTo(b.maxX - 2, y);
+  }
+  ctx.stroke();
+  const r = Math.max(1.2, Math.min(w, h) * 0.06);
+  const inset = Math.max(r * 2, Math.min(w, h) * 0.14);
+  ctx.fillStyle = '#3f4752';
+  for (const [x, y] of [[b.minX + inset, b.minY + inset], [b.maxX - inset, b.minY + inset], [b.minX + inset, b.maxY - inset], [b.maxX - inset, b.maxY - inset]]) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** A magnet's field (#99) while it is on: its range, and ripples running in toward it */
+export function drawMagnetField(ctx: CanvasRenderingContext2D, o: CompiledObject, range: number, t: number, now: number): void {
+  const c = posedCenter(o, t);
+  ctx.save();
+  ctx.setLineDash([3, 7]);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(224,71,91,0.4)';
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, range, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const body = Math.max(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2;
+  for (let k = 0; k < 3; k++) {
+    const f = 1 - (((now / 1400 + k / 3) % 1 + 1) % 1);
+    const r = body + (range - body) * f;
+    if (r <= body) continue;
+    ctx.strokeStyle = `rgba(224,71,91,${0.32 * (1 - f) + 0.05})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** A magnet (#99): a horseshoe filling its box, the poles toward its top; dimmed while off */
+export function drawMagnet(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, on: boolean): void {
+  ctx.save();
+  enterPose(ctx, o, t);
+  const b = o.box;
+  const w = b.maxX - b.minX;
+  const h = b.maxY - b.minY;
+  const arm = w * 0.3;
+  const poleH = Math.min(h * 0.3, arm);
+  const bend = Math.min(w / 2, h * 0.6);
+  const shoe = new Path2D();
+  shoe.moveTo(b.minX, b.minY);
+  shoe.lineTo(b.minX + arm, b.minY);
+  shoe.lineTo(b.minX + arm, b.maxY - bend);
+  shoe.arc(b.minX + w / 2, b.maxY - bend, w / 2 - arm, Math.PI, 0, true);
+  shoe.lineTo(b.maxX - arm, b.minY);
+  shoe.lineTo(b.maxX, b.minY);
+  shoe.lineTo(b.maxX, b.maxY - bend);
+  shoe.arc(b.minX + w / 2, b.maxY - bend, w / 2, 0, Math.PI);
+  shoe.closePath();
+  // Its box is all deadly: a faint plate behind the horseshoe shows it
+  ctx.fillStyle = 'rgba(58,42,46,0.18)';
+  ctx.fillRect(b.minX, b.minY, w, h);
+  ctx.fillStyle = on ? '#e0475b' : '#a7737b';
+  ctx.strokeStyle = '#3a2a2e';
+  ctx.lineWidth = 2;
+  ctx.fill(shoe);
+  ctx.fillStyle = '#dfe4ea';
+  ctx.fillRect(b.minX, b.minY, arm, poleH);
+  ctx.fillRect(b.maxX - arm, b.minY, arm, poleH);
+  ctx.stroke(shoe);
   ctx.restore();
 }

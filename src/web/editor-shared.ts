@@ -2,7 +2,7 @@ import { t as tr } from './i18n';
 
 import { type Transform } from '../core/object';
 
-import type { Easing, FogKind, Liquid, MapObject, Motion, MotionType, Point, PowerKind, Rect, Repeat, Role, Shape, TriggerKind, ZoneShape } from '../core/types';
+import type { Easing, FogKind, Liquid, MapObject, Rad, Motion, MotionType, Point, PowerKind, Rect, Repeat, Role, Shape, TriggerKind, ZoneShape } from '../core/types';
 import { switchColor } from './localized/colors';
 
 import { DEFAULT_BOULDER_WAVE, DEFAULT_MOTION } from './localized/validate';
@@ -22,7 +22,7 @@ export interface ObjectTool {
   /** role 'trigger': which kind of switch / zone */
   trigger?: TriggerKind;
   /** Walls with a built-in behavior */
-  special?: 'spike' | 'boulder' | 'disc' | 'blade' | 'fall' | 'vine';
+  special?: 'spike' | 'boulder' | 'disc' | 'blade' | 'fall' | 'vine' | 'gear' | 'press' | 'hand' | 'pendulum';
   /** role 'fog': fog or sand dust */
   fog?: FogKind;
   /** shape 'sector': a ring sector (#53/#54) */
@@ -37,6 +37,8 @@ export interface ObjectTool {
   liquid?: Liquid['kind'];
   /** role 'power': which electric device (#94–97) */
   power?: PowerKind;
+  /** role 'rad': radioactive zone (#115), box (#116) or drum (#117) of waste */
+  rad?: Rad['kind'];
 }
 
 /** START / GOAL tool: a rectangle (#9 / #10), or a circle, polygon or freeform (#63–68) */
@@ -81,6 +83,7 @@ export const SPECIAL_IDS = {
   fall: 51, pulley: 52, ringPath: 53, ringWall: 54, secret: 55, secretFree: 56, torch: 57, carryTorch: 58, crystal: 59, turret: 60, missile: 61, rotatingSaw: 62, conveyor: 69, luggage: 70,
   vine: 83, movingVine: 84, lily: 85, pond: 86, toxic: 87, spot: 88, movingSpot: 89, rotatingSpot: 90, wire: 91, ringBlinkPath: 92, ringBlinkWall: 93,
   elecSwitch: 94, elecPulley: 95, elecTimer: 96, inverter: 97, ringIce: 100,
+  metal: 98, magnet: 99, gear: 111, press: 112, hand: 113, pendulum: 114, radZone: 115, radBox: 116, radDrum: 117,
 } as const;
 
 /** Ice (#71–74, #100–110): the first id of each behavior; rectangle, circle, polygon, freeform, then the ring sector */
@@ -93,6 +96,8 @@ export const POWER_NAMES: Record<PowerKind, string> = {
 };
 
 export const liquidName = (kind: Liquid['kind'] | undefined) => tr(kind === 'toxic' ? 'ed.nameToxic' : 'ed.namePond');
+
+export const radName = (kind: Rad['kind'] | undefined) => tr(kind === 'box' ? 'ed.nameRadBox' : kind === 'drum' ? 'ed.nameRadDrum' : 'ed.nameRadZone');
 
 export const TRIGGER_IDS: Record<TriggerKind, number> = { switch: 32, timer: 33, hold: 34, startZone: 35, stopZone: 36 };
 
@@ -107,12 +112,13 @@ export const ROLE_NAMES: Record<Role, string> = {
   text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'), torch: tr('ed.nameTorch'), secret: tr('ed.nameSecret'), crystal: tr('ed.nameCrystal'), pulley: tr('ed.namePulley'), turret: tr('ed.nameTurret'),
   conveyor: tr('ed.nameConveyor'), luggage: tr('ed.nameLuggage'),
   liquid: tr('ed.namePond'), lily: tr('ed.nameLily'), spot: tr('ed.nameSpot'), wire: tr('ed.nameWire'), power: tr('ed.nameElecSwitch'),
+  rad: tr('ed.nameRadZone'), metal: tr('ed.nameMetal'), magnet: tr('ed.nameMagnet'),
 };
 
 export const fogName = (kind: FogKind | undefined) => tr(kind === 'sand' ? 'ed.nameSand' : 'ed.nameFog');
 
-export const isSquare = (o: { role: Role; trigger?: { kind: TriggerKind }; saw?: { kind: string }; power?: { kind: PowerKind } }) => o.role === 'pulley' || o.role === 'portal' || o.role === 'laser' || isButton(o.trigger?.kind) || o.saw?.kind === 'disc'
-  || o.role === 'lily' || o.role === 'spot' || (o.role === 'power' && o.power?.kind !== 'inverter');
+export const isSquare = (o: { role: Role; trigger?: { kind: TriggerKind }; saw?: { kind: string }; power?: { kind: PowerKind }; rad?: { kind: string }; gear?: unknown }) => o.role === 'pulley' || o.role === 'portal' || o.role === 'laser' || isButton(o.trigger?.kind) || o.saw?.kind === 'disc'
+  || o.role === 'lily' || o.role === 'spot' || (o.role === 'power' && o.power?.kind !== 'inverter') || (o.role === 'rad' && o.rad?.kind === 'drum') || !!o.gear;
 
 export function withBehavior(beh: Behavior, name: string): string {
   return beh === 'moving' ? tr('ed.nameMoving', { name }) : beh === 'rotating' ? tr('ed.nameRotating', { name }) : beh === 'blinking' ? tr('ed.nameBlinking', { name }) : name;
@@ -124,7 +130,12 @@ export function toolLabel(t: ObjectTool): string {
   if (t.special === 'boulder') return tr('ed.nameBoulder');
   if (t.special === 'fall') return tr('ed.nameFall');
   if (t.special === 'vine') return withBehavior(t.behavior, tr('ed.nameVine'));
+  if (t.special === 'gear') return tr('ed.nameGear');
+  if (t.special === 'press') return tr('ed.namePress');
+  if (t.special === 'hand') return tr('ed.nameHand');
+  if (t.special === 'pendulum') return tr('ed.namePendulum');
   if (t.role === 'liquid') return liquidName(t.liquid);
+  if (t.role === 'rad') return radName(t.rad);
   if (t.role === 'power') return POWER_NAMES[t.power ?? 'switch'];
   if (t.role === 'spot') return withBehavior(t.behavior, tr('ed.nameSpot'));
   if (t.role === 'fog') return fogName(t.fog);
@@ -152,7 +163,12 @@ export function describeObject(o: MapObject): string {
   if (o.boulder) return tr('ed.nameBoulder');
   if (o.fall) return tr('ed.nameFall');
   if (o.vine) return withBehavior(beh, tr('ed.nameVine'));
+  if (o.gear) return tr('ed.nameGear');
+  if (o.press) return tr('ed.namePress');
+  if (o.hand) return tr('ed.nameHand');
+  if (o.pendulum) return tr('ed.namePendulum');
   if (o.role === 'liquid') return withBehavior(beh, liquidName(o.liquid?.kind));
+  if (o.role === 'rad') return withBehavior(beh, radName(o.rad?.kind));
   if (o.role === 'power') return POWER_NAMES[o.power?.kind ?? 'switch'];
   if (o.role === 'pulley') return tr('ed.colorName', { color: switchColor(o.pulley?.color ?? 0).name, name: tr('ed.namePulley') });
   if (o.role === 'fog') return withBehavior(beh, fogName(o.fog?.kind));
@@ -188,10 +204,17 @@ export function objectToolId(o: MapObject): number {
   if (o.fall) return SPECIAL_IDS.fall;
   if (o.role === 'trigger') return TRIGGER_IDS[o.trigger?.kind ?? 'switch'];
   if (o.vine) return o.motion ? SPECIAL_IDS.movingVine : SPECIAL_IDS.vine;
+  if (o.gear) return SPECIAL_IDS.gear;
+  if (o.press) return SPECIAL_IDS.press;
+  if (o.hand) return SPECIAL_IDS.hand;
+  if (o.pendulum) return SPECIAL_IDS.pendulum;
   if (o.role === 'lily') return SPECIAL_IDS.lily;
   if (o.role === 'liquid') return o.liquid?.kind === 'toxic' ? SPECIAL_IDS.toxic : SPECIAL_IDS.pond;
   if (o.role === 'spot') return o.rotation ? SPECIAL_IDS.rotatingSpot : o.motion ? SPECIAL_IDS.movingSpot : SPECIAL_IDS.spot;
   if (o.role === 'wire') return SPECIAL_IDS.wire;
+  if (o.role === 'metal') return SPECIAL_IDS.metal;
+  if (o.role === 'magnet') return SPECIAL_IDS.magnet;
+  if (o.role === 'rad') return o.rad?.kind === 'box' ? SPECIAL_IDS.radBox : o.rad?.kind === 'drum' ? SPECIAL_IDS.radDrum : SPECIAL_IDS.radZone;
   if (o.role === 'power') return POWER_IDS[o.power?.kind ?? 'switch'];
   if (o.ice) {
     const first = ICE_IDS[o.rotation ? 'rotating' : o.motion ? 'moving' : 'static'];

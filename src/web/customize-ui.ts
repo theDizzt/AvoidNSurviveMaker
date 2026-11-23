@@ -1,7 +1,7 @@
 import { rewardAchievement } from '../core/achievements';
 import { t, type MessageKey } from './i18n';
 import {
-  drawPointer, drawSkinTrail, onSkinChange, PALETTE, PALETTE_COLUMNS, POINTER_SKINS, resetSkin, setSkin, skin, skinAllowed, TRAIL_SKINS, type Skin,
+  drawPointer, drawSkinTrail, onSkinChange, PALETTE, PALETTE_COLUMNS, parseSkinColor, POINTER_SKINS, resetSkin, setSkin, skin, skinAllowed, TRAIL_SKINS, type Skin,
 } from './skin';
 import { fitRotatedGrid } from './campaign-ui';
 
@@ -96,6 +96,8 @@ export class CustomizeUI {
   private readonly trailName: HTMLElement;
   private readonly slots: Record<'primary' | 'accent', HTMLButtonElement>;
   private readonly swatches: HTMLButtonElement[] = [];
+  /** Hex code of the slot the palette sets; typing one sets any color */
+  private readonly hexInput: HTMLInputElement;
   /** Which color slot the palette sets */
   private target: 'primary' | 'accent' = 'primary';
   private raf = 0;
@@ -200,9 +202,33 @@ export class CustomizeUI {
     resetIn.append(el('span', 'dicon', '↺'), el('strong', '', t('customize.reset')));
     reset.addEventListener('click', resetSkin);
     nodes.push(reset);
-    nodes.push(tile('div', 'dtile-deco', '4', '3')[0], tile('div', 'dtile-deco', '3', '4')[0]);
+
+    // Hex code: any color, not just the palette's
+    const [hexTile, hexIn] = tile('div', 'cz-hex-tile', '4', '3');
+    const hex = el('input', 'cz-hex-input');
+    hex.type = 'text';
+    hex.spellcheck = false;
+    hex.autocomplete = 'off';
+    hex.maxLength = 7;
+    hex.placeholder = '#rrggbb';
+    hex.title = t('customize.hexHint');
+    const applyHex = () => {
+      const color = parseSkinColor(hex.value);
+      hex.setAttribute('aria-invalid', String(!color));
+      if (!color) return;
+      if (color === skin[this.target]) this.sync();
+      else setSkin({ [this.target]: color });
+    };
+    hex.addEventListener('change', applyHex);
+    hex.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') applyHex();
+      else if (e.key === 'Escape') { hex.blur(); this.sync(); }
+    });
+    hex.addEventListener('input', () => hex.removeAttribute('aria-invalid'));
+    hexIn.append(el('small', 'dstat-label', t('customize.hex')), hex);
+    this.hexInput = hex;
+    nodes.push(hexTile, tile('div', 'dtile-deco', '3', '4')[0]);
     nodes.at(-1)!.setAttribute('aria-hidden', 'true');
-    nodes.at(-2)!.setAttribute('aria-hidden', 'true');
 
     grid.prepend(...nodes);
     onSkinChange(() => this.sync());
@@ -397,9 +423,13 @@ export class CustomizeUI {
       const b = this.slots[which];
       b.setAttribute('aria-pressed', String(this.target === which));
       b.querySelector<HTMLElement>('.cz-chip')!.style.background = skin[which];
-      b.querySelector('.cz-hex')!.textContent = `${PALETTE.indexOf(skin[which]) + 1} · ${skin[which]}`;
+      const n = PALETTE.indexOf(skin[which]) + 1;
+      b.querySelector('.cz-hex')!.textContent = n ? `${n} · ${skin[which]}` : skin[which];
     }
     const current = skin[this.target];
+    this.hexInput.value = current;
+    this.hexInput.removeAttribute('aria-invalid');
+    this.hexInput.setAttribute('aria-label', `${t(this.target === 'primary' ? 'customize.primary' : 'customize.accent')}: ${t('customize.hex')}`);
     this.swatches.forEach((b, i) => {
       const on = PALETTE[i] === current;
       b.setAttribute('aria-checked', String(on));

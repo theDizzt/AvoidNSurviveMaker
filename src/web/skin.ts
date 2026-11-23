@@ -56,8 +56,17 @@ export function trailStyle(skin: Skin): TrailStyle {
   return TRAIL_SKINS[skin.trail] ?? 'line';
 }
 
-export function isPaletteColor(v: unknown): v is string {
-  return typeof v === 'string' && PALETTE.includes(v);
+/** A skin color: any '#rrggbb' (a palette color or one typed in) */
+export function isSkinColor(v: unknown): v is string {
+  return typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+}
+
+/** '#RGB', 'rgb', '#RRGGBB' or 'RRGGBB' → '#rrggbb' (null when it isn't a color code) */
+export function parseSkinColor(text: string): string | null {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(text.trim());
+  if (!m) return null;
+  const hex = m[1].length === 3 ? m[1].split('').map((c) => c + c).join('') : m[1];
+  return `#${hex.toLowerCase()}`;
 }
 
 function rgba(hex: string, a: number): string {
@@ -480,8 +489,8 @@ function loadSkin(): Skin {
     if (validIndex(saved.pointer, POINTER_SKINS.length)) out.pointer = saved.pointer;
     if (validIndex(saved.trail, TRAIL_SKINS.length)) out.trail = saved.trail;
     if (validIndex(saved.lastTrail, TRAIL_SKINS.length) && saved.lastTrail > 0) lastTrail = saved.lastTrail;
-    if (isPaletteColor(saved.primary)) out.primary = saved.primary;
-    if (isPaletteColor(saved.accent)) out.accent = saved.accent;
+    if (isSkinColor(saved.primary)) out.primary = saved.primary.toLowerCase();
+    if (isSkinColor(saved.accent)) out.accent = saved.accent.toLowerCase();
   } catch {
     /* storage unavailable or corrupted → defaults */
   }
@@ -534,8 +543,8 @@ function commitSkin(): void {
 export function setSkin(patch: Partial<Skin>): void {
   if (validIndex(patch.pointer, POINTER_SKINS.length) && skinGate('pointer', patch.pointer)) chosen.pointer = patch.pointer;
   if (validIndex(patch.trail, TRAIL_SKINS.length) && skinGate('trail', patch.trail)) chosen.trail = patch.trail;
-  if (isPaletteColor(patch.primary)) chosen.primary = patch.primary;
-  if (isPaletteColor(patch.accent)) chosen.accent = patch.accent;
+  if (isSkinColor(patch.primary)) chosen.primary = patch.primary.toLowerCase();
+  if (isSkinColor(patch.accent)) chosen.accent = patch.accent.toLowerCase();
   commitSkin();
 }
 

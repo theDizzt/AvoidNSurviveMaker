@@ -20,6 +20,9 @@ import { switchColor } from './localized/colors';
 import { boulderShape, spikeShape } from '../core/hazards';
 import { BeamCaster } from '../core/laser';
 import { createEmptyMap, DEFAULT_BLINK, DEFAULT_FALL, DEFAULT_ICE_GRIP, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_PULLEY, DEFAULT_SECRET_RADIUS, DEFAULT_SPOT, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS, validateMap } from './localized/validate';
+import { DEFAULT_AURA } from '../core/radiation';
+import { DEFAULT_MAGNET } from '../core/magnet';
+import { DEFAULT_GEAR, DEFAULT_PENDULUM, DEFAULT_PRESS, gearRing, handRing, pendulumRing } from '../core/machines';
 import { beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, fittedView, releaseRenderCaches, FONT_MAIN, fitCanvas, setCamera, staticPicture, traceObject, unitsPerPx, zonePath } from './render';
 import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
 import { renderThemePanel } from './theme-panel';
@@ -38,6 +41,13 @@ export type { EditorElements } from './editor-shared';
 
 /** "30°" / "-12.5°" */
 const tiltText = (deg: number): string => `${Math.round(deg * 10) / 10}°`;
+
+
+/** Palette title "#<id> <name>": the id comes from the item, not the translation (a "#n " the text still starts with is dropped) */
+function numbered(title: string, id: number | string | undefined): string {
+  const name = title.replace(/^#\d+\s*/, '');
+  return id === undefined ? name : `#${id} ${name}`;
+}
 
 export class Editor {
   onTest: (map: MapData) => void = () => {};
@@ -490,7 +500,7 @@ export class Editor {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = `pal-btn ${cls}`;
-      b.title = title;
+      b.title = numbered(title, /class="pal-num">(\d+)</.exec(html)?.[1]);
       b.setAttribute('aria-label', title);
       b.innerHTML = html;
       b.addEventListener('click', () => this.setTool(tool));
@@ -539,7 +549,7 @@ export class Editor {
             row,
             tool,
             `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[shape]}</svg>${badge}<span class="pal-num">${num}</span>`,
-            `#${num} ${toolLabel(tool)} (${k + 1})`,
+            `${toolLabel(tool)} (${k + 1})`,
             `pal-${g.role} pal-${g.behavior}`,
           );
         });
@@ -593,7 +603,7 @@ export class Editor {
         const tool: ObjectTool = { kind: 'object', role: 'path', behavior, shape, ice: true, ...(ring ? { ring: true } : {}) };
         const badge = behavior === 'moving' ? '⇄' : behavior === 'rotating' ? '↻' : '❄';
         addButton(row, tool, `${svg(ring ? ringIcon : ICONS[shape])}<span class="pal-badge">${badge}</span><span class="pal-num">${num}</span>`,
-          `#${num} ${toolLabel(tool)}${shape === 'poly' || shape === 'free' ? ` — ${tr('ed.clickPointsEnter')}` : ''}`, 'pal-ice');
+          `${toolLabel(tool)}${shape === 'poly' || shape === 'free' ? ` — ${tr('ed.clickPointsEnter')}` : ''}`, 'pal-ice');
       });
     }
 
@@ -633,6 +643,35 @@ export class Editor {
     const vineTool = (behavior: Behavior): ObjectTool => ({ kind: 'object', role: 'wall', behavior, shape: 'rect', special: 'vine' });
     addButton(row, vineTool('static'), `${svg(vineIcon)}<span class="pal-num">83</span>`, tr('ed.palVine'), 'pal-wall pal-static');
     addButton(row, vineTool('moving'), `${svg(vineIcon + route)}<span class="pal-num">84</span>`, tr('ed.palMovingVine'), 'pal-wall pal-moving');
+
+    // Magnetism: metal box and magnet (#98 / #99)
+    row = section(tr('ed.catMagnet'));
+    addButton(row, { kind: 'object', role: 'metal', behavior: 'static', shape: 'rect' }, `${svg('<rect x="3" y="3" width="18" height="18" rx="1.5" fill="#aab4c0" stroke="#3f4752"/><path d="M3 9 L21 9 M3 15 L21 15" stroke="#7f8a97" stroke-width="1"/><circle cx="6" cy="6" r="1" fill="#3f4752"/><circle cx="18" cy="6" r="1" fill="#3f4752"/><circle cx="6" cy="18" r="1" fill="#3f4752"/><circle cx="18" cy="18" r="1" fill="#3f4752"/>')}<span class="pal-num">98</span>`, tr('ed.palMetal'), 'pal-magnet');
+    addButton(row, { kind: 'object', role: 'magnet', behavior: 'static', shape: 'rect' }, `${svg('<path d="M4 3 L10 3 L10 13 A2 2 0 0 0 14 13 L14 3 L20 3 L20 13 A8 8 0 0 1 4 13 Z" fill="#e0475b" stroke="#3a2a2e"/><rect x="4" y="3" width="6" height="4" fill="#dfe4ea"/><rect x="14" y="3" width="6" height="4" fill="#dfe4ea"/>')}<span class="pal-num">99</span>`, tr('ed.palMagnet'), 'pal-magnet');
+
+    // Machines: gear, hydraulic press, clock hand, pendulum (#111–114)
+    row = section(tr('ed.catMachines'));
+    const machineTool = (special: 'gear' | 'press' | 'hand' | 'pendulum'): ObjectTool => ({ kind: 'object', role: 'wall', behavior: special === 'gear' || special === 'hand' ? 'rotating' : 'static', shape: 'rect', special });
+    const ringSvg = (pts: Float64Array) => {
+      let d = '';
+      for (let k = 0; k < pts.length; k += 2) d += `${k ? 'L' : 'M'}${pts[k].toFixed(2)} ${pts[k + 1].toFixed(2)} `;
+      return `<path d="${d}Z"/>`;
+    };
+    addButton(row, machineTool('gear'), `${svg(`${ringSvg(gearRing({ x: 2, y: 2, w: 20, h: 20 }, { teeth: 10, depth: 24 }))}<circle cx="12" cy="12" r="3" fill="#fff"/>`)}<span class="pal-badge">↻</span><span class="pal-num">111</span>`, tr('ed.palGear'), 'pal-wall pal-rotating');
+    addButton(row, machineTool('press'), `${svg('<rect x="8" y="1.5" width="8" height="9" rx="1"/><rect x="10.5" y="10" width="3" height="5"/><rect x="3" y="14.5" width="18" height="5" rx="1"/><path d="M5 22.5 L19 22.5" stroke-width="1.4" stroke-dasharray="2 1.5"/>')}<span class="pal-num">112</span>`, tr('ed.palPress'), 'pal-wall pal-moving');
+    addButton(row, machineTool('hand'), `${svg(`<g transform="rotate(35 12 17)">${ringSvg(handRing({ x: 9, y: 1, w: 6, h: 20 }))}</g><circle cx="12" cy="17" r="1.2" fill="#fff"/>`)}<span class="pal-badge">↻</span><span class="pal-num">113</span>`, tr('ed.palHand'), 'pal-wall pal-rotating');
+    addButton(row, machineTool('pendulum'), `${svg(`<g transform="rotate(-25 12 2.5)">${ringSvg(pendulumRing({ x: 7, y: 2, w: 10, h: 21 }))}</g><circle cx="12" cy="2.5" r="1.6" fill="#fff"/>`)}<span class="pal-badge">↻</span><span class="pal-num">114</span>`, tr('ed.palPendulum'), 'pal-wall pal-rotating');
+
+    // Radiation: radioactive zone, box and drum of radioactive waste
+    row = section(tr('ed.catRadiation'));
+    const radTool = (rad: 'zone' | 'box' | 'drum'): ObjectTool => ({ kind: 'object', role: 'rad', behavior: 'static', shape: rad === 'zone' ? 'free' : rad === 'drum' ? 'ellipse' : 'rect', rad });
+    const trefoil = (cx: number, cy: number, r: number, fill: string) => [0, 120, 240].map((a) => {
+      const p = (deg: number, rr: number) => `${(cx + Math.cos(((deg - 90) * Math.PI) / 180) * rr).toFixed(2)},${(cy + Math.sin(((deg - 90) * Math.PI) / 180) * rr).toFixed(2)}`;
+      return `<path d="M${p(a - 30, r * 0.35)} L${p(a - 30, r)} A${r} ${r} 0 0 1 ${p(a + 30, r)} L${p(a + 30, r * 0.35)} A${r * 0.35} ${r * 0.35} 0 0 0 ${p(a - 30, r * 0.35)} Z" fill="${fill}"/>`;
+    }).join('') + `<circle cx="${cx}" cy="${cy}" r="${(r * 0.22).toFixed(2)}" fill="${fill}"/>`;
+    addButton(row, radTool('zone'), `${svg(`<path d="M3 9 C3 4 9 3 13 4.5 S 21 6 21 12 S 15 21 10 20 S 3 15 3 9 Z" fill="#c6f24a" fill-opacity="0.75" stroke="#5c7a12" stroke-dasharray="2.5 1.5"/>${trefoil(12, 12, 5.5, '#2b3510')}`)}<span class="pal-num">115</span>`, `${tr('ed.palRadZone')} — ${tr('ed.clickPointsEnter')}`, 'pal-rad');
+    addButton(row, radTool('box'), `${svg(`<circle cx="12" cy="12" r="11" fill="#b6f03c" fill-opacity="0.35" stroke="none"/><rect x="5" y="5" width="14" height="14" rx="1.5" fill="#f2c318" stroke="#3b3a30"/>${trefoil(12, 12, 5, '#2a2a22')}`)}<span class="pal-num">116</span>`, tr('ed.palRadBox'), 'pal-rad');
+    addButton(row, radTool('drum'), `${svg(`<circle cx="12" cy="12" r="11" fill="#b6f03c" fill-opacity="0.35" stroke="none"/><circle cx="12" cy="12" r="7.5" fill="#f2c318" stroke="#3b3a30"/>${trefoil(12, 12, 5, '#2a2a22')}`)}<span class="pal-num">117</span>`, tr('ed.palRadDrum'), 'pal-rad');
 
     // Shooters: laser and mirror, turret and homing missile launcher
     row = section(tr('ed.catShooters'));
@@ -680,7 +719,7 @@ export class Editor {
     const g = document.createElement('button');
     g.type = 'button';
     g.className = 'pal-btn pal-global-dark';
-    g.title = tr('ed.42GlobalDarknessToggle');
+    g.title = numbered(tr('ed.42GlobalDarknessToggle'), SPECIAL_IDS.globalDark);
     g.setAttribute('aria-label', g.title);
     g.innerHTML = `${svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="#fff"/>')}<span class="pal-num">42</span>`;
     g.addEventListener('click', () => this.edit(() => {
@@ -846,7 +885,8 @@ export class Editor {
       const t = this.tool;
       const how = tr(t.special === 'spike' ? 'ed.howSpike'
         : t.special === 'boulder' ? 'ed.howBoulder'
-          : t.role === 'torch' || t.role === 'crystal' || t.role === 'turret' || t.role === 'spot' || t.role === 'power' || t.special === 'fall' ? 'ed.howTorch'
+          : t.role === 'torch' || t.role === 'crystal' || t.role === 'turret' || t.role === 'spot' || t.role === 'power' || t.special === 'fall' || (t.role === 'rad' && t.rad !== 'zone')
+            || t.role === 'metal' || t.role === 'magnet' ? 'ed.howTorch'
           : t.role === 'mirror' ? 'ed.howMirror'
             : t.role === 'laser' ? 'ed.howLaser'
               : t.role === 'portal' ? 'ed.howPortal' : t.shape === 'sector' ? 'ed.howSector' : t.role === 'coin' ? 'ed.howCoin' : t.shape === 'poly' || t.shape === 'free' ? 'ed.howPoints' : t.shape === 'ellipse' ? 'ed.howEllipse' : 'ed.howRect');
@@ -873,10 +913,13 @@ export class Editor {
   private hitTest(p: Point): Hit {
     const objs = this.compiled;
     const zoneTrigger = (i: number) => !isButton(this.map.objects[i]?.trigger?.kind);
+    // Radioactive waste is picked with the solid things, a radioactive zone with the areas
+    const radZone = (i: number) => this.map.objects[i]?.rad?.kind === 'zone';
     // Text boxes are drawn over everything, so they are picked first
-    for (const role of ['text', 'coin', 'crystal', 'torch', 'spot', 'power', 'pulley', 'portal', 'laser', 'turret', 'trigger', 'wire', 'luggage', 'lily', 'wall', 'door', 'mirror'] as const) {
+    for (const role of ['text', 'coin', 'crystal', 'torch', 'spot', 'power', 'pulley', 'portal', 'laser', 'turret', 'trigger', 'wire', 'magnet', 'metal', 'luggage', 'rad', 'lily', 'wall', 'door', 'mirror'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && zoneTrigger(i)) continue;
+        if (role === 'rad' && radZone(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
       }
     }
@@ -884,9 +927,10 @@ export class Editor {
     if (new ZoneArea(this.map.start, this.map.startShape).contains(p.x, p.y)) return { kind: 'start' };
     // Darkness and fog areas last, so whatever lies under one can still be clicked. Conveyor belts
     // (#69) lie over paths; a loop's middle is not belt (even-odd, like its outline)
-    for (const role of ['safe', 'conveyor', 'liquid', 'path', 'trigger', 'dark', 'fog', 'secret'] as const) {
+    for (const role of ['safe', 'conveyor', 'rad', 'liquid', 'path', 'trigger', 'dark', 'fog', 'secret'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && !zoneTrigger(i)) continue;
+        if (role === 'rad' && !radZone(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
       }
     }
@@ -1423,7 +1467,19 @@ export class Editor {
         : tool.power === 'pulley' ? [80, 80] : tool.power === 'timer' ? [48, 48] : tool.power === 'inverter' ? [64, 36] : [40, 40];
       r = { x: d.x0 - w / 2, y: d.y0 - h / 2, w, h };
     }
-    if (tool.role === 'lily') {
+    // A plain click drops a metal box (#98) 50×50, a magnet (#99) 60×30
+    if (tool.role === 'metal' && r.w < 4 && r.h < 4) r = { x: d.x0 - 25, y: d.y0 - 25, w: 50, h: 50 };
+    if (tool.role === 'magnet' && r.w < 4 && r.h < 4) r = { x: d.x0 - 30, y: d.y0 - 15, w: 60, h: 30 };
+    // Machines (#111–114): a plain click drops one in its usual proportions
+    const machine = tool.special === 'gear' ? [100, 100] : tool.special === 'press' ? [100, 32] : tool.special === 'hand' ? [24, 150] : tool.special === 'pendulum' ? [50, 220] : null;
+    if (machine && r.w < 4 && r.h < 4) r = { x: d.x0 - machine[0] / 2, y: d.y0 - machine[1] / 2, w: machine[0], h: machine[1] };
+    if (tool.special === 'gear') {
+      const s = Math.max(r.w, r.h);
+      r = { x: r.x + r.w / 2 - s / 2, y: r.y + r.h / 2 - s / 2, w: s, h: s };
+    }
+    // Radioactive waste (#116 / #117): a plain click drops one 48×48
+    if (tool.role === 'rad' && tool.rad !== 'zone' && r.w < 4 && r.h < 4) r = { x: d.x0 - 24, y: d.y0 - 24, w: 48, h: 48 };
+    if (tool.role === 'lily' || (tool.role === 'rad' && tool.rad === 'drum')) {
       // Always round
       const s = Math.max(r.w, r.h);
       r = { x: r.x + r.w / 2 - s / 2, y: r.y + r.h / 2 - s / 2, w: s, h: s };
@@ -1540,7 +1596,21 @@ export class Editor {
     if (tool.behavior === 'blinking') o.blink = { ...DEFAULT_BLINK };
     if (tool.ice) o.ice = { grip: DEFAULT_ICE_GRIP };
     if (tool.special === 'vine') o.vine = true;
+    // Machines (#111–114)
+    if (tool.special === 'gear') {
+      o.gear = { ...DEFAULT_GEAR };
+      o.rotation = { ...defaultRotation(o), speed: 60 };
+    }
+    if (tool.special === 'hand') {
+      o.hand = true;
+      // A second hand: one beat (6°) a second
+      o.rotation = { ...defaultRotation(o), speed: 6, easing: 'out', tick: { angle: 6, moveMs: 150, waitMs: 850 } };
+    }
+    if (tool.special === 'pendulum') o.pendulum = { ...DEFAULT_PENDULUM };
+    if (tool.special === 'press') o.press = { ...DEFAULT_PRESS };
+    if (tool.role === 'magnet') o.magnet = { ...DEFAULT_MAGNET };
     if (tool.role === 'liquid') o.liquid = { kind: tool.liquid ?? 'pond' };
+    if (tool.role === 'rad') o.rad = tool.rad === 'box' || tool.rad === 'drum' ? { kind: tool.rad, aura: { ...DEFAULT_AURA } } : { kind: 'zone' };
     if (tool.role === 'spot') {
       o.spot = { ...DEFAULT_SPOT };
       // A searchlight sweeping back and forth over a quarter turn

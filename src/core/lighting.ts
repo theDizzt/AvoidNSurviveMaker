@@ -2,6 +2,7 @@ import { elecEffect, isLightRole } from './electric';
 import { pointInPoly } from './geometry';
 import { toWorld, transformAt, type CompiledObject } from './object';
 import { shapeCenter } from './shape';
+import { auraRadius } from './radiation';
 import type { MapObject } from './types';
 
 /**
@@ -71,6 +72,24 @@ export function objectLights(objects: readonly CompiledObject[], time: number, s
           if (!pointInPoly(x, y, o.poly)) continue;
           toWorld(o, tf, x, y, p);
           lights.push({ x: p.x, y: p.y, r: TOXIC_GLOW_GAP * 1.1, intensity: 55 });
+        }
+      }
+      return;
+    }
+    // Radioactive zones glow all over (#115); waste glows as far as its aura reaches now (#116 / #117)
+    if (m.role === 'rad' && m.rad) {
+      const at = state.clock?.[i] ?? time;
+      const tf = transformAt(o, at, pose);
+      if (m.rad.aura) {
+        toWorld(o, tf, o.cx, o.cy, p);
+        lights.push({ x: p.x, y: p.y, r: Math.max(40, auraRadius(m.rad.aura, at) * 1.15), intensity: 55 });
+        return;
+      }
+      for (let y = o.minY + TOXIC_GLOW_GAP / 2; y < o.maxY; y += TOXIC_GLOW_GAP) {
+        for (let x = o.minX + TOXIC_GLOW_GAP / 2; x < o.maxX; x += TOXIC_GLOW_GAP) {
+          if (!pointInPoly(x, y, o.poly)) continue;
+          toWorld(o, tf, x, y, p);
+          lights.push({ x: p.x, y: p.y, r: TOXIC_GLOW_GAP * 1.1, intensity: 50 });
         }
       }
       return;

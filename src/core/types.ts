@@ -54,9 +54,48 @@ export type Shape =
  * wire: an electric wire (#91): deadly while it carries power (see `wire`).
  * power: an electric device (#94–97): switch, pulley, timer or inverter feeding the wires touching
  *   it (see `power`).
+ * metal: a metal box (#98): deadly like a wall, dragged toward magnets that pull it.
+ * magnet: a magnet (#99): a deadly block that, while on, pulls the cursor and metal boxes (see `magnet`).
+ * rad: a radioactive zone (#115, deadly to touch) or a piece of radioactive waste (#116 box /
+ *   #117 drum) whose round radioactive area grows and shrinks around it (see `rad`).
  */
 export type Role = 'path' | 'wall' | 'coin' | 'dark' | 'trigger' | 'door' | 'laser' | 'mirror' | 'portal' | 'text' | 'safe' | 'fog' | 'torch' | 'secret' | 'crystal' | 'pulley' | 'turret' | 'conveyor' | 'luggage'
-  | 'liquid' | 'lily' | 'spot' | 'wire' | 'power';
+  | 'liquid' | 'lily' | 'spot' | 'wire' | 'power' | 'rad' | 'metal' | 'magnet';
+
+/**
+ * Magnet (#99): while on, it pulls what lies within `range` px of its center toward it, at up to
+ * `strength` px/s (strongest next to it, nothing at the edge of its range). The cursor is pulled
+ * like on ice (it drifts off the mouse); metal boxes (#98) slide until something stops them.
+ * On unless a switch link or a wire says otherwise.
+ */
+export interface Magnet {
+  range: number;
+  strength: number;
+  cursor: boolean;
+  metal: boolean;
+}
+
+/**
+ * Round radioactive area around a piece of waste (#116 / #117), centered on it: `min` px wide
+ * (radius) at rest, it grows to `max` over `growMs`, stays `holdMs`, shrinks back over `shrinkMs`
+ * and rests `restMs`, over and over. Before `delay` ms it rests (a negative delay starts partway).
+ */
+export interface Aura {
+  min: number;
+  max: number;
+  growMs: number;
+  holdMs: number;
+  shrinkMs: number;
+  restMs: number;
+  delay: number;
+}
+
+/** Radioactive zone (#115, any shape) or waste: a box (#116) or a drum (#117) with an `aura` */
+export interface Rad {
+  kind: 'zone' | 'box' | 'drum';
+  /** box / drum only */
+  aura?: Aura;
+}
 
 /** Pond water (#86) or glowing radioactive water (#87). Touching liquids blend where they meet. */
 export interface Liquid {
@@ -394,6 +433,49 @@ export interface Rotation {
   delay: number;
   /** Draw a screw on the pivot in game */
   showPivot?: boolean;
+  /**
+   * Turn a beat at a time like a clock hand (#111 / #113): `angle` degrees over `moveMs` (with the
+   * rotation's easing), then a stop of `waitMs`. Replaces `speed`; `angle` / `repeat` of the
+   * rotation still bound the sweep.
+   */
+  tick?: RotationTick;
+}
+
+export interface RotationTick {
+  angle: number;
+  moveMs: number;
+  waitMs: number;
+}
+
+/** Gear (#111), on a wall: a toothed wheel filling its square, `teeth` teeth `depth` % of its radius tall */
+export interface Gear {
+  teeth: number;
+  depth: number;
+}
+
+/**
+ * Pendulum (#114), on a wall: a rod hanging from the top of its box with a round bob at the bottom
+ * (as wide as the box), swinging `amplitude` degrees to each side, one full swing there and back
+ * every `periodMs`. `delay`: ms before it starts (negative = partway).
+ */
+export interface Pendulum {
+  amplitude: number;
+  periodMs: number;
+  delay: number;
+}
+
+/**
+ * Hydraulic press (#112), on a wall: its box is the press head, driven by a rod out of a fixed
+ * cylinder behind it (above, turned with the tilt). Each beat on its own: it waits open `waitMs`,
+ * slams `reach` px down in `downMs`, stays shut `holdMs` and rises back in `upMs`.
+ */
+export interface Press {
+  reach: number;
+  downMs: number;
+  holdMs: number;
+  upMs: number;
+  waitMs: number;
+  delay: number;
 }
 
 export interface MapObject {
@@ -456,6 +538,14 @@ export interface MapObject {
   light?: { radius: number; intensity?: number };
   /** Thorn vine (#83 / #84), on a wall: thorns all around its outline (part of its shape) */
   vine?: boolean;
+  /** Gear (#111), on a wall: its teeth are part of its outline */
+  gear?: Gear;
+  /** Clock hand (#113), on a wall: a tapered hand along its box's long side, its hub at one end */
+  hand?: boolean;
+  /** Pendulum (#114), on a wall */
+  pendulum?: Pendulum;
+  /** Hydraulic press (#112), on a wall */
+  press?: Press;
   /** role 'liquid' (#86 / #87) */
   liquid?: Liquid;
   /** role 'spot' (#88–90) */
@@ -464,6 +554,10 @@ export interface MapObject {
   wire?: Wire;
   /** role 'power' (#94–97) */
   power?: Power;
+  /** role 'rad' (#115–117) */
+  rad?: Rad;
+  /** role 'magnet' (#99) */
+  magnet?: Magnet;
   /** How the object reacts to a powered wire ending on it (omitted = a default for its kind) */
   elec?: { action: ElecAction };
 }

@@ -1,6 +1,6 @@
 import { pointInPoly, segmentPolyCrossings } from './geometry';
 import { displayTime } from './time';
-import { compileMap, compileObject, compileTiltedAbout, toLocal, toWorld, transformAt, type CompiledObject, type Transform } from './object';
+import { compileMap, compileObject, compilePressCylinder, compileTiltedAbout, toLocal, toWorld, transformAt, type CompiledObject, type Transform } from './object';
 import { autoDoorOpen, doorPanels, initialChannels } from './switches';
 import { BeamCaster, beamHit, type Beam } from './laser';
 import { TurretSystem, type Shot, type TurretState } from './turret';
@@ -10,6 +10,7 @@ import { CompiledMotion, CompiledRotation } from './motion';
 import { rotatePoint, shapeCenter } from './shape';
 import { BeltPath, LuggageMover, polysOverlap } from './conveyor';
 import { Circuit, elecEffect, GENERATOR_MS, isLightRole } from './electric';
+import { auraRadius, segmentCircleEntry } from './radiation';
 
 /** How long a portal pulls the cursor to its center before teleporting (ms) */
 export const PORTAL_PULL_MS = 160;
@@ -37,7 +38,8 @@ export type AbortReason = 'left' | 'blur' | 'pointer';
 /** wall: static wall · mover: moving/rotating wall · void: outside the paths (counts as wall) · bounds: left the map */
 /** bullet / missile: shot by a turret (#60) or hit by a homing missile (#61) */
 /** liquid: fell into a pond / radioactive water (#86 / #87) · shock: touched a live wire (#91) */
-export type EndReason = 'wall' | 'mover' | 'void' | 'bounds' | 'laser' | 'bullet' | 'missile' | 'liquid' | 'shock' | AbortReason;
+/** radiation: inside a radioactive zone, a piece of waste or its aura (#115–117) */
+export type EndReason = 'wall' | 'mover' | 'void' | 'bounds' | 'laser' | 'bullet' | 'missile' | 'liquid' | 'shock' | 'radiation' | AbortReason;
 
 /** t: ms since the run started (START click), sub-millisecond precision preserved */
 export interface ReplaySample {
@@ -59,6 +61,8 @@ export interface Replay {
 const tfA: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
 const tfB: Transform = { dx: 0, dy: 0, cos: 1, sin: 0 };
 const pA: Point = { x: 0, y: 0 };
+/** Scratch for magnet pulls (#99) */
+const magnetStep: Point = { x: 0, y: 0 };
 const pB: Point = { x: 0, y: 0 };
 
 /**
@@ -111,6 +115,11 @@ export class Simulation {
   private readonly belts: readonly { i: number; path: BeltPath }[];
   /** Crates (#70): object index and the mover the simulation steps */
   private readonly crates: readonly { i: number; mover: LuggageMover }[];
+  /** Metal boxes (#98) a magnet can pull (none when no magnet pulls metal) */
+  private readonly metals: readonly { i: number; mover: LuggageMover }[];
+  /** Magnets (#99), and those that pull the cursor */
+  private readonly magnets: readonly number[];
+  private readonly cursorMagnets: readonly number[];
   /** The cursor's velocity (map units / ms) while sliding on ice */
   vx = 0;
   vy = 0;
@@ -127,6 +136,8 @@ export class Simulation {
   private readonly crystals: readonly number[];
   /** Falling rocks (#51): hidden while not falling */
   private readonly falls: readonly number[];
+  /** Radioactive waste (#116 / #117): its round aura is checked on its own */
+  private readonly wastes: readonly number[];
   /** Blinking paths / walls (#75–82): hidden while off */
   private readonly blinks: readonly number[];
 
@@ -243,14 +254,20 @@ export class Simulation {
       o.ice || o.link ||
       o.role === 'trigger' || o.role === 'door' || o.role === 'portal' ||
       o.role === 'pulley' || o.role === 'laser' || o.role === 'turret' || o.role === 'conveyor' ||
-      o.role === 'wire' || o.role === 'power');
+      o.role === 'wire' || o.role === 'power' || o.role === 'magnet');
     this.simulationStepMs = needsFineSteps ? 1 : stepMs;
     this.hasPaths = this.objects.some((o) => o.role === 'path');
     this.ices = map.objects.flatMap((o, i) => (o.role === 'path' && o.ice ? [i] : []));
     this.belts = map.objects.flatMap((o, i) => (o.role === 'conveyor' && o.conveyor ? [{ i, path: new BeltPath(o.conveyor) }] : []));
     this.crates = this.objects.flatMap((o, i) => (o.role === 'luggage' && o.motion instanceof LuggageMover ? [{ i, mover: o.motion }] : []));
-    // Every run starts with the crates where they were placed
+    this.magnets = map.objects.flatMap((o, i) => (o.role === 'magnet' && o.magnet && o.magnet.strength > 0 ? [i] : []));
+    this.cursorMagnets = this.magnets.filter((i) => map.objects[i].magnet!.cursor);
+    // Metal boxes only move when some magnet pulls metal
+    const pullsMetal = this.magnets.some((i) => map.objects[i].magnet!.metal);
+    this.metals = pullsMetal ? this.objects.flatMap((o, i) => (o.role === 'metal' && o.motion instanceof LuggageMover ? [{ i, mover: o.motion }] : [])) : [];
+    // Every run starts with the crates and metal boxes where they were placed
     for (const c of this.crates) c.mover.reset();
+    for (const o of this.objects) if (o.role === 'metal' && o.motion instanceof LuggageMover) o.motion.reset();
     // Coins, triggers, darkness areas and text don't block or support the cursor. A door is two
     // sliding wall halves. Safe zones come first: inside one, nothing else matters.
     const solids: CompiledObject[] = [];
@@ -267,12 +284,20 @@ export class Simulation {
     this.safeCount = solids.length;
     this.objects.forEach((o, i) => {
       if (o.role === 'path' || o.role === 'wall' || o.role === 'laser' || o.role === 'turret' || o.role === 'conveyor' || o.role === 'luggage'
-        || o.role === 'liquid' || o.role === 'lily' || o.role === 'wire') {
-        // A laser emitter's, a turret's or a crate's body is as deadly as a wall; a belt is floor
-        solids.push(o.role === 'laser' || o.role === 'turret' || o.role === 'luggage' ? { ...o, role: 'wall' } : o);
+        || o.role === 'liquid' || o.role === 'lily' || o.role === 'wire' || o.role === 'rad' || o.role === 'metal' || o.role === 'magnet') {
+        // The bodies of laser emitters, turrets, crates, metal boxes and magnets are as deadly as a wall; a belt is floor
+        solids.push(o.role === 'laser' || o.role === 'turret' || o.role === 'luggage' || o.role === 'metal' || o.role === 'magnet' ? { ...o, role: 'wall' } : o);
         src.push(i);
         doorOf.push(-1);
         slide.push(0, 0);
+        // A hydraulic press (#112): its cylinder is a wall of its own that stays put
+        const cylinder = compilePressCylinder(map.objects[i]);
+        if (cylinder) {
+          solids.push(map.objects[i].link || map.objects[i].blink ? { ...cylinder, dynamic: true } : cylinder);
+          src.push(i);
+          doorOf.push(-1);
+          slide.push(0, 0);
+        }
       } else if (o.role === 'door' && map.objects[i].shape.type === 'rect') {
         const s = map.objects[i].shape as { x: number; y: number; w: number; h: number };
         // A tilted door's panels turn about the door's center, and slide along the tilt
@@ -305,6 +330,7 @@ export class Simulation {
     this.coins = this.objects.flatMap((o, i) => (o.role === 'coin' ? [i] : []));
     this.crystals = this.objects.flatMap((o, i) => (o.role === 'crystal' ? [i] : []));
     this.falls = map.objects.flatMap((o, i) => (o.fall ? [i] : []));
+    this.wastes = map.objects.flatMap((o, i) => (o.role === 'rad' && o.rad?.aura ? [i] : []));
     this.blinks = map.objects.flatMap((o, i) => (o.blink ? [i] : []));
     this.pulleys = map.objects.flatMap((o, i) => (o.role === 'pulley' && o.pulley ? [i] : []));
     this.pulleyAngle = new Float64Array(this.objects.length);
@@ -431,7 +457,7 @@ export class Simulation {
         sy = this.y;
         continue;
       }
-      if (this.ices.length || this.belts.length) {
+      if (this.ices.length || this.belts.length || this.cursorMagnets.length) {
         this.slideStep(t, rx, ry);
         if (this.status !== 'playing' || this.time === t) return;
         continue;
@@ -498,6 +524,7 @@ export class Simulation {
       this.vy = mvy;
     }
     if (this.belts.length) this.beltPush(this.x, this.y, dt);
+    if (this.cursorMagnets.length) this.magnetPull(this.x, this.y, dt);
     const bx = mx1 + this.offX;
     const by = my1 + this.offY;
     this.checkSegment(this.time, this.x, this.y, end, bx, by);
@@ -506,6 +533,68 @@ export class Simulation {
     this.x = bx;
     this.y = by;
     if (end === this.tick + 1) this.tick = end;
+  }
+
+  /** Is magnet `i` pulling now? Not while removed, nor while its switch link / wire holds it (like a motion that doesn't run) */
+  private magnetOn(i: number): boolean {
+    return !this.hidden[i] && this.runs(i);
+  }
+
+  /**
+   * The pull of the magnets in `list` on (x, y) over `dt` ms, added to `out`: toward each one in
+   * range, at its strength right by it, fading to nothing at the edge of its range.
+   */
+  private magnetForce(x: number, y: number, dt: number, list: readonly number[], kind: 'cursor' | 'metal', out: Point): void {
+    for (const i of list) {
+      const g = this.map.objects[i].magnet!;
+      if (!g[kind] || !this.magnetOn(i)) continue;
+      const o = this.objects[i];
+      toWorld(o, transformAt(o, this.clockB[i] ?? this.time, tfA), o.cx, o.cy, pB);
+      const dx = pB.x - x;
+      const dy = pB.y - y;
+      const d = Math.hypot(dx, dy);
+      if (d >= g.range || d < 1e-6) continue;
+      const step = Math.min(d, (g.strength / 1000) * (1 - d / g.range) * dt);
+      out.x += (dx / d) * step;
+      out.y += (dy / d) * step;
+    }
+  }
+
+  /** Magnets (#99) drag the cursor off the mouse, like ice: their pull builds up in the offset */
+  private magnetPull(x: number, y: number, dt: number): void {
+    magnetStep.x = 0;
+    magnetStep.y = 0;
+    this.magnetForce(x, y, dt, this.cursorMagnets, 'cursor', magnetStep);
+    this.offX += magnetStep.x;
+    this.offY += magnetStep.y;
+  }
+
+  /**
+   * Drag each metal box (#98) toward the magnets pulling it from ta to tb. It stops where a wall,
+   * door, crate, magnet or another box (where they are at tb) is in the way, and slides along it
+   * when only one direction is blocked.
+   */
+  private moveMetals(ta: number, tb: number): void {
+    const dt = tb - ta;
+    for (const c of this.metals) {
+      const m = c.mover;
+      m.begin(ta, tb);
+      if (this.hidden[c.i] || dt <= 0) continue;
+      const o = this.objects[c.i];
+      magnetStep.x = 0;
+      magnetStep.y = 0;
+      this.magnetForce(o.cx + m.x1, o.cy + m.y1, dt, this.magnets, 'metal', magnetStep);
+      const sx = magnetStep.x;
+      const sy = magnetStep.y;
+      if (sx === 0 && sy === 0) continue;
+      for (const [dx, dy] of [[sx, sy], [sx, 0], [0, sy]]) {
+        if (dx === 0 && dy === 0) continue;
+        if (this.crateBlocked(c.i, o, m.x1 + dx, m.y1 + dy, null)) continue;
+        m.x1 += dx;
+        m.y1 += dy;
+        break;
+      }
+    }
   }
 
   /** The belt (#69) under (x, y): the cursor travels with it for `dt` ms (the fastest one if belts overlap) */
@@ -580,7 +669,7 @@ export class Simulation {
    * Would crate `ci` overlap another crate, or a wall or door lying across its `belt`, if moved to
    * offset (dx, dy)? Walls beside the belt don't stop it: it turns corners past them.
    */
-  private crateBlocked(ci: number, o: CompiledObject, dx: number, dy: number, belt: BeltPath): boolean {
+  private crateBlocked(ci: number, o: CompiledObject, dx: number, dy: number, belt: BeltPath | null): boolean {
     // The crate a hair smaller, so a crate resting against something can still slide along it
     if (this.crateScratch.length !== o.poly.length) this.crateScratch = new Float64Array(o.poly.length);
     const box = this.crateScratch;
@@ -627,8 +716,9 @@ export class Simulation {
       }
       if (wx1 <= minX || wx0 >= maxX || wy1 <= minY || wy0 >= maxY) continue;
       if (!polysOverlap(box, ring)) continue;
-      if (src >= 0 && this.objects[src].role === 'luggage') return true;
-      if (belt.overlaps(ring)) return true;
+      if (src >= 0 && (this.objects[src].role === 'luggage' || this.objects[src].role === 'metal')) return true;
+      // A metal box (no belt) is stopped by anything solid
+      if (!belt || belt.overlaps(ring)) return true;
     }
     return false;
   }
@@ -813,7 +903,7 @@ export class Simulation {
   }
 
   /** What the cursor is touching at fraction u of the prepared segment: null = safe */
-  private hazardAt(u: number): 'wall' | 'mover' | 'void' | 'liquid' | 'shock' | null {
+  private hazardAt(u: number): 'wall' | 'mover' | 'void' | 'liquid' | 'shock' | 'radiation' | null {
     const { solids, local, relevant } = this;
     let onPath = !this.hasPaths;
     // Liquid only kills outside every lily pad (#85), so remember it until the end
@@ -831,6 +921,7 @@ export class Simulation {
       if (!pointInPoly(x, y, o.poly)) continue;
       if (o.role === 'safe') return null;
       if (o.role === 'wire') return 'shock';
+      if (o.role === 'rad') return 'radiation';
       if (o.role === 'liquid') {
         wet = true;
         continue;
@@ -876,6 +967,19 @@ export class Simulation {
           }
           prev = c;
         }
+      }
+    }
+
+    // Radioactive waste (#116 / #117): its aura, as large as it is at the end of this tick
+    for (const i of this.wastes) {
+      if (this.hidden[i]) continue;
+      const o = this.objects[i];
+      const at = this.clockB[i] ?? tb;
+      toWorld(o, transformAt(o, at, tfA), o.cx, o.cy, pA);
+      const u = segmentCircleEntry(xa, ya, xb, yb, pA.x, pA.y, auraRadius(this.map.objects[i].rad!.aura!, at));
+      if (u >= 0 && u < deathU && !this.inSafeZone(xa + (xb - xa) * u, ya + (yb - ya) * u, tb)) {
+        deathU = u;
+        reason = 'radiation';
       }
     }
 
@@ -1029,6 +1133,8 @@ export class Simulation {
     }
     // Crates move against the walls and doors where they are at the end of this piece
     if (this.crates.length) this.moveCrates(ta, tb);
+    // Metal boxes too, pulled by the magnets where they are now
+    if (this.metals.length) this.moveMetals(ta, tb);
   }
 
   /** Commit the segment, then let triggers react to where the cursor went */

@@ -29,7 +29,7 @@ export type ElecEffect = ElecAction | 'door' | 'laser';
 function connectable(o: MapObject): boolean {
   switch (o.role) {
     case 'wall': case 'door': case 'laser': case 'spot': case 'torch': case 'turret': case 'mirror':
-    case 'dark': case 'fog': case 'liquid': case 'lily': case 'secret':
+    case 'dark': case 'fog': case 'liquid': case 'lily': case 'secret': case 'rad': case 'magnet':
       return true;
     // A floor only when it is meant to react: it moves, blinks or has a setting
     case 'path':
@@ -45,6 +45,8 @@ export function elecEffect(o: MapObject): ElecEffect {
   if (o.role === 'laser' && !o.elec) return 'laser';
   if (o.elec) return o.elec.action;
   if (o.role === 'spot' || o.role === 'torch') return 'show';
+  // A wired magnet (#99) pulls while powered
+  if (o.role === 'magnet') return 'start';
   return o.motion || o.rotation ? 'start' : 'remove';
 }
 

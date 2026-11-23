@@ -3,14 +3,15 @@ import { contentHash, uniqueLevelIds } from './record-identity';
 import { pointInPoly, pointInRect } from './geometry';
 import { compileObject, toWorld, transformAt, type Transform } from './object';
 import { createColorsApi } from './colors';
-import { normalizeTilt, shapeBounds, shapeCenter } from './shape';
+import { normalizeTilt, rotatePoint, shapeBounds, shapeCenter } from './shape';
 import { beltPoints, conveyorOutline } from './conveyor';
 import { wireOutline } from './electric';
+import { GEAR_TEETH, handPivot } from './machines';
 import { assignObjectIds, MAX_OBJECT_ID, objectNumber } from './object-ids';
 import {
   MAP_VERSION, PACK_VERSION,
   type Door, type Easing, type Fill, type MapData, type MapPack, type Trigger, type TriggerKind, type MapObject, type Motion, type PatternKind, type Point, type PolyPoint, type Rect,
-  type Repeat, type Rotation, type Shape, type SurfaceAnim, type SurfaceStyle, type Theme, type Wave, type Fall, type Pulley, type Turret, type Blink, type ZoneShape, type Conveyor, type Spot, type Power,
+  type Repeat, type Rotation, type RotationTick, type Shape, type SurfaceAnim, type SurfaceStyle, type Theme, type Wave, type Fall, type Pulley, type Turret, type Blink, type ZoneShape, type Conveyor, type Spot, type Power,
 } from './types';
 
 export class MapValidationError extends Error {}
@@ -57,6 +58,10 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     /** Global darkness light radius */
     minLight: 0,
     maxLight: 2000,
+    /** Radioactive waste (#116 / #117): largest aura radius (px) */
+    maxAura: 2000,
+    /** Magnets (#99): farthest pull (px) */
+    maxMagnetRange: 2000,
   } as const;
 
   function fail(msg: string): never {
@@ -189,6 +194,16 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       easing: oneOf(o.easing, `${name}.easing`, EASINGS),
       delay: num(o.delay, `${name}.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
       ...(o.showPivot === true ? { showPivot: true } : {}),
+      ...(o.tick !== undefined ? { tick: tick(o.tick, `${name}.tick`) } : {}),
+    };
+  }
+
+  function tick(v: unknown, name: string): RotationTick {
+    const o = obj(v, name);
+    return {
+      angle: num(o.angle, `${name}.angle`, 0.1, 360),
+      moveMs: num(o.moveMs, `${name}.moveMs`, 0, LIMITS.maxDelay),
+      waitMs: num(o.waitMs, `${name}.waitMs`, 0, LIMITS.maxDelay),
     };
   }
 
@@ -240,7 +255,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
   function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
     const o = obj(v, name);
     const out: MapObject = {
-      role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret', 'crystal', 'pulley', 'turret', 'conveyor', 'luggage', 'liquid', 'lily', 'spot', 'wire', 'power'] as const),
+      role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret', 'crystal', 'pulley', 'turret', 'conveyor', 'luggage', 'liquid', 'lily', 'spot', 'wire', 'power', 'rad', 'metal', 'magnet'] as const),
       shape: shape(o.shape, `${name}.shape`, W, H),
     };
     if (o.motion !== undefined) out.motion = motion(o.motion, `${name}.motion`, W, H);
@@ -344,6 +359,49 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       const r = Math.max(1, Math.min(b.w, b.h) / 2);
       out.shape = { type: 'ellipse', cx: b.x + b.w / 2, cy: b.y + b.h / 2, rx: r, ry: r };
     }
+    if (out.role === 'metal') {
+      // Magnets move it; it has no route or rotation of its own
+      out.shape = (() => {
+        const b = shapeBounds(out.shape);
+        return { type: 'rect' as const, x: b.x, y: b.y, w: b.w, h: b.h };
+      })();
+      delete out.motion;
+      delete out.rotation;
+    }
+    if (out.role === 'magnet') {
+      const g = obj(o.magnet, `${name}.magnet`);
+      out.magnet = {
+        range: num(g.range, `${name}.magnet.range`, 1, LIMITS.maxMagnetRange),
+        strength: num(g.strength, `${name}.magnet.strength`, 0, LIMITS.maxSpeed),
+        cursor: g.cursor !== false,
+        metal: g.metal !== false,
+      };
+    }
+    if (out.role === 'rad') {
+      const r = obj(o.rad, `${name}.rad`);
+      const kind = oneOf(r.kind, `${name}.rad.kind`, ['zone', 'box', 'drum'] as const);
+      out.rad = { kind };
+      if (kind !== 'zone') {
+        const a = obj(r.aura, `${name}.rad.aura`);
+        const ms = (v: unknown, key: string, min = 0) => num(v, `${name}.rad.aura.${key}`, min, LIMITS.maxDelay);
+        out.rad.aura = {
+          min: num(a.min, `${name}.rad.aura.min`, 0, LIMITS.maxAura),
+          max: num(a.max, `${name}.rad.aura.max`, 0, LIMITS.maxAura),
+          growMs: ms(a.growMs, 'growMs'),
+          holdMs: ms(a.holdMs, 'holdMs'),
+          shrinkMs: ms(a.shrinkMs, 'shrinkMs'),
+          restMs: ms(a.restMs, 'restMs'),
+          delay: num(a.delay, `${name}.rad.aura.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
+        };
+        const b = shapeBounds(out.shape);
+        // A box is a rectangle, a drum is round
+        if (kind === 'box' && out.shape.type !== 'rect') out.shape = { type: 'rect', x: b.x, y: b.y, w: b.w, h: b.h };
+        if (kind === 'drum') {
+          const rr = Math.max(1, Math.min(b.w, b.h) / 2);
+          out.shape = { type: 'ellipse', cx: b.x + b.w / 2, cy: b.y + b.h / 2, rx: rr, ry: rr };
+        }
+      }
+    }
     if (out.role === 'spot') {
       const s = obj(o.spot, `${name}.spot`);
       const spot: Spot = {
@@ -429,6 +487,48 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     }
     // Thorn vine (#83 / #84): an area shape whose outline grows thorns
     if (out.role === 'wall' && o.vine === true && !out.spike && !out.boulder && !out.fall && !out.saw && out.shape.type !== 'sector') out.vine = true;
+    // Machines (#111–114): walls built from their box, one kind at a time
+    const plainWall = out.role === 'wall' && !out.spike && !out.boulder && !out.fall && !out.saw && !out.vine;
+    const box = () => {
+      const b = shapeBounds(out.shape);
+      return { type: 'rect' as const, x: b.x, y: b.y, w: b.w, h: b.h };
+    };
+    if (plainWall && o.gear !== undefined) {
+      const g = obj(o.gear, `${name}.gear`);
+      out.gear = { teeth: Math.round(num(g.teeth, `${name}.gear.teeth`, GEAR_TEETH.min, GEAR_TEETH.max)), depth: num(g.depth, `${name}.gear.depth`, 1, 80) };
+      // Always square
+      const b = box();
+      const s = Math.min(b.w, b.h);
+      out.shape = { type: 'rect', x: b.x + (b.w - s) / 2, y: b.y + (b.h - s) / 2, w: s, h: s };
+    } else if (plainWall && o.hand === true) {
+      out.hand = true;
+      out.shape = box();
+    } else if (plainWall && o.pendulum !== undefined) {
+      const p = obj(o.pendulum, `${name}.pendulum`);
+      out.pendulum = {
+        amplitude: num(p.amplitude, `${name}.pendulum.amplitude`, 0, 180),
+        periodMs: num(p.periodMs, `${name}.pendulum.periodMs`, 50, LIMITS.maxDelay),
+        delay: num(p.delay, `${name}.pendulum.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
+      };
+      out.shape = box();
+      // It swings on its own (its pivot can still travel along a route)
+      delete out.rotation;
+    } else if (plainWall && o.press !== undefined) {
+      const p = obj(o.press, `${name}.press`);
+      const ms = (v: unknown, key: string) => num(v, `${name}.press.${key}`, 0, LIMITS.maxDelay);
+      out.press = {
+        reach: num(p.reach, `${name}.press.reach`, 1, Math.max(W, H)),
+        downMs: ms(p.downMs, 'downMs'),
+        holdMs: ms(p.holdMs, 'holdMs'),
+        upMs: ms(p.upMs, 'upMs'),
+        waitMs: ms(p.waitMs, 'waitMs'),
+        delay: num(p.delay, `${name}.press.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
+      };
+      out.shape = box();
+      // Its slam is its movement; its cylinder stays put
+      delete out.motion;
+      delete out.rotation;
+    }
     if (out.role === 'text') {
       const t = obj(o.text, `${name}.text`);
       if (out.shape.type !== 'rect') out.shape = { type: 'rect', ...shapeBounds(out.shape) };
@@ -471,7 +571,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       out.fog = { kind: oneOf(f.kind, `${name}.fog.kind`, ['fog', 'sand'] as const), density: num(f.density, `${name}.fog.density`, 0, 100) };
     }
     if (o.link !== undefined && (out.role === 'path' || out.role === 'wall' || out.role === 'coin' || out.role === 'dark' || out.role === 'fog' || out.role === 'mirror' || out.role === 'laser' || out.role === 'turret'
-      || out.role === 'liquid' || out.role === 'lily' || out.role === 'spot')) {
+      || out.role === 'liquid' || out.role === 'lily' || out.role === 'spot' || out.role === 'rad' || out.role === 'magnet')) {
       const l = obj(o.link, `${name}.link`);
       out.link = { color: colorIndex(l.color, `${name}.link.color`), action: oneOf(l.action, `${name}.link.action`, ['start', 'stop', 'remove', 'pulley'] as const) };
     }
@@ -797,8 +897,9 @@ export function createValidateApi(t: Translator = defaultTranslate) {
 
   function defaultRotation(o: MapObject): Rotation {
     return {
-      // A sector spins around its apex like a radar sweep; everything else around its center
-      pivot: o.shape.type === 'sector' ? { x: o.shape.cx, y: o.shape.cy } : shapeCenter(o.shape),
+      // A sector spins around its apex like a radar sweep, a clock hand around its hub; everything else around its center
+      pivot: o.shape.type === 'sector' ? { x: o.shape.cx, y: o.shape.cy }
+        : o.hand && o.shape.type === 'rect' ? rotatePoint(handPivot(o.shape), shapeCenter(o.shape), o.tilt ?? 0) : shapeCenter(o.shape),
       speed: 90,
       angle: 360,
       clockwise: true,

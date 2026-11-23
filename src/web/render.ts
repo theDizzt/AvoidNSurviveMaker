@@ -16,8 +16,8 @@ import { shapeCenter } from '../core/shape';
 import { zoneRing } from '../core/zone';
 import { BeltPath, beltSides } from '../core/conveyor';
 import { lightLit, type LightSource } from '../core/lighting';
-import { initialPower } from '../core/electric';
-import { drawLily, drawLiquids, drawPowerDevice, drawSpotBeam, drawSpotFixture, drawThornVine, drawWire } from './render-objects';
+import { elecEffect, initialPower } from '../core/electric';
+import { drawLily, drawMachine, drawMagnet, drawMagnetField, drawMetalBox, drawRadAura, drawRadWaste, drawRadZone, drawLiquids, drawPowerDevice, drawSpotBeam, drawSpotFixture, drawThornVine, drawWire } from './render-objects';
 import { renderScale } from './graphics';
 import { options } from './options';
 
@@ -1304,6 +1304,21 @@ export function drawMap(
   objects.forEach((o, i) => {
     if (o.role === 'lily' && shown(i)) drawLily(ctx, o, timeOf(i), i);
   });
+  // Radiation (#115–117): zones on the floor, then the waste's growing auras, then the waste itself
+  if (objects.some((o) => o.role === 'rad')) {
+    const now = opts.now ?? t;
+    objects.forEach((o, i) => {
+      if (o.role === 'rad' && o.src?.rad?.kind === 'zone' && shown(i)) drawRadZone(ctx, o, timeOf(i), now, i);
+    });
+    objects.forEach((o, i) => {
+      const a = o.src?.rad?.aura;
+      if (o.role === 'rad' && a && shown(i)) drawRadAura(ctx, o, a, timeOf(i), now);
+    });
+    objects.forEach((o, i) => {
+      const r = o.src?.rad;
+      if (o.role === 'rad' && r && r.kind !== 'zone' && shown(i)) drawRadWaste(ctx, o, r.kind, timeOf(i), now, i);
+    });
+  }
 
   zone(ctx, map.start, COLORS.start, COLORS.startEdge, tr('zone.start'), true, map.startShape);
   // Locked GOAL (coins still to collect): dark gray, with the coins collected so far, e.g. "3/10"
@@ -1405,12 +1420,41 @@ export function drawMap(
   objects.forEach((o, i) => {
     if (o.role === 'luggage' && shown(i)) drawCrate(ctx, o, timeOf(i));
   });
+  // Magnets (#99), their fields while on, and the metal boxes (#98) they drag
+  if (objects.some((o) => o.role === 'magnet' || o.role === 'metal')) {
+    const now = opts.now ?? t;
+    const magnetOn = (m: MapObject, i: number) => {
+      const link = m.link;
+      if (link && (link.action === 'start' || link.action === 'stop') && (channels[link.color] === 1) !== (link.action === 'start')) return false;
+      if (wired?.[i]) {
+        const e = elecEffect(m);
+        if ((e === 'start' && !power?.[i]) || (e === 'stop' && power?.[i])) return false;
+      }
+      return true;
+    };
+    objects.forEach((o, i) => {
+      const m = map.objects[i];
+      if (o.role === 'magnet' && m?.magnet && shown(i) && magnetOn(m, i) && m.magnet.strength > 0) drawMagnetField(ctx, o, m.magnet.range, timeOf(i), now);
+    });
+    objects.forEach((o, i) => {
+      if (o.role === 'metal' && shown(i)) drawMetalBox(ctx, o, timeOf(i));
+    });
+    objects.forEach((o, i) => {
+      const m = map.objects[i];
+      if (o.role === 'magnet' && m && shown(i)) drawMagnet(ctx, o, timeOf(i), magnetOn(m, i));
+    });
+  }
   // Thorn vines (#83 / #84)
   objects.forEach((o, i) => {
     if (o.role !== 'wall' || !map.objects[i]?.vine || !shown(i)) return;
     // The same look as the walls: their fill (laid out in the vine's own frame) and outline
     const fill = theme ? fillStyle(ctx, theme.wall.fill, o.box) : COLORS.wall;
     drawThornVine(ctx, o, timeOf(i), i, fill, theme ? theme.wall.edge : COLORS.wallEdge);
+  });
+  // Machines (#111–114): a press's cylinder, the hubs of gears, hands and pendulums
+  objects.forEach((o, i) => {
+    const m = map.objects[i];
+    if (o.role === 'wall' && m && (m.press || m.gear || m.hand || m.pendulum) && shown(i)) drawMachine(ctx, o, m, timeOf(i));
   });
   // Wires (#91): glowing while they carry power
   map.objects.forEach((m, i) => {

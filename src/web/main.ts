@@ -744,8 +744,9 @@ function renderRecordsOption(): void {
     ? t('records.syncHint')
     : account.configured ? t('records.signInHint') : t('records.unconfiguredHint');
 }
-const stats = new StatsUI($('stats-dia'), $('stats-message'), $('stats-records'), account, recordSync, deaths);
+const stats = new StatsUI($('stats-dia'), $('stats-message'), $('stats-records'), account, recordSync, deaths, achievements);
 account.onChange(() => current === 'stats' && void stats.render());
+achievements.subscribe(() => current === 'stats' && stats.updateAchievements());
 account.onPlayTotal(() => current === 'stats' && stats.updatePlayTime());
 account.onChange(renderRecordsOption);
 account.onChange(clearLeaderboardCache); // so the player's own row is marked after signing in

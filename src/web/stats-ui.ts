@@ -1,5 +1,6 @@
 import { t as tr } from './i18n';
-import { formatPlayTime } from './localized/account';
+import { ACHIEVEMENTS } from '../core/achievements';
+import type { Achievements } from './achievements';
 import { formatTime } from '../core/simulation';
 import { formatUtc } from '../core/time';
 import { CRYSTALS_PER_THEME, levelAt, levelSlots, maxStars, STARS_PER_LEVEL } from './localized/theme-pack';
@@ -19,6 +20,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
 }
 
 const date = formatUtc;
+const pad2 = (n: number) => String(n).padStart(2, '0');
 const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(Math.max(0, STARS_PER_LEVEL - n));
 const starTotal = (records: readonly AccountRecord[]) => records.reduce((sum, r) => sum + r.stars, 0)
   + Math.min(CRYSTALS_PER_THEME, records.filter(r => r.crystal).length);
@@ -43,7 +45,7 @@ function levelName(key: string): string {
 /** The per-level record tables are built but kept hidden for now; flip to show them again. */
 const SHOW_LEVEL_RECORDS = false;
 
-type StatField = 'stars' | 'stars-note' | 'player' | 'player-note' | 'time' | 'time-note' | 'cleared' | 'cleared-note' | 'last' | 'deaths' | 'deaths-note';
+type StatField = 'stars' | 'stars-note' | 'player' | 'player-note' | 'time' | 'time-note' | 'cleared' | 'cleared-note' | 'last' | 'deaths' | 'deaths-note' | 'ach' | 'ach-note';
 
 /**
  * Personal stats: everything the database holds for the signed-in player at a glance —
@@ -60,14 +62,24 @@ export class StatsUI {
     private readonly account: Account,
     private readonly records: RecordSync,
     private readonly deaths: DeathTracker,
+    private readonly achievements: Achievements,
   ) {}
 
-  /** Refresh only the play-time field (the total grows every 30 s while the game is open) */
+  /** Refresh only the play-time field (the total grows every 30 s while the game is open): hours big, "08m 35s" below */
   updatePlayTime(): void {
     const profile = this.account.profile;
     if (!profile) return;
-    this.set('time', formatPlayTime(profile.total_play_seconds));
-    this.set('time-note', `${profile.total_play_seconds.toLocaleString()}s`);
+    const total = Math.max(0, Math.floor(profile.total_play_seconds));
+    this.set('time', `${Math.floor(total / 3600).toLocaleString()}h`);
+    this.set('time-note', `${pad2(Math.floor((total % 3600) / 60))}m ${pad2(total % 60)}s`);
+  }
+
+  /** Achievement completion rate (unlocked / all) */
+  updateAchievements(): void {
+    const done = ACHIEVEMENTS.filter((d) => this.achievements.unlocks[d.id]).length;
+    const total = ACHIEVEMENTS.length;
+    this.set('ach', total ? `${Math.floor((done / total) * 100)}%` : '—');
+    this.set('ach-note', `${done} / ${total}`);
   }
 
   private set(field: StatField, text: string): void {
@@ -85,6 +97,7 @@ export class StatsUI {
   async render(): Promise<void> {
     const run = ++this.loading;
     this.clear();
+    this.updateAchievements();
     if (!this.account.configured) return this.message(tr('stats.notConfigured'));
     const profile = this.account.profile;
     if (!profile) return this.message(tr('stats.signIn'));
@@ -111,8 +124,7 @@ export class StatsUI {
     const player = this.grid.querySelector<HTMLElement>('[data-stat="player"]');
     if (player) renderTag(player, this.account.tag ?? '—');
     this.set('player-note', tr('stats.joined', { date: date(profile.created_at) }));
-    this.set('time', formatPlayTime(profile.total_play_seconds));
-    this.set('time-note', `${profile.total_play_seconds.toLocaleString()}s`);
+    this.updatePlayTime();
     this.set('cleared', String(currentRows.length));
     this.set('cleared-note', tr('stats.perfect', { n: perfect }));
     this.set('last', date(lastUpdate));

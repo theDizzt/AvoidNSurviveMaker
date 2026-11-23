@@ -7,6 +7,9 @@ import { shapeCenter } from '../core/shape';
 import { conveyorOutline } from '../core/conveyor';
 import { Circuit, elecEffect, isLightRole } from '../core/electric';
 import { compileMap } from '../core/object';
+import { CompiledMotion } from '../core/motion';
+import { GEAR_TEETH } from '../core/machines';
+import { DEFAULT_MAGNET } from '../core/magnet';
 
 import type { ElecAction, Easing, FogKind, Liquid, LinkAction, MapData, MapObject, Motion, MotionType, Rect, Repeat, Role, Rotation } from '../core/types';
 import { SWITCH_COLORS, switchColor } from './localized/colors';
@@ -18,7 +21,7 @@ import { TEXT_BASE_FONTS } from './render';
 import { fontPicker } from './font-picker';
 
 import type { EditorSelection } from '../core/editor-document';
-import { POWER_NAMES, liquidName, TRIGGER_NAMES, isButton, describeObject, objectToolId, ZONE_IDS, sizeText, REPEAT_OPTIONS, ROUTE_REPEAT_OPTIONS, EASING_OPTIONS, ROUTE_OPTIONS, DIRECTION_OPTIONS, newMotion, Command } from './editor-shared';
+import { POWER_NAMES, liquidName, radName, TRIGGER_NAMES, isButton, describeObject, objectToolId, ZONE_IDS, sizeText, REPEAT_OPTIONS, ROUTE_REPEAT_OPTIONS, EASING_OPTIONS, ROUTE_OPTIONS, DIRECTION_OPTIONS, newMotion, Command } from './editor-shared';
 
 export interface EditorPropertiesHost {
   readonly map: MapData;
@@ -36,6 +39,10 @@ export interface EditorPropertiesHost {
 }
 
 /** DOM projection of an editor document, with explicit edit/navigation callbacks. */
+
+/** Passes in one repeat cycle: ping-pong goes there and back */
+const cycleSweeps = (repeat: Repeat) => (repeat === 'pingpong' ? 2 : 1);
+
 export class EditorPropertiesPanel {
   constructor(private readonly root: HTMLElement, private readonly host: EditorPropertiesHost) {}
   field(label: string, control: HTMLElement, wide = false): HTMLElement {
@@ -79,6 +86,91 @@ export class EditorPropertiesPanel {
       this.group(this.selectField<Liquid['kind']>(tr('ed.liquidKind'), l.kind, [['pond', tr('ed.namePond')], ['toxic', tr('ed.nameToxic')]], (v) => (l.kind = v), true)),
       this.note(tr('ed.liquidNote')),
     ];
+  }
+
+  /** Magnet (#99): how far and how hard it pulls, and what */
+  private magnetProps(o: MapObject): HTMLElement[] {
+    const g = o.magnet ?? (o.magnet = { ...DEFAULT_MAGNET });
+    return [
+      this.heading(tr('ed.nameMagnet')),
+      this.group(
+        this.numField(tr('ed.magnetRange'), g.range, (v) => (g.range = Math.round(Math.min(LIMITS.maxMagnetRange, Math.max(1, v)))), 10),
+        this.numField(tr('ed.magnetStrength'), g.strength, (v) => (g.strength = Math.round(Math.min(LIMITS.maxSpeed, Math.max(0, v)))), 10),
+      ),
+      this.toggle(tr('ed.magnetCursor'), g.cursor, (on) => (g.cursor = on)),
+      this.toggle(tr('ed.magnetMetal'), g.metal, (on) => (g.metal = on)),
+      this.note(tr('ed.magnetNote')),
+    ];
+  }
+
+  /** Machines (#111–114): a gear's teeth, a pendulum's swing, a press's beats */
+  private machineProps(o: MapObject): HTMLElement[] {
+    const sec = (ms: number) => ms / 1000;
+    const ms = (v: number, min = 0) => Math.round(Math.min(LIMITS.maxDelay, Math.max(min, v)) * 1000);
+    const delay = (v: number) => Math.round(Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, v)) * 1000);
+    if (o.gear) {
+      const g = o.gear;
+      return [
+        this.heading(tr('ed.nameGear')),
+        this.group(
+          this.numField(tr('ed.gearTeeth'), g.teeth, (v) => (g.teeth = Math.round(Math.min(GEAR_TEETH.max, Math.max(GEAR_TEETH.min, v)))), 1),
+          this.numField(tr('ed.gearDepth'), g.depth, (v) => (g.depth = Math.round(Math.min(80, Math.max(1, v)))), 2),
+        ),
+        this.note(tr('ed.gearNote')),
+      ];
+    }
+    if (o.pendulum) {
+      const p = o.pendulum;
+      return [
+        this.heading(tr('ed.namePendulum')),
+        this.group(
+          this.numField(tr('ed.pendAmplitude'), p.amplitude, (v) => (p.amplitude = Math.min(180, Math.max(0, v))), 5),
+          this.numField(tr('ed.pendPeriodS'), sec(p.periodMs), (v) => (p.periodMs = ms(v, 0.05)), 0.1),
+          this.numField(tr('ed.startDelayS'), sec(p.delay), (v) => (p.delay = delay(v)), 0.1),
+        ),
+        this.note(tr('ed.pendulumNote')),
+      ];
+    }
+    if (o.press) {
+      const p = o.press;
+      return [
+        this.heading(tr('ed.namePress')),
+        this.group(
+          this.numField(tr('ed.pressReach'), p.reach, (v) => (p.reach = Math.round(Math.max(1, Math.min(LIMITS.maxSize, v)))), 10),
+          this.numField(tr('ed.pressDownS'), sec(p.downMs), (v) => (p.downMs = ms(v)), 0.05),
+          this.numField(tr('ed.pressHoldS'), sec(p.holdMs), (v) => (p.holdMs = ms(v)), 0.1),
+          this.numField(tr('ed.pressUpS'), sec(p.upMs), (v) => (p.upMs = ms(v)), 0.1),
+          this.numField(tr('ed.pressWaitS'), sec(p.waitMs), (v) => (p.waitMs = ms(v)), 0.1),
+          this.numField(tr('ed.startDelayS'), sec(p.delay), (v) => (p.delay = delay(v)), 0.1),
+        ),
+        this.note(tr('ed.pressNote')),
+      ];
+    }
+    return [this.heading(tr('ed.nameHand')), this.note(tr('ed.handNote'))];
+  }
+
+  /** Radioactive zone (#115) / waste (#116 / #117): the waste's growing and shrinking aura */
+  private radProps(o: MapObject): HTMLElement[] {
+    const r = o.rad ?? (o.rad = { kind: 'zone' });
+    const out: HTMLElement[] = [this.heading(radName(r.kind))];
+    const a = r.aura;
+    if (r.kind === 'zone' || !a) return [...out, this.note(tr('ed.radZoneNote'))];
+    const px = (v: number) => Math.round(Math.min(LIMITS.maxAura, Math.max(0, v)));
+    const sec = (ms: number) => ms / 1000;
+    const ms = (v: number) => Math.round(Math.min(LIMITS.maxDelay, Math.max(0, v)) * 1000);
+    out.push(
+      this.group(
+        this.numField(tr('ed.auraMin'), a.min, (v) => (a.min = px(v)), 5),
+        this.numField(tr('ed.auraMax'), a.max, (v) => (a.max = px(v)), 5),
+        this.numField(tr('ed.auraGrowS'), sec(a.growMs), (v) => (a.growMs = ms(v)), 0.1),
+        this.numField(tr('ed.auraHoldS'), sec(a.holdMs), (v) => (a.holdMs = ms(v)), 0.1),
+        this.numField(tr('ed.auraShrinkS'), sec(a.shrinkMs), (v) => (a.shrinkMs = ms(v)), 0.1),
+        this.numField(tr('ed.auraRestS'), sec(a.restMs), (v) => (a.restMs = ms(v)), 0.1),
+        this.numField(tr('ed.startDelayS'), sec(a.delay), (v) => (a.delay = Math.round(Math.max(-LIMITS.maxDelay, Math.min(LIMITS.maxDelay, v)) * 1000)), 0.1),
+      ),
+      this.note(tr('ed.radWasteNote')),
+    );
+    return out;
   }
 
   /** Spotlight (#88–90): direction, beam width, reach and brightness */
@@ -195,6 +287,16 @@ export class EditorPropertiesPanel {
     }
     out.push(this.note(tr('ed.luggageNote')));
     return out;
+  }
+
+  /** Route speed as the seconds one cycle takes (one pass; there and back for ping-pong); none without a route */
+  private motionCycleField(o: MapObject, m: Motion): HTMLElement[] {
+    // Seconds per cycle at 1 px/s: the route length (× 2 for ping-pong)
+    const perSpeed = (new CompiledMotion({ ...m, speed: 1 }, shapeCenter(o.shape)).pass / 1000) * cycleSweeps(m.repeat);
+    if (!(perSpeed > 0) || !Number.isFinite(perSpeed)) return [];
+    return [this.numField(tr('ed.cycleTimeS'), m.speed > 0 ? perSpeed / m.speed : 0, (v) => {
+      if (v > 0) m.speed = Math.min(LIMITS.maxSpeed, Math.max(0.01, perSpeed / v));
+    }, 0.1)];
   }
 
   numField(label: string, value: number, apply: (v: number) => void, step = 1): HTMLElement {
@@ -321,6 +423,14 @@ export class EditorPropertiesPanel {
       parts.push(this.heading(tr('ed.nameVine')), this.note(tr('ed.vineNote')));
     } else if (o.role === 'liquid') {
       parts.push(...this.liquidProps(o));
+    } else if (o.role === 'rad') {
+      parts.push(...this.radProps(o));
+    } else if (o.gear || o.hand || o.pendulum || o.press) {
+      parts.push(...this.machineProps(o));
+    } else if (o.role === 'magnet') {
+      parts.push(...this.magnetProps(o));
+    } else if (o.role === 'metal') {
+      parts.push(this.heading(tr('ed.nameMetal')), this.note(tr('ed.metalNote')));
     } else if (o.role === 'lily') {
       parts.push(this.heading(tr('ed.nameLily')), this.note(tr('ed.lilyNote')));
     } else if ((o.role === 'path' || o.role === 'wall') && !o.saw) {
@@ -479,11 +589,11 @@ export class EditorPropertiesPanel {
     }
     if ((o.role === 'path' || o.role === 'wall') && !o.saw && !o.fall && !o.ice) parts.push(...this.blinkProps(o));
     if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'fog' || o.role === 'mirror' || o.role === 'laser' || o.role === 'turret'
-      || o.role === 'liquid' || o.role === 'lily' || o.role === 'spot') parts.push(...this.linkProps(o));
+      || o.role === 'liquid' || o.role === 'lily' || o.role === 'spot' || o.role === 'rad' || o.role === 'magnet') parts.push(...this.linkProps(o));
     parts.push(...this.elecProps(o, idx));
 
     // Movement (a spike's thrust is its movement; liquids stay put)
-    if (!o.spike && !o.fall && o.role !== 'liquid') {
+    if (!o.spike && !o.fall && !o.press && o.role !== 'liquid' && o.role !== 'metal') {
     // Movement
     parts.push(this.heading(tr('ed.movement')), this.toggle(tr('ed.movesAlongARoute'), !!o.motion, (on) => {
       if (on) {
@@ -511,6 +621,8 @@ export class EditorPropertiesPanel {
           if (v !== 'slam') delete m.returnSpeed;
         }),
         this.numField(tr(m.repeat === 'slam' ? 'ed.slamSpeed' : 'ed.speedPxS'), m.speed, (v) => (m.speed = Math.min(LIMITS.maxSpeed, Math.max(0, v))), 10),
+        // The same speed as the time of one cycle (a slam's cycle also holds its rest and slow way back)
+        ...(m.repeat === 'slam' ? [] : this.motionCycleField(o, m)),
         // A slam has its own fixed easing: rushing in, easing back
         ...(m.repeat === 'slam'
           ? [this.numField(tr('ed.slamReturnSpeed'), m.returnSpeed ?? m.speed / 4, (v) => (m.returnSpeed = Math.min(LIMITS.maxSpeed, Math.max(1, Math.round(v)))), 10)]
@@ -561,7 +673,7 @@ export class EditorPropertiesPanel {
     }
 
     // Rotation (a boulder spins by rolling; a saw keeps its own spin / sawing on top of it, #62)
-    if (!o.boulder && !o.fall && o.role !== 'liquid') {
+    if (!o.boulder && !o.fall && !o.press && !o.pendulum && o.role !== 'liquid' && o.role !== 'metal') {
     // Rotation
     parts.push(this.heading(tr('ed.rotation')), this.toggle(tr('ed.rotatesAroundAPivot'), !!o.rotation, (on) => {
       if (on) o.rotation = defaultRotation(o);
@@ -569,8 +681,29 @@ export class EditorPropertiesPanel {
     }));
     if (o.rotation) {
       const r: Rotation = o.rotation;
+      const tk = r.tick;
+      const sec = (ms: number) => ms / 1000;
+      const ms = (v: number) => Math.round(Math.min(LIMITS.maxDelay, Math.max(0, v)) * 1000);
+      // Beat by beat (#111 / #113): each beat's angle and timing replace the speed
+      const pace = tk
+        ? [
+          this.numField(tr('ed.tickAngle'), tk.angle, (v) => (tk.angle = Math.min(360, Math.max(0.1, v))), 1),
+          this.numField(tr('ed.tickMoveS'), sec(tk.moveMs), (v) => (tk.moveMs = ms(v)), 0.05),
+          this.numField(tr('ed.tickWaitS'), sec(tk.waitMs), (v) => (tk.waitMs = ms(v)), 0.05),
+        ]
+        : [
+          this.numField(tr('ed.speedS'), r.speed, (v) => (r.speed = Math.min(LIMITS.maxRotSpeed, Math.max(0, v))), 5),
+          // The same speed as the time of one cycle: one sweep of `angle` (there and back for ping-pong)
+          this.numField(tr('ed.cycleTimeS'), r.speed > 0 ? (r.angle * cycleSweeps(r.repeat)) / r.speed : 0, (v) => {
+            if (v > 0 && r.angle > 0) r.speed = Math.min(LIMITS.maxRotSpeed, Math.max(0.01, (r.angle * cycleSweeps(r.repeat)) / v));
+          }, 0.1),
+        ];
+      parts.push(this.toggle(tr('ed.tick'), !!tk, (on) => {
+        if (on) r.tick = { angle: 6, moveMs: 150, waitMs: 850 };
+        else delete r.tick;
+      }));
       parts.push(this.group(
-        this.numField(tr('ed.speedS'), r.speed, (v) => (r.speed = Math.min(LIMITS.maxRotSpeed, Math.max(0, v))), 5),
+        ...pace,
         this.numField(tr('common.angle'), r.angle, (v) => (r.angle = Math.min(LIMITS.maxAngle, Math.max(0, v))), 15),
         this.selectField(tr('ed.direction'), r.clockwise ? 'cw' : 'ccw', DIRECTION_OPTIONS, (v) => (r.clockwise = v === 'cw')),
         this.selectField<Repeat>(tr('ed.repeat'), r.repeat, REPEAT_OPTIONS, (v) => (r.repeat = v)),
@@ -584,7 +717,7 @@ export class EditorPropertiesPanel {
         else delete r.showPivot;
       }));
       parts.push(this.note(tr('ed.angle360LoopContinuousSpin')));
-      parts.push(this.actions(this.button(tr('ed.centerPivot'), () => this.host.edit(() => (r.pivot = shapeCenter(o.shape))))));
+      parts.push(this.actions(this.button(tr('ed.centerPivot'), () => this.host.edit(() => (r.pivot = defaultRotation(o).pivot)))));
     }
 
     }

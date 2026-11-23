@@ -62,6 +62,8 @@
   "customize.prev": "Previous",
   "customize.next": "Next",
   "customize.showAll": "Show all as a grid",
+  "customize.hex": "Hex code",
+  "customize.hexHint": "Type a color code (#rrggbb) for the selected slot, then press Enter",
   "customize.prevPage": "Previous page",
   "customize.nextPage": "Next page",
   "customize.preview": "Preview of your cursor and trail",
