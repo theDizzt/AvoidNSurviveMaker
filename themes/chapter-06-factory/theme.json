@@ -11,6 +11,8 @@
                    "#7c939a"
                ],
     "cover":  "cover.svg",
+    "music": "audio/central-town-arranged.mp3",
+    "credits": "Music: Mega Man Battle Network 6: Central Town (Arranged) by CASSAVAGIRL. https://www.newgrounds.com/audio/listen/1649349 - CC BY-NC-ND 3.0: https://creativecommons.org/licenses/by-nc-nd/3.0/ . An arrangement of a Mega Man Battle Network 6 (Capcom) theme. Original audio, unmodified.",
     "style":  {
       "badge": {
         "kind": "lcd",

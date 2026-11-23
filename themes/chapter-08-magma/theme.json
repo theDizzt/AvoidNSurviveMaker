@@ -11,6 +11,8 @@
                    "#ee4b39"
                ],
     "cover":  "cover.svg",
+    "music": "audio/lava-rush.mp3",
+    "credits": "Music: Lava Rush by SecretMusician. https://www.newgrounds.com/audio/listen/1311370 - CC BY-NC-SA 3.0: https://creativecommons.org/licenses/by-nc-sa/3.0/ . Original audio, unmodified.",
     "style":  {
                   "maze":  {
                                "wall":  {
