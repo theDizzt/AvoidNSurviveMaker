@@ -1,3 +1,4 @@
+import { elecEffect } from './electric';
 import { toWorld, transformAt, type CompiledObject, type Transform } from './object';
 import { doorPanels } from './switches';
 import { rotateRing } from './shape';
@@ -27,6 +28,8 @@ export interface BeamState {
   hidden?: Uint8Array;
   doorOpen?: Float64Array;
   channels: Uint8Array;
+  /** Per object: 1 while powered by a wire (#91); a wired laser's beam flips while powered */
+  power?: ArrayLike<number>;
 }
 
 export class BeamCaster {
@@ -85,10 +88,12 @@ export class BeamCaster {
       check(o.role === 'door' ? st.doorOpen?.[i] ?? 0 : 0);
     }
     for (let c = 0; c < 16; c++) check(st.channels[c]);
+    for (const i of this.lasers) check(st.power?.[i] ?? 0);
     if (!changed) return this.cachedBeams!;
     const active = this.lasers.filter(i => {
       const l = this.map.objects[i].laser;
-      return !st.hidden?.[i] && l && l.on !== (l.switchColor !== undefined && st.channels[l.switchColor] === 1);
+      const flip = (l?.switchColor !== undefined && st.channels[l.switchColor] === 1) !== (!!st.power?.[i] && elecEffect(this.map.objects[i]) === 'laser');
+      return !st.hidden?.[i] && l && l.on !== flip;
     });
     if (!active.length) return this.cachedBeams = [];
     const blockers: { ring: Float64Array; owner: number }[] = [];

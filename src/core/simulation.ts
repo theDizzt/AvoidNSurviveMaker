@@ -9,6 +9,7 @@ import { blinkState, fallState } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
 import { rotatePoint, shapeCenter } from './shape';
 import { BeltPath, LuggageMover, polysOverlap } from './conveyor';
+import { Circuit, elecEffect, GENERATOR_MS, isLightRole } from './electric';
 
 /** How long a portal pulls the cursor to its center before teleporting (ms) */
 export const PORTAL_PULL_MS = 160;
@@ -35,7 +36,8 @@ export type SimStatus = 'ready' | 'playing' | 'dead' | 'cleared';
 export type AbortReason = 'left' | 'blur' | 'pointer';
 /** wall: static wall · mover: moving/rotating wall · void: outside the paths (counts as wall) · bounds: left the map */
 /** bullet / missile: shot by a turret (#60) or hit by a homing missile (#61) */
-export type EndReason = 'wall' | 'mover' | 'void' | 'bounds' | 'laser' | 'bullet' | 'missile' | AbortReason;
+/** liquid: fell into a pond / radioactive water (#86 / #87) · shock: touched a live wire (#91) */
+export type EndReason = 'wall' | 'mover' | 'void' | 'bounds' | 'laser' | 'bullet' | 'missile' | 'liquid' | 'shock' | AbortReason;
 
 /** t: ms since the run started (START click), sub-millisecond precision preserved */
 export interface ReplaySample {
@@ -173,6 +175,20 @@ export class Simulation {
   private readonly openB: Float64Array;
   private clicks: ReplaySample[] = [];
 
+  // ── Electricity (#91, #94–97) ──
+  /** The wires, devices and the objects wired to them (null on maps without any) */
+  readonly circuit: Circuit | null;
+  /** Per object: 1 while a wire carries power, a device's output is on, or a wired object is powered */
+  readonly power: Uint8Array;
+  /** Electric devices */
+  private readonly devices: readonly number[];
+  /** Per object (electric switches): 1 while ON */
+  private readonly powerOn: Uint8Array;
+  /** Per object (electric timers): when it stops powering */
+  private readonly powerEnd: Float64Array;
+  /** Time the circuit is being worked out for */
+  private powerT = 0;
+
   // ── Lasers ──
   /** Beams at the current time (for drawing and the next tick's sweep test) */
   beams: Beam[] = [];
@@ -226,7 +242,8 @@ export class Simulation {
     const needsFineSteps = map.objects.some(o =>
       o.ice || o.link ||
       o.role === 'trigger' || o.role === 'door' || o.role === 'portal' ||
-      o.role === 'pulley' || o.role === 'laser' || o.role === 'turret' || o.role === 'conveyor');
+      o.role === 'pulley' || o.role === 'laser' || o.role === 'turret' || o.role === 'conveyor' ||
+      o.role === 'wire' || o.role === 'power');
     this.simulationStepMs = needsFineSteps ? 1 : stepMs;
     this.hasPaths = this.objects.some((o) => o.role === 'path');
     this.ices = map.objects.flatMap((o, i) => (o.role === 'path' && o.ice ? [i] : []));
@@ -249,7 +266,8 @@ export class Simulation {
     });
     this.safeCount = solids.length;
     this.objects.forEach((o, i) => {
-      if (o.role === 'path' || o.role === 'wall' || o.role === 'laser' || o.role === 'turret' || o.role === 'conveyor' || o.role === 'luggage') {
+      if (o.role === 'path' || o.role === 'wall' || o.role === 'laser' || o.role === 'turret' || o.role === 'conveyor' || o.role === 'luggage'
+        || o.role === 'liquid' || o.role === 'lily' || o.role === 'wire') {
         // A laser emitter's, a turret's or a crate's body is as deadly as a wall; a belt is floor
         solids.push(o.role === 'laser' || o.role === 'turret' || o.role === 'luggage' ? { ...o, role: 'wall' } : o);
         src.push(i);
@@ -307,7 +325,14 @@ export class Simulation {
     }
     this.hasCrystal = this.crystals.length > 0;
     this.triggers = this.objects.flatMap((o, i) => (o.role === 'trigger' ? [i] : []));
-    this.linked = map.objects.flatMap((o, i) => (o.link ? [i] : []));
+    const circuit = new Circuit(map, this.objects);
+    this.circuit = circuit.any ? circuit : null;
+    this.devices = map.objects.flatMap((o, i) => (o.role === 'power' && o.power ? [i] : []));
+    this.power = new Uint8Array(this.objects.length);
+    this.powerOn = new Uint8Array(this.objects.length);
+    this.powerEnd = new Float64Array(this.objects.length);
+    // Objects reacting to a switch color or to a wire's power
+    this.linked = map.objects.flatMap((o, i) => (o.link || this.circuit?.isTarget[i] ? [i] : []));
     for (const o of map.objects) if (o.trigger?.revert) this.revertColors |= 1 << o.trigger.color;
     this.doors = this.objects.flatMap((o, i) => (o.role === 'door' ? [i] : []));
     const n = this.objects.length;
@@ -681,6 +706,10 @@ export class Simulation {
       }
       if (pointInPoly(lx, ly, o.poly)) this.activate(i, this.time);
     }
+    for (const i of this.devices) {
+      const p = this.map.objects[i].power!;
+      if (p.click && (p.kind === 'switch' || p.kind === 'timer') && pointInPoly(this.x, this.y, this.objects[i].poly)) this.powerActivate(i, this.time);
+    }
     this.updateDerived(this.time);
   }
 
@@ -718,6 +747,7 @@ export class Simulation {
       const o = solids[i];
       const srcIdx = this.solidSrc[i];
       if (srcIdx >= 0 && this.hidden[srcIdx]) continue; // removed by a switch
+      if (o.role === 'wire' && !this.power[srcIdx]) continue; // a dead wire is harmless
       let ax = xa;
       let ay = ya;
       let bx = xb;
@@ -783,9 +813,12 @@ export class Simulation {
   }
 
   /** What the cursor is touching at fraction u of the prepared segment: null = safe */
-  private hazardAt(u: number): 'wall' | 'mover' | 'void' | null {
+  private hazardAt(u: number): 'wall' | 'mover' | 'void' | 'liquid' | 'shock' | null {
     const { solids, local, relevant } = this;
     let onPath = !this.hasPaths;
+    // Liquid only kills outside every lily pad (#85), so remember it until the end
+    let wet = false;
+    let onLily = false;
     // A static wall only kills outside every wall-piercing path, so remember it until the end
     let wallHit = false;
     let pierced = false;
@@ -797,10 +830,16 @@ export class Simulation {
       const y = local[i * 4 + 1] + (local[i * 4 + 3] - local[i * 4 + 1]) * u;
       if (!pointInPoly(x, y, o.poly)) continue;
       if (o.role === 'safe') return null;
+      if (o.role === 'wire') return 'shock';
+      if (o.role === 'liquid') {
+        wet = true;
+        continue;
+      }
+      if (o.role === 'lily') onLily = true;
       if (o.role === 'wall') {
-        // Moving / switch-linked walls, doors and laser emitters are never pierced
+        // Moving / switch-linked walls, doors and laser emitters are never pierced, nor thorn vines
         if (o.dynamic) return 'mover';
-        if (o.src?.role !== 'wall') return 'wall';
+        if (o.src?.role !== 'wall' || o.src.vine) return 'wall';
         wallHit = true;
         continue;
       }
@@ -808,6 +847,7 @@ export class Simulation {
       if (o.src?.pierce) pierced = true;
     }
     if (wallHit && !pierced) return 'wall';
+    if (wet && !onLily) return 'liquid';
     return onPath ? null : 'void';
   }
 
@@ -818,7 +858,7 @@ export class Simulation {
     this.prepare(ta, xa, ya, tb, xb, yb);
 
     let deathU = Infinity;
-    let reason: 'wall' | 'mover' | 'void' | 'bounds' | 'laser' | 'bullet' | 'missile' | null = this.hazardAt(0);
+    let reason: EndReason | null = this.hazardAt(0);
     if (reason) {
       deathU = 0;
     } else {
@@ -842,7 +882,7 @@ export class Simulation {
     // Laser beams (where they are at the end of this tick; swept area since its start)
     if (this.caster.any) {
       this.pendingBeams = this.caster.beams({
-        timeOf: (i) => this.clockB[i], hidden: this.hidden, doorOpen: this.openB, channels: this.channels,
+        timeOf: (i) => this.clockB[i], hidden: this.hidden, doorOpen: this.openB, channels: this.channels, power: this.power,
       });
       const u = beamHit(this.pendingBeams, this.beams, xa, ya, xb, yb);
       if (u >= 0 && u < deathU && !this.inSafeZone(xa + (xb - xa) * u, ya + (yb - ya) * u, tb)) {
@@ -918,29 +958,45 @@ export class Simulation {
     this.pulleyTime?.fill(0);
     this.pulleyAngle?.fill(0);
     this.lastTurn?.fill(-Infinity);
+    // Electric switches start as set, timers off; inverters settle from scratch
+    this.powerOn?.fill(0);
+    this.powerEnd?.fill(-Infinity);
+    for (const i of this.devices ?? []) if (this.map.objects[i].power!.kind === 'switch' && this.map.objects[i].power!.initial) this.powerOn[i] = 1;
+    this.circuit?.reset();
+    this.evalPower(0);
     for (const d of this.doors) {
       const door = this.map.objects[d].door!;
-      this.doorOpen[d] = door.mode === 'auto' ? autoDoorOpen(door, 0) : this.channels[door.color];
+      this.doorOpen[d] = this.circuit?.isTarget[d] ? this.power[d] : door.mode === 'auto' ? autoDoorOpen(door, 0) : this.channels[door.color];
     }
     this.updateDerived(0);
     // caster is created after the first reset in the constructor
     this.beams = this.caster?.any
-      ? this.caster.beams({ timeOf: () => 0, hidden: this.hidden, doorOpen: this.doorOpen, channels: this.channels })
+      ? this.caster.beams({ timeOf: () => 0, hidden: this.hidden, doorOpen: this.doorOpen, channels: this.channels, power: this.power })
       : [];
   }
 
   /** Does the linked object's motion run with the current switch states? */
   private runs(i: number): boolean {
-    const link = this.map.objects[i].link;
-    if (!link || link.action === 'remove') return true;
-    const on = this.channels[link.color] === 1;
-    return link.action === 'start' ? on : !on;
+    const m = this.map.objects[i];
+    const link = m.link;
+    let ok = true;
+    if (link && link.action !== 'remove' && link.action !== 'pulley') {
+      const on = this.channels[link.color] === 1;
+      ok = link.action === 'start' ? on : !on;
+    }
+    // A wired object (#91) that moves only while powered, or only while not
+    if (this.circuit?.isTarget[i]) {
+      const e = elecEffect(m);
+      if (e === 'start') ok &&= this.power[i] === 1;
+      else if (e === 'stop') ok &&= this.power[i] === 0;
+    }
+    return ok;
   }
 
   /** Does the (stopped) linked object play its motion backwards to its starting point? */
   private rewinds(i: number): boolean {
-    const link = this.map.objects[i].link!;
-    return link.action === 'start' && (this.revertColors & (1 << link.color)) !== 0;
+    const link = this.map.objects[i].link;
+    return link?.action === 'start' && (this.revertColors & (1 << link.color)) !== 0;
   }
 
   /** Timers that ran out, then everybody's clock / door position at the end of the segment */
@@ -956,17 +1012,18 @@ export class Simulation {
     this.unwindPulleys(tb, dt);
     for (let i = 0; i < this.clock.length; i++) this.clockB[i] = tb;
     for (const i of this.linked) {
-      const link = this.map.objects[i].link!;
-      if (link.action === 'pulley') this.clockB[i] = this.pulleyTime[link.color];
+      const link = this.map.objects[i].link;
+      if (link?.action === 'pulley') this.clockB[i] = this.pulleyTime[link.color];
       else if (this.runs(i)) this.clockB[i] = this.clock[i] + dt;
       else if (this.rewinds(i)) this.clockB[i] = Math.max(0, this.clock[i] - dt);
       else this.clockB[i] = this.clock[i];
     }
     for (const d of this.doors) {
       const door = this.map.objects[d].door!;
-      if (door.mode === 'auto') this.openB[d] = autoDoorOpen(door, tb);
+      if (door.mode === 'auto' && !this.circuit?.isTarget[d]) this.openB[d] = autoDoorOpen(door, tb);
       else {
-        const dir = this.channels[door.color] ? 1 : -1;
+        // A wired door (#91) opens while powered
+        const dir = (this.circuit?.isTarget[d] ? this.power[d] : this.channels[door.color]) ? 1 : -1;
         this.openB[d] = Math.min(1, Math.max(0, this.doorOpen[d] + (dir * dt) / door.moveMs));
       }
     }
@@ -1029,7 +1086,50 @@ export class Simulation {
         this.activate(i, tb);
       }
     }
+    // Electric switches and timers (#94 / #96) touched on the way: they never move
+    for (const i of this.devices) {
+      const p = this.map.objects[i].power!;
+      if (p.kind !== 'switch' && p.kind !== 'timer') continue;
+      const o = this.objects[i];
+      const near = !(Math.max(xa, xb) < o.minX || Math.min(xa, xb) > o.maxX || Math.max(ya, yb) < o.minY || Math.min(ya, yb) > o.maxY);
+      let touched = false;
+      let insideB = false;
+      if (near) {
+        insideB = pointInPoly(xb, yb, o.poly);
+        out.length = 0;
+        if (xa !== xb || ya !== yb) segmentPolyCrossings(xa, ya, xb, yb, o.poly, out);
+        touched = insideB || out.length > 0 || pointInPoly(xa, ya, o.poly);
+      }
+      const entered = this.inside[i] !== 1 && touched;
+      this.inside[i] = insideB ? 1 : 0;
+      if (entered && !p.click) this.powerActivate(i, tb);
+    }
     this.updateDerived(tb);
+  }
+
+  /** An electric switch toggles, an electric timer starts powering */
+  private powerActivate(i: number, t: number): void {
+    const p = this.map.objects[i].power!;
+    if (p.once && this.used[i]) return;
+    this.used[i] = 1;
+    if (p.kind === 'switch') this.powerOn[i] ^= 1;
+    else if (p.kind === 'timer') this.powerEnd[i] = t + (p.duration ?? 3000);
+  }
+
+  /** Is electric device `i` a source that is on at `powerT`? (inverters are worked out by the circuit) */
+  private readonly powerActive = (i: number): boolean => {
+    const p = this.map.objects[i].power!;
+    if (p.kind === 'switch') return this.powerOn[i] === 1;
+    if (p.kind === 'timer') return this.powerEnd[i] > this.powerT;
+    if (p.kind === 'pulley') return this.powerT - this.lastTurn[i] < GENERATOR_MS;
+    return false;
+  };
+
+  /** Power everywhere at time t */
+  private evalPower(t: number): void {
+    if (!this.circuit) return;
+    this.powerT = t;
+    this.circuit.evaluate(this.powerActive, this.power);
   }
 
   /**
@@ -1037,23 +1137,37 @@ export class Simulation {
    * the segment inside it); that winds its color's linked objects forward (clockwise) or back.
    */
   private turnPulleys(xa: number, ya: number, xb: number, yb: number, tb: number): void {
+    // Electric pulleys (#95) power their wires while turned, either way
+    for (const i of this.devices) {
+      if (this.map.objects[i].power!.kind !== 'pulley') continue;
+      const d = this.turnAngle(i, xa, ya, xb, yb);
+      if (d === 0) continue;
+      this.lastTurn[i] = tb;
+      this.pulleyAngle[i] += d;
+    }
     for (const i of this.pulleys) {
       if (this.hidden[i]) continue;
-      const o = this.objects[i];
       const p = this.map.objects[i].pulley!;
-      transformAt(o, this.clock[i], tfA);
-      toWorld(o, tfA, o.cx, o.cy, pA);
-      const r = Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2;
-      const da = Math.hypot(xa - pA.x, ya - pA.y);
-      const db = Math.hypot(xb - pA.x, yb - pA.y);
-      if (da > r || db > r || da < PULLEY_DEAD_ZONE || db < PULLEY_DEAD_ZONE) continue;
-      let d = Math.atan2(yb - pA.y, xb - pA.x) - Math.atan2(ya - pA.y, xa - pA.x);
-      if (d > Math.PI) d -= Math.PI * 2;
-      else if (d < -Math.PI) d += Math.PI * 2;
+      const d = this.turnAngle(i, xa, ya, xb, yb);
       if (d === 0) continue;
       this.lastTurn[i] = tb;
       this.windPulley(i, (d / (Math.PI * 2)) * p.turnMs);
     }
+  }
+
+  /** The angle (radians, + = clockwise) the cursor swept around wheel `i`'s center, both ends inside it */
+  private turnAngle(i: number, xa: number, ya: number, xb: number, yb: number): number {
+    const o = this.objects[i];
+    transformAt(o, this.clock[i], tfA);
+    toWorld(o, tfA, o.cx, o.cy, pA);
+    const r = Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2;
+    const da = Math.hypot(xa - pA.x, ya - pA.y);
+    const db = Math.hypot(xb - pA.x, yb - pA.y);
+    if (da > r || db > r || da < PULLEY_DEAD_ZONE || db < PULLEY_DEAD_ZONE) return 0;
+    let d = Math.atan2(yb - pA.y, xb - pA.x) - Math.atan2(ya - pA.y, xa - pA.x);
+    if (d > Math.PI) d -= Math.PI * 2;
+    else if (d < -Math.PI) d += Math.PI * 2;
+    return d;
   }
 
   /** Move pulley `i`'s color `ms` along (clamped to the start and the end); the wheel turns with it */
@@ -1140,9 +1254,17 @@ export class Simulation {
 
   /** Removal flags and drawing progress from the current switch states */
   private updateDerived(t: number): void {
+    this.evalPower(t);
     for (const i of this.linked) {
-      const link = this.map.objects[i].link!;
-      this.hidden[i] = (link.action === 'remove' && this.channels[link.color] === 1) || this.collected[i] === 1 ? 1 : 0;
+      const m = this.map.objects[i];
+      const link = m.link;
+      // A spotlight switched off only goes dark (drawing and lights read the switch themselves)
+      let hide = this.collected[i] === 1 || (link?.action === 'remove' && m.role !== 'spot' && this.channels[link.color] === 1);
+      if (this.circuit?.isTarget[i] && !isLightRole(m)) {
+        const e = elecEffect(m);
+        if ((e === 'remove' && this.power[i]) || (e === 'show' && !this.power[i])) hide = true;
+      }
+      this.hidden[i] = hide ? 1 : 0;
     }
     for (const i of this.coins) if (this.collected[i]) this.hidden[i] = 1;
     for (const i of this.crystals) if (this.collected[i]) this.hidden[i] = 1;
@@ -1165,6 +1287,11 @@ export class Simulation {
       } else if (trig.kind === 'hold') {
         this.progress[i] = Math.min(1, this.holdAcc[i] / (trig.duration ?? 1000));
       }
+    }
+    // Electric timers (#96): the time left, for their display
+    for (const i of this.devices ?? []) {
+      const p = this.map.objects[i].power!;
+      if (p.kind === 'timer') this.progress[i] = Math.max(0, this.powerEnd[i] - t) / (p.duration ?? 3000);
     }
   }
 

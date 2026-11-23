@@ -2,7 +2,7 @@ import { t as tr } from './i18n';
 
 import { type Transform } from '../core/object';
 
-import type { Easing, FogKind, MapObject, Motion, MotionType, Point, Rect, Repeat, Role, Shape, TriggerKind, ZoneShape } from '../core/types';
+import type { Easing, FogKind, Liquid, MapObject, Motion, MotionType, Point, PowerKind, Rect, Repeat, Role, Shape, TriggerKind, ZoneShape } from '../core/types';
 import { switchColor } from './localized/colors';
 
 import { DEFAULT_BOULDER_WAVE, DEFAULT_MOTION } from './localized/validate';
@@ -22,7 +22,7 @@ export interface ObjectTool {
   /** role 'trigger': which kind of switch / zone */
   trigger?: TriggerKind;
   /** Walls with a built-in behavior */
-  special?: 'spike' | 'boulder' | 'disc' | 'blade' | 'fall';
+  special?: 'spike' | 'boulder' | 'disc' | 'blade' | 'fall' | 'vine';
   /** role 'fog': fog or sand dust */
   fog?: FogKind;
   /** shape 'sector': a ring sector (#53/#54) */
@@ -31,8 +31,12 @@ export interface ObjectTool {
   carry?: boolean;
   /** role 'turret': gun turret (#60) or missile launcher (#61) */
   turret?: 'gun' | 'missile';
-  /** role 'path': ice floor (#71–74) */
+  /** role 'path': ice floor (#71–74, #100–110) */
   ice?: boolean;
+  /** role 'liquid': pond (#86) or radioactive water (#87) */
+  liquid?: Liquid['kind'];
+  /** role 'power': which electric device (#94–97) */
+  power?: PowerKind;
 }
 
 /** START / GOAL tool: a rectangle (#9 / #10), or a circle, polygon or freeform (#63–68) */
@@ -75,7 +79,20 @@ export const SPECIAL_IDS = {
   sectorPath: 27, sectorWall: 28, spike: 29, boulder: 30, coin: 31, laser: 37, mirror: 38, portal: 39, door: 40, dark: 41, globalDark: 42,
   disc: 43, blade: 44, movingDisc: 45, movingBlade: 46, text: 47, safe: 48, fog: 49, sand: 50,
   fall: 51, pulley: 52, ringPath: 53, ringWall: 54, secret: 55, secretFree: 56, torch: 57, carryTorch: 58, crystal: 59, turret: 60, missile: 61, rotatingSaw: 62, conveyor: 69, luggage: 70,
+  vine: 83, movingVine: 84, lily: 85, pond: 86, toxic: 87, spot: 88, movingSpot: 89, rotatingSpot: 90, wire: 91, ringBlinkPath: 92, ringBlinkWall: 93,
+  elecSwitch: 94, elecPulley: 95, elecTimer: 96, inverter: 97, ringIce: 100,
 } as const;
+
+/** Ice (#71–74, #100–110): the first id of each behavior; rectangle, circle, polygon, freeform, then the ring sector */
+export const ICE_IDS = { static: 71, moving: 101, rotating: 106 } as const;
+
+export const POWER_IDS: Record<PowerKind, number> = { switch: 94, pulley: 95, timer: 96, inverter: 97 };
+
+export const POWER_NAMES: Record<PowerKind, string> = {
+  switch: tr('ed.nameElecSwitch'), pulley: tr('ed.nameElecPulley'), timer: tr('ed.nameElecTimer'), inverter: tr('ed.nameInverter'),
+};
+
+export const liquidName = (kind: Liquid['kind'] | undefined) => tr(kind === 'toxic' ? 'ed.nameToxic' : 'ed.namePond');
 
 export const TRIGGER_IDS: Record<TriggerKind, number> = { switch: 32, timer: 33, hold: 34, startZone: 35, stopZone: 36 };
 
@@ -89,11 +106,13 @@ export const ROLE_NAMES: Record<Role, string> = {
   path: tr('ed.namePath'), wall: tr('ed.nameWall'), coin: tr('ed.nameCoin'), dark: tr('ed.nameDark'), trigger: tr('ed.nameSwitch'), door: tr('ed.nameDoor'), laser: tr('ed.laser'), mirror: tr('ed.mirror'), portal: tr('ed.namePortal'),
   text: tr('ed.textBox2'), safe: tr('ed.nameSafe'), fog: tr('ed.nameFog'), torch: tr('ed.nameTorch'), secret: tr('ed.nameSecret'), crystal: tr('ed.nameCrystal'), pulley: tr('ed.namePulley'), turret: tr('ed.nameTurret'),
   conveyor: tr('ed.nameConveyor'), luggage: tr('ed.nameLuggage'),
+  liquid: tr('ed.namePond'), lily: tr('ed.nameLily'), spot: tr('ed.nameSpot'), wire: tr('ed.nameWire'), power: tr('ed.nameElecSwitch'),
 };
 
 export const fogName = (kind: FogKind | undefined) => tr(kind === 'sand' ? 'ed.nameSand' : 'ed.nameFog');
 
-export const isSquare = (o: { role: Role; trigger?: { kind: TriggerKind }; saw?: { kind: string } }) => o.role === 'pulley' || o.role === 'portal' || o.role === 'laser' || isButton(o.trigger?.kind) || o.saw?.kind === 'disc';
+export const isSquare = (o: { role: Role; trigger?: { kind: TriggerKind }; saw?: { kind: string }; power?: { kind: PowerKind } }) => o.role === 'pulley' || o.role === 'portal' || o.role === 'laser' || isButton(o.trigger?.kind) || o.saw?.kind === 'disc'
+  || o.role === 'lily' || o.role === 'spot' || (o.role === 'power' && o.power?.kind !== 'inverter');
 
 export function withBehavior(beh: Behavior, name: string): string {
   return beh === 'moving' ? tr('ed.nameMoving', { name }) : beh === 'rotating' ? tr('ed.nameRotating', { name }) : beh === 'blinking' ? tr('ed.nameBlinking', { name }) : name;
@@ -104,14 +123,17 @@ export function toolLabel(t: ObjectTool): string {
   if (t.special === 'spike') return tr('ed.nameSpike');
   if (t.special === 'boulder') return tr('ed.nameBoulder');
   if (t.special === 'fall') return tr('ed.nameFall');
+  if (t.special === 'vine') return withBehavior(t.behavior, tr('ed.nameVine'));
+  if (t.role === 'liquid') return liquidName(t.liquid);
+  if (t.role === 'power') return POWER_NAMES[t.power ?? 'switch'];
+  if (t.role === 'spot') return withBehavior(t.behavior, tr('ed.nameSpot'));
   if (t.role === 'fog') return fogName(t.fog);
   if (t.role === 'torch') return tr(t.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch');
   if (t.role === 'turret') return tr(t.turret === 'missile' ? 'ed.nameMissile' : 'ed.nameTurret');
   if (t.special === 'disc' || t.special === 'blade') return withBehavior(t.behavior === 'moving' || t.behavior === 'rotating' ? t.behavior : 'static', tr(t.special === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (t.role !== 'path' && t.role !== 'wall') return ROLE_NAMES[t.role];
-  if (t.ice) return tr('ed.shapeRole', { shape: SHAPES.find(([k]) => k === t.shape)![1], role: tr('ed.nameIce') });
   const shape = t.shape === 'sector' ? tr(t.ring ? 'ed.shapeRing' : 'ed.shapeSector') : SHAPES.find(([k]) => k === t.shape)![1];
-  return withBehavior(t.behavior, tr('ed.shapeRole', { shape, role: ROLE_NAMES[t.role] }));
+  return withBehavior(t.behavior, tr('ed.shapeRole', { shape, role: t.ice ? tr('ed.nameIce') : ROLE_NAMES[t.role] }));
 }
 
 export function isFreeform(s: Shape): boolean {
@@ -129,6 +151,9 @@ export function describeObject(o: MapObject): string {
   if (o.spike) return tr('ed.nameSpike');
   if (o.boulder) return tr('ed.nameBoulder');
   if (o.fall) return tr('ed.nameFall');
+  if (o.vine) return withBehavior(beh, tr('ed.nameVine'));
+  if (o.role === 'liquid') return withBehavior(beh, liquidName(o.liquid?.kind));
+  if (o.role === 'power') return POWER_NAMES[o.power?.kind ?? 'switch'];
   if (o.role === 'pulley') return tr('ed.colorName', { color: switchColor(o.pulley?.color ?? 0).name, name: tr('ed.namePulley') });
   if (o.role === 'fog') return withBehavior(beh, fogName(o.fog?.kind));
   if (o.role === 'turret') return withBehavior(beh, tr(o.turret?.kind === 'missile' ? 'ed.nameMissile' : 'ed.nameTurret'));
@@ -162,7 +187,18 @@ export function objectToolId(o: MapObject): number {
   if (o.role === 'turret') return o.turret?.kind === 'missile' ? SPECIAL_IDS.missile : SPECIAL_IDS.turret;
   if (o.fall) return SPECIAL_IDS.fall;
   if (o.role === 'trigger') return TRIGGER_IDS[o.trigger?.kind ?? 'switch'];
-  if (o.ice && o.shape.type !== 'sector') return 71 + (o.shape.type === 'rect' ? 0 : o.shape.type === 'ellipse' ? 1 : isFreeform(o.shape) ? 3 : 2);
+  if (o.vine) return o.motion ? SPECIAL_IDS.movingVine : SPECIAL_IDS.vine;
+  if (o.role === 'lily') return SPECIAL_IDS.lily;
+  if (o.role === 'liquid') return o.liquid?.kind === 'toxic' ? SPECIAL_IDS.toxic : SPECIAL_IDS.pond;
+  if (o.role === 'spot') return o.rotation ? SPECIAL_IDS.rotatingSpot : o.motion ? SPECIAL_IDS.movingSpot : SPECIAL_IDS.spot;
+  if (o.role === 'wire') return SPECIAL_IDS.wire;
+  if (o.role === 'power') return POWER_IDS[o.power?.kind ?? 'switch'];
+  if (o.ice) {
+    const first = ICE_IDS[o.rotation ? 'rotating' : o.motion ? 'moving' : 'static'];
+    if (o.shape.type === 'sector') return first === 71 ? SPECIAL_IDS.ringIce : first + 4;
+    return first + (o.shape.type === 'rect' ? 0 : o.shape.type === 'ellipse' ? 1 : isFreeform(o.shape) ? 3 : 2);
+  }
+  if (o.shape.type === 'sector' && o.shape.inner && o.blink) return o.role === 'path' ? SPECIAL_IDS.ringBlinkPath : SPECIAL_IDS.ringBlinkWall;
   if (o.shape.type === 'sector' && o.shape.inner) return o.role === 'path' ? SPECIAL_IDS.ringPath : SPECIAL_IDS.ringWall;
   if (o.shape.type === 'sector') return o.role === 'path' ? SPECIAL_IDS.sectorPath : SPECIAL_IDS.sectorWall;
   const shape = o.shape.type === 'rect' ? 0 : o.shape.type === 'ellipse' ? 1 : isFreeform(o.shape) ? 3 : 2;
@@ -197,7 +233,7 @@ export type Handle =
   | { kind: 'arc'; part: 'start' | 'end' | 'radius' | 'inner' }
   /** Laser: beam direction */
   | { kind: 'aim' }
-  /** Conveyor belt (#69): a point of its centerline */
+  /** Conveyor belt (#69) or wire (#91): a point of its centerline */
   | { kind: 'belt'; j: number }
   /** Tilt: turns the object about its center */
   | { kind: 'rotate' };

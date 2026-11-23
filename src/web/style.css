@@ -682,6 +682,10 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .pal-turret svg { fill: #4a505c; stroke: #1d2027; }
 .pal-belt svg { fill: #3a3f47; stroke: #1d1f24; }
 .pal-crate svg { fill: #c08a50; stroke: #7a4b22; }
+.pal-lily svg, .pal-spot svg, .pal-wire svg { stroke: none; }
+.pal-pond svg { stroke: #245c96; stroke-width: 0.8; }
+.pal-toxic svg { stroke: #2f8a12; stroke-width: 0.8; }
+.pal-power svg { stroke: #1d2027; stroke-width: 0.6; }
 .pal-dark svg { fill: #1b1f27; stroke: #000; }
 .pal-global-dark svg { fill: #1b1f27; stroke: #000; }
 .pal-global-dark[aria-pressed="true"] { background: #2a2f3a; }

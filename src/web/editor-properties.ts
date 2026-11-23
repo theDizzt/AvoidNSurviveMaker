@@ -5,8 +5,10 @@ import { objectsBounds, tiltObject } from '../core/arrange';
 
 import { shapeCenter } from '../core/shape';
 import { conveyorOutline } from '../core/conveyor';
+import { Circuit, elecEffect, isLightRole } from '../core/electric';
+import { compileMap } from '../core/object';
 
-import type { Easing, FogKind, LinkAction, MapData, MapObject, Motion, MotionType, Rect, Repeat, Role, Rotation } from '../core/types';
+import type { ElecAction, Easing, FogKind, Liquid, LinkAction, MapData, MapObject, Motion, MotionType, Rect, Repeat, Role, Rotation } from '../core/types';
 import { SWITCH_COLORS, switchColor } from './localized/colors';
 import { setIcon, type IconName } from './icons';
 
@@ -16,7 +18,7 @@ import { TEXT_BASE_FONTS } from './render';
 import { fontPicker } from './font-picker';
 
 import type { EditorSelection } from '../core/editor-document';
-import { TRIGGER_NAMES, isButton, describeObject, objectToolId, ZONE_IDS, sizeText, REPEAT_OPTIONS, ROUTE_REPEAT_OPTIONS, EASING_OPTIONS, ROUTE_OPTIONS, DIRECTION_OPTIONS, newMotion, Command } from './editor-shared';
+import { POWER_NAMES, liquidName, TRIGGER_NAMES, isButton, describeObject, objectToolId, ZONE_IDS, sizeText, REPEAT_OPTIONS, ROUTE_REPEAT_OPTIONS, EASING_OPTIONS, ROUTE_OPTIONS, DIRECTION_OPTIONS, newMotion, Command } from './editor-shared';
 
 export interface EditorPropertiesHost {
   readonly map: MapData;
@@ -67,6 +69,116 @@ export class EditorPropertiesPanel {
       this.toggle(tr('ed.beltLoop'), c.loop, (on) => set(() => (c.loop = on))()),
       this.note(tr('ed.conveyorNote')),
     ];
+  }
+
+  /** Pond (#86) / radioactive water (#87) */
+  private liquidProps(o: MapObject): HTMLElement[] {
+    const l = o.liquid ?? (o.liquid = { kind: 'pond' });
+    return [
+      this.heading(liquidName(l.kind)),
+      this.group(this.selectField<Liquid['kind']>(tr('ed.liquidKind'), l.kind, [['pond', tr('ed.namePond')], ['toxic', tr('ed.nameToxic')]], (v) => (l.kind = v), true)),
+      this.note(tr('ed.liquidNote')),
+    ];
+  }
+
+  /** Spotlight (#88–90): direction, beam width, reach and brightness */
+  private spotProps(o: MapObject): HTMLElement[] {
+    const s = o.spot!;
+    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+    return [
+      this.heading(tr('ed.nameSpot')),
+      this.group(
+        this.numField(tr('ed.spotAngle'), s.angle, (v) => (s.angle = ((Math.round(v) % 360) + 360) % 360), 15),
+        this.numField(tr('ed.spotSweep'), s.sweep, (v) => (s.sweep = Math.round(clamp(v, 1, 360))), 5),
+        this.numField(tr('ed.spotRange'), s.range, (v) => (s.range = Math.round(clamp(v, 1, LIMITS.maxLight))), 20),
+        this.numField(tr('ed.spotIntensity'), s.intensity ?? 100, (v) => {
+          const k = Math.round(clamp(v, 0, 100));
+          if (k === 100) delete s.intensity;
+          else s.intensity = k;
+        }, 5),
+      ),
+      this.note(tr('ed.spotNote')),
+    ];
+  }
+
+  /** Wire (#91): how many of its ends are connected */
+  private wireProps(idx: number): HTMLElement[] {
+    const circuit = new Circuit(this.host.map, compileMap(this.host.map));
+    const n = circuit.joints.filter((j) => j.wire === idx).length;
+    return [this.heading(tr('ed.nameWire')), this.note(tr('ed.wireJoints', { n })), this.note(tr('ed.wireNote'))];
+  }
+
+  /** Electric devices (#94–97) */
+  private powerProps(o: MapObject): HTMLElement[] {
+    const p = o.power!;
+    const s = o.shape;
+    const out: HTMLElement[] = [this.heading(POWER_NAMES[p.kind])];
+    if (s.type === 'rect') {
+      out.push(this.group(
+        this.numField(tr('ed.centerX'), s.x + s.w / 2, (v) => (s.x = Math.round(v - s.w / 2))),
+        this.numField(tr('ed.centerY'), s.y + s.h / 2, (v) => (s.y = Math.round(v - s.h / 2))),
+        this.numField(tr('common.width'), s.w, (v) => (s.w = Math.max(8, Math.round(v)))),
+        this.numField(tr('common.height'), s.h, (v) => (s.h = Math.max(8, Math.round(v)))),
+      ));
+    } else if (s.type === 'ellipse') {
+      out.push(this.group(
+        this.numField(tr('ed.centerX'), s.cx, (v) => (s.cx = Math.round(v))),
+        this.numField(tr('ed.centerY'), s.cy, (v) => (s.cy = Math.round(v))),
+        this.numField(tr('ed.radius'), s.rx, (v) => (s.rx = s.ry = Math.max(8, Math.round(v)))),
+      ));
+    }
+    if (p.kind === 'inverter') {
+      out.push(this.group(this.numField(tr('ed.tilt'), o.tilt ?? 0, (v) => {
+        const next = tiltObject(o, v - (o.tilt ?? 0));
+        Object.assign(o, next);
+        if (next.tilt === undefined) delete o.tilt;
+      }, 15)));
+    }
+    const fields: HTMLElement[] = [];
+    if (p.kind === 'switch' || p.kind === 'timer') {
+      fields.push(this.selectField(tr('ed.pressedBy'), p.click ? 'click' : 'touch', [['touch', tr('ed.touchingIt')], ['click', tr('ed.clickingOnIt')]], (v) => {
+        if (v === 'click') p.click = true;
+        else delete p.click;
+      }));
+    }
+    if (p.kind === 'timer') {
+      fields.push(this.numField(tr('ed.powerFor'), (p.duration ?? 3000) / 1000, (v) => (p.duration = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1));
+    }
+    if (fields.length) out.push(this.group(...fields));
+    if (p.kind === 'switch') {
+      out.push(this.toggle(tr('ed.startsOn'), !!p.initial, (on) => {
+        if (on) p.initial = true;
+        else delete p.initial;
+      }));
+    }
+    if (p.kind === 'switch' || p.kind === 'timer') {
+      out.push(this.toggle(tr('ed.canBeSwitchedBack'), !p.once, (on) => {
+        if (on) delete p.once;
+        else p.once = true;
+      }));
+    }
+    out.push(this.note(tr(p.kind === 'switch' ? 'ed.elecSwitchNote' : p.kind === 'timer' ? 'ed.elecTimerNote' : p.kind === 'pulley' ? 'ed.elecPulleyNote' : 'ed.inverterNote')));
+    return out;
+  }
+
+  /** An object a wire (#91) ends on: what it does while powered */
+  private elecProps(o: MapObject, idx: number): HTMLElement[] {
+    if (!this.host.map.objects.some((m) => m.role === 'wire')) return [];
+    const circuit = new Circuit(this.host.map, compileMap(this.host.map));
+    if (!circuit.isTarget[idx]) return [];
+    const out: HTMLElement[] = [this.heading(tr('ed.electricity'))];
+    if (o.role === 'door') return [...out, this.note(tr('ed.elecDoorNote'))];
+    const effect = elecEffect(o);
+    if (o.role === 'laser' && effect === 'laser') return [...out, this.note(tr('ed.elecLaserNote'))];
+    const options: [ElecAction, string][] = isLightRole(o)
+      ? [['show', tr('ed.elecShine')], ['remove', tr('ed.elecDark')]]
+      : [['start', tr('ed.movesStartsMoving')], ['stop', tr('ed.stopsMoving')], ['remove', tr('ed.isRemoved')], ['show', tr('ed.elecShow')]];
+    const current = (effect === 'door' || effect === 'laser' ? 'remove' : effect) as ElecAction;
+    out.push(
+      this.group(this.selectField<ElecAction>(tr('ed.whilePowered'), current, options, (v) => (o.elec = { action: v }), true)),
+      this.note(tr('ed.elecWiredNote')),
+    );
+    return out;
   }
 
   /** Crate (#70): its box, and how belts carry it */
@@ -188,8 +300,15 @@ export class EditorPropertiesPanel {
     }
     const idx = ids[0];
     const title = document.createElement('h4');
-    title.textContent = `#${idx + 1} · ID ${objectToolId(o)} · ${describeObject(o)}${o.group !== undefined ? ` · ${tr('ed.groupN', { n: o.group })}` : ''}`;
+    title.textContent = `#${o.id ?? idx + 1} · ID ${objectToolId(o)} · ${describeObject(o)}${o.group !== undefined ? ` · ${tr('ed.groupN', { n: o.group })}` : ''}`;
     const parts: HTMLElement[] = [title];
+
+    // Wires (#91) and electric devices (#94–97) have only their own settings
+    if (o.role === 'wire' || o.role === 'power') {
+      parts.push(...(o.role === 'wire' ? this.wireProps(idx) : this.powerProps(o)), ...this.arrangeProps(false), this.editActions());
+      box.replaceChildren(...parts);
+      return;
+    }
 
     // Conveyor belts (#69) and crates (#70) have only their own settings
     if (o.role === 'conveyor' || o.role === 'luggage') {
@@ -198,7 +317,13 @@ export class EditorPropertiesPanel {
       return;
     }
 
-    if ((o.role === 'path' || o.role === 'wall') && !o.saw) {
+    if (o.vine) {
+      parts.push(this.heading(tr('ed.nameVine')), this.note(tr('ed.vineNote')));
+    } else if (o.role === 'liquid') {
+      parts.push(...this.liquidProps(o));
+    } else if (o.role === 'lily') {
+      parts.push(this.heading(tr('ed.nameLily')), this.note(tr('ed.lilyNote')));
+    } else if ((o.role === 'path' || o.role === 'wall') && !o.saw) {
       parts.push(this.group(
         this.selectField<Role>(tr('ed.type'), o.role, [['path', tr('ed.pathSafeFloor')], ['wall', tr('ed.wallDeadly')]], (v) => (o.role = v), true),
       ));
@@ -226,6 +351,12 @@ export class EditorPropertiesPanel {
         this.numField('Y', s.y, (v) => (s.y = Math.round(v))),
         this.numField(tr('common.width'), s.w, (v) => (s.w = Math.max(1, Math.round(v)))),
         this.numField(tr('common.height'), s.h, (v) => (s.h = Math.max(1, Math.round(v)))),
+      ));
+    } else if (o.role === 'lily' && s.type === 'ellipse') {
+      parts.push(this.group(
+        this.numField(tr('ed.centerX'), s.cx, (v) => (s.cx = Math.round(v))),
+        this.numField(tr('ed.centerY'), s.cy, (v) => (s.cy = Math.round(v))),
+        this.numField(tr('ed.lilySize'), s.rx * 2, (v) => (s.rx = s.ry = Math.max(4, Math.round(v)) / 2), 10),
       ));
     } else if (o.role === 'coin' && s.type === 'ellipse') {
       parts.push(this.group(
@@ -320,6 +451,7 @@ export class EditorPropertiesPanel {
         this.note(tr('ed.secretNote')),
       );
     }
+    if (o.spot) parts.push(...this.spotProps(o));
     if (o.laser) parts.push(...this.laserProps(o));
     if (o.turret) parts.push(...this.turretProps(o));
     if (o.portal) parts.push(...this.portalProps(o));
@@ -331,8 +463,11 @@ export class EditorPropertiesPanel {
       }));
       // Ice (#71–74)
       parts.push(this.toggle(tr('ed.iceToggle'), !!o.ice, (on) => {
-        if (on) o.ice = { grip: DEFAULT_ICE_GRIP };
-        else delete o.ice;
+        if (on) {
+          o.ice = { grip: DEFAULT_ICE_GRIP };
+          // Ice never blinks
+          delete o.blink;
+        } else delete o.ice;
       }));
       const ice = o.ice;
       if (ice) {
@@ -342,11 +477,13 @@ export class EditorPropertiesPanel {
         );
       }
     }
-    if ((o.role === 'path' || o.role === 'wall') && !o.saw && !o.fall) parts.push(...this.blinkProps(o));
-    if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'fog' || o.role === 'mirror' || o.role === 'laser' || o.role === 'turret') parts.push(...this.linkProps(o));
+    if ((o.role === 'path' || o.role === 'wall') && !o.saw && !o.fall && !o.ice) parts.push(...this.blinkProps(o));
+    if (o.role === 'path' || o.role === 'wall' || o.role === 'coin' || o.role === 'dark' || o.role === 'fog' || o.role === 'mirror' || o.role === 'laser' || o.role === 'turret'
+      || o.role === 'liquid' || o.role === 'lily' || o.role === 'spot') parts.push(...this.linkProps(o));
+    parts.push(...this.elecProps(o, idx));
 
-    // Movement (a spike's thrust is its movement)
-    if (!o.spike && !o.fall) {
+    // Movement (a spike's thrust is its movement; liquids stay put)
+    if (!o.spike && !o.fall && o.role !== 'liquid') {
     // Movement
     parts.push(this.heading(tr('ed.movement')), this.toggle(tr('ed.movesAlongARoute'), !!o.motion, (on) => {
       if (on) {
@@ -424,7 +561,7 @@ export class EditorPropertiesPanel {
     }
 
     // Rotation (a boulder spins by rolling; a saw keeps its own spin / sawing on top of it, #62)
-    if (!o.boulder && !o.fall) {
+    if (!o.boulder && !o.fall && o.role !== 'liquid') {
     // Rotation
     parts.push(this.heading(tr('ed.rotation')), this.toggle(tr('ed.rotatesAroundAPivot'), !!o.rotation, (on) => {
       if (on) o.rotation = defaultRotation(o);
@@ -906,7 +1043,7 @@ export class EditorPropertiesPanel {
     };
     return [
       title,
-      this.note(tr('ed.multiNote', { paths: objs.filter((o) => o.role === 'path').length, walls: objs.filter((o) => o.role === 'wall').length, size: sizeText(b.w, b.h), first: ids[0] + 1 })),
+      this.note(tr('ed.multiNote', { paths: objs.filter((o) => o.role === 'path').length, walls: objs.filter((o) => o.role === 'wall').length, size: sizeText(b.w, b.h), first: objs[0].id ?? ids[0] + 1 })),
       ...this.arrangeProps(true),
       this.heading(tr('ed.group')),
       row(this.cmdButton(c.group, 'group'), this.cmdButton(c.ungroup, 'ungroup'), this.cmdButton(c.regroup, 'regroup')),

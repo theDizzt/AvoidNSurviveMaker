@@ -13,12 +13,13 @@ import { initialChannels } from '../core/switches';
 import { type MergeOp } from '../core/merge';
 import { flattenShape, normalizeTilt, polyOutline, rotatePoint, shapeBounds, shapeCenter, tiltedBounds, translateShape } from '../core/shape';
 import { conveyorOutline, DEFAULT_BELT_SPEED, DEFAULT_BELT_WIDTH } from '../core/conveyor';
+import { initialPower, WIRE_WIDTH, wireOutline } from '../core/electric';
 import { encodeMap } from './localized/share';
-import type { FogKind, MapData, MapObject, Point, PolyPoint, Rect, Shape, TriggerKind } from '../core/types';
+import type { FogKind, MapData, MapObject, Point, PolyPoint, PowerKind, Rect, Shape, TriggerKind } from '../core/types';
 import { switchColor } from './localized/colors';
 import { boulderShape, spikeShape } from '../core/hazards';
 import { BeamCaster } from '../core/laser';
-import { createEmptyMap, DEFAULT_BLINK, DEFAULT_FALL, DEFAULT_ICE_GRIP, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_PULLEY, DEFAULT_SECRET_RADIUS, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS, validateMap } from './localized/validate';
+import { createEmptyMap, DEFAULT_BLINK, DEFAULT_FALL, DEFAULT_ICE_GRIP, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_PULLEY, DEFAULT_SECRET_RADIUS, DEFAULT_SPOT, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS, validateMap } from './localized/validate';
 import { beginFrame, type Camera, clientToMap, COLORS, drawDarkAreas, drawGlobalDark, drawMap, drawSecretWalls, fittedView, releaseRenderCaches, FONT_MAIN, fitCanvas, setCamera, staticPicture, traceObject, unitsPerPx, zonePath } from './render';
 import { closeContextMenu, openContextMenu, type MenuItem } from './context-menu';
 import { renderThemePanel } from './theme-panel';
@@ -28,7 +29,7 @@ import { DEFAULT_BADGE, DEFAULT_DESIGN } from './localized/theme-pack';
 
 import { checkSymmetry, mirrorPoint, SYMMETRY_MODES, type SymmetryMode, type SymmetryReport } from '../core/symmetry';
 import { drawFogAreas } from './fog';
-import { Behavior, ObjectTool, Tool, SHAPES, GROUPS, ICONS, isButton, isSquare, toolLabel, objectToolId, zoneToolId, type ZoneTool, sizeText, Hit, Handle, Drag, MAP_SIZES, GRID, HANDLE_PX, PIVOT_SNAP_PX, ROTATE_HANDLE_PX, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP, IDENTITY, newMotion, EditorElements, clone, CommandId, Command, ARROWS, SHORTCUTS, rectFromCorners, rectCorners } from './editor-shared';
+import { Behavior, ObjectTool, Tool, SHAPES, ICE_IDS, SPECIAL_IDS, type ShapeKind, GROUPS, ICONS, isButton, isSquare, toolLabel, objectToolId, zoneToolId, type ZoneTool, sizeText, Hit, Handle, Drag, MAP_SIZES, GRID, HANDLE_PX, PIVOT_SNAP_PX, ROTATE_HANDLE_PX, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP, IDENTITY, newMotion, EditorElements, clone, CommandId, Command, ARROWS, SHORTCUTS, rectFromCorners, rectCorners } from './editor-shared';
 import { EditorDocument, type EditorSelection as Selection } from '../core/editor-document';
 import * as editCommands from '../core/editor-commands';
 import { loadEditorDraft, saveEditorDraft, loadEditorPreference, saveEditorPreference } from './editor-storage';
@@ -569,17 +570,42 @@ export class Editor {
     const ringWall: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'sector', ring: true };
     addButton(row, ringPath, `${svg(ringIcon)}<span class="pal-num">53</span>`, tr('ed.palRingPath'), 'pal-path pal-static');
     addButton(row, ringWall, `${svg(ringIcon)}<span class="pal-num">54</span>`, tr('ed.palRingWall'), 'pal-wall pal-static');
-    // Ice floors (#71–74): rectangle, circle, polygon, freeform
-    SHAPES.forEach(([shape], k) => {
-      const tool: ObjectTool = { kind: 'object', role: 'path', behavior: 'static', shape, ice: true };
-      addButton(row, tool, `${svg(ICONS[shape])}<span class="pal-badge">❄</span><span class="pal-num">${71 + k}</span>`, `#${71 + k} ${toolLabel(tool)}${shape === 'poly' || shape === 'free' ? ` — ${tr('ed.clickPointsEnter')}` : ''}`, 'pal-ice');
-    });
+    // Blinking ring sector path / wall (#92 / #93); they can also be given a route or a rotation
+    const ringBlinkPath: ObjectTool = { kind: 'object', role: 'path', behavior: 'blinking', shape: 'sector', ring: true };
+    const ringBlinkWall: ObjectTool = { kind: 'object', role: 'wall', behavior: 'blinking', shape: 'sector', ring: true };
+    addButton(row, ringBlinkPath, `${svg(ringIcon)}<span class="pal-badge">◐</span><span class="pal-num">92</span>`, tr('ed.palRingBlinkPath'), 'pal-path pal-blinking');
+    addButton(row, ringBlinkWall, `${svg(ringIcon)}<span class="pal-badge">◐</span><span class="pal-num">93</span>`, tr('ed.palRingBlinkWall'), 'pal-wall pal-blinking');
     const safeTool: ObjectTool = { kind: 'object', role: 'safe', behavior: 'static', shape: 'rect' };
     addButton(row, safeTool, `${svg('<rect x="3" y="3" width="18" height="18" rx="2" fill-opacity="0.45"/><path d="M12 6.5 L16.5 8.3 L16.2 12.4 C15.8 15 14 16.6 12 17.6 C10 16.6 8.2 15 7.8 12.4 L7.5 8.3 Z" fill="#fff"/>')}<span class="pal-num">48</span>`, tr('ed.palSafeZone'), 'pal-safe');
     const secretTool: ObjectTool = { kind: 'object', role: 'secret', behavior: 'static', shape: 'rect' };
     addButton(row, secretTool, `${svg('<rect x="3" y="4" width="18" height="16" rx="1.5"/><circle cx="12" cy="12" r="4.5" fill="#fff" fill-opacity="0.9"/><circle cx="12" cy="12" r="1.6"/>')}<span class="pal-num">55</span>`, tr('ed.palSecretWall'), 'pal-wall pal-static');
     const secretFreeTool: ObjectTool = { kind: 'object', role: 'secret', behavior: 'static', shape: 'free' };
     addButton(row, secretFreeTool, `${svg('<path d="M4 18 C3 9 9 3 13 7 S 21 8 20 15 S 9 21 4 18 Z"/><circle cx="12" cy="12.5" r="4" fill="#fff" fill-opacity="0.9"/><circle cx="12" cy="12.5" r="1.4"/>')}<span class="pal-num">56</span>`, tr('ed.palSecretWallFree'), 'pal-wall pal-static');
+
+    // Ice floors: rectangle, circle, polygon, freeform and ring sector; still (#71–74, #100),
+    // moving (#101–105) and rotating (#106–110)
+    row = section(tr('ed.catIce'));
+    for (const behavior of ['static', 'moving', 'rotating'] as const) {
+      const first = ICE_IDS[behavior];
+      const kinds: [ShapeKind, boolean][] = [...SHAPES.map(([s]): [ShapeKind, boolean] => [s, false]), ['sector', true]];
+      kinds.forEach(([shape, ring], k) => {
+        const num = ring ? (behavior === 'static' ? SPECIAL_IDS.ringIce : first + 4) : first + k;
+        const tool: ObjectTool = { kind: 'object', role: 'path', behavior, shape, ice: true, ...(ring ? { ring: true } : {}) };
+        const badge = behavior === 'moving' ? '⇄' : behavior === 'rotating' ? '↻' : '❄';
+        addButton(row, tool, `${svg(ring ? ringIcon : ICONS[shape])}<span class="pal-badge">${badge}</span><span class="pal-num">${num}</span>`,
+          `#${num} ${toolLabel(tool)}${shape === 'poly' || shape === 'free' ? ` — ${tr('ed.clickPointsEnter')}` : ''}`, 'pal-ice');
+      });
+    }
+
+    // Water: lily pad, pond, radioactive water
+    row = section(tr('ed.catWater'));
+    const lilyTool: ObjectTool = { kind: 'object', role: 'lily', behavior: 'static', shape: 'ellipse' };
+    const lilyIcon = '<path d="M12 12 L19.5 6.5 A9 9 0 1 1 12 3 Z" fill="#4caf50"/><path d="M12 12 L6 8 M12 12 L5.5 15 M12 12 L12 20.5 M12 12 L18.5 16" stroke="#2e7d32" stroke-width="1" fill="none"/>';
+    addButton(row, lilyTool, `${svg(lilyIcon)}<span class="pal-num">85</span>`, tr('ed.palLily'), 'pal-lily');
+    const liquidTool = (liquid: 'pond' | 'toxic'): ObjectTool => ({ kind: 'object', role: 'liquid', behavior: 'static', shape: 'free', liquid });
+    const waveIcon = (fill: string) => `<path d="M3 9 C3 4 9 3 13 4.5 S 21 6 21 12 S 15 21 10 20 S 3 15 3 9 Z" fill="${fill}"/><path d="M6 11 Q8 9.5 10 11 T14 11 T18 11" fill="none" stroke="#fff" stroke-width="1.3" stroke-opacity="0.8"/>`;
+    addButton(row, liquidTool('pond'), `${svg(waveIcon('#3d8fd6'))}<span class="pal-num">86</span>`, `${tr('ed.palPond')} — ${tr('ed.clickPointsEnter')}`, 'pal-pond');
+    addButton(row, liquidTool('toxic'), `${svg(`${waveIcon('#6cf53a')}<circle cx="15" cy="15" r="1.6" fill="#eaffd0"/>`)}<span class="pal-num">87</span>`, `${tr('ed.palToxic')} — ${tr('ed.clickPointsEnter')}`, 'pal-toxic');
 
     // Traps: spike, boulder, falling rock, grinders and saw blades
     row = section(tr('ed.catTraps'));
@@ -602,6 +628,11 @@ export class Editor {
     const fallTool: ObjectTool = { kind: 'object', role: 'wall', behavior: 'static', shape: 'poly', special: 'fall' };
     const fallRock = boulderShape(12, 9, 6.5).map((p) => `${p.x},${p.y}`).join(' ');
     addButton(row, fallTool, `${svg(`<polygon points="${fallRock}"/><path d="M12 17 L12 23 M9.5 20.5 L12 23 L14.5 20.5" stroke-width="1.6" fill="none" stroke-linecap="round"/>`)}<span class="pal-num">51</span>`, tr('ed.palFall'), 'pal-wall pal-moving');
+    // Thorn vines (#83 / #84): an area with thorns all around
+    const vineIcon = '<path d="M12 1.5 L13 6 L17.5 4.5 L13.6 8.5 L18 10 L13.6 11.6 L17.5 14.5 L13.4 14.6 L16.5 19 L13 17.5 L12.6 22.5 L11.4 22.5 L11 17.5 L7.5 19 L10.6 14.6 L6.5 14.5 L10.4 11.6 L6 10 L10.4 8.5 L6.5 4.5 L11 6 Z"/>';
+    const vineTool = (behavior: Behavior): ObjectTool => ({ kind: 'object', role: 'wall', behavior, shape: 'rect', special: 'vine' });
+    addButton(row, vineTool('static'), `${svg(vineIcon)}<span class="pal-num">83</span>`, tr('ed.palVine'), 'pal-wall pal-static');
+    addButton(row, vineTool('moving'), `${svg(vineIcon + route)}<span class="pal-num">84</span>`, tr('ed.palMovingVine'), 'pal-wall pal-moving');
 
     // Shooters: laser and mirror, turret and homing missile launcher
     row = section(tr('ed.catShooters'));
@@ -667,6 +698,23 @@ export class Editor {
     const torchTool = (carry: boolean): ObjectTool => ({ kind: 'object', role: 'torch', behavior: 'static', shape: 'rect', ...(carry ? { carry: true } : {}) });
     addButton(row, torchTool(false), `${svg(torchIcon)}<span class="pal-num">57</span>`, tr('ed.palTorch'), 'pal-torch');
     addButton(row, torchTool(true), `${svg(`${torchIcon}<path d="M16 14 L22.5 17 L19.4 18 L18.4 21.2 Z" fill="#2b86e0"/>`)}<span class="pal-num">58</span>`, tr('ed.palCarryTorch'), 'pal-torch');
+    // Spotlights (#88–90): a cone of light, still, on a route or turning
+    const spotIcon = '<path d="M9 9 L22 3 L22 21 Z" fill="#ffe27a" fill-opacity="0.8" stroke="none"/><rect x="2" y="8" width="8" height="8" rx="2" fill="#4a5363"/><circle cx="9" cy="12" r="2.4" fill="#fff6c8"/>';
+    const spotTool = (behavior: Behavior): ObjectTool => ({ kind: 'object', role: 'spot', behavior, shape: 'rect' });
+    addButton(row, spotTool('static'), `${svg(spotIcon)}<span class="pal-num">88</span>`, tr('ed.palSpot'), 'pal-spot');
+    addButton(row, spotTool('moving'), `${svg(spotIcon)}<span class="pal-badge">⇄</span><span class="pal-num">89</span>`, tr('ed.palMovingSpot'), 'pal-spot');
+    addButton(row, spotTool('rotating'), `${svg(spotIcon)}<span class="pal-badge">↻</span><span class="pal-num">90</span>`, tr('ed.palRotatingSpot'), 'pal-spot');
+
+    // Electricity: wire and the devices that power it
+    row = section(tr('ed.catElectric'));
+    const wireTool: ObjectTool = { kind: 'object', role: 'wire', behavior: 'static', shape: 'poly' };
+    addButton(row, wireTool, `${svg('<path d="M3 19 C8 19 6 6 12 6 S 16 17 21 5" fill="none" stroke="#2e333b" stroke-width="3.2" stroke-linecap="round"/><path d="M3 19 C8 19 6 6 12 6 S 16 17 21 5" fill="none" stroke="#ffd23a" stroke-width="1.2" stroke-dasharray="2 3" stroke-linecap="round"/>')}<span class="pal-num">91</span>`, `${tr('ed.palWire')} — ${tr('ed.clickPointsEnter')}`, 'pal-wire');
+    const powerTool = (power: PowerKind): ObjectTool => ({ kind: 'object', role: 'power', behavior: 'static', shape: power === 'pulley' ? 'ellipse' : 'rect', power });
+    const bolt = '<path d="M13.5 4 L8 13 L11.5 13 L10 20 L16 10.5 L12.5 10.5 Z" fill="#ffd23a"/>';
+    addButton(row, powerTool('switch'), `${svg(`<rect x="3" y="3" width="18" height="18" rx="3" fill="#3a404b"/>${bolt}`)}<span class="pal-num">94</span>`, tr('ed.palElecSwitch'), 'pal-power');
+    addButton(row, powerTool('pulley'), `${svg(`<circle cx="12" cy="12" r="9.5" fill="#b87333"/><circle cx="12" cy="12" r="6.5" fill="#3a404b"/>${bolt}`)}<span class="pal-num">95</span>`, tr('ed.palElecPulley'), 'pal-power');
+    addButton(row, powerTool('timer'), `${svg('<rect x="3" y="2.5" width="18" height="7" rx="1.5" fill="#1c2a1c"/><path d="M6 4.5 L8 4.5 M7 4.5 L7 7.5 M11 4.5 L13 4.5 L13 7.5 L11 7.5 M16 4.5 L18 4.5 L18 7.5 L16 7.5 Z" stroke="#7dff6a" stroke-width="0.9" fill="none"/><rect x="5" y="11" width="14" height="11" rx="2.5" fill="#3a404b"/><circle cx="12" cy="16.5" r="3.5" fill="#fff"/><path d="M12 16.5 L12 14" stroke="#3a404b" stroke-width="1.2"/>')}<span class="pal-num">96</span>`, tr('ed.palElecTimer'), 'pal-power');
+    addButton(row, powerTool('inverter'), `${svg('<rect x="2" y="6" width="20" height="12" rx="2" fill="#3a404b"/><path d="M7 9 L14 12 L7 15 Z" fill="#fff"/><circle cx="15.8" cy="12" r="1.6" fill="none" stroke="#fff" stroke-width="1.2"/>')}<span class="pal-num">97</span>`, tr('ed.palInverter'), 'pal-power');
 
     // Decoration: text box
     row = section(tr('ed.catDecor'));
@@ -781,6 +829,8 @@ export class Editor {
         : tr('ed.hintMarkers', { n: m?.points.length ?? 0 });
     } else if (this.draft?.tool.kind === 'object' && this.draft.tool.role === 'conveyor') {
       text = tr('ed.hintBelt', { n: this.draft.points.length });
+    } else if (this.draft?.tool.kind === 'object' && this.draft.tool.role === 'wire') {
+      text = tr('ed.hintWire', { n: this.draft.points.length });
     } else if (this.draft) {
       text = this.draft.tool.shape === 'free'
         ? tr('ed.hintFree', { n: this.draft.points.length })
@@ -796,7 +846,7 @@ export class Editor {
       const t = this.tool;
       const how = tr(t.special === 'spike' ? 'ed.howSpike'
         : t.special === 'boulder' ? 'ed.howBoulder'
-          : t.role === 'torch' || t.role === 'crystal' || t.role === 'turret' || t.special === 'fall' ? 'ed.howTorch'
+          : t.role === 'torch' || t.role === 'crystal' || t.role === 'turret' || t.role === 'spot' || t.role === 'power' || t.special === 'fall' ? 'ed.howTorch'
           : t.role === 'mirror' ? 'ed.howMirror'
             : t.role === 'laser' ? 'ed.howLaser'
               : t.role === 'portal' ? 'ed.howPortal' : t.shape === 'sector' ? 'ed.howSector' : t.role === 'coin' ? 'ed.howCoin' : t.shape === 'poly' || t.shape === 'free' ? 'ed.howPoints' : t.shape === 'ellipse' ? 'ed.howEllipse' : 'ed.howRect');
@@ -824,7 +874,7 @@ export class Editor {
     const objs = this.compiled;
     const zoneTrigger = (i: number) => !isButton(this.map.objects[i]?.trigger?.kind);
     // Text boxes are drawn over everything, so they are picked first
-    for (const role of ['text', 'coin', 'crystal', 'torch', 'pulley', 'portal', 'laser', 'turret', 'trigger', 'luggage', 'wall', 'door', 'mirror'] as const) {
+    for (const role of ['text', 'coin', 'crystal', 'torch', 'spot', 'power', 'pulley', 'portal', 'laser', 'turret', 'trigger', 'wire', 'luggage', 'lily', 'wall', 'door', 'mirror'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
@@ -834,7 +884,7 @@ export class Editor {
     if (new ZoneArea(this.map.start, this.map.startShape).contains(p.x, p.y)) return { kind: 'start' };
     // Darkness and fog areas last, so whatever lies under one can still be clicked. Conveyor belts
     // (#69) lie over paths; a loop's middle is not belt (even-odd, like its outline)
-    for (const role of ['safe', 'conveyor', 'path', 'trigger', 'dark', 'fog', 'secret'] as const) {
+    for (const role of ['safe', 'conveyor', 'liquid', 'path', 'trigger', 'dark', 'fog', 'secret'] as const) {
       for (let i = objs.length - 1; i >= 0; i--) {
         if (role === 'trigger' && !zoneTrigger(i)) continue;
         if (objs[i].role === role && pointInPoly(p.x, p.y, objs[i].poly)) return { kind: 'object', i };
@@ -900,9 +950,9 @@ export class Editor {
       if (g) out.push({ h: { kind: 'rotate' }, p: g.p });
       return out;
     }
-    // A conveyor belt (#69): only the points of its centerline
-    if (o.conveyor) {
-      o.conveyor.points.forEach((p, j) => out.push({ h: { kind: 'belt', j }, p }));
+    // A conveyor belt (#69) or wire (#91): only the points of its centerline
+    if (o.conveyor || o.wire) {
+      (o.conveyor ?? o.wire)!.points.forEach((p, j) => out.push({ h: { kind: 'belt', j }, p }));
       return out;
     }
     if (o.rotation) out.push({ h: { kind: 'pivot' }, p: o.rotation.pivot });
@@ -920,9 +970,9 @@ export class Editor {
     if (o.role === 'coin' || o.role === 'crystal') return out; // fixed size: only route markers / pivot / tilt
     // Shape handles sit on the tilted outline
     const shapeStart = out.length;
-    if (o.laser) {
+    if (o.laser || o.spot) {
       const b = shapeBounds(o.shape);
-      const a = (o.laser.angle * Math.PI) / 180;
+      const a = (((o.laser ?? o.spot)!.angle) * Math.PI) / 180;
       const r = Math.max(b.w, b.h) / 2 + 22;
       out.unshift({ h: { kind: 'aim' }, p: { x: b.x + b.w / 2 + Math.cos(a) * r, y: b.y + b.h / 2 + Math.sin(a) * r } });
     }
@@ -1204,6 +1254,12 @@ export class Editor {
       this.dirty();
       return;
     }
+    if (h.kind === 'belt' && o.wire) {
+      o.wire.points[h.j] = this.snapPoint(raw);
+      o.shape = { type: 'poly', points: wireOutline(o.wire) };
+      this.dirty();
+      return;
+    }
     if (h.kind === 'rotate') {
       const c = shapeCenter(d.orig.shape);
       const from = d.orig.tilt ?? 0;
@@ -1241,11 +1297,12 @@ export class Editor {
       }
       this.pivotSnap = best;
       o.rotation.pivot = best ? { x: Math.round(best.p.x * 100) / 100, y: Math.round(best.p.y * 100) / 100 } : p;
-    } else if (h.kind === 'aim' && (o.laser || o.turret)) {
+    } else if (h.kind === 'aim' && (o.laser || o.turret || o.spot)) {
       const b = shapeBounds(o.shape);
       const deg = (Math.atan2(raw.y - (b.y + b.h / 2), raw.x - (b.x + b.w / 2)) * 180) / Math.PI;
       const ang = ((Math.round(this.el.snap.checked ? Math.round(deg / 15) * 15 : deg) % 360) + 360) % 360;
       if (o.laser) o.laser.angle = ang;
+      else if (o.spot) o.spot.angle = ang;
       else o.turret!.angle = ang > 180 ? ang - 360 : ang;
     } else if (h.kind === 'arc' && o.shape.type === 'sector') {
       const s = o.shape;
@@ -1360,6 +1417,17 @@ export class Editor {
     }
     // Turrets and missile launchers are always 60×60, centered on the click
     if (tool.role === 'turret') r = { x: d.x0 - LIMITS.turretSize / 2, y: d.y0 - LIMITS.turretSize / 2, w: LIMITS.turretSize, h: LIMITS.turretSize };
+    // Lily pads (#85) 70 px, spotlights (#88–90) 36×36, electric devices (#94–97), thorn vines (#83 / #84)
+    if (r.w < 4 && r.h < 4 && (tool.role === 'lily' || tool.role === 'spot' || tool.role === 'power' || tool.special === 'vine')) {
+      const [w, h] = tool.role === 'lily' ? [70, 70] : tool.role === 'spot' ? [36, 36] : tool.special === 'vine' ? [30, 180]
+        : tool.power === 'pulley' ? [80, 80] : tool.power === 'timer' ? [48, 48] : tool.power === 'inverter' ? [64, 36] : [40, 40];
+      r = { x: d.x0 - w / 2, y: d.y0 - h / 2, w, h };
+    }
+    if (tool.role === 'lily') {
+      // Always round
+      const s = Math.max(r.w, r.h);
+      r = { x: r.x + r.w / 2 - s / 2, y: r.y + r.h / 2 - s / 2, w: s, h: s };
+    }
     // Crates (#70): a plain click drops one 40×40
     if (tool.role === 'luggage' && r.w < 4 && r.h < 4) r = { x: d.x0 - 20, y: d.y0 - 20, w: 40, h: 40 };
     // Torches 24×40, centered on the click
@@ -1436,6 +1504,11 @@ export class Editor {
       const conveyor = { points: draft.points.map((p) => ({ x: p.x, y: p.y })), loop: loop && draft.points.length >= 3, width: DEFAULT_BELT_WIDTH, speed: DEFAULT_BELT_SPEED };
       return this.addObject(draft.tool, { type: 'poly', points: conveyorOutline(conveyor) }, { conveyor });
     }
+    if (draft?.tool.kind === 'object' && draft.tool.role === 'wire') {
+      if (draft.points.length < 2) return this.updateHint();
+      const wire = { points: draft.points.map((p) => ({ x: p.x, y: p.y })) };
+      return this.addObject(draft.tool, { type: 'poly', points: wireOutline(wire) }, { wire });
+    }
     if (!draft || draft.points.length < 3) return this.updateHint();
     const shape: Shape = draft.tool.shape === 'free'
       ? { type: 'poly', points: draft.points, free: true }
@@ -1466,6 +1539,17 @@ export class Editor {
     if (tool.behavior === 'rotating') o.rotation = defaultRotation(o);
     if (tool.behavior === 'blinking') o.blink = { ...DEFAULT_BLINK };
     if (tool.ice) o.ice = { grip: DEFAULT_ICE_GRIP };
+    if (tool.special === 'vine') o.vine = true;
+    if (tool.role === 'liquid') o.liquid = { kind: tool.liquid ?? 'pond' };
+    if (tool.role === 'spot') {
+      o.spot = { ...DEFAULT_SPOT };
+      // A searchlight sweeping back and forth over a quarter turn
+      if (o.rotation) Object.assign(o.rotation, { speed: 45, angle: 90, repeat: 'pingpong', easing: 'inOut' });
+    }
+    if (tool.role === 'power') {
+      o.power = { kind: tool.power ?? 'switch' };
+      if (o.power.kind === 'timer') o.power.duration = 3000;
+    }
     if (tool.special === 'boulder') o.boulder = true;
     if (tool.behavior === 'moving') o.motion = newMotion(o);
     if (tool.role === 'trigger') {
@@ -1508,8 +1592,8 @@ export class Editor {
   private onDoubleClick(e: MouseEvent): void {
     if (this.tool.kind !== 'select' || this.draft || this.markerMode !== null) return;
     const o = this.selectedObject();
-    // A conveyor belt's outline comes from its centerline: no vertices to add or round off
-    if (!o || o.shape.type !== 'poly' || o.conveyor) return;
+    // A conveyor belt's or wire's outline comes from its centerline: no vertices to add or round off
+    if (!o || o.shape.type !== 'poly' || o.conveyor || o.wire) return;
     const shape = o.shape;
     const raw = this.pointer(e);
     const h = this.hitHandle(raw);
@@ -1866,7 +1950,7 @@ export class Editor {
     if (this.draft) {
       const pts = this.draft.points.length;
       return openContextMenu(x, y, [
-        { label: tr('ed.finishShape'), keys: 'Enter', disabled: pts < (this.draft.tool.kind === 'object' && this.draft.tool.role === 'conveyor' ? 2 : 3), action: () => this.closeDraft() },
+        { label: tr('ed.finishShape'), keys: 'Enter', disabled: pts < (this.draft.tool.kind === 'object' && (this.draft.tool.role === 'conveyor' || this.draft.tool.role === 'wire') ? 2 : 3), action: () => this.closeDraft() },
         { label: tr('ed.removeLastPoint'), keys: 'Backspace', action: () => {
           this.draft?.points.pop();
           if (this.draft && !this.draft.points.length) this.draft = null;
@@ -2482,7 +2566,8 @@ export class Editor {
     ctx.setLineDash([]);
     // Global darkness: a light preview around the mouse
     if (map.darkness) {
-      const lights = objectLights(objs, t);
+      const ip = initialPower(map, objs);
+      const lights = objectLights(objs, t, { power: ip.power, wired: ip.circuit.isTarget, channels: initialChannels(map) });
       if (this.hover && map.darkness.light > 0) lights.push({ x: this.hover.x, y: this.hover.y, r: map.darkness.light });
       drawGlobalDark(ctx, map, lights, 0.3);
     }
@@ -2576,7 +2661,7 @@ export class Editor {
         const kind = this.sel?.kind;
         const size = o ? shapeBounds(o.shape) : b;
         const label = o
-          ? `#${selIndex + 1} · ID ${objectToolId(o)} · ${sizeText(size.w, size.h)}${o.tilt ? ` · ${tiltText(o.tilt)}` : ''}`
+          ? `#${o.id ?? selIndex + 1} · ID ${objectToolId(o)} · ${sizeText(size.w, size.h)}${o.tilt ? ` · ${tiltText(o.tilt)}` : ''}`
           : `${tr(kind === 'start' ? 'zone.start' : 'zone.goal')} · ID ${kind === 'start' ? zoneToolId('start', map.startShape) : zoneToolId('goal', map.goalShape)} · ${sizeText(b.w, b.h)}`;
         this.drawInfoLabel(label, b.x + b.w, b.y, u);
       }
@@ -2753,11 +2838,11 @@ export class Editor {
     // Polygon / freeform in progress
     if (this.draft) {
       const pts = this.hover ? [...this.draft.points, this.snapPoint(this.hover)] : this.draft.points;
-      const belt = this.draft.tool.kind === 'object' && this.draft.tool.role === 'conveyor';
+      const belt = this.draft.tool.kind === 'object' && (this.draft.tool.role === 'conveyor' || this.draft.tool.role === 'wire');
       if (belt && pts.length >= 2) {
         ctx.save();
         ctx.strokeStyle = 'rgba(58,63,71,0.45)';
-        ctx.lineWidth = DEFAULT_BELT_WIDTH;
+        ctx.lineWidth = this.draft.tool.kind === 'object' && this.draft.tool.role === 'wire' ? WIRE_WIDTH : DEFAULT_BELT_WIDTH;
         ctx.lineJoin = 'miter';
         ctx.beginPath();
         pts.forEach((p, k) => (k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));

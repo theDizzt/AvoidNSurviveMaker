@@ -237,3 +237,124 @@ export class FallSpin {
     return s.falling ? s.u * s.u * Math.PI * 0.9 : 0;
   }
 }
+
+/** Spacing of a thorn vine's (#83 / #84) thorns along its outline (map units) */
+const THORN_GAP = 18;
+
+/** Share of a thorn vine's length (from its tip) over which it narrows to a point */
+const THORN_TAPER = 0.4;
+
+/**
+ * A thorn vine's outline: `ring` (closed, [x0, y0, ...]) walked at an even step, narrowing to a
+ * sharp point at one end (the top of a tall shape, the right end of a wide one; tilt turns it),
+ * with a thorn sticking out every THORN_GAP. Thorns vary in length (a fixed pseudo-random pattern
+ * from `seed`) and lean toward the tip, like a climbing vine's. Used for both drawing and collision.
+ */
+export function thornRing(ring: Float64Array, seed: number): Float64Array {
+  const n = ring.length / 2;
+  if (n < 3) return ring;
+  let area = 0;
+  let perimeter = 0;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    area += ring[j * 2] * ring[i * 2 + 1] - ring[i * 2] * ring[j * 2 + 1];
+    perimeter += Math.hypot(ring[i * 2] - ring[j * 2], ring[i * 2 + 1] - ring[j * 2 + 1]);
+  }
+  if (perimeter < THORN_GAP * 2) return ring;
+  // Points every third of a gap: base, tip, base, then a stretch of plain stem
+  const count = Math.max(3, Math.round(perimeter / THORN_GAP)) * 3;
+  const step = perimeter / count;
+  const pts = new Float64Array(count * 2);
+  let edge = 0;
+  let edgeStart = 0;
+  let edgeLen = Math.hypot(ring[2] - ring[0], ring[3] - ring[1]);
+  for (let k = 0; k < count; k++) {
+    const s = k * step;
+    while (s > edgeStart + edgeLen && edge < n - 1) {
+      edgeStart += edgeLen;
+      edge++;
+      const b = (edge + 1) % n;
+      edgeLen = Math.hypot(ring[b * 2] - ring[edge * 2], ring[b * 2 + 1] - ring[edge * 2 + 1]);
+    }
+    const b = (edge + 1) % n;
+    const u = edgeLen > 0 ? Math.min(1, (s - edgeStart) / edgeLen) : 0;
+    pts[k * 2] = ring[edge * 2] + (ring[b * 2] - ring[edge * 2]) * u;
+    pts[k * 2 + 1] = ring[edge * 2 + 1] + (ring[b * 2 + 1] - ring[edge * 2 + 1]) * u;
+  }
+  // Narrow the tip end to a point on the long axis' center line
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let k = 0; k < count; k++) {
+    minX = Math.min(minX, pts[k * 2]); maxX = Math.max(maxX, pts[k * 2]);
+    minY = Math.min(minY, pts[k * 2 + 1]); maxY = Math.max(maxY, pts[k * 2 + 1]);
+  }
+  const tall = maxY - minY >= maxX - minX;
+  const mid = tall ? (minX + maxX) / 2 : (minY + maxY) / 2;
+  const width = Math.max(1e-9, tall ? maxY - minY : maxX - minX);
+  const narrow = new Float64Array(count);
+  for (let k = 0; k < count; k++) {
+    // 0 at the tip, 1 from THORN_TAPER of the length on
+    const from = tall ? (pts[k * 2 + 1] - minY) / width : (maxX - pts[k * 2]) / width;
+    const f = Math.min(1, from / THORN_TAPER) ** 1.3;
+    narrow[k] = f;
+    if (tall) pts[k * 2] = mid + (pts[k * 2] - mid) * f;
+    else pts[k * 2 + 1] = mid + (pts[k * 2 + 1] - mid) * f;
+    // The very end draws out into a long spike
+    const spike = Math.max(0, 1 - from / 0.06) ** 2 * Math.min(45, 12 + width * 0.12);
+    if (tall) pts[k * 2 + 1] -= spike;
+    else pts[k * 2] += spike;
+  }
+  // Outward normal: (dy, -dx) for a ring of positive area (y down)
+  const sign = area >= 0 ? 1 : -1;
+  let r = (Math.abs(Math.round(seed)) % 997 + 1) * 7919;
+  const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+  for (let k = 1; k < count; k += 3) {
+    const a = (k - 1) * 2;
+    const c = ((k + 1) % count) * 2;
+    const dx = pts[c] - pts[a];
+    const dy = pts[c + 1] - pts[a + 1];
+    const len = Math.hypot(dx, dy) || 1;
+    let nx = (dy / len) * sign;
+    let ny = (-dx / len) * sign;
+    // Lean toward the tip
+    if (tall) ny -= 0.45;
+    else nx += 0.45;
+    const nl = Math.hypot(nx, ny) || 1;
+    nx /= nl;
+    ny /= nl;
+    // Long and short thorns, roughly alternating
+    const length = ((k % 6 === 1 ? 11 : 6) + rnd() * 7) * (0.45 + 0.55 * narrow[k]);
+    pts[k * 2] += nx * length;
+    pts[k * 2 + 1] += ny * length;
+  }
+  return pts;
+}
+
+/**
+ * A lily pad (#85) bobbing on the water: a slow drift a few px around its place, never repeating
+ * exactly (two waves of unrelated periods), and a gentle sway. `seed` offsets each pad's phase.
+ */
+export class LilyDrift {
+  readonly moves = true;
+  readonly dur = 1;
+  private readonly phase: number;
+
+  constructor(seed: number, private readonly route: { offsetAt(t: number, out: Point): Point } | null = null) {
+    this.phase = (seed * 2.399) % (Math.PI * 2);
+  }
+
+  offsetAt(t: number, out: Point): Point {
+    if (this.route) this.route.offsetAt(t, out);
+    else {
+      out.x = 0;
+      out.y = 0;
+    }
+    const s = t / 1000;
+    out.x += Math.sin(s * 0.9 + this.phase) * 5 + Math.sin(s * 0.37 + this.phase * 2) * 3;
+    out.y += Math.cos(s * 0.7 + this.phase) * 4 + Math.sin(s * 0.29 + this.phase * 3) * 3;
+    return out;
+  }
+
+  angleAt(t: number): number {
+    const s = t / 1000;
+    return Math.sin(s * 0.5 + this.phase) * 0.12;
+  }
+}

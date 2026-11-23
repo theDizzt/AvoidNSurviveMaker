@@ -42,7 +42,7 @@ export function createLevelApi(t: Translator = defaultTranslate) {
 
   /**
    * The parts of a map that affect play. A clear verified in test play stays valid while only
-   * names, level settings, the theme or editor grouping change.
+   * names, level settings, the theme, editor grouping or object ids change.
    */
   function gameplayKey(map: MapData): string {
     return JSON.stringify({
@@ -51,7 +51,8 @@ export function createLevelApi(t: Translator = defaultTranslate) {
       height: map.height,
       start: map.start,
       goal: map.goal,
-      objects: map.objects.map(({ group: _group, ...rest }) => rest),
+      // Editor-only: groups, and object ids (they don't change how the map plays)
+      objects: map.objects.map(({ group: _group, id: _id, ...rest }) => rest),
       darkness: map.darkness ?? null,
     });
   }

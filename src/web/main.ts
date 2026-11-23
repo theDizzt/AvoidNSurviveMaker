@@ -49,7 +49,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   return el as T;
 };
 
-// Static page text comes from the locale file (src/locale/<lang>.json)
+// Static page text comes from the locale file (src/locale/<lang>/*.json)
 applyI18n();
 installTooltips();
 // Editor toolbar: icon buttons, the label in the tooltip (with the shortcut)

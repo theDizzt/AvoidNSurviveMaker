@@ -603,7 +603,7 @@ export class PlayController {
     this.placeBackground();
     beginFrame(ctx, map, true);
     this.mapTransform = ctx.getTransform();
-    const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle, turretAim: sim.guns.aim };
+    const state = sim.status === 'ready' ? {} : { hidden: sim.hidden, clock: sim.clock, doorOpen: sim.doorOpen, channels: sim.channels, progress: sim.progress, pulleyAngle: sim.pulleyAngle, turretAim: sim.guns.aim, power: sim.power };
     const playing = sim.status === 'playing';
     const carried = playing ? this.carried : undefined;
     drawMap(ctx, map, sim.objects, t, { ...state, coinsLeft: sim.coinsLeft, beams: sim.beams, now, carried,
@@ -644,7 +644,8 @@ export class PlayController {
     if (map.darkness && (sim.status === 'playing' || sim.status === 'ready')) {
       const light = map.darkness.light;
       const s = map.start;
-      const lights = objectLights(sim.objects, t, playing ? { ...state, carried: this.carried, cursor: { x: sim.x, y: sim.y } } : state);
+      const circuit = { power: sim.power, wired: sim.circuit?.isTarget, channels: sim.channels };
+      const lights = objectLights(sim.objects, t, playing ? { ...state, ...circuit, carried: this.carried, cursor: { x: sim.x, y: sim.y } } : { ...state, ...circuit });
       if (light > 0) lights.push(sim.status === 'playing'
         ? { x: sim.x, y: sim.y, r: light }
         : { x: s.x + s.w / 2, y: s.y + s.h / 2, r: Math.max(light, Math.hypot(s.w, s.h) / 2 + 12) });

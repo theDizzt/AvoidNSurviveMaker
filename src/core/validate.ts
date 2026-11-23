@@ -5,10 +5,12 @@ import { compileObject, toWorld, transformAt, type Transform } from './object';
 import { createColorsApi } from './colors';
 import { normalizeTilt, shapeBounds, shapeCenter } from './shape';
 import { beltPoints, conveyorOutline } from './conveyor';
+import { wireOutline } from './electric';
+import { assignObjectIds, MAX_OBJECT_ID, objectNumber } from './object-ids';
 import {
   MAP_VERSION, PACK_VERSION,
   type Door, type Easing, type Fill, type MapData, type MapPack, type Trigger, type TriggerKind, type MapObject, type Motion, type PatternKind, type Point, type PolyPoint, type Rect,
-  type Repeat, type Rotation, type Shape, type SurfaceAnim, type SurfaceStyle, type Theme, type Wave, type Fall, type Pulley, type Turret, type Blink, type ZoneShape, type Conveyor,
+  type Repeat, type Rotation, type Shape, type SurfaceAnim, type SurfaceStyle, type Theme, type Wave, type Fall, type Pulley, type Turret, type Blink, type ZoneShape, type Conveyor, type Spot, type Power,
 } from './types';
 
 export class MapValidationError extends Error {}
@@ -46,6 +48,8 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     turretSize: 60,
     /** Conveyor belts (#69): centerline points, belt width (px) */
     maxBeltPoints: 64,
+    /** Wires (#91): points along the cable */
+    maxWirePoints: 64,
     minBeltWidth: 20,
     maxBeltWidth: 300,
     maxTurretRange: 4000,
@@ -236,7 +240,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
   function mapObject(v: unknown, name: string, W: number, H: number): MapObject {
     const o = obj(v, name);
     const out: MapObject = {
-      role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret', 'crystal', 'pulley', 'turret', 'conveyor', 'luggage'] as const),
+      role: oneOf(o.role, `${name}.role`, ['path', 'wall', 'coin', 'dark', 'trigger', 'door', 'laser', 'mirror', 'portal', 'text', 'safe', 'fog', 'torch', 'secret', 'crystal', 'pulley', 'turret', 'conveyor', 'luggage', 'liquid', 'lily', 'spot', 'wire', 'power'] as const),
       shape: shape(o.shape, `${name}.shape`, W, H),
     };
     if (o.motion !== undefined) out.motion = motion(o.motion, `${name}.motion`, W, H);
@@ -249,6 +253,8 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       const g = num(o.group, `${name}.group`, 1, 1e9);
       if (Number.isInteger(g)) out.group = g;
     }
+    // A bad or repeated id is replaced (assignObjectIds), not an error
+    if (typeof o.id === 'number' && Number.isInteger(o.id) && o.id >= 1 && o.id <= MAX_OBJECT_ID) out.id = o.id;
     if (out.role === 'coin') {
       // Coins are always a 24×24 circle, centered where the shape was
       const c = shapeCenter(out.shape);
@@ -303,6 +309,51 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       delete out.motion;
       delete out.rotation;
     }
+    if (out.role === 'wire') {
+      const w = obj(o.wire, `${name}.wire`);
+      const points = arr(w.points, `${name}.wire.points`, LIMITS.maxWirePoints).map((p, i) => point(p, `${name}.wire.points[${i}]`, W, H));
+      if (beltPoints({ points, loop: false }).length < 2) fail(t('validate.beltPoints', { name }));
+      out.wire = { points };
+      // The cable's shape always comes from its points; wires don't move
+      out.shape = { type: 'poly', points: wireOutline(out.wire) };
+      delete out.motion;
+      delete out.rotation;
+      delete out.tilt;
+    }
+    if (out.role === 'power') {
+      const p = obj(o.power, `${name}.power`);
+      const kind = oneOf(p.kind, `${name}.power.kind`, ['switch', 'timer', 'pulley', 'inverter'] as const);
+      const power: Power = { kind };
+      if (p.click === true && (kind === 'switch' || kind === 'timer')) power.click = true;
+      if (p.initial === true && kind === 'switch') power.initial = true;
+      if (p.once === true && (kind === 'switch' || kind === 'timer')) power.once = true;
+      if (kind === 'timer') power.duration = num(p.duration, `${name}.power.duration`, 50, LIMITS.maxDelay);
+      out.power = power;
+      // Electric devices stay where they are placed (the wires are joined to them there)
+      delete out.motion;
+      delete out.rotation;
+    }
+    if (out.role === 'liquid') {
+      out.liquid = { kind: oneOf(obj(o.liquid, `${name}.liquid`).kind, `${name}.liquid.kind`, ['pond', 'toxic'] as const) };
+      delete out.motion;
+      delete out.rotation;
+    }
+    if (out.role === 'lily') {
+      // Always round
+      const b = shapeBounds(out.shape);
+      const r = Math.max(1, Math.min(b.w, b.h) / 2);
+      out.shape = { type: 'ellipse', cx: b.x + b.w / 2, cy: b.y + b.h / 2, rx: r, ry: r };
+    }
+    if (out.role === 'spot') {
+      const s = obj(o.spot, `${name}.spot`);
+      const spot: Spot = {
+        angle: num(s.angle, `${name}.spot.angle`, -720, 720),
+        sweep: num(s.sweep, `${name}.spot.sweep`, 1, 360),
+        range: num(s.range, `${name}.spot.range`, 1, LIMITS.maxLight),
+      };
+      if (s.intensity !== undefined) spot.intensity = num(s.intensity, `${name}.spot.intensity`, 0, 100);
+      out.spot = spot;
+    }
     if (out.role === 'path' && o.pierce === true) out.pierce = true;
     if (out.role === 'path' && o.ice !== undefined) out.ice = { grip: num(obj(o.ice, `${name}.ice`).grip, `${name}.ice.grip`, 1, 100) };
     if (out.role === 'trigger') out.trigger = trigger(o.trigger, `${name}.trigger`);
@@ -341,6 +392,8 @@ export function createValidateApi(t: Translator = defaultTranslate) {
         offMs: num(b.offMs, `${name}.blink.offMs`, 0, LIMITS.maxDelay),
         delay: num(b.delay, `${name}.blink.delay`, -LIMITS.maxDelay, LIMITS.maxDelay),
       };
+      // Ice never blinks (#71–74, #100–110)
+      if (out.ice) delete out.blink;
     }
     if (out.role === 'pulley') {
       const pl = obj(o.pulley, `${name}.pulley`);
@@ -374,6 +427,8 @@ export function createValidateApi(t: Translator = defaultTranslate) {
         out.shape = { type: 'rect', ...b };
       }
     }
+    // Thorn vine (#83 / #84): an area shape whose outline grows thorns
+    if (out.role === 'wall' && o.vine === true && !out.spike && !out.boulder && !out.fall && !out.saw && out.shape.type !== 'sector') out.vine = true;
     if (out.role === 'text') {
       const t = obj(o.text, `${name}.text`);
       if (out.shape.type !== 'rect') out.shape = { type: 'rect', ...shapeBounds(out.shape) };
@@ -415,9 +470,13 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       const f = obj(o.fog, `${name}.fog`);
       out.fog = { kind: oneOf(f.kind, `${name}.fog.kind`, ['fog', 'sand'] as const), density: num(f.density, `${name}.fog.density`, 0, 100) };
     }
-    if (o.link !== undefined && (out.role === 'path' || out.role === 'wall' || out.role === 'coin' || out.role === 'dark' || out.role === 'fog' || out.role === 'mirror' || out.role === 'laser' || out.role === 'turret')) {
+    if (o.link !== undefined && (out.role === 'path' || out.role === 'wall' || out.role === 'coin' || out.role === 'dark' || out.role === 'fog' || out.role === 'mirror' || out.role === 'laser' || out.role === 'turret'
+      || out.role === 'liquid' || out.role === 'lily' || out.role === 'spot')) {
       const l = obj(o.link, `${name}.link`);
       out.link = { color: colorIndex(l.color, `${name}.link.color`), action: oneOf(l.action, `${name}.link.action`, ['start', 'stop', 'remove', 'pulley'] as const) };
+    }
+    if (o.elec !== undefined && out.role !== 'wire' && out.role !== 'power') {
+      out.elec = { action: oneOf(obj(o.elec, `${name}.elec`).action, `${name}.elec.action`, ['start', 'stop', 'remove', 'show'] as const) };
     }
     if (o.light !== undefined) {
       const light = obj(o.light, `${name}.light`);
@@ -443,7 +502,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     return v.toLowerCase();
   }
 
-  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'soil', 'snow', 'snowDirt', 'snowPile', 'ice', 'iceCrystal'] as const satisfies readonly PatternKind[];
+  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'soil', 'snow', 'snowDirt', 'snowPile', 'ice', 'iceCrystal', 'concrete', 'epoxy'] as const satisfies readonly PatternKind[];
 
   function fill(v: unknown, name: string): Fill {
     const o = obj(v, name);
@@ -472,6 +531,10 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     const out: SurfaceStyle = { fill: fill(o.fill, `${name}.fill`), edge: color(o.edge, `${name}.edge`) };
     const anim = surfaceAnim(o.anim);
     if (anim) out.anim = anim;
+    if (o.line !== undefined) {
+      const l = obj(o.line, `${name}.line`);
+      out.line = { color: color(l.color, `${name}.line.color`), width: num(l.width, `${name}.line.width`, 1, 40), inset: num(l.inset, `${name}.line.inset`, 0, 80) };
+    }
     return out;
   }
 
@@ -544,6 +607,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       ...(o.goalShape !== undefined ? { goalShape: zoneShapeOf(o.goalShape, 'goalShape') } : {}),
       objects: arr(o.objects, 'objects', LIMITS.maxObjects).map((m, i) => mapObject(m, `objects[${i}]`, W, H)),
     };
+    assignObjectIds(map.objects);
     if (o.theme !== undefined) map.theme = theme(o.theme, 'theme');
     if (o.themeDesign !== undefined) {
       if (typeof o.themeDesign !== 'string' || !/^[A-Za-z0-9_-]{1,60}$/.test(o.themeDesign)) fail('Invalid theme design id');
@@ -630,20 +694,20 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     if (crystals > LIMITS.maxCrystals) out.push(t('mapError.crystalMany', { n: crystals, max: LIMITS.maxCrystals }));
     map.objects.forEach((o, i) => {
       if (o.link?.action === 'pulley') {
-        if (!pulleys.has(o.link.color)) out.push(t('mapError.noPulley', { n: i + 1, color: switchColor(o.link.color).name }));
+        if (!pulleys.has(o.link.color)) out.push(t('mapError.noPulley', { n: objectNumber(map.objects, i), color: switchColor(o.link.color).name }));
       } else {
         // A laser can both flip with one color and be linked to another; check each
         const used = [o.link?.color ?? (o.door?.mode === 'switch' ? o.door.color : undefined), o.laser?.switchColor];
         for (const c of new Set(used)) if (c !== undefined && !colors.has(c)) {
-          out.push(t('mapError.noSwitch', { n: i + 1, color: switchColor(c).name }));
+          out.push(t('mapError.noSwitch', { n: objectNumber(map.objects, i), color: switchColor(c).name }));
         }
       }
       if (o.portal) {
         const p = o.portal;
         const others = map.objects.filter((q, j) => j !== i && q.portal?.color === p.color);
         const name = switchColor(p.color).name;
-        if (!others.length) out.push(t('mapError.portalAlone', { n: i + 1, color: name }));
-        else if (p.mode !== 'out' && !others.some((q) => q.portal!.mode !== 'in')) out.push(t('mapError.portalNoExit', { n: i + 1, color: name }));
+        if (!others.length) out.push(t('mapError.portalAlone', { n: objectNumber(map.objects, i), color: name }));
+        else if (p.mode !== 'out' && !others.some((q) => q.portal!.mode !== 'in')) out.push(t('mapError.portalNoExit', { n: objectNumber(map.objects, i), color: name }));
       }
     });
     return out;
@@ -659,11 +723,11 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     if (overlapsRect({ role: 'wall', shape: { type: 'rect', ...map.start } }, map.goal, 0)) out.push(t('mapWarn.startGoalOverlap'));
     map.objects.forEach((o, i) => {
       if (o.role !== 'wall') return;
-      if (overlapsRect(o, map.start, 0)) out.push(t('mapWarn.wallOnStart', { n: i + 1 }));
-      if (!o.motion && !o.rotation && overlapsRect(o, map.goal, 0)) out.push(t('mapWarn.wallOnGoal', { n: i + 1 }));
+      if (overlapsRect(o, map.start, 0)) out.push(t('mapWarn.wallOnStart', { n: objectNumber(map.objects, i) }));
+      if (!o.motion && !o.rotation && overlapsRect(o, map.goal, 0)) out.push(t('mapWarn.wallOnGoal', { n: objectNumber(map.objects, i) }));
     });
     map.objects.forEach((o, i) => {
-      if (o.motion && o.motion.points.length === 0) out.push(t('mapWarn.noMarkers', { n: i + 1 }));
+      if (o.motion && o.motion.points.length === 0) out.push(t('mapWarn.noMarkers', { n: objectNumber(map.objects, i) }));
     });
     const s = map.stars;
     if (s && !(s.three <= s.two && s.two <= s.one)) out.push(t('mapWarn.starOrder'));
@@ -674,13 +738,13 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       if (!a) return;
       const j = map.objects.findIndex((p, k) => k < i && p.role === 'coin' && !p.motion && !p.rotation
         && ((c) => !!c && Math.hypot(c.x - a.x, c.y - a.y) < LIMITS.coinSize / 2)(coinAt(p)));
-      if (j >= 0) out.push(t('mapWarn.coinStacked', { n: i + 1, m: j + 1 }));
+      if (j >= 0) out.push(t('mapWarn.coinStacked', { n: objectNumber(map.objects, i), m: objectNumber(map.objects, j) }));
     });
     map.objects.forEach((o, i) => {
-      if (o.role === 'coin' && overlapsRect(o, map.goal, 0)) out.push(t('mapWarn.coinInGoal', { n: i + 1 }));
-      if (o.boulder && !o.motion) out.push(t('mapWarn.boulderNoRoute', { n: i + 1 }));
+      if (o.role === 'coin' && overlapsRect(o, map.goal, 0)) out.push(t('mapWarn.coinInGoal', { n: objectNumber(map.objects, i) }));
+      if (o.boulder && !o.motion) out.push(t('mapWarn.boulderNoRoute', { n: objectNumber(map.objects, i) }));
       if (o.link && o.link.action !== 'remove' && !o.motion && !o.rotation && !o.spike) {
-        out.push(t(o.link.action === 'start' ? 'mapWarn.linkStartStill' : 'mapWarn.linkStopStill', { n: i + 1 }));
+        out.push(t(o.link.action === 'start' ? 'mapWarn.linkStartStill' : 'mapWarn.linkStopStill', { n: objectNumber(map.objects, i) }));
       }
     });
     return out;
@@ -724,6 +788,8 @@ export function createValidateApi(t: Translator = defaultTranslate) {
   /** A new turret (#60) / missile launcher (#61) */
   const DEFAULT_GUN: Readonly<Turret> = { kind: 'gun', range: 300, fireMs: 800, speed: 320, angle: 0, arc: 360, turnSpeed: 180, lifeMs: 5000, pierce: false };
   const DEFAULT_MISSILE: Readonly<Turret> = { kind: 'missile', range: 400, fireMs: 2500, speed: 200, angle: -90, arc: 360, turnSpeed: 120, lifeMs: 5000, pierce: false };
+  /** A new spotlight (#88–90): pointing down, 50° wide, 320 px long */
+  const DEFAULT_SPOT: Readonly<Spot> = { angle: 90, sweep: 50, range: 320 };
   /** Light radius of a new torch (#57 / #58) */
   const DEFAULT_TORCH_LIGHT = 120;
   /** How far around the cursor a secret wall (#55) shows what lies under it */
@@ -741,7 +807,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       delay: 0,
     };
   }
-  return { LIMITS, validateMap, validatePack, mapErrors, mapWarnings, createEmptyMap, DEFAULT_MOTION, DEFAULT_BOULDER_WAVE, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_ICE_GRIP, DEFAULT_BLINK, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_TORCH_LIGHT, DEFAULT_SECRET_RADIUS, defaultRotation };
+  return { LIMITS, validateMap, validatePack, mapErrors, mapWarnings, createEmptyMap, DEFAULT_MOTION, DEFAULT_BOULDER_WAVE, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_ICE_GRIP, DEFAULT_BLINK, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_TORCH_LIGHT, DEFAULT_SECRET_RADIUS, DEFAULT_SPOT, defaultRotation };
 }
 
-export const { LIMITS, validateMap, validatePack, mapErrors, mapWarnings, createEmptyMap, DEFAULT_MOTION, DEFAULT_BOULDER_WAVE, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_ICE_GRIP, DEFAULT_BLINK, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_TORCH_LIGHT, DEFAULT_SECRET_RADIUS, defaultRotation } = createValidateApi();
+export const { LIMITS, validateMap, validatePack, mapErrors, mapWarnings, createEmptyMap, DEFAULT_MOTION, DEFAULT_BOULDER_WAVE, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_ICE_GRIP, DEFAULT_BLINK, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_TORCH_LIGHT, DEFAULT_SECRET_RADIUS, DEFAULT_SPOT, defaultRotation } = createValidateApi();

@@ -10,6 +10,9 @@ import floatingBridge from './fixtures/floating-bridge.json';
 import { THEME_PRESETS } from './theme';
 import type { MapData, MapObject, Motion, Rect, Rotation } from './types';
 
+/** The map without object ids (validation numbers the objects; the tests compare the rest) */
+const noIds = (m: MapData): MapData => ({ ...m, objects: m.objects.map(({ id: _id, ...o }) => o) });
+
 function baseMap(objects: MapObject[] = [], patch: Partial<MapData> = {}): MapData {
   return {
     ...createEmptyMap(),
@@ -456,7 +459,7 @@ describe('validateMap', () => {
   it('all built-in levels are valid and playable', () => {
     // Warnings are advisory (a level may block GOAL on purpose), so only errors fail here
     for (const m of BUILTIN_LEVELS) {
-      expect(validateMap(m), m.name).toEqual(m);
+      expect(noIds(validateMap(m)), m.name).toEqual(noIds(m));
       expect(mapErrors(m), m.name).toEqual([]);
     }
   });
@@ -480,7 +483,7 @@ describe('validateMap', () => {
   it('fog and sand dust areas validate and never touch the cursor', () => {
     const shape = { type: 'poly' as const, free: true, points: [{ x: 100, y: 0 }, { x: 300, y: 0 }, { x: 300, y: 200, smooth: true }, { x: 100, y: 200 }] };
     const fog: MapObject = { role: 'fog', shape, fog: { kind: 'sand', density: 80 } };
-    expect(validateMap({ ...createEmptyMap(), objects: [fog] }).objects[0]).toEqual(fog);
+    expect(validateMap({ ...createEmptyMap(), objects: [fog] }).objects[0]).toEqual({ ...fog, id: 1 });
     expect(() => validateMap({ ...createEmptyMap(), objects: [{ ...fog, fog: { kind: 'sand', density: 120 } }] })).toThrow();
     expect(() => validateMap({ ...createEmptyMap(), objects: [{ ...fog, fog: { kind: 'smoke', density: 50 } }] })).toThrow();
     expect(() => validateMap({ ...createEmptyMap(), objects: [{ role: 'fog', shape }] })).toThrow();
@@ -493,8 +496,8 @@ describe('validateMap', () => {
   it('accepts every theme preset and keeps it through sharing', async () => {
     for (const p of THEME_PRESETS) {
       const map = { ...createEmptyMap(), ...(p.theme ? { theme: p.theme } : {}) };
-      expect(validateMap(map)).toEqual(map);
-      expect(await decodeMap(await encodeMap(map))).toEqual(map);
+      expect(noIds(validateMap(map))).toEqual(noIds(map));
+      expect(noIds(await decodeMap(await encodeMap(map)))).toEqual(noIds(map));
     }
   });
   it('rejects bad theme values', () => {
@@ -520,6 +523,7 @@ describe('validateMap', () => {
     expect(m.v).toBe(2);
     expect(m.objects).toHaveLength(2);
     expect(m.objects[1]).toEqual({
+      id: 2,
       role: 'wall',
       shape: { type: 'rect', x: 295, y: 40, w: 10, h: 20 },
       motion: { type: 'linear', points: [{ x: 300, y: 250 }], speed: 80, repeat: 'pingpong', easing: 'none', delay: -250, clockwise: true },
@@ -532,7 +536,7 @@ describe('share', () => {
     for (const m of BUILTIN_LEVELS) {
       const code = await encodeMap(m);
       expect(code).toMatch(/^[zj][A-Za-z0-9_-]+$/);
-      expect(await decodeMap(code)).toEqual(m);
+      expect(noIds(await decodeMap(code))).toEqual(noIds(m));
     }
   });
   it('throws on a corrupted code', async () => {

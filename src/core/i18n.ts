@@ -1,10 +1,10 @@
-import en from '../locale/en.json';
-import ko from '../locale/ko.json';
-import zh from '../locale/zh.json';
+import en from '../locale/en';
+import ko from '../locale/ko';
+import zh from '../locale/zh';
 
 /**
- * Every player-facing string lives in src/locale/<lang>.json (flat "area.name" keys). Text can
- * carry {placeholders}, filled from the vars passed to t(). en.json is the reference: a key
+ * Every player-facing string lives in src/locale/<lang>/<area>.json (flat "area.name" keys). Text can
+ * carry {placeholders}, filled from the vars passed to t(). English (src/locale/en) is the reference: a key
  * missing from another language falls back to English.
  *
  * Translation is explicit and independent of browser storage or mutable global locale state.

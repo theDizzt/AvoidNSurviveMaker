@@ -51,7 +51,7 @@ const ZOOMS = [1, 1.5, 2, 3];
 
 const BADGE_KINDS: [BadgeKind, string][] = [
   ['pill', tr('te.roundedPlate')], ['disc', tr('te.vinylRecord')], ['emblem', tr('te.snowflakeEmblem')], ['plate', tr('te.gearPlate')],
-  ['slant', tr('te.slantedBand')], ['ring', tr('te.woodSlice')], ['image', tr('te.customImage')],
+  ['slant', tr('te.slantedBand')], ['ring', tr('te.woodSlice')], ['image', tr('te.customImage')], ['lcd', tr('te.lcdScreen')],
 ];
 const BADGE_FONTS: [BadgeFont, string][] = [['title', tr('te.title')], ['main', tr('te.rounded')], ['serif', tr('te.serif')], ['heavy', tr('te.heavy')], ['timer', tr('te.digital')]];
 

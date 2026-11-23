@@ -15,7 +15,9 @@ import { CompiledMotion } from '../core/motion';
 import { shapeCenter } from '../core/shape';
 import { zoneRing } from '../core/zone';
 import { BeltPath, beltSides } from '../core/conveyor';
-import type { LightSource } from '../core/lighting';
+import { lightLit, type LightSource } from '../core/lighting';
+import { initialPower } from '../core/electric';
+import { drawLily, drawLiquids, drawPowerDevice, drawSpotBeam, drawSpotFixture, drawThornVine, drawWire } from './render-objects';
 import { renderScale } from './graphics';
 import { options } from './options';
 
@@ -387,9 +389,14 @@ function isPanelDoor(m: MapObject | undefined): boolean {
   return m?.role === 'door' && !!m.door && m.shape.type === 'rect';
 }
 
-/** A moving path or wall (not a grinder / saw) that cuts into or adds to the wall mass */
+/** Walls drawn on their own instead of as part of the wall mass: grinders / saws, thorn vines (#83 / #84) */
+function ownLook(m: MapObject | undefined): boolean {
+  return !!m?.saw || !!m?.vine;
+}
+
+/** A moving path or wall (not a grinder / saw or thorn vine) that cuts into or adds to the wall mass */
 function movesWallMass(map: MapData, o: CompiledObject, i: number): boolean {
-  return o.dynamic && (o.role === 'path' || (o.role === 'wall' && !map.objects[i]?.saw));
+  return o.dynamic && (o.role === 'path' || (o.role === 'wall' && !ownLook(map.objects[i])));
 }
 
 /**
@@ -431,6 +438,48 @@ export function releaseRenderCaches(ctx: CanvasRenderingContext2D, objects?: rea
   secretLayers.delete(ctx);
   freeCanvas(sawLayers.get(ctx)?.[0]);
   sawLayers.delete(ctx);
+}
+
+/** Directions a mask is shifted in to grow it by a radius (enough for a smooth outline) */
+const GROW_STEPS = 24;
+
+/** `mask` grown by `r` layer pixels into `out` (cleared first): copies of it shifted all around */
+function growMask(out: CanvasRenderingContext2D, mask: HTMLCanvasElement, r: number): void {
+  out.setTransform(1, 0, 0, 1, 0, 0);
+  out.globalCompositeOperation = 'source-over';
+  out.clearRect(0, 0, out.canvas.width, out.canvas.height);
+  out.drawImage(mask, 0, 0);
+  if (r <= 0) return;
+  for (let k = 0; k < GROW_STEPS; k++) {
+    const a = (k / GROW_STEPS) * Math.PI * 2;
+    out.drawImage(mask, Math.cos(a) * r, Math.sin(a) * r);
+  }
+}
+
+/**
+ * Paint the theme's floor line onto the floor `f` (scaled to map units): the band between `inset`
+ * and `inset + width` map units out from the wall mass `walls` (layer pixels), in the line's color.
+ */
+function paintFloorLine(f: CanvasRenderingContext2D, walls: HTMLCanvasElement, line: { color: string; width: number; inset: number }, scale: number): void {
+  const w = walls.width;
+  const h = walls.height;
+  const [band, g] = offscreen(w, h);
+  const [inner, i] = offscreen(w, h);
+  growMask(g, walls, (line.inset + line.width) * scale);
+  growMask(i, walls, line.inset * scale);
+  // The band: the outer growth minus the inner one, then colored
+  g.globalCompositeOperation = 'destination-out';
+  g.drawImage(inner, 0, 0);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = line.color;
+  g.fillRect(0, 0, w, h);
+  g.globalCompositeOperation = 'source-over';
+  f.save();
+  f.setTransform(1, 0, 0, 1, 0, 0);
+  f.drawImage(band, 0, 0);
+  f.restore();
+  freeCanvas(band);
+  freeCanvas(inner);
 }
 
 /** The static wall mass at a coarse resolution: 1 = wall */
@@ -498,7 +547,7 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   const [wallPieces, p] = offscreen(w, h);
   p.scale(scale, scale);
   p.beginPath();
-  for (const o of objects) if (o.role === 'wall' && !o.dynamic) traceStatic(p, o);
+  for (const o of objects) if (o.role === 'wall' && !o.dynamic && !o.src?.vine) traceStatic(p, o);
   p.fillStyle = theme ? fillStyle(p, theme.wall.fill, whole) : COLORS.wall;
   p.fill('nonzero');
   // Grow the pieces by about half a pixel: where a wall's edge lies exactly on the edge of the
@@ -523,6 +572,9 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   f.fillRect(0, 0, map.width, map.height);
   // Default grid sits on the floor, under the walls ("Grid on top" draws another one over everything)
   drawGrid(f, map, COLORS.grid);
+  // A line painted on the floor along the walls (theme path `line`), under the walls' shadow
+  const line = theme?.path.line;
+  if (line && paths) paintFloorLine(f, wallCanvas, line, scale);
   const [layer, s] = offscreen(w, h);
   s.drawImage(floor, 0, 0);
   drawWallMass(s, wallCanvas, scale);
@@ -853,6 +905,8 @@ export interface DrawMapOptions {
   carried?: ArrayLike<number>;
   /** Per object index (pulleys, #52): how far it has turned (radians) */
   pulleyAngle?: ArrayLike<number>;
+  /** Per object index: powered by the circuit (#91, #94–97); default: as it starts */
+  power?: ArrayLike<number>;
   /** Per object index (turrets, #60): the barrel's turn from its rest direction (radians) */
   turretAim?: ArrayLike<number>;
   /** Opacity of the parts of grinders / saw blades hidden inside walls (the editor shows a ghost); default 0 */
@@ -1046,7 +1100,12 @@ export function drawGlobalDark(
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grad;
     g.beginPath();
-    g.arc(l.x, l.y, l.r, 0, Math.PI * 2);
+    // A spotlight (#88–90) lights a cone
+    if (l.dir !== undefined && l.sweep !== undefined && l.sweep < Math.PI * 2 - 1e-6) {
+      g.moveTo(l.x, l.y);
+      g.arc(l.x, l.y, l.r, l.dir - l.sweep / 2, l.dir + l.sweep / 2);
+      g.closePath();
+    } else g.arc(l.x, l.y, l.r, 0, Math.PI * 2);
     g.fill();
   }
   g.globalCompositeOperation = 'source-over';
@@ -1073,6 +1132,10 @@ export function drawMap(
   };
   const shown = (i: number) => !opts.hidden?.[i] && !blinkFlicker(i);
   const channels = opts.channels ?? initialChannels(map);
+  // Electricity (#91, #94–97): which objects are wired, and the power now (as it starts, outside a run)
+  const circuitStart = map.objects.some((m) => m.role === 'wire' || m.role === 'power') ? initialPower(map, objects) : null;
+  const power = opts.power ?? circuitStart?.power;
+  const wired = circuitStart?.circuit.isTarget;
   const doorOpenAt = (m: MapObject, i: number) => opts.doorOpen?.[i] ?? (m.door!.mode === 'auto' ? autoDoorOpen(m.door!, t) : channels[m.door!.color] ? 1 : 0);
   const isDoor = isPanelDoor;
 
@@ -1081,7 +1144,7 @@ export function drawMap(
   const st = staticLayer(ctx, map, objects);
   st.secretReady = false;
   const conceal = opts.secretCursor !== undefined && objects.some((o, i) => o.role === 'secret' && shown(i));
-  const isSaw = (i: number) => !!map.objects[i]?.saw;
+  const isSaw = (i: number) => ownLook(map.objects[i]);
   const moving = objects.some((o, i) => movesWallMass(map, o, i) || isDoor(map.objects[i]));
   const dyn = st.dyn;
   const bg = opts.background;
@@ -1236,6 +1299,11 @@ export function drawMap(
   if ((theme?.path.anim || theme?.wall.anim) && options.graphics !== 'low') drawSurfaceAnims(ctx, map, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t);
   // Conveyor belts (#69): on the floor, under the walls that cross them
   if (objects.some((o, i) => o.role === 'conveyor' && shown(i))) drawBelts(ctx, map, objects, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t, shown);
+  // Ponds and radioactive water (#86 / #87); lily pads (#85) float on them
+  if (objects.some((o, i) => o.role === 'liquid' && shown(i))) drawLiquids(ctx, map, objects, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t, shown, timeOf);
+  objects.forEach((o, i) => {
+    if (o.role === 'lily' && shown(i)) drawLily(ctx, o, timeOf(i), i);
+  });
 
   zone(ctx, map.start, COLORS.start, COLORS.startEdge, tr('zone.start'), true, map.startShape);
   // Locked GOAL (coins still to collect): dark gray, with the coins collected so far, e.g. "3/10"
@@ -1337,6 +1405,17 @@ export function drawMap(
   objects.forEach((o, i) => {
     if (o.role === 'luggage' && shown(i)) drawCrate(ctx, o, timeOf(i));
   });
+  // Thorn vines (#83 / #84)
+  objects.forEach((o, i) => {
+    if (o.role !== 'wall' || !map.objects[i]?.vine || !shown(i)) return;
+    // The same look as the walls: their fill (laid out in the vine's own frame) and outline
+    const fill = theme ? fillStyle(ctx, theme.wall.fill, o.box) : COLORS.wall;
+    drawThornVine(ctx, o, timeOf(i), i, fill, theme ? theme.wall.edge : COLORS.wallEdge);
+  });
+  // Wires (#91): glowing while they carry power
+  map.objects.forEach((m, i) => {
+    if (m.role === 'wire' && m.wire && shown(i)) drawWire(ctx, m.wire.points, !!power?.[i], opts.now ?? t, i);
+  });
   // Ice floors (#71–74): a pale blue sheen with glints and fine cracks over the floor
   objects.forEach((o, i) => {
     if (o.role === 'path' && map.objects[i]?.ice && shown(i)) drawIce(ctx, o, timeOf(i), i);
@@ -1370,6 +1449,11 @@ export function drawMap(
     if (!trig || trig.kind === 'startZone' || trig.kind === 'stopZone' || !shown(i)) return;
     drawSwitch(ctx, o, timeOf(i), map.objects[i], channels[trig.color] === 1, opts.progress?.[i] ?? 0);
   });
+  // Electric switches, pulleys, timers and inverters (#94–97)
+  objects.forEach((o, i) => {
+    const m = map.objects[i];
+    if (o.role === 'power' && m?.power && shown(i)) drawPowerDevice(ctx, o, m, m.power, !!power?.[i], opts.progress?.[i] ?? 0, opts.pulleyAngle?.[i] ?? 0, opts.now ?? t);
+  });
   objects.forEach((o, i) => {
     if (o.role === 'coin' && shown(i)) drawCoin(ctx, o, timeOf(i));
   });
@@ -1388,9 +1472,19 @@ export function drawMap(
   objects.forEach((o, i) => {
     if (o.role === 'crystal' && shown(i)) drawCrystal(ctx, o, timeOf(i), opts.now ?? t);
   });
-  // Torches (#57 / #58), unless being carried
+  // Torches (#57 / #58), unless being carried (or dark: a wire can switch one off)
+  const lightState = { channels, power, wired };
   objects.forEach((o, i) => {
-    if (o.role === 'torch' && shown(i) && !opts.carried?.[i]) drawTorch(ctx, o, timeOf(i), opts.now ?? t, i);
+    const m = map.objects[i];
+    if (o.role === 'torch' && shown(i) && !opts.carried?.[i] && (!m || lightLit(m, i, lightState))) drawTorch(ctx, o, timeOf(i), opts.now ?? t, i);
+  });
+  // Spotlights (#88–90): the beam, then the lamp
+  objects.forEach((o, i) => {
+    const m = map.objects[i];
+    if (o.role !== 'spot' || !m?.spot || !shown(i)) return;
+    const lit = lightLit(m, i, lightState);
+    if (lit) drawSpotBeam(ctx, o, m.spot, timeOf(i));
+    drawSpotFixture(ctx, o, m.spot, timeOf(i), lit);
   });
   objects.forEach((o, i) => {
     if (!shown(i)) return;

@@ -1,5 +1,5 @@
 import { LuggageMover } from './conveyor';
-import { BladeMotion, FallMover, FallSpin, Roller, SawSpin, SawTurn, SpikeMover } from './hazards';
+import { BladeMotion, FallMover, FallSpin, LilyDrift, Roller, SawSpin, SawTurn, SpikeMover, thornRing } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
 import { flattenShape, ringBounds, rotateRing, shapeCenter, type FlatShape } from './shape';
 import type { MapData, MapObject, Point, Rect, Role } from './types';
@@ -57,8 +57,10 @@ export function compileObject(o: MapObject): CompiledObject {
 
 /** `tiltCenter` overrides the point the tilt turns about (door panels turn about their whole door) */
 export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledObject {
-  const box = flattenShape(o.shape);
   const center = shapeCenter(o.shape);
+  // A thorn vine's thorns are part of its outline (#83 / #84)
+  const plain = flattenShape(o.shape);
+  const box = o.vine && o.role === 'wall' ? ringBounds(thornRing(plain.poly, center.x * 13 + center.y * 7)) : plain;
   const tc = tiltCenter ?? center;
   const tilt = o.tilt ? (o.tilt * Math.PI) / 180 : 0;
   const flat = tilt ? ringBounds(rotateRing(box.poly, tc, o.tilt!)) : box;
@@ -73,7 +75,10 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
       saw.kind === 'blade' ? new BladeMotion(null, axis, saw) : null, route?.moves ? route : null, tc, o.rotation.pivot)
     : null;
   // A crate (#70) goes wherever its belt carries it: moved step by step by the simulation
+  // A lily pad (#85) bobs on the water, along its route if it has one
+  const lily = o.role === 'lily' ? new LilyDrift(center.x * 3 + center.y * 5, route?.moves ? route : null) : null;
   const motion = o.role === 'luggage' ? new LuggageMover()
+    : lily ? lily
     : sawTurn ? sawTurn
     : o.fall ? new FallMover(o.fall)
     : o.spike ? new SpikeMover(o.spike)
@@ -81,13 +86,14 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
       : route;
   // A boulder spins about its own center by the distance it has rolled; a grinder spins steadily
   const rotation = sawTurn ? sawTurn
+    : lily && !o.rotation ? lily
     : o.fall ? new FallSpin(o.fall)
     : o.boulder && route?.moves
     ? new Roller(route, Math.min(box.maxX - box.minX, box.maxY - box.minY) / 2)
     : saw?.kind === 'disc' ? new SawSpin(saw)
       : saw ? null
         : o.rotation ? new CompiledRotation(o.rotation) : null;
-  const pivot = o.boulder || saw || o.fall ? center : o.rotation?.pivot ?? { x: 0, y: 0 };
+  const pivot = o.boulder || saw || o.fall || (lily && !o.rotation) ? center : o.rotation?.pivot ?? { x: 0, y: 0 };
   let travelBounds: CompiledObject['travelBounds'];
   if (!rotation || rotation.dur <= 0) {
     let minDX = 0, minDY = 0, maxDX = 0, maxDY = 0;
@@ -103,6 +109,10 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
         const dx = leg.pts[k] - center.x, dy = leg.pts[k + 1] - center.y;
         minDX = Math.min(minDX, dx); maxDX = Math.max(maxDX, dx);
         minDY = Math.min(minDY, dy); maxDY = Math.max(maxDY, dy);
+      }
+      // A lily pad drifts up to 8 px either way
+      if (lily) {
+        minDX -= 8; maxDX += 8; minDY -= 7; maxDY += 7;
       }
       if (saw?.kind === 'blade') {
         const x = Math.abs(axis.x * saw.stroke / 2), y = Math.abs(axis.y * saw.stroke / 2);
@@ -128,7 +138,7 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
       routeRadius = Math.max(routeRadius, Math.hypot(leg.pts[k] - center.x, leg.pts[k + 1] - center.y));
     }
     radius += routeRadius + Math.abs(o.fall?.height ?? 0) + Math.abs(o.spike?.reach ?? 0)
-      + Math.abs(saw?.stroke ?? 0) / 2;
+      + Math.abs(saw?.stroke ?? 0) / 2 + (lily ? 12 : 0);
     if (sawTurn && o.rotation) radius += 2 * Math.hypot(center.x - o.rotation.pivot.x, center.y - o.rotation.pivot.y);
     radius += 1e-7;
     interactionBounds = { minX: pivot.x - radius, minY: pivot.y - radius,
