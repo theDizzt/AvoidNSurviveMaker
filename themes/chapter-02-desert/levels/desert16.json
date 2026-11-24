@@ -1,0 +1,849 @@
+{
+  "v": 2,
+  "name": "desert16",
+  "author": "Dizzt, Matchoi, Kukui",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 450,
+    "w": 180,
+    "h": 180
+  },
+  "goal": {
+    "x": 1620,
+    "y": 450,
+    "w": 180,
+    "h": 180
+  },
+  "objects": [
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": -480,
+        "y": -190,
+        "w": 40,
+        "h": 40
+      },
+      "id": 15,
+      "trigger": {
+        "kind": "switch",
+        "color": 0
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 960,
+        "cy": 540,
+        "rx": 490,
+        "ry": 490
+      },
+      "id": 16
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 480,
+        "w": 1440,
+        "h": 120
+      },
+      "id": 17
+    },
+    {
+      "role": "pulley",
+      "shape": {
+        "type": "ellipse",
+        "cx": 960,
+        "cy": 540,
+        "rx": 40,
+        "ry": 40
+      },
+      "pulley": {
+        "color": 15,
+        "mode": "unwind",
+        "turnMs": 1000,
+        "unwind": 50
+      },
+      "id": 18
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 960.0069940220542,
+        "cy": 540.0069940220542,
+        "r": 160,
+        "start": 195,
+        "sweep": 330,
+        "inner": 100
+      },
+      "id": 19,
+      "link": {
+        "color": 15,
+        "action": "pulley"
+      },
+      "rotation": {
+        "pivot": {
+          "x": 960.0021061092714,
+          "y": 540.01
+        },
+        "speed": 90,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 960.0042216591005,
+        "cy": 540.0050730894181,
+        "r": 220,
+        "start": 195,
+        "sweep": 330,
+        "inner": 160
+      },
+      "id": 22,
+      "link": {
+        "color": 15,
+        "action": "pulley"
+      },
+      "rotation": {
+        "pivot": {
+          "x": 959.9993337463177,
+          "y": 540.008079067364
+        },
+        "speed": 84,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 960.0042216591005,
+        "cy": 540.0050730894181,
+        "r": 280,
+        "start": 195,
+        "sweep": 330,
+        "inner": 220
+      },
+      "id": 23,
+      "link": {
+        "color": 15,
+        "action": "pulley"
+      },
+      "rotation": {
+        "pivot": {
+          "x": 959.9993337463177,
+          "y": 540.008079067364
+        },
+        "speed": 78,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 960.0029283404151,
+        "cy": 540.0029283404151,
+        "r": 340,
+        "start": 195,
+        "sweep": 330,
+        "inner": 280
+      },
+      "id": 24,
+      "link": {
+        "color": 15,
+        "action": "pulley"
+      },
+      "rotation": {
+        "pivot": {
+          "x": 959.9980404276323,
+          "y": 540.0059343183609
+        },
+        "speed": 72,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 960.0035558419326,
+        "cy": 540.0035558419326,
+        "r": 400,
+        "start": 195,
+        "sweep": 330,
+        "inner": 340
+      },
+      "id": 25,
+      "link": {
+        "color": 15,
+        "action": "pulley"
+      },
+      "rotation": {
+        "pivot": {
+          "x": 959.9986679291497,
+          "y": 540.0065618198784
+        },
+        "speed": 66,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "sector",
+        "cx": 960.0041833434501,
+        "cy": 540.0041833434501,
+        "r": 460,
+        "start": 195,
+        "sweep": 330,
+        "inner": 400
+      },
+      "id": 26,
+      "link": {
+        "color": 15,
+        "action": "pulley"
+      },
+      "rotation": {
+        "pivot": {
+          "x": 959.9992954306673,
+          "y": 540.0071893213959
+        },
+        "speed": 60,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      }
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 830,
+        "y": 10,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 27,
+      "group": 2
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 690,
+        "y": 50,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 28,
+      "group": 2
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 560,
+        "y": 150,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 29,
+      "group": 2
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 470,
+        "y": 270,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 30,
+      "group": 2
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 408,
+        "y": 400,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 31,
+      "group": 2
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1070,
+        "y": 10,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 32,
+      "group": 2
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1210,
+        "y": 50,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 33,
+      "group": 2
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1340,
+        "y": 150,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 34,
+      "group": 2
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1430,
+        "y": 270,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 35,
+      "group": 2
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1492,
+        "y": 400,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 36,
+      "group": 2
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 822,
+        "y": 1020,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 37,
+      "group": 3
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 682,
+        "y": 980,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 38,
+      "group": 3
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 552,
+        "y": 880,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 39,
+      "group": 3
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 462,
+        "y": 760,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 40,
+      "group": 3
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 400,
+        "y": 630,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 41,
+      "group": 3
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1062,
+        "y": 1020,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 42,
+      "group": 3
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1202,
+        "y": 980,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 43,
+      "group": 3
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1332,
+        "y": 880,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 44,
+      "group": 3
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1422,
+        "y": 760,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 45,
+      "group": 3
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1484,
+        "y": 630,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "id": 46,
+      "group": 3
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 300,
+        "y": 300,
+        "w": 60,
+        "h": 180
+      },
+      "id": 47
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 300,
+        "y": 120,
+        "w": 60,
+        "h": 60
+      },
+      "id": 48
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 120,
+        "y": 180,
+        "w": 60,
+        "h": 120
+      },
+      "id": 49,
+      "link": {
+        "color": 15,
+        "action": "pulley"
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 330,
+            "y": 240
+          }
+        ],
+        "speed": 45,
+        "repeat": "once",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 330,
+        "cy": 80,
+        "rx": 60,
+        "ry": 60
+      },
+      "id": 50
+    },
+    {
+      "role": "crystal",
+      "shape": {
+        "type": "rect",
+        "x": 306,
+        "y": 56,
+        "w": 48,
+        "h": 48
+      },
+      "id": 51
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1090,
+        "cy": 540,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 52
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 960,
+        "cy": 350,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 53
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1100,
+        "cy": 820,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 54
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1322,
+        "cy": 772,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 55
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1240,
+        "cy": 210,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 56
+    },
+    {
+      "role": "secret",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 290,
+            "y": 480
+          },
+          {
+            "x": 290,
+            "y": 340
+          },
+          {
+            "x": 70,
+            "y": 340
+          },
+          {
+            "x": 70,
+            "y": 0
+          },
+          {
+            "x": 420,
+            "y": 0
+          },
+          {
+            "x": 420,
+            "y": 340
+          },
+          {
+            "x": 380,
+            "y": 340
+          },
+          {
+            "x": 380,
+            "y": 480
+          }
+        ],
+        "free": true
+      },
+      "secret": {
+        "radius": 60
+      },
+      "id": 57
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 300,
+        "y": 600,
+        "w": 60,
+        "h": 300
+      },
+      "id": 58
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 330,
+        "cy": 940,
+        "rx": 60,
+        "ry": 60
+      },
+      "id": 59
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 318,
+        "y": 920,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "torch": {
+        "carry": true
+      },
+      "id": 60
+    },
+    {
+      "role": "secret",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 290,
+            "y": 600
+          },
+          {
+            "x": 290,
+            "y": 840
+          },
+          {
+            "x": 160,
+            "y": 930
+          },
+          {
+            "x": 260,
+            "y": 1050
+          },
+          {
+            "x": 460,
+            "y": 1060
+          },
+          {
+            "x": 510,
+            "y": 930
+          },
+          {
+            "x": 380,
+            "y": 840
+          },
+          {
+            "x": 380,
+            "y": 600
+          }
+        ],
+        "free": true
+      },
+      "secret": {
+        "radius": 60
+      },
+      "id": 61
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "sandBrick",
+        "color": "#4a3b2a",
+        "background": "#9c8460",
+        "size": 40
+      },
+      "edge": "#1c140c"
+    },
+    "path": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "egyptian",
+        "color": "#c9a96e",
+        "background": "#ecdcb4",
+        "size": 64
+      },
+      "edge": "#1c140c"
+    }
+  },
+  "themeDesign": "ruins",
+  "themeId": "desert",
+  "id": "15",
+  "title": "Spiral",
+  "level": 16,
+  "difficulty": 3.25,
+  "darkness": {
+    "light": 60,
+    "intensity": 75
+  },
+  "stars": {
+    "three": 25000,
+    "two": 32000,
+    "one": 42000
+  },
+  "startShape": {
+    "type": "ellipse"
+  },
+  "goalShape": {
+    "type": "ellipse"
+  }
+}

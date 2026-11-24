@@ -1,0 +1,109 @@
+{
+  "v": 2,
+  "name": "frost01",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 720,
+    "w": 120,
+    "h": 240
+  },
+  "goal": {
+    "x": 1680,
+    "y": 120,
+    "w": 120,
+    "h": 240
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 720,
+        "w": 480,
+        "h": 240
+      },
+      "id": 1
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1320,
+        "y": 120,
+        "w": 360,
+        "h": 240
+      },
+      "id": 2
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 1320.0026764306954,
+        "cy": 540.0026764306955,
+        "r": 420,
+        "start": 180,
+        "sweep": 90,
+        "inner": 180
+      },
+      "ice": {
+        "grip": 25
+      },
+      "id": 3
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 1140.0026764306954,
+        "cy": 960.0026764306954,
+        "r": 420,
+        "start": 180,
+        "sweep": 90,
+        "inner": 180
+      },
+      "ice": {
+        "grip": 25
+      },
+      "id": 4,
+      "tilt": 180
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "snow",
+        "color": "#cfdeee",
+        "background": "#eef6fc",
+        "size": 64
+      },
+      "edge": "#ffffff"
+    },
+    "path": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "iceCrystal",
+        "color": "#d1d3d4",
+        "background": "#759abe",
+        "size": 64
+      },
+      "edge": "#8fb0d2"
+    }
+  },
+  "themeId": "frost",
+  "id": "d50010935ec067c608dae563a987abd8",
+  "title": "Ice",
+  "level": 1,
+  "difficulty": 2,
+  "stars": {
+    "three": 1200,
+    "two": 1600,
+    "one": 2400
+  },
+  "themeDesign": "default"
+}

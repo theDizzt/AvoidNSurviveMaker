@@ -20,19 +20,24 @@
       "font": "hexadecimal",
       "pad": 2,
       "showTitle": true,
-      "layout": {
-        "number": {
-          "y": 6,
-          "scale": 1.15
-        }
-      },
       "numberFx": {
         "gradient": "#79a7da"
       },
       "titleFx": {
-        "gradient": "#79a7da",
         "outline": "#ffffff",
+        "gradient": "#79a7da",
         "outlineWidth": 2
+      },
+      "layout": {
+        "number": {
+          "y": 6,
+          "scale": 1.15
+        },
+        "title": {
+          "x": -2,
+          "y": 4,
+          "scale": 1.65
+        }
       },
       "titlePlate": false,
       "anim": {

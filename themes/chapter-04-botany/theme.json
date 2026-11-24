@@ -22,16 +22,16 @@
       "showTitle": true,
       "numberFx": {
         "outline": "#142c27",
-        "outlineWidth": 2,
-        "depthColor": "#1a2233",
-        "depth": 4,
         "gradient": "#226001",
-        "vine": "#3f8f2f"
+        "depthColor": "#1a2233",
+        "vine": "#3f8f2f",
+        "outlineWidth": 2,
+        "depth": 4
       },
       "titleFx": {
         "outline": "#142c27",
-        "outlineWidth": 1.5,
         "depthColor": "#1a2233",
+        "outlineWidth": 1.5,
         "depth": 4
       },
       "image": "badge.png",
@@ -39,6 +39,9 @@
         "number": {
           "x": 4,
           "scale": 1.7
+        },
+        "title": {
+          "scale": 1.5
         }
       },
       "titlePlate": false

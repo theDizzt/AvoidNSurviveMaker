@@ -1,0 +1,1174 @@
+{
+  "v": 2,
+  "name": "desert17",
+  "author": "Dizzt, Matchoi, Kukui",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 120,
+    "w": 120,
+    "h": 120
+  },
+  "goal": {
+    "x": 1200,
+    "y": 480,
+    "w": 180,
+    "h": 180
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 120,
+        "w": 420,
+        "h": 120
+      },
+      "id": 17
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 120,
+        "y": 360,
+        "w": 240,
+        "h": 120
+      },
+      "id": 18
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 480,
+        "y": 300,
+        "w": 240,
+        "h": 180
+      },
+      "id": 19
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 120,
+        "y": 600,
+        "w": 120,
+        "h": 180
+      },
+      "id": 20
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 120,
+        "y": 900,
+        "w": 360,
+        "h": 60
+      },
+      "id": 21
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 690,
+            "y": 360,
+            "smooth": true
+          },
+          {
+            "x": 640,
+            "y": 390,
+            "smooth": true
+          },
+          {
+            "x": 610,
+            "y": 420,
+            "smooth": true
+          },
+          {
+            "x": 650,
+            "y": 460,
+            "smooth": true
+          },
+          {
+            "x": 650,
+            "y": 480
+          },
+          {
+            "x": 720,
+            "y": 480
+          },
+          {
+            "x": 720,
+            "y": 360
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 22
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 360,
+        "y": 540,
+        "w": 300,
+        "h": 300
+      },
+      "id": 23
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 840,
+        "y": 360,
+        "w": 240,
+        "h": 360
+      },
+      "id": 24
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 720,
+        "y": 840,
+        "w": 420,
+        "h": 120
+      },
+      "id": 25
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1260,
+        "y": 720,
+        "w": 300,
+        "h": 260
+      },
+      "id": 26
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1680,
+        "y": 840,
+        "w": 120,
+        "h": 140
+      },
+      "id": 27
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1560,
+        "y": 420,
+        "w": 240,
+        "h": 240
+      },
+      "id": 28
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1620,
+        "y": 120,
+        "w": 180,
+        "h": 180
+      },
+      "id": 29
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1320,
+        "y": 300,
+        "w": 180,
+        "h": 130
+      },
+      "id": 30
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1200,
+        "y": 120,
+        "w": 300,
+        "h": 120
+      },
+      "id": 31
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 780,
+        "y": 120,
+        "w": 360,
+        "h": 180
+      },
+      "id": 32
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 660,
+        "y": 150,
+        "w": 120,
+        "h": 30
+      },
+      "id": 33
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1140,
+        "y": 180,
+        "w": 120,
+        "h": 30
+      },
+      "id": 34
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1500,
+        "y": 150,
+        "w": 120,
+        "h": 30
+      },
+      "id": 35
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1380,
+        "y": 590,
+        "w": 180,
+        "h": 30
+      },
+      "id": 36
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1080,
+        "y": 390,
+        "w": 240,
+        "h": 30
+      },
+      "id": 37
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1140,
+        "y": 870,
+        "w": 120,
+        "h": 30
+      },
+      "id": 38
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 660,
+        "y": 570,
+        "w": 180,
+        "h": 30
+      },
+      "id": 39
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 720,
+        "y": 390,
+        "w": 120,
+        "h": 30
+      },
+      "id": 40
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 360,
+        "y": 390,
+        "w": 120,
+        "h": 30
+      },
+      "id": 41
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 720,
+        "w": 120,
+        "h": 30
+      },
+      "id": 42
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 480,
+        "y": 920,
+        "w": 240,
+        "h": 30
+      },
+      "id": 43
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1560,
+        "y": 930,
+        "w": 120,
+        "h": 30
+      },
+      "id": 44
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 900,
+        "y": 720,
+        "w": 30,
+        "h": 120
+      },
+      "id": 45
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 560,
+        "y": 480,
+        "w": 30,
+        "h": 120
+      },
+      "id": 46
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 150,
+        "y": 480,
+        "w": 30,
+        "h": 120
+      },
+      "id": 47
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 300,
+        "y": 240,
+        "w": 30,
+        "h": 120
+      },
+      "id": 48
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 570,
+        "y": 240,
+        "w": 30,
+        "h": 120
+      },
+      "id": 49
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 780,
+        "w": 30,
+        "h": 120
+      },
+      "id": 50
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1710,
+        "y": 660,
+        "w": 30,
+        "h": 180
+      },
+      "id": 51
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1690,
+        "y": 300,
+        "w": 30,
+        "h": 120
+      },
+      "id": 52
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1380,
+        "y": 220,
+        "w": 30,
+        "h": 120
+      },
+      "id": 53
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 490,
+            "y": 620,
+            "smooth": true
+          },
+          {
+            "x": 430,
+            "y": 700,
+            "smooth": true
+          },
+          {
+            "x": 460,
+            "y": 790,
+            "smooth": true
+          },
+          {
+            "x": 550,
+            "y": 800,
+            "smooth": true
+          },
+          {
+            "x": 610,
+            "y": 720,
+            "smooth": true
+          },
+          {
+            "x": 590,
+            "y": 620,
+            "smooth": true
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 54
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1080,
+            "y": 430
+          },
+          {
+            "x": 960,
+            "y": 460,
+            "smooth": true
+          },
+          {
+            "x": 910,
+            "y": 510,
+            "smooth": true
+          },
+          {
+            "x": 910,
+            "y": 580,
+            "smooth": true
+          },
+          {
+            "x": 940,
+            "y": 630,
+            "smooth": true
+          },
+          {
+            "x": 940,
+            "y": 710,
+            "smooth": true
+          },
+          {
+            "x": 950,
+            "y": 720
+          },
+          {
+            "x": 1080,
+            "y": 720
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 55
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1560,
+            "y": 420
+          },
+          {
+            "x": 1560,
+            "y": 580
+          },
+          {
+            "x": 1650,
+            "y": 630,
+            "smooth": true
+          },
+          {
+            "x": 1750,
+            "y": 580,
+            "smooth": true
+          },
+          {
+            "x": 1750,
+            "y": 500,
+            "smooth": true
+          },
+          {
+            "x": 1660,
+            "y": 500,
+            "smooth": true
+          },
+          {
+            "x": 1660,
+            "y": 450,
+            "smooth": true
+          },
+          {
+            "x": 1630,
+            "y": 420
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 56
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1760,
+            "y": 840
+          },
+          {
+            "x": 1730,
+            "y": 910,
+            "smooth": true
+          },
+          {
+            "x": 1740,
+            "y": 980
+          },
+          {
+            "x": 1800,
+            "y": 980
+          },
+          {
+            "x": 1800,
+            "y": 840
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 57
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1650,
+            "y": 120
+          },
+          {
+            "x": 1660,
+            "y": 210,
+            "smooth": true
+          },
+          {
+            "x": 1690,
+            "y": 230,
+            "smooth": true
+          },
+          {
+            "x": 1700,
+            "y": 210,
+            "smooth": true
+          },
+          {
+            "x": 1690,
+            "y": 160,
+            "smooth": true
+          },
+          {
+            "x": 1750,
+            "y": 150,
+            "smooth": true
+          },
+          {
+            "x": 1760,
+            "y": 220,
+            "smooth": true
+          },
+          {
+            "x": 1740,
+            "y": 250,
+            "smooth": true
+          },
+          {
+            "x": 1790,
+            "y": 300
+          },
+          {
+            "x": 1800,
+            "y": 300
+          },
+          {
+            "x": 1800,
+            "y": 120
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 58
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 830,
+            "y": 120
+          },
+          {
+            "x": 850,
+            "y": 220,
+            "smooth": true
+          },
+          {
+            "x": 900,
+            "y": 260,
+            "smooth": true
+          },
+          {
+            "x": 950,
+            "y": 230,
+            "smooth": true
+          },
+          {
+            "x": 940,
+            "y": 170,
+            "smooth": true
+          },
+          {
+            "x": 900,
+            "y": 120
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 59
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1010,
+            "y": 300
+          },
+          {
+            "x": 1020,
+            "y": 240,
+            "smooth": true
+          },
+          {
+            "x": 990,
+            "y": 190,
+            "smooth": true
+          },
+          {
+            "x": 1020,
+            "y": 160,
+            "smooth": true
+          },
+          {
+            "x": 1070,
+            "y": 160,
+            "smooth": true
+          },
+          {
+            "x": 1100,
+            "y": 230,
+            "smooth": true
+          },
+          {
+            "x": 1110,
+            "y": 300
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 60
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 140,
+            "y": 480
+          },
+          {
+            "x": 200,
+            "y": 410,
+            "smooth": true
+          },
+          {
+            "x": 270,
+            "y": 370,
+            "smooth": true
+          },
+          {
+            "x": 270,
+            "y": 360
+          },
+          {
+            "x": 120,
+            "y": 360
+          },
+          {
+            "x": 120,
+            "y": 480
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 61
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1320,
+        "y": 660,
+        "w": 30,
+        "h": 120
+      },
+      "id": 62
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1320,
+            "y": 720
+          },
+          {
+            "x": 1320,
+            "y": 810,
+            "smooth": true
+          },
+          {
+            "x": 1370,
+            "y": 850,
+            "smooth": true
+          },
+          {
+            "x": 1300,
+            "y": 870,
+            "smooth": true
+          },
+          {
+            "x": 1260,
+            "y": 850
+          },
+          {
+            "x": 1260,
+            "y": 720
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 63
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1350,
+            "y": 720
+          },
+          {
+            "x": 1350,
+            "y": 800,
+            "smooth": true
+          },
+          {
+            "x": 1400,
+            "y": 830,
+            "smooth": true
+          },
+          {
+            "x": 1490,
+            "y": 810,
+            "smooth": true
+          },
+          {
+            "x": 1560,
+            "y": 800
+          },
+          {
+            "x": 1560,
+            "y": 720
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 64
+    },
+    {
+      "role": "liquid",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 850,
+            "y": 950,
+            "smooth": true
+          },
+          {
+            "x": 1040,
+            "y": 910,
+            "smooth": true
+          },
+          {
+            "x": 1140,
+            "y": 910
+          },
+          {
+            "x": 1140,
+            "y": 960
+          },
+          {
+            "x": 850,
+            "y": 960
+          }
+        ],
+        "free": true
+      },
+      "liquid": {
+        "kind": "pond"
+      },
+      "id": 65
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 288,
+        "y": 160,
+        "w": 24,
+        "h": 40
+      },
+      "light": {
+        "radius": 120
+      },
+      "torch": {
+        "carry": true
+      },
+      "id": 66
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 600,
+        "cy": 180,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 67
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 700,
+        "cy": 320,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 68
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 330,
+        "cy": 450,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 69
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 150,
+        "cy": 690,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 70
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 150,
+        "cy": 930,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 71
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 750,
+        "cy": 870,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 72
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 630,
+        "cy": 800,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 73
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 960,
+        "cy": 390,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 74
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1480,
+        "cy": 410,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 75
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1230,
+        "cy": 150,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 76
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 970,
+        "cy": 210,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 77
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1730,
+        "cy": 180,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 78
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1680,
+        "cy": 480,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 79
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1702,
+        "cy": 862,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 80
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1500,
+        "cy": 840,
+        "rx": 12,
+        "ry": 12
+      },
+      "id": 81
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "sandBrick",
+        "color": "#4a3b2a",
+        "background": "#9c8460",
+        "size": 40
+      },
+      "edge": "#1c140c"
+    },
+    "path": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "egyptian",
+        "color": "#c9a96e",
+        "background": "#ecdcb4",
+        "size": 64
+      },
+      "edge": "#1c140c"
+    }
+  },
+  "themeDesign": "ruins",
+  "themeId": "desert",
+  "id": "16",
+  "title": "Sewer",
+  "level": 17,
+  "difficulty": 3.25,
+  "darkness": {
+    "light": 60,
+    "intensity": 75
+  },
+  "stars": {
+    "three": 16000,
+    "two": 24000,
+    "one": 39000
+  }
+}

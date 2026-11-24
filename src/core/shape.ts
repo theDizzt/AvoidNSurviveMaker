@@ -77,10 +77,12 @@ export function flattenShape(s: Shape): FlatShape {
       const circumference = Math.PI * (3 * (s.rx + s.ry) - Math.sqrt((3 * s.rx + s.ry) * (s.rx + 3 * s.ry)));
       const n = Math.min(512, Math.max(24, Math.ceil(circumference / CURVE_STEP)));
       const poly = new Float64Array(n * 2);
+      // Circumscribed: the outline holds the whole ellipse (see OUTSIDE)
+      const k = outside(Math.PI / n);
       for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2;
-        poly[i * 2] = s.cx + Math.cos(a) * s.rx;
-        poly[i * 2 + 1] = s.cy + Math.sin(a) * s.ry;
+        const u = unitAt((i / n) * Math.PI * 2);
+        poly[i * 2] = s.cx + u.x * s.rx * k;
+        poly[i * 2 + 1] = s.cy + u.y * s.ry * k;
       }
       return ringBounds(poly);
     }
@@ -89,6 +91,16 @@ export function flattenShape(s: Shape): FlatShape {
     case 'sector':
       return ringBounds(new Float64Array(sectorOutline(s)));
   }
+}
+
+/**
+ * How far out (times the radius) to put the corners of an arc cut into steps of `2 * half` radians
+ * so the chords touch the arc instead of cutting inside it: the outline then holds the whole curved
+ * shape, and two shapes laid flush along an arc (a circle in a ring, #53) overlap by a hair instead
+ * of leaving a hairline gap between their chords that belongs to neither (a 'void' death)
+ */
+function outside(half: number): number {
+  return 1 / Math.cos(half);
 }
 
 /**
@@ -116,11 +128,14 @@ export function sectorOutline(s: Extract<Shape, { type: 'sector' }>): number[] {
   const a0 = (s.start * Math.PI) / 180;
   const n = Math.min(512, Math.max(full ? 24 : 2, Math.ceil((arc * s.r) / CURVE_STEP)));
   const inner = s.inner !== undefined && s.inner > 0 && s.inner < s.r ? s.inner : 0;
+  // The outer arc is circumscribed; the inner arc (the hole's edge) keeps its corners on the arc,
+  // so the hole's outline stays inside the hole: either way the outline holds the whole shape
+  const r = s.r * outside(arc / n / 2);
   if (inner) {
     const out: number[] = [];
     for (let i = 0; i <= n; i++) {
       const u = unitAt(a0 + (arc * i) / n);
-      out.push(s.cx + u.x * s.r, s.cy + u.y * s.r);
+      out.push(s.cx + u.x * r, s.cy + u.y * r);
     }
     const m = Math.min(512, Math.max(full ? 24 : 2, Math.ceil((arc * inner) / CURVE_STEP)));
     for (let i = m; i >= 0; i--) {
@@ -133,7 +148,7 @@ export function sectorOutline(s: Extract<Shape, { type: 'sector' }>): number[] {
   const steps = full ? n : n + 1;
   for (let i = 0; i < steps; i++) {
     const u = unitAt(a0 + (arc * i) / n);
-    out.push(s.cx + u.x * s.r, s.cy + u.y * s.r);
+    out.push(s.cx + u.x * r, s.cy + u.y * r);
   }
   return out;
 }

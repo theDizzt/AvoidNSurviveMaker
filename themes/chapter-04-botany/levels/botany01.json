@@ -1,0 +1,164 @@
+{
+  "v": 2,
+  "name": "botany01",
+  "author": "Dizzt",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 720,
+    "w": 60,
+    "h": 180
+  },
+  "goal": {
+    "x": 1740,
+    "y": 180,
+    "w": 60,
+    "h": 180
+  },
+  "objects": [
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 180,
+        "y": 720,
+        "w": 960,
+        "h": 180
+      },
+      "id": 1
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1140,
+        "y": 180,
+        "w": 600,
+        "h": 180
+      },
+      "id": 2
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1140,
+        "y": 360,
+        "w": 180,
+        "h": 540
+      },
+      "id": 3
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 760.007993257196,
+        "cy": 770,
+        "r": 140,
+        "start": 180,
+        "sweep": 180
+      },
+      "id": 4
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 1120,
+        "cy": 580.007993257196,
+        "r": 140,
+        "start": 180,
+        "sweep": 180
+      },
+      "id": 5,
+      "tilt": -90
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 730,
+        "y": 640,
+        "w": 60,
+        "h": 300
+      },
+      "vine": true,
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 760,
+            "y": 900
+          }
+        ],
+        "speed": 150,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "id": 6
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1190,
+        "y": 350,
+        "w": 60,
+        "h": 300
+      },
+      "vine": true,
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1350,
+            "y": 500
+          }
+        ],
+        "speed": 150,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "id": 7,
+      "tilt": -90
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "gradient",
+        "style": "linear",
+        "from": "#3f9a3c",
+        "to": "#0d3b1f",
+        "angle": 90
+      },
+      "edge": "#0a2a14"
+    },
+    "path": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "soil",
+        "color": "#160e08",
+        "background": "#3b2a1d",
+        "size": 64
+      },
+      "edge": "#6e4f36"
+    }
+  },
+  "themeId": "botany",
+  "id": "d50010935ec067c608dae563a987abd8",
+  "title": "Thorn",
+  "level": 1,
+  "difficulty": 1.75,
+  "stars": {
+    "three": 3000,
+    "two": 3600,
+    "one": 4200
+  }
+}

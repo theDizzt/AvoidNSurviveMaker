@@ -34,4 +34,33 @@ describe('flush path seams', () => {
       expect(sim.status, `trial ${trial} at ${x}, ${y}`).toBe('playing');
     }
   });
+
+  it('a circle laid in the hole of a ring sector is one floor with it, all along the arc', () => {
+    const m = createEmptyMap();
+    m.start = { x: 60, y: 480, w: 120, h: 120 };
+    m.objects = [
+      { role: 'path', shape: { type: 'rect', x: 180, y: 500, w: 200, h: 80 } },
+      { role: 'path', shape: { type: 'sector', cx: 700, cy: 540, r: 350, inner: 173, start: 150, sweep: 60 } },
+      { role: 'path', shape: { type: 'ellipse', cx: 700, cy: 540, rx: 173, ry: 173 } },
+    ];
+    const map = validateMap(JSON.parse(JSON.stringify(m)));
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let trial = 0; trial < 300; trial++) {
+      const sim = new Simulation(map);
+      sim.start(120, 540);
+      sim.feed(100, 400, 540);
+      // Wandering back and forth over the arc where they meet (x ≈ 527)
+      let x = 527 + (rnd() - 0.5) * 6;
+      let y = 540 + (rnd() - 0.5) * 120;
+      let t = 200;
+      sim.feed(t, x, y);
+      for (let k = 0; k < 60 && sim.status === 'playing'; k++) {
+        x = Math.min(560, Math.max(500, x + (rnd() - 0.5) * 8));
+        y = Math.min(600, Math.max(480, y + (rnd() - 0.5) * 8));
+        sim.feed((t += 8), x, y);
+      }
+      expect(sim.status, `trial ${trial} at ${x}, ${y}`).toBe('playing');
+    }
+  });
 });

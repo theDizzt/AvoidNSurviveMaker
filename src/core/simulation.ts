@@ -73,8 +73,11 @@ const pA: Point = { x: 0, y: 0 };
 /** Scratch for magnet pulls (#99) */
 const magnetStep: Point = { x: 0, y: 0 };
 const pB: Point = { x: 0, y: 0 };
-/** Crossing intervals narrower than this (fraction of a step's sweep) are floating-point seams between flush shapes */
-const SEAM_U = 1e-9;
+/**
+ * Crossing intervals narrower than this (map units, in every object's frame) are seams between
+ * shapes laid flush, from rounding or from curves cut into chords: no ground anyone can stand on
+ */
+const SEAM_PX = 0.05;
 
 export interface SimSnapshot {
   readonly own: readonly [string, unknown][];
@@ -279,6 +282,8 @@ export class Simulation {
   private readonly local: Float64Array;
   private readonly relevant: Int32Array;
   private relevantCount = 0;
+  /** Longest the segment being checked is in any object's frame (map units) */
+  private sweepLen = 0;
   private readonly crossings: number[] = [];
   /** Scratch rings for crate collision checks */
   private crateScratch = new Float64Array(0);
@@ -938,6 +943,7 @@ export class Simulation {
     const { solids, local, relevant, crossings } = this;
     crossings.length = 0;
     this.relevantCount = 0;
+    this.sweepLen = Math.hypot(xb - xa, yb - ya);
     const minX = Math.min(xa, xb), maxX = Math.max(xa, xb);
     const minY = Math.min(ya, yb), maxY = Math.max(ya, yb);
     for (let i = 0; i < solids.length; i++) {
@@ -986,7 +992,10 @@ export class Simulation {
       local[i * 4 + 2] = bx;
       local[i * 4 + 3] = by;
       relevant[this.relevantCount++] = i;
-      if (ax !== bx || ay !== by) segmentPolyCrossings(ax, ay, bx, by, o.poly, crossings);
+      if (ax !== bx || ay !== by) {
+        segmentPolyCrossings(ax, ay, bx, by, o.poly, crossings);
+        this.sweepLen = Math.max(this.sweepLen, Math.hypot(bx - ax, by - ay));
+      }
     }
     crossings.sort((p, q) => p - q);
   }
@@ -1061,13 +1070,14 @@ export class Simulation {
       deathU = 0;
     } else {
       // Between consecutive crossings the state can't change, so test one point per interval.
-      // An interval shorter than SEAM_U is a rounding sliver where two flush shapes meet (e.g. a
-      // ring sector's end against a straight path), not real ground, so it is skipped.
+      // An interval narrower than SEAM_PX is a sliver where two flush shapes meet (e.g. a ring
+      // sector's end against a straight path), not real ground, so it is skipped.
       let prev = 0;
       const cs = this.crossings;
+      const seamU = this.sweepLen > 0 ? SEAM_PX / this.sweepLen : 0;
       for (let k = 0; k <= cs.length; k++) {
         const c = k < cs.length ? cs[k] : 1;
-        if (c - prev < SEAM_U && c < 1) continue;
+        if (c - prev < seamU && c < 1) continue;
         if (c > prev) {
           const hazard = this.hazardAt((prev + c) / 2);
           if (hazard) {

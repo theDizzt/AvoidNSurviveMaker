@@ -1,0 +1,716 @@
+{
+  "v": 2,
+  "name": "desert15",
+  "author": "Dizzt, Matchoi, Kukui",
+  "width": 1920,
+  "height": 1080,
+  "start": {
+    "x": 120,
+    "y": 500,
+    "w": 120,
+    "h": 120
+  },
+  "goal": {
+    "x": 1680,
+    "y": 500,
+    "w": 120,
+    "h": 120
+  },
+  "objects": [
+    {
+      "role": "trigger",
+      "shape": {
+        "type": "rect",
+        "x": -480,
+        "y": -190,
+        "w": 40,
+        "h": 40
+      },
+      "id": 15,
+      "trigger": {
+        "kind": "switch",
+        "color": 0
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 240,
+        "y": 500,
+        "w": 190,
+        "h": 120
+      },
+      "id": 16
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 660,
+        "cy": 560,
+        "r": 240,
+        "start": 315,
+        "sweep": 45,
+        "inner": 120
+      },
+      "rotation": {
+        "pivot": {
+          "x": 660,
+          "y": 560
+        },
+        "speed": 60,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      },
+      "id": 17,
+      "link": {
+        "color": 0,
+        "action": "pulley"
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "sector",
+        "cx": 660,
+        "cy": 560,
+        "r": 240,
+        "start": 135,
+        "sweep": 45,
+        "inner": 120
+      },
+      "rotation": {
+        "pivot": {
+          "x": 660,
+          "y": 560
+        },
+        "speed": 60,
+        "angle": 360,
+        "clockwise": true,
+        "repeat": "loop",
+        "easing": "none",
+        "delay": 0
+      },
+      "id": 18,
+      "link": {
+        "color": 0,
+        "action": "pulley"
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 660,
+        "cy": 560,
+        "rx": 120,
+        "ry": 120
+      },
+      "id": 19
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 890,
+        "y": 500,
+        "w": 790,
+        "h": 120
+      },
+      "id": 20
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 555,
+        "y": 165,
+        "w": 210,
+        "h": 120
+      },
+      "tilt": -90,
+      "id": 21
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 575,
+        "y": 815,
+        "w": 170,
+        "h": 120
+      },
+      "tilt": -90,
+      "id": 22
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 360,
+        "y": 7.105427357601002e-15,
+        "w": 120,
+        "h": 360
+      },
+      "tilt": -90,
+      "id": 23
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 648,
+        "y": 460,
+        "w": 24,
+        "h": 40
+      },
+      "id": 24,
+      "light": {
+        "radius": 120
+      }
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 648,
+        "y": 620,
+        "w": 24,
+        "h": 40
+      },
+      "id": 25,
+      "light": {
+        "radius": 120
+      }
+    },
+    {
+      "role": "pulley",
+      "shape": {
+        "type": "ellipse",
+        "cx": 660,
+        "cy": 560,
+        "rx": 40,
+        "ry": 40
+      },
+      "id": 26,
+      "pulley": {
+        "color": 0,
+        "mode": "hold",
+        "turnMs": 1000,
+        "unwind": 50
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 720,
+        "y": 840,
+        "w": 960,
+        "h": 120
+      },
+      "id": 27
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "rect",
+        "x": 1020,
+        "y": 120,
+        "w": 120,
+        "h": 380
+      },
+      "id": 28
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 720,
+        "y": 840,
+        "w": 60,
+        "h": 60
+      },
+      "id": 29
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 840,
+        "y": 900,
+        "w": 60,
+        "h": 60
+      },
+      "id": 30
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 960,
+        "y": 840,
+        "w": 60,
+        "h": 60
+      },
+      "id": 31
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1080,
+        "y": 900,
+        "w": 60,
+        "h": 60
+      },
+      "id": 32
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1200,
+        "y": 840,
+        "w": 60,
+        "h": 60
+      },
+      "id": 33
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1320,
+        "y": 900,
+        "w": 60,
+        "h": 60
+      },
+      "id": 34
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1440,
+        "y": 840,
+        "w": 60,
+        "h": 60
+      },
+      "id": 35
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "rect",
+        "x": 1560,
+        "y": 900,
+        "w": 60,
+        "h": 60
+      },
+      "id": 36
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1740,
+        "cy": 900,
+        "rx": 12,
+        "ry": 12
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 810,
+            "y": 900
+          }
+        ],
+        "speed": 200,
+        "repeat": "once",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "id": 37,
+      "link": {
+        "color": 5,
+        "action": "pulley"
+      }
+    },
+    {
+      "role": "coin",
+      "shape": {
+        "type": "ellipse",
+        "cx": 1082,
+        "cy": 62,
+        "rx": 12,
+        "ry": 12
+      },
+      "motion": {
+        "type": "linear",
+        "points": [
+          {
+            "x": 1080,
+            "y": 450
+          }
+        ],
+        "speed": 200,
+        "repeat": "once",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "id": 38,
+      "link": {
+        "color": 5,
+        "action": "pulley"
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1140,
+            "y": 450
+          },
+          {
+            "x": 1290,
+            "y": 430
+          },
+          {
+            "x": 1290,
+            "y": 470
+          }
+        ]
+      },
+      "id": 39,
+      "spike": {
+        "angle": 180,
+        "reach": 150,
+        "thrustMs": 120,
+        "returnMs": 900,
+        "waitMs": 900,
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1140,
+            "y": 210
+          },
+          {
+            "x": 1290,
+            "y": 190
+          },
+          {
+            "x": 1290,
+            "y": 230
+          }
+        ]
+      },
+      "id": 40,
+      "spike": {
+        "angle": 180,
+        "reach": 150,
+        "thrustMs": 120,
+        "returnMs": 900,
+        "waitMs": 900,
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1140,
+            "y": 330
+          },
+          {
+            "x": 1290,
+            "y": 310
+          },
+          {
+            "x": 1290,
+            "y": 350
+          }
+        ]
+      },
+      "id": 41,
+      "spike": {
+        "angle": 180,
+        "reach": 150,
+        "thrustMs": 120,
+        "returnMs": 900,
+        "waitMs": 900,
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 870,
+            "y": 270
+          },
+          {
+            "x": 1020,
+            "y": 250
+          },
+          {
+            "x": 1020,
+            "y": 290
+          }
+        ]
+      },
+      "tilt": 180,
+      "id": 42,
+      "spike": {
+        "angle": 0,
+        "reach": 150,
+        "thrustMs": 120,
+        "returnMs": 900,
+        "waitMs": 900,
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 870,
+            "y": 150
+          },
+          {
+            "x": 1020,
+            "y": 130
+          },
+          {
+            "x": 1020,
+            "y": 170
+          }
+        ]
+      },
+      "tilt": 180,
+      "id": 43,
+      "spike": {
+        "angle": 0,
+        "reach": 150,
+        "thrustMs": 120,
+        "returnMs": 900,
+        "waitMs": 900,
+        "delay": 0
+      }
+    },
+    {
+      "role": "wall",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 870,
+            "y": 390
+          },
+          {
+            "x": 1020,
+            "y": 370
+          },
+          {
+            "x": 1020,
+            "y": 410
+          }
+        ]
+      },
+      "tilt": 180,
+      "id": 44,
+      "spike": {
+        "angle": 0,
+        "reach": 150,
+        "thrustMs": 120,
+        "returnMs": 900,
+        "waitMs": 900,
+        "delay": 0
+      }
+    },
+    {
+      "role": "pulley",
+      "shape": {
+        "type": "ellipse",
+        "cx": 210,
+        "cy": 180,
+        "rx": 40,
+        "ry": 40
+      },
+      "id": 45,
+      "pulley": {
+        "color": 5,
+        "mode": "unwind",
+        "turnMs": 1000,
+        "unwind": 50
+      }
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 288,
+        "y": 160,
+        "w": 24,
+        "h": 40
+      },
+      "id": 46,
+      "light": {
+        "radius": 120
+      }
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1578,
+        "y": 910,
+        "w": 24,
+        "h": 40
+      },
+      "id": 47,
+      "light": {
+        "radius": 120
+      }
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1218,
+        "y": 850,
+        "w": 24,
+        "h": 40
+      },
+      "id": 48,
+      "light": {
+        "radius": 120
+      }
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 858,
+        "y": 910,
+        "w": 24,
+        "h": 40
+      },
+      "id": 49,
+      "light": {
+        "radius": 120
+      }
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1068,
+        "y": 160,
+        "w": 24,
+        "h": 40
+      },
+      "id": 50,
+      "light": {
+        "radius": 120
+      }
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 1608,
+        "y": 540,
+        "w": 24,
+        "h": 40
+      },
+      "id": 51,
+      "light": {
+        "radius": 120
+      }
+    },
+    {
+      "role": "torch",
+      "shape": {
+        "type": "rect",
+        "x": 278,
+        "y": 540,
+        "w": 24,
+        "h": 40
+      },
+      "id": 52,
+      "light": {
+        "radius": 120
+      }
+    },
+    {
+      "role": "path",
+      "shape": {
+        "type": "ellipse",
+        "cx": 210,
+        "cy": 180,
+        "rx": 90,
+        "ry": 90
+      },
+      "id": 53
+    }
+  ],
+  "theme": {
+    "wall": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "sandBrick",
+        "color": "#4a3b2a",
+        "background": "#9c8460",
+        "size": 40
+      },
+      "edge": "#1c140c"
+    },
+    "path": {
+      "fill": {
+        "type": "pattern",
+        "pattern": "egyptian",
+        "color": "#c9a96e",
+        "background": "#ecdcb4",
+        "size": 64
+      },
+      "edge": "#1c140c"
+    }
+  },
+  "themeDesign": "ruins",
+  "themeId": "desert",
+  "id": "14",
+  "title": "Rapid",
+  "level": 15,
+  "difficulty": 2.75,
+  "darkness": {
+    "light": 60,
+    "intensity": 75
+  },
+  "stars": {
+    "three": 17000,
+    "two": 22000,
+    "one": 30000
+  }
+}
