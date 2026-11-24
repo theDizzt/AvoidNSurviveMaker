@@ -41,17 +41,56 @@ function random(seed: number): () => number {
 
 // ───────────────────────── Thorn vine (#83 / #84) ─────────────────────────
 
-/**
- * A thorn vine in the walls' colors (`fill`, outline `edge`): one solid silhouette, its big thorns
- * and the point at its tip already in its outline, with a soft shadow like the walls'.
- */
+const vineDetails = new WeakMap<CompiledObject, { body: Path2D; light: Path2D; shade: Path2D; grain: Path2D }>();
+
+/** Cache surface details in the same local frame as the collision outline. */
+function vineDetail(o: CompiledObject) {
+  const cached = vineDetails.get(o);
+  if (cached) return cached;
+  const body = new Path2D(), light = new Path2D(), shade = new Path2D(), grain = new Path2D();
+  const poly = o.box.poly;
+  ringPath(body, poly);
+  let area = 0;
+  for (let i = 0, j = poly.length - 2; i < poly.length; j = i, i += 2) {
+    area += poly[j] * poly[i + 1] - poly[i] * poly[j + 1];
+  }
+  const sign = area >= 0 ? 1 : -1;
+  for (let i = 0; i < poly.length; i += 2) {
+    const j = (i + 2) % poly.length;
+    const dx = poly[j] - poly[i], dy = poly[j + 1] - poly[i + 1];
+    // Upper-left edges catch the light; opposite edges define the thorn undersides.
+    const path = sign * (dx - dy) > 0 ? light : shade;
+    path.moveTo(poly[i], poly[i + 1]);
+    path.lineTo(poly[j], poly[j + 1]);
+  }
+  const { minX, minY, maxX, maxY } = o.box;
+  const tall = maxY - minY >= maxX - minX;
+  const across = tall ? maxX - minX : maxY - minY;
+  const length = tall ? maxY - minY : maxX - minX;
+  const mid = tall ? (minX + maxX) / 2 : (minY + maxY) / 2;
+  // A few fine, winding fibres, clipped to the body rather than covering its sharp tips.
+  for (const offset of [-0.09, 0.02, 0.12]) {
+    for (let k = 0; k <= 36; k++) {
+      const u = k / 36;
+      const along = (tall ? minY : maxX) + (tall ? 1 : -1) * length * u;
+      const cross = mid + across * (offset + Math.sin(u * Math.PI * 3 + offset * 8) * 0.045) * Math.min(1, u * 3);
+      const x = tall ? cross : along, y = tall ? along : cross;
+      if (k === 0) grain.moveTo(x, y);
+      else grain.lineTo(x, y);
+    }
+  }
+  const detail = { body, light, shade, grain };
+  vineDetails.set(o, detail);
+  return detail;
+}
+
+/** Sculpted vine, retaining the theme colors and the exact collision silhouette. */
 export function drawThornVine(
   ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, fill: string | CanvasGradient | CanvasPattern, edge: string,
 ): void {
   ctx.save();
   enterPose(ctx, o, t);
-  const body = new Path2D();
-  ringPath(body, o.box.poly);
+  const { body, light, shade, grain } = vineDetail(o);
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.3)';
   ctx.shadowBlur = 6;
@@ -59,11 +98,24 @@ export function drawThornVine(
   ctx.fillStyle = fill;
   ctx.fill(body);
   ctx.restore();
-  ctx.lineJoin = 'miter';
-  ctx.miterLimit = 10;
-  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 0.8;
   ctx.strokeStyle = edge;
   ctx.stroke(body);
+  ctx.clip(body);
+  // Inset bevels preserve needle-sharp tips without long miter spikes outside the hitbox.
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+  ctx.stroke(shade);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.24)';
+  ctx.stroke(light);
+  ctx.lineWidth = 1.8;
+  ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+  ctx.stroke(grain);
+  ctx.lineWidth = 0.65;
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.stroke(grain);
   ctx.restore();
 }
 
