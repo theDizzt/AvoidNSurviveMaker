@@ -6,10 +6,10 @@ import type { MapData, Point, Turret } from './types';
 /**
  * Turrets (#60) and homing missile launchers (#61): barrels, firing and projectiles.
  *
- * Everything is stepped by the simulation once per checked segment (at most 1 ms), from the
+ * Everything is stepped by the simulation once per checked segment (normally at most 4 ms), from the
  * cursor position at the start of the segment, so the same replay always produces the same shots.
  * Projectiles are circles; a hit on the cursor is found from their relative motion within the
- * segment, so nothing can pass through anything else however fast either moves.
+ * segment. Curved motion is approximated within each segment.
  */
 
 /** Turrets and launchers are always this size (px, square) */

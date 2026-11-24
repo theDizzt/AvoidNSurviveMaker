@@ -17,8 +17,8 @@ export const PORTAL_PULL_MS = 160;
 /** A coin is collected once the cursor comes this close to its center (map units; the coin's radius is 12) */
 export const COIN_MAGNET = 36;
 /**
- * Step of the simulation (ms): the finest a browser's input and timers resolve anyway. Every event
- * inside a step (GOAL, coins, hits) is still placed at its exact, interpolated time
+ * Simulation step budget, chosen to reduce CPU work (not a JavaScript timer limitation).
+ * GOAL and swept collisions are interpolated within each step; record precision is independent.
  */
 export const SIM_STEP_MS = 4;
 /** How long a collected coin takes to fly into the cursor (ms, drawing only) */
@@ -50,8 +50,10 @@ export interface ReplaySample {
 
 export interface Replay {
   v: 1;
-  /** Omitted in legacy replays (1 ms). The map can still require fine steps. */
+  /** Omitted in legacy replays (1 ms). */
   simulationStepMs?: 4 | 8;
+  /** Version 2 uses the recorded step for every mechanism; older replays retain map-specific fallbacks. */
+  simulationVersion?: 2;
   samples: ReplaySample[];
   /** Clicks during the run (click-activated switches), in time order */
   clicks?: ReplaySample[];
@@ -67,15 +69,14 @@ const pB: Point = { x: 0, y: 0 };
 
 /**
  * Deterministic simulation, judged in 4 ms steps (SIM_STEP_MS). Each step is swept as a whole, so
- * the clear time, coin pickups and hits are placed at their exact time inside it: records keep
- * 1 ms precision. Maps with stateful mechanisms (ice, switches, doors, portals, pulleys, lasers,
- * turrets) keep 1 ms steps: their state advances per step.
+ * the clear time, coin pickups and hits are interpolated inside it: records keep
+ * 1 ms resolution independently of the simulation step. Stateful mechanisms use the same step.
  *
- * - Input samples define line segments, split at 4 ms (or 1 ms) boundaries.
+ * - Input samples define line segments, split at 4 ms boundaries (legacy replays may use 1 or 8 ms).
  * - Each piece is tested against every object in that object's own local frame: the cursor
  *   endpoints are mapped through the inverse of the object's pose at the start and end of the
  *   piece. That turns moving and rotating objects into static polygons and the cursor's motion
- *   into a relative-motion segment, so nothing can be skipped over no matter how fast either moves.
+ *   into a relative-motion segment. Nonlinear motion within a step remains an approximation.
  * - All boundary crossings along the segment are collected and the segment is checked
  *   interval by interval: safe = (inside some path, or the map has no paths) and inside no wall,
  *   where static walls don't count inside a path that cuts through walls (`pierce`).
@@ -244,13 +245,12 @@ export class Simulation {
   /** Maximum step for this run; fixed at construction so a replay always runs the same way. */
   readonly simulationStepMs: 1 | 4 | 8;
 
-  /** `stepMs`: the step where the map allows more than 1 ms (replays keep the one they were made with) */
-  constructor(map: MapData, objects: readonly CompiledObject[] = compileMap(map), stepMs: 1 | 4 | 8 = SIM_STEP_MS) {
+  /** New games use one step for all devices; legacy replays retain the old fine-step policy. */
+  constructor(map: MapData, objects: readonly CompiledObject[] = compileMap(map), stepMs: 1 | 4 | 8 = SIM_STEP_MS,
+    private readonly legacyStepPolicy = false) {
     this.map = map;
     this.objects = objects;
-    // Integrators and mechanisms with nonlocal effects still need the original event order.
-    // Analytic motion, rotation, falling and blinking are judged in whole steps.
-    const needsFineSteps = map.objects.some(o =>
+    const needsFineSteps = legacyStepPolicy && map.objects.some(o =>
       o.ice || o.link ||
       o.role === 'trigger' || o.role === 'door' || o.role === 'portal' ||
       o.role === 'pulley' || o.role === 'laser' || o.role === 'turret' || o.role === 'conveyor' ||
@@ -441,13 +441,14 @@ export class Simulation {
       const pull = this.pull;
       if (pull) {
         // Pulled toward the portal's center regardless of the mouse, then teleported
-        const end = Math.min(t, pull.end, this.tick + 1);
+        const boundary = this.nextBoundary();
+        const end = Math.min(t, pull.end, boundary);
         const f = (end - pull.start) / (pull.end - pull.start);
         const px = pull.fromX + (pull.toX - pull.fromX) * f;
         const py = pull.fromY + (pull.toY - pull.fromY) * f;
         this.checkSegment(this.time, this.x, this.y, end, px, py);
         if (this.status !== 'playing') return;
-        if (end === this.tick + 1) this.tick = end;
+        if (end === boundary) this.tick = end;
         this.time = end;
         this.x = px;
         this.y = py;
@@ -496,13 +497,14 @@ export class Simulation {
   }
 
   /**
-   * One piece (up to the next 1 ms boundary) of the cursor's way toward the mouse sample (rx, ry)
+   * One piece (up to the next simulation boundary) of the cursor's way toward the mouse sample (rx, ry)
    * at time t, on a map with ice or conveyor belts. Off the ice the cursor follows the mouse (plus
    * the offset); on it, the cursor's velocity eases toward the mouse's and the difference builds up
    * in the offset. A belt under the cursor adds its own travel to the offset.
    */
   private slideStep(t: number, rx: number, ry: number): void {
-    const end = Math.min(t, this.tick + 1);
+    const boundary = this.nextBoundary();
+    const end = Math.min(t, boundary);
     const dt = end - this.time;
     // Where the mouse is now and where it gets to by the end of this piece
     const mx0 = this.x - this.offX;
@@ -532,7 +534,7 @@ export class Simulation {
     this.time = end;
     this.x = bx;
     this.y = by;
-    if (end === this.tick + 1) this.tick = end;
+    if (end === boundary) this.tick = end;
   }
 
   /** Is magnet `i` pulling now? Not while removed, nor while its switch link / wire holds it (like a motion that doesn't run) */
@@ -820,6 +822,7 @@ export class Simulation {
 
   getReplay(): Replay {
     const r: Replay = { v: 1, samples: this.samples.slice() };
+    if (!this.legacyStepPolicy) r.simulationVersion = 2;
     if (this.simulationStepMs !== 1) r.simulationStepMs = this.simulationStepMs;
     if (this.clicks.length) r.clicks = this.clicks.slice();
     if (this.abortReason) r.abort = { reason: this.abortReason };
@@ -1478,7 +1481,7 @@ export class Simulation {
 /** Re-run a replay from scratch (for server-side record verification) */
 export function runReplay(map: MapData, replay: Replay, checkBudget: () => void = () => {}): Simulation {
   // Replays without a step are from before steps were batched: 1 ms
-  const sim = new Simulation(map, undefined, replay.simulationStepMs ?? 1);
+  const sim = new Simulation(map, undefined, replay.simulationStepMs ?? 1, replay.simulationVersion !== 2);
   const [first, ...rest] = replay.samples;
   if (!first || first.t !== 0 || !sim.start(first.x, first.y)) return sim;
   const clicks = replay.clicks ?? [];

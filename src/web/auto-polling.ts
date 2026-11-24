@@ -1,4 +1,4 @@
-/** Conservative workload feedback; never changes the simulation's 1 ms clock. */
+/** Conservative workload feedback; never changes the simulation step or record time resolution. */
 export class AutoPolling {
   private readonly rates = [125, 250, 500, 1000] as const;
   private index = 2;
