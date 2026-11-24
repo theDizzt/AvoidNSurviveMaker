@@ -641,12 +641,14 @@ export class PlayController {
     // Fog, sand dust and darkness go over the cursor and trail; the timer and messages stay readable on top
     drawFogAreas(ctx, map, sim.objects, t, now, 1, state);
     drawDarkAreas(ctx, sim.objects, t, 1, state);
-    if (map.darkness && (sim.status === 'playing' || sim.status === 'ready')) {
+    // Darkness stays after the run ends too (death, clear): the light stays where the cursor stopped
+    if (map.darkness) {
       const light = map.darkness.light;
       const s = map.start;
+      const started = sim.status !== 'ready';
       const circuit = { power: sim.power, wired: sim.circuit?.isTarget, channels: sim.channels };
-      const lights = objectLights(sim.objects, t, playing ? { ...state, ...circuit, carried: this.carried, cursor: { x: sim.x, y: sim.y } } : { ...state, ...circuit });
-      if (light > 0) lights.push(sim.status === 'playing'
+      const lights = objectLights(sim.objects, t, started ? { ...state, ...circuit, carried: this.carried, cursor: { x: sim.x, y: sim.y } } : { ...state, ...circuit });
+      if (light > 0) lights.push(started
         ? { x: sim.x, y: sim.y, r: light }
         : { x: s.x + s.w / 2, y: s.y + s.h / 2, r: Math.max(light, Math.hypot(s.w, s.h) / 2 + 12) });
       drawGlobalDark(ctx, map, lights);
