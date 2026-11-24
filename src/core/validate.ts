@@ -602,7 +602,7 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     return v.toLowerCase();
   }
 
-  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'soil', 'snow', 'snowDirt', 'snowPile', 'ice', 'iceCrystal', 'concrete', 'epoxy', 'clouds', 'basalt', 'hotrock', 'magma'] as const satisfies readonly PatternKind[];
+  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'soil', 'snow', 'snowDirt', 'snowPile', 'ice', 'iceCrystal', 'concrete', 'epoxy', 'clouds', 'cloudBank', 'basalt', 'hotrock', 'magma'] as const satisfies readonly PatternKind[];
 
   function fill(v: unknown, name: string): Fill {
     const o = obj(v, name);

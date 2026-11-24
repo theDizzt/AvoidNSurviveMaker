@@ -818,6 +818,30 @@ export function createPatternTile(f: Extract<Fill, { type: 'pattern' }>): HTMLCa
       }
       break;
     }
+    case 'cloudBank': {
+      // One sky scene, stretched to the surface bounds by the renderer.
+      const sky = g.createLinearGradient(0, 0, 0, s);
+      sky.addColorStop(0, f.background);
+      sky.addColorStop(0.65, mix(f.background, f.color, 0.35));
+      sky.addColorStop(1, mix(f.background, f.color, 0.8));
+      g.fillStyle = sky;
+      g.fillRect(0, 0, s, s);
+      const random = seeded(7072);
+      for (const [base, radius, blend] of [[0.82, 0.09, 0.4], [0.92, 0.12, 0.18], [1.03, 0.14, 0]] as const) {
+        g.fillStyle = mix(f.color, f.background, blend);
+        g.beginPath();
+        for (let i = -1; i <= 12; i++) {
+          const x = s * i / 11;
+          const y = s * (base + (random() - 0.5) * 0.055);
+          const r = s * radius * (0.8 + random() * 0.4);
+          g.moveTo(x + r, y);
+          g.ellipse(x, y, r, r * 0.7, 0, 0, Math.PI * 2);
+        }
+        g.rect(0, s * base, s, s * (1.2 - base));
+        g.fill();
+      }
+      break;
+    }
     case 'clouds': {
       // Clear sky with puffy clouds (chapter 7 walls). `background` is the sky, `color` the clouds.
       const random = seeded(7071);

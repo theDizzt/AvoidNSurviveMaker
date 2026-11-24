@@ -55,22 +55,31 @@
         "italic": true
       }
     },
+    "designs": [
+      {
+        "id": "scattered-clouds",
+        "name": "Scattered Clouds",
+        "i18n": { "ko": "흩어진 구름", "zh": "散落的云" },
+        "maze": {
+          "wall": {
+            "fill": { "type": "pattern", "pattern": "clouds", "color": "#ffffff", "background": "#7cc5f2", "size": 256 },
+            "edge": "#cfe8f8",
+            "anim": { "type": "scroll", "speed": 10, "amount": 1, "angle": 0 }
+          },
+          "path": { "fill": { "type": "solid", "color": "#ffffff" }, "edge": "#9fd0f0" }
+        }
+      }
+    ],
     "maze": {
       "wall": {
         "fill": {
           "type": "pattern",
-          "pattern": "clouds",
+          "pattern": "cloudBank",
           "color": "#ffffff",
-          "background": "#7cc5f2",
+          "background": "#61b8f2",
           "size": 256
         },
-        "edge": "#cfe8f8",
-        "anim": {
-          "type": "scroll",
-          "speed": 10,
-          "amount": 1,
-          "angle": 0
-        }
+        "edge": "#cfe8f8"
       },
       "path": {
         "fill": {

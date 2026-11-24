@@ -30,6 +30,7 @@ const PATTERNS: [PatternKind, string][] = [
   ['concrete', t('pattern.concrete')],
   ['epoxy', t('pattern.epoxy')],
   ['clouds', t('pattern.clouds')],
+  ['cloudBank', t('pattern.cloudBank')],
   ['basalt', t('pattern.basalt')],
   ['hotrock', t('pattern.hotrock')],
   ['magma', t('pattern.magma')],

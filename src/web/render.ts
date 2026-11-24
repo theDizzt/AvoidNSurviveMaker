@@ -284,7 +284,16 @@ type Bounds = Pick<CompiledObject, 'minX' | 'minY' | 'maxX' | 'maxY'>;
 
 function fillStyle(ctx: CanvasRenderingContext2D, f: Fill, o: Bounds): string | CanvasGradient | CanvasPattern {
   if (f.type === 'solid') return f.color;
-  if (f.type === 'pattern') return patternFor(ctx, f);
+  if (f.type === 'pattern') {
+    const pattern = patternFor(ctx, f);
+    if (f.pattern === 'cloudBank' && typeof pattern !== 'string') {
+      pattern.setTransform(new DOMMatrix().translate(o.minX, o.minY).scale(
+        Math.max(1, o.maxX - o.minX) / Math.ceil(f.size * PATTERN_RES),
+        Math.max(1, o.maxY - o.minY) / Math.ceil(f.size * PATTERN_RES),
+      ));
+    }
+    return pattern;
+  }
   const cx = (o.minX + o.maxX) / 2;
   const cy = (o.minY + o.maxY) / 2;
   const w = o.maxX - o.minX;

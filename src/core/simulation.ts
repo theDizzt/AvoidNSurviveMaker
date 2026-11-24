@@ -3,7 +3,7 @@ import { displayTime } from './time';
 import { compileMap, compileObject, compilePressCylinder, compileTiltedAbout, toLocal, toWorld, transformAt, type CompiledObject, type Transform } from './object';
 import { autoDoorOpen, doorPanels, initialChannels } from './switches';
 import { BeamCaster, beamHit, type Beam } from './laser';
-import { TurretSystem, type Shot, type TurretState } from './turret';
+import { TurretSystem, type Shot, type TurretSnapshot, type TurretState } from './turret';
 import { ZoneArea, zoneShape } from './zone';
 import { blinkState, fallState } from './hazards';
 import { CompiledMotion, CompiledRotation } from './motion';
@@ -66,6 +66,44 @@ const pA: Point = { x: 0, y: 0 };
 /** Scratch for magnet pulls (#99) */
 const magnetStep: Point = { x: 0, y: 0 };
 const pB: Point = { x: 0, y: 0 };
+/** Crossing intervals narrower than this (fraction of a step's sweep) are floating-point seams between flush shapes */
+const SEAM_U = 1e-9;
+
+export interface SimSnapshot {
+  readonly own: readonly [string, unknown][];
+  readonly guns: TurretSnapshot;
+  readonly circuit: Uint8Array | null;
+  readonly movers: readonly number[][];
+}
+
+/** Simulation fields that never change after construction, or are scratch space: not snapshotted */
+const SNAPSHOT_SKIP = new Set([
+  'map', 'objects', 'hasPaths', 'ices', 'belts', 'crates', 'metals', 'magnets', 'cursorMagnets', 'startArea', 'goalArea',
+  'solids', 'safeCount', 'coins', 'crystals', 'falls', 'wastes', 'blinks', 'pulleys', 'pulleyCap', 'triggers', 'linked',
+  'doors', 'solidSrc', 'solidDoor', 'solidSlide', 'circuit', 'devices', 'caster', 'guns', 'gunState', 'shotHit', 'portals',
+  'local', 'relevant', 'relevantCount', 'crossings', 'crateScratch', 'wallScratch', 'powerActive', 'coinTotal',
+  'hasCrystal', 'simulationStepMs', 'legacyStepPolicy',
+  // A cache of poses by time (pure): forgotten on restore instead
+  'solidPose', 'solidPoseTime',
+]);
+
+/** Arrays of entries that are never changed once added: copied shallowly */
+const SNAPSHOT_SHALLOW = new Set(['samples', 'clicks', 'beams', 'pendingBeams']);
+
+/** Deep copy of run state: numbers, strings, typed arrays, arrays and plain objects only */
+function copyState(v: unknown, key: string): unknown {
+  if (v === null || typeof v !== 'object') {
+    if (typeof v === 'function') throw new Error(`Simulation.snapshot: ${key} is a function`);
+    return v;
+  }
+  if (ArrayBuffer.isView(v)) return (v as Float64Array).slice();
+  if (Array.isArray(v)) return v.map((e) => copyState(e, key));
+  const proto = Object.getPrototypeOf(v);
+  if (proto !== Object.prototype && proto !== null) throw new Error(`Simulation.snapshot: ${key} holds a class instance`);
+  const out: Record<string, unknown> = {};
+  for (const [k, e] of Object.entries(v)) out[k] = copyState(e, key);
+  return out;
+}
 
 /**
  * Deterministic simulation, judged in 4 ms steps (SIM_STEP_MS). Each step is swept as a whole, so
@@ -390,6 +428,41 @@ export class Simulation {
     this.solidPose = this.solids.map(() => ({ dx: 0, dy: 0, cos: 1, sin: 0 }));
   }
 
+  /**
+   * Everything a run changes, to come back to later with restore(): lets a route search branch
+   * from the middle of a run instead of replaying it from the start.
+   */
+  snapshot(): SimSnapshot {
+    const own: [string, unknown][] = [];
+    for (const [k, v] of Object.entries(this)) {
+      if (SNAPSHOT_SKIP.has(k)) continue;
+      own.push([k, SNAPSHOT_SHALLOW.has(k) ? (v as unknown[]).slice() : copyState(v, k)]);
+    }
+    return {
+      own,
+      guns: this.guns.snapshot(),
+      circuit: this.circuit?.snapshot() ?? null,
+      movers: [...this.crates, ...this.metals].map(({ mover: m }) => [m.t0, m.x0, m.y0, m.t1, m.x1, m.y1]),
+    };
+  }
+
+  restore(s: SimSnapshot): void {
+    const self = this as unknown as Record<string, unknown>;
+    for (const [k, v] of s.own) {
+      const cur = self[k];
+      // Typed arrays are shared with helpers (gunState, ...), so they are refilled in place
+      if (ArrayBuffer.isView(cur) && ArrayBuffer.isView(v)) (cur as Float64Array).set(v as Float64Array);
+      else self[k] = SNAPSHOT_SHALLOW.has(k) ? (v as unknown[]).slice() : copyState(v, k);
+    }
+    this.solidPoseTime.fill(NaN);
+    this.guns.restore(s.guns);
+    if (this.circuit && s.circuit) this.circuit.restore(s.circuit);
+    [...this.crates, ...this.metals].forEach(({ mover: m }, i) => {
+      [m.t0, m.x0, m.y0, m.t1, m.x1, m.y1] = s.movers[i];
+    });
+    this.caster.invalidate();
+  }
+
   /** Last completed whole millisecond (not a count of segment checks). */
   get ticks(): number {
     return this.tick;
@@ -409,6 +482,8 @@ export class Simulation {
     this.collected.fill(0);
     this.coinsLeft = this.coinTotal;
     this.crystalHeld = false;
+    // Coins taken in an earlier run on this instance come back; updateDerived() hides what it must
+    this.hidden.fill(0);
     this.resetSwitches();
     this.guns.reset();
     this.offX = 0;
@@ -956,11 +1031,14 @@ export class Simulation {
     if (reason) {
       deathU = 0;
     } else {
-      // Between consecutive crossings the state can't change, so test one point per interval
+      // Between consecutive crossings the state can't change, so test one point per interval.
+      // An interval shorter than SEAM_U is a rounding sliver where two flush shapes meet (e.g. a
+      // ring sector's end against a straight path), not real ground, so it is skipped.
       let prev = 0;
       const cs = this.crossings;
       for (let k = 0; k <= cs.length; k++) {
         const c = k < cs.length ? cs[k] : 1;
+        if (c - prev < SEAM_U && c < 1) continue;
         if (c > prev) {
           const hazard = this.hazardAt((prev + c) / 2);
           if (hazard) {

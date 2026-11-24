@@ -162,18 +162,12 @@
     "wall": {
       "fill": {
         "type": "pattern",
-        "pattern": "clouds",
+        "pattern": "cloudBank",
         "color": "#ffffff",
-        "background": "#7cc5f2",
+        "background": "#61b8f2",
         "size": 256
       },
-      "edge": "#cfe8f8",
-      "anim": {
-        "type": "scroll",
-        "speed": 10,
-        "amount": 1,
-        "angle": 0
-      }
+      "edge": "#cfe8f8"
     },
     "path": {
       "fill": {

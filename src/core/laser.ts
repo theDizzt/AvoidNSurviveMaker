@@ -55,6 +55,12 @@ export class BeamCaster {
     return this.lasers.length > 0;
   }
 
+  /** Drop the cached beams (the simulation jumped to another state) */
+  invalidate(): void {
+    this.cachedBeams = null;
+    this.previousState.fill(NaN);
+  }
+
   private ring(i: number, t: number): Float64Array {
     const hit = this.staticRings.get(i);
     if (hit) return hit;

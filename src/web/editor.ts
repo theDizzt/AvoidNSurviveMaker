@@ -37,6 +37,8 @@ import { EditorDocument, type EditorSelection as Selection } from '../core/edito
 import * as editCommands from '../core/editor-commands';
 import { loadEditorDraft, saveEditorDraft, loadEditorPreference, saveEditorPreference } from './editor-storage';
 import { EditorPropertiesPanel } from './editor-properties';
+import { STAR_TIERS, type SkillId, type StarTier } from '../core/star-solver';
+import type { StarRatingMessage, StarRatingRequest } from './star-rating.worker';
 export type { EditorElements } from './editor-shared';
 
 /** "30°" / "-12.5°" */
@@ -69,6 +71,13 @@ export class Editor {
   private set verifiedJson(value: string | null) { this.model.verifiedJson = value; }
   /** Clear time of that test play, used to suggest star times */
   private get lastClearMs(): number | null { return this.model.lastClearMs; }
+
+  // ── Star times from route analysis ──
+  private starTier: StarTier = STAR_TIERS.includes(loadEditorPreference('starTier') as StarTier) ? loadEditorPreference('starTier') as StarTier : 'normal';
+  private starWorker: Worker | null = null;
+  /** The map being analyzed, and the outcome to show under the star times (for that map only) */
+  private starRun: { map: MapData; text: string } | null = null;
+  private starStatus: HTMLElement | null = null;
 
   private tool: Tool = { kind: 'select' };
   private get sel(): Selection { return this.model.selection; }
@@ -2317,6 +2326,7 @@ export class Editor {
         this.properties.note(this.lastClearMs !== null
           ? tr('ed.lastClear', { time: formatSeconds(this.lastClearMs) })
           : tr('ed.starHelp')),
+        ...this.starAnalysis(m),
       );
     }
     parts.push(this.properties.toggle(tr('ed.globalDarkness42'), !!m.darkness, (on) => {
@@ -2334,6 +2344,77 @@ export class Editor {
       );
     }
     this.el.level.replaceChildren(...parts);
+  }
+
+  /** Strictness tier + "analyze routes" button, and what the analysis found */
+  private starAnalysis(m: MapData): HTMLElement[] {
+    const tier = document.createElement('select');
+    for (const id of STAR_TIERS) tier.append(new Option(tr(`ed.starTier.${id}`), id, false, id === this.starTier));
+    tier.addEventListener('change', () => {
+      this.starTier = tier.value as StarTier;
+      saveEditorPreference('starTier', this.starTier);
+    });
+    const running = this.starWorker !== null && this.starRun?.map === m;
+    const run = this.properties.button(running ? tr('ed.starAnalyzeCancel') : tr('ed.starAnalyze'), () => {
+      if (this.starWorker) this.stopStarAnalysis(tr('ed.starAnalyzeCancelled'));
+      else this.startStarAnalysis(m);
+    });
+    const status = this.properties.note(this.starRun?.map === m ? this.starRun.text : tr('ed.starAnalyzeHelp'));
+    this.starStatus = status;
+    return [this.properties.group(this.properties.field(tr('ed.starTier'), tier)), this.properties.actions(run), status];
+  }
+
+  private setStarStatus(text: string): void {
+    if (this.starRun) this.starRun.text = text;
+    if (this.starStatus) this.starStatus.textContent = text;
+  }
+
+  private startStarAnalysis(m: MapData): void {
+    const worker = new Worker(new URL('./star-rating.worker.ts', import.meta.url), { type: 'module' });
+    this.starWorker = worker;
+    this.starRun = { map: m, text: tr('ed.starAnalyzing', { skill: tr('ed.skill.expert'), time: formatSeconds(0) }) };
+    const tier = this.starTier;
+    worker.onmessage = (event: MessageEvent<StarRatingMessage>) => {
+      const msg = event.data;
+      if (this.starWorker !== worker) return;
+      if (msg.type === 'progress') {
+        this.setStarStatus(tr('ed.starAnalyzing', { skill: tr(`ed.skill.${msg.skill}`), time: formatSeconds(msg.ms) }));
+        return;
+      }
+      this.finishStarAnalysis();
+      if (msg.type === 'error') {
+        this.setStarStatus(tr('ed.starAnalyzeFailed'));
+        return;
+      }
+      const skills = (Object.keys(msg.times) as SkillId[]).map((id) =>
+        tr(msg.found[id] ? 'ed.skillTime' : 'ed.skillTimeEstimated', { skill: tr(`ed.skill.${id}`), time: formatSeconds(msg.times[id]) }));
+      const text = tr('ed.starAnalyzed', { tier: tr(`ed.starTier.${tier}`), routes: skills.join(' · ') });
+      this.starRun = { map: m, text };
+      if (this.map === m) this.edit(() => { m.stars = { ...msg.stars }; });
+      this.renderedLevel = null;
+      this.renderLevel();
+    };
+    worker.onerror = () => {
+      if (this.starWorker !== worker) return;
+      this.finishStarAnalysis();
+      this.setStarStatus(tr('ed.starAnalyzeFailed'));
+    };
+    const request: StarRatingRequest = { map: JSON.parse(JSON.stringify(m)), tier, observedMs: this.lastClearMs };
+    worker.postMessage(request);
+    this.renderedLevel = null;
+    this.renderLevel();
+  }
+
+  private finishStarAnalysis(): void {
+    this.starWorker?.terminate();
+    this.starWorker = null;
+  }
+
+  private stopStarAnalysis(text: string): void {
+    this.finishStarAnalysis();
+    this.setStarStatus(text);
+    this.renderedLevel = null;
+    this.renderLevel();
   }
 
   private startMarkers(i: number): void {

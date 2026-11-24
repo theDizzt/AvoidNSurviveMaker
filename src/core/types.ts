@@ -562,7 +562,7 @@ export interface MapObject {
   elec?: { action: ElecAction };
 }
 
-export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal' | 'egyptian' | 'sandBrick' | 'bark' | 'woodGrain' | 'thicket' | 'mud' | 'soil' | 'snow' | 'snowDirt' | 'snowPile' | 'ice' | 'iceCrystal' | 'concrete' | 'epoxy' | 'clouds' | 'basalt' | 'hotrock' | 'magma';
+export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal' | 'egyptian' | 'sandBrick' | 'bark' | 'woodGrain' | 'thicket' | 'mud' | 'soil' | 'snow' | 'snowDirt' | 'snowPile' | 'ice' | 'iceCrystal' | 'concrete' | 'epoxy' | 'clouds' | 'cloudBank' | 'basalt' | 'hotrock' | 'magma';
 
 /** Colors are '#rrggbb'. Gradients and patterns are laid out in the object's own frame, so they move and rotate with it. */
 export type Fill =

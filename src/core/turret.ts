@@ -102,6 +102,13 @@ function circleEntry(ax: number, ay: number, bx: number, by: number, r: number):
   return u >= 0 && u <= 1 ? u : -1;
 }
 
+export interface TurretSnapshot {
+  aim: Float64Array;
+  nextFire: Float64Array;
+  shots: Shot[];
+  blasts: Blast[];
+}
+
 export class TurretSystem {
   /** Map object indices of the turrets */
   readonly turrets: readonly number[];
@@ -144,6 +151,18 @@ export class TurretSystem {
     this.nextFire.fill(0);
     this.shots = [];
     this.blasts = [];
+  }
+
+  /** Everything a run changes, for Simulation.snapshot() */
+  snapshot(): TurretSnapshot {
+    return { aim: this.aim.slice(), nextFire: this.nextFire.slice(), shots: structuredClone(this.shots), blasts: structuredClone(this.blasts) };
+  }
+
+  restore(s: TurretSnapshot): void {
+    this.aim.set(s.aim);
+    this.nextFire.set(s.nextFire);
+    this.shots = structuredClone(s.shots);
+    this.blasts = structuredClone(s.blasts);
   }
 
   /**

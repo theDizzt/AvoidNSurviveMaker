@@ -190,6 +190,15 @@ export class Circuit {
     this.invOut.fill(0);
   }
 
+  /** The inverters' last outputs, for Simulation.snapshot() */
+  snapshot(): Uint8Array {
+    return this.invOut.slice();
+  }
+
+  restore(s: Uint8Array): void {
+    this.invOut.set(s);
+  }
+
   /**
    * Work out the power everywhere from the sources that are on (`active`), into `out` per object:
    * wires carrying power, devices whose output is on, targets receiving power.

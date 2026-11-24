@@ -6,6 +6,7 @@ const PREFERENCES = {
   gridTop: 'avoid-n-survive:editor-grid-top',
   center: 'avoid-n-survive:editor-center-lines',
   symmetry: 'avoid-n-survive:editor-symmetry',
+  starTier: 'avoid-n-survive:editor-star-tier',
 } as const;
 export function loadEditorPreference(key: keyof typeof PREFERENCES): string | null {
   try { return localStorage.getItem(PREFERENCES[key]); } catch { return null; }
