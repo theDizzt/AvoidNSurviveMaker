@@ -1,360 +1,445 @@
-import type { CompiledMotion } from './motion';
-import type { Blink, Fall, Point, PolyPoint, Saw, Spike } from './types';
-
-/**
- * Movement of a spike stake: rest → fast thrust (eases out) → slow return (eases in and out).
- * Same interface as CompiledMotion.offsetAt, so the object pose code treats it like any motion.
- */
-export class SpikeMover {
-  readonly cycle: number;
-  private readonly dx: number;
-  private readonly dy: number;
-
-  constructor(readonly src: Spike) {
-    this.cycle = src.waitMs + src.thrustMs + src.returnMs;
-    const a = (src.angle * Math.PI) / 180;
-    this.dx = Math.cos(a) * src.reach;
-    this.dy = Math.sin(a) * src.reach;
-  }
-
-  get moves(): boolean {
-    return this.cycle > 0 && this.src.reach > 0;
-  }
-
-  /** How far out the spike is, 0–1 */
-  extensionAt(t: number): number {
-    const s = this.src;
-    const c = this.cycle;
-    const p = (((t - s.delay) % c) + c) % c;
-    if (p < s.waitMs) return 0;
-    const q = p - s.waitMs;
-    if (q < s.thrustMs) {
-      const u = q / s.thrustMs;
-      return 1 - (1 - u) ** 3;
-    }
-    const u = (q - s.thrustMs) / s.returnMs;
-    return 1 - u * u * (3 - 2 * u);
-  }
-
-  offsetAt(t: number, out: Point): Point {
-    const e = this.extensionAt(t);
-    out.x = this.dx * e;
-    out.y = this.dy * e;
-    return out;
-  }
-}
-
-/** Rolling: the spin angle follows the distance travelled along the route (angle = distance / radius) */
-export class Roller {
-  readonly dur = 1;
-
-  constructor(private readonly motion: CompiledMotion, private readonly radius: number) {}
-
-  angleAt(t: number): number {
-    return this.motion.distanceAt(t) / Math.max(1, this.radius);
-  }
-}
-
-/** A grinder disc spins at a steady speed (positive angle = clockwise on screen) */
-export class SawSpin {
-  readonly dur = 1;
-  private readonly rate: number;
-
-  constructor(saw: Saw) {
-    this.rate = ((saw.clockwise ? 1 : -1) * saw.spin * Math.PI) / 180 / 1000;
-  }
-
-  angleAt(t: number): number {
-    return this.rate * t;
-  }
-}
-
-/**
- * A grinder / saw blade that also turns around a pivot (#62). One pose for both: the object turns
- * about its own center by the pivot turn plus its own spin, and that center swings around the
- * pivot; a blade's sawing runs along its turned long side. Used as both the motion and the
- * rotation of the compiled object (whose pivot is the saw's center).
- *
- *   world = R(θ+φ)(local − c) + R(θ)(c + s − p) + p + route
- */
-export class SawTurn {
-  readonly moves = true;
-  readonly dur: number;
-  private readonly tmp: Point = { x: 0, y: 0 };
-
-  constructor(
-    private readonly turn: { angleAt(t: number): number; readonly dur: number },
-    private readonly spin: SawSpin | null,
-    private readonly stroke: BladeMotion | null,
-    private readonly route: { offsetAt(t: number, out: Point): Point } | null,
-    private readonly center: Point,
-    private readonly pivot: Point,
-  ) {
-    this.dur = Math.max(turn.dur, spin ? 1 : 0);
-  }
-
-  angleAt(t: number): number {
-    return this.turn.angleAt(t) + (this.spin ? this.spin.angleAt(t) : 0);
-  }
-
-  offsetAt(t: number, out: Point): Point {
-    const a = this.turn.angleAt(t);
-    const cos = Math.cos(a);
-    const sin = Math.sin(a);
-    let x = this.center.x - this.pivot.x;
-    let y = this.center.y - this.pivot.y;
-    if (this.stroke) {
-      this.stroke.offsetAt(t, this.tmp);
-      x += this.tmp.x;
-      y += this.tmp.y;
-    }
-    out.x = cos * x - sin * y + this.pivot.x - this.center.x;
-    out.y = sin * x + cos * y + this.pivot.y - this.center.y;
-    if (this.route) {
-      this.route.offsetAt(t, this.tmp);
-      out.x += this.tmp.x;
-      out.y += this.tmp.y;
-    }
-    return out;
-  }
-}
-
-/** A saw blade's sawing: a quick back-and-forth along `axis` (unit vector), on top of its route */
-export class BladeMotion {
-  readonly moves = true;
-  private readonly tmp: Point = { x: 0, y: 0 };
-
-  constructor(
-    private readonly route: { offsetAt(t: number, out: Point): Point } | null,
-    private readonly axis: Point,
-    private readonly saw: Saw,
-  ) {}
-
-  /** Signed position along the axis, -stroke/2 … +stroke/2 */
-  strokeAt(t: number): number {
-    const s = this.saw;
-    return s.strokeMs > 0 ? (s.stroke / 2) * Math.sin((2 * Math.PI * t) / s.strokeMs) : 0;
-  }
-
-  offsetAt(t: number, out: Point): Point {
-    const k = this.strokeAt(t);
-    if (this.route) {
-      this.route.offsetAt(t, this.tmp);
-      out.x = this.tmp.x + this.axis.x * k;
-      out.y = this.tmp.y + this.axis.y * k;
-    } else {
-      out.x = this.axis.x * k;
-      out.y = this.axis.y * k;
-    }
-    return out;
-  }
-}
-
-/** A fat eight-pointed star (rolling boulder) of outer radius r */
-export function boulderShape(cx: number, cy: number, r: number): PolyPoint[] {
-  // A chunky rock: 10 short knobs around a round body. Each knob has a small flat tip at the full
-  // radius; between knobs the outline dips to a notch at 0.8 r (all corners, no curves).
-  const KNOBS = 10;
-  const pts: PolyPoint[] = [];
-  const round = (v: number) => Math.round(v * 100) / 100;
-  const at = (a: number, rr: number) => pts.push({ x: round(cx + Math.cos(a) * rr), y: round(cy + Math.sin(a) * rr) });
-  const step = (Math.PI * 2) / KNOBS;
-  for (let i = 0; i < KNOBS; i++) {
-    const a = i * step - Math.PI / 2;
-    at(a - step * 0.07, r);
-    at(a + step * 0.07, r);
-    at(a + step * 0.5, r * 0.8);
-  }
-  return pts;
-}
-
-/** A spear head pointing from `base` to `tip`, `width` wide at the base */
-export function spikeShape(base: Point, tip: Point, width: number): PolyPoint[] {
-  const len = Math.hypot(tip.x - base.x, tip.y - base.y) || 1;
-  const nx = -(tip.y - base.y) / len;
-  const ny = (tip.x - base.x) / len;
-  const h = width / 2;
-  const r = (v: number) => Math.round(v * 100) / 100;
-  return [
-    { x: r(tip.x), y: r(tip.y) },
-    { x: r(base.x + nx * h), y: r(base.y + ny * h) },
-    { x: r(base.x - nx * h), y: r(base.y - ny * h) },
-  ];
-}
-
-/**
- * Where a blinking path / wall (#75–82) is in its cycle at time t: there (`on`) or not, and how
- * long (ms) until that changes.
- */
-export function blinkState(b: Blink, t: number): { on: boolean; left: number } {
-  const u = t - b.delay;
-  if (b.offMs <= 0) return { on: true, left: Infinity };
-  if (u < 0) return { on: true, left: -u + b.onMs };
-  const cycle = b.onMs + b.offMs;
-  const p = u % cycle;
-  return p < b.onMs ? { on: true, left: b.onMs - p } : { on: false, left: cycle - p };
-}
-
-/**
- * Where a falling rock (#51) is in its cycle at time t: falling (fraction `u` of the drop, 0–1) or
- * not there; `sinceLanding` is the ms since it last landed (Infinity before the first landing).
- */
-export function fallState(f: Fall, t: number): { falling: boolean; u: number; sinceLanding: number } {
-  const tt = t - f.delay;
-  const period = f.waitMs + f.fallMs;
-  if (tt < 0 || period <= 0 || f.fallMs <= 0) return { falling: false, u: 0, sinceLanding: Infinity };
-  const p = tt % period;
-  const landed = tt >= period ? p : Infinity;
-  if (p < f.waitMs) return { falling: false, u: 0, sinceLanding: landed };
-  return { falling: true, u: (p - f.waitMs) / f.fallMs, sinceLanding: Infinity };
-}
-
-/**
- * The drop: from `height` above down to the resting place, speeding up (u²). While not falling it
- * rests at the landing place, hidden, so it never jumps within a collision check.
- */
-export class FallMover {
-  readonly moves = true;
-
-  constructor(private readonly f: Fall) {}
-
-  offsetAt(t: number, out: Point): Point {
-    const s = fallState(this.f, t);
-    out.x = 0;
-    out.y = s.falling ? -this.f.height * (1 - s.u * s.u) : 0;
-    return out;
-  }
-}
-
-/** A falling rock tumbles a little on the way down */
-export class FallSpin {
-  readonly dur = 1;
-
-  constructor(private readonly f: Fall) {}
-
-  angleAt(t: number): number {
-    const s = fallState(this.f, t);
-    return s.falling ? s.u * s.u * Math.PI * 0.9 : 0;
-  }
-}
-
-/** Spacing of a thorn vine's (#83 / #84) thorns along its outline (map units) */
-const THORN_GAP = 18;
-
-/** Share of a thorn vine's length (from its tip) over which it narrows to a point */
-const THORN_TAPER = 0.4;
-
-/**
- * A thorn vine's outline: `ring` (closed, [x0, y0, ...]) walked at an even step, narrowing to a
- * sharp point at one end (the top of a tall shape, the right end of a wide one; tilt turns it),
- * with a thorn sticking out every THORN_GAP. Thorns vary in length (a fixed pseudo-random pattern
- * from `seed`) and lean toward the tip, like a climbing vine's. Used for both drawing and collision.
- */
-export function thornRing(ring: Float64Array, seed: number): Float64Array {
-  const n = ring.length / 2;
-  if (n < 3) return ring;
-  let area = 0;
-  let perimeter = 0;
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    area += ring[j * 2] * ring[i * 2 + 1] - ring[i * 2] * ring[j * 2 + 1];
-    perimeter += Math.hypot(ring[i * 2] - ring[j * 2], ring[i * 2 + 1] - ring[j * 2 + 1]);
-  }
-  if (perimeter < THORN_GAP * 2) return ring;
-  // Points every third of a gap: base, tip, base, then a stretch of plain stem
-  const count = Math.max(3, Math.round(perimeter / THORN_GAP)) * 3;
-  const step = perimeter / count;
-  const pts = new Float64Array(count * 2);
-  let edge = 0;
-  let edgeStart = 0;
-  let edgeLen = Math.hypot(ring[2] - ring[0], ring[3] - ring[1]);
-  for (let k = 0; k < count; k++) {
-    const s = k * step;
-    while (s > edgeStart + edgeLen && edge < n - 1) {
-      edgeStart += edgeLen;
-      edge++;
-      const b = (edge + 1) % n;
-      edgeLen = Math.hypot(ring[b * 2] - ring[edge * 2], ring[b * 2 + 1] - ring[edge * 2 + 1]);
-    }
-    const b = (edge + 1) % n;
-    const u = edgeLen > 0 ? Math.min(1, (s - edgeStart) / edgeLen) : 0;
-    pts[k * 2] = ring[edge * 2] + (ring[b * 2] - ring[edge * 2]) * u;
-    pts[k * 2 + 1] = ring[edge * 2 + 1] + (ring[b * 2 + 1] - ring[edge * 2 + 1]) * u;
-  }
-  // Narrow the tip end to a point on the long axis' center line
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (let k = 0; k < count; k++) {
-    minX = Math.min(minX, pts[k * 2]); maxX = Math.max(maxX, pts[k * 2]);
-    minY = Math.min(minY, pts[k * 2 + 1]); maxY = Math.max(maxY, pts[k * 2 + 1]);
-  }
-  const tall = maxY - minY >= maxX - minX;
-  const mid = tall ? (minX + maxX) / 2 : (minY + maxY) / 2;
-  const width = Math.max(1e-9, tall ? maxY - minY : maxX - minX);
-  const narrow = new Float64Array(count);
-  for (let k = 0; k < count; k++) {
-    // 0 at the tip, 1 from THORN_TAPER of the length on
-    const from = tall ? (pts[k * 2 + 1] - minY) / width : (maxX - pts[k * 2]) / width;
-    const f = Math.min(1, from / THORN_TAPER) ** 1.3;
-    narrow[k] = f;
-    if (tall) pts[k * 2] = mid + (pts[k * 2] - mid) * f;
-    else pts[k * 2 + 1] = mid + (pts[k * 2 + 1] - mid) * f;
-    // The very end draws out into a long spike
-    const spike = Math.max(0, 1 - from / 0.06) ** 2 * Math.min(45, 12 + width * 0.12);
-    if (tall) pts[k * 2 + 1] -= spike;
-    else pts[k * 2] += spike;
-  }
-  // Outward normal: (dy, -dx) for a ring of positive area (y down)
-  const sign = area >= 0 ? 1 : -1;
-  let r = (Math.abs(Math.round(seed)) % 997 + 1) * 7919;
-  const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
-  for (let k = 1; k < count; k += 3) {
-    const a = (k - 1) * 2;
-    const c = ((k + 1) % count) * 2;
-    const dx = pts[c] - pts[a];
-    const dy = pts[c + 1] - pts[a + 1];
-    const len = Math.hypot(dx, dy) || 1;
-    let nx = (dy / len) * sign;
-    let ny = (-dx / len) * sign;
-    // Lean toward the tip
-    if (tall) ny -= 0.45;
-    else nx += 0.45;
-    const nl = Math.hypot(nx, ny) || 1;
-    nx /= nl;
-    ny /= nl;
-    // Long and short thorns, roughly alternating
-    const length = ((k % 6 === 1 ? 11 : 6) + rnd() * 7) * (0.45 + 0.55 * narrow[k]);
-    pts[k * 2] += nx * length;
-    pts[k * 2 + 1] += ny * length;
-  }
-  return pts;
-}
-
-/**
- * A lily pad (#85) bobbing on the water: a slow drift a few px around its place, never repeating
- * exactly (two waves of unrelated periods), and a gentle sway. `seed` offsets each pad's phase.
- */
-export class LilyDrift {
-  readonly moves = true;
-  readonly dur = 1;
-  private readonly phase: number;
-
-  constructor(seed: number, private readonly route: { offsetAt(t: number, out: Point): Point } | null = null) {
-    this.phase = (seed * 2.399) % (Math.PI * 2);
-  }
-
-  offsetAt(t: number, out: Point): Point {
-    if (this.route) this.route.offsetAt(t, out);
-    else {
-      out.x = 0;
-      out.y = 0;
-    }
-    const s = t / 1000;
-    out.x += Math.sin(s * 0.9 + this.phase) * 5 + Math.sin(s * 0.37 + this.phase * 2) * 3;
-    out.y += Math.cos(s * 0.7 + this.phase) * 4 + Math.sin(s * 0.29 + this.phase * 3) * 3;
-    return out;
-  }
-
-  angleAt(t: number): number {
-    const s = t / 1000;
-    return Math.sin(s * 0.5 + this.phase) * 0.12;
-  }
-}
+import type { CompiledMotion } from './motion';
+import type { Blink, Fall, Point, PolyPoint, Saw, Spike } from './types';
+
+/**
+ * Movement of a spike stake: rest → fast thrust (eases out) → slow return (eases in and out).
+ * Same interface as CompiledMotion.offsetAt, so the object pose code treats it like any motion.
+ */
+export class SpikeMover {
+  readonly cycle: number;
+  private readonly dx: number;
+  private readonly dy: number;
+
+  constructor(readonly src: Spike) {
+    this.cycle = src.waitMs + src.thrustMs + src.returnMs;
+    const a = (src.angle * Math.PI) / 180;
+    this.dx = Math.cos(a) * src.reach;
+    this.dy = Math.sin(a) * src.reach;
+  }
+
+  get moves(): boolean {
+    return this.cycle > 0 && this.src.reach > 0;
+  }
+
+  /** How far out the spike is, 0–1 */
+  extensionAt(t: number): number {
+    const s = this.src;
+    const c = this.cycle;
+    const p = (((t - s.delay) % c) + c) % c;
+    if (p < s.waitMs) return 0;
+    const q = p - s.waitMs;
+    if (q < s.thrustMs) {
+      const u = q / s.thrustMs;
+      return 1 - (1 - u) ** 3;
+    }
+    const u = (q - s.thrustMs) / s.returnMs;
+    return 1 - u * u * (3 - 2 * u);
+  }
+
+  offsetAt(t: number, out: Point): Point {
+    const e = this.extensionAt(t);
+    out.x = this.dx * e;
+    out.y = this.dy * e;
+    return out;
+  }
+}
+
+/** Rolling: the spin angle follows the distance travelled along the route (angle = distance / radius) */
+export class Roller {
+  readonly dur = 1;
+
+  constructor(private readonly motion: CompiledMotion, private readonly radius: number) {}
+
+  angleAt(t: number): number {
+    return this.motion.distanceAt(t) / Math.max(1, this.radius);
+  }
+}
+
+/** A grinder disc spins at a steady speed (positive angle = clockwise on screen) */
+export class SawSpin {
+  readonly dur = 1;
+  private readonly rate: number;
+
+  constructor(saw: Saw) {
+    this.rate = ((saw.clockwise ? 1 : -1) * saw.spin * Math.PI) / 180 / 1000;
+  }
+
+  angleAt(t: number): number {
+    return this.rate * t;
+  }
+}
+
+/**
+ * A grinder / saw blade that also turns around a pivot (#62). One pose for both: the object turns
+ * about its own center by the pivot turn plus its own spin, and that center swings around the
+ * pivot; a blade's sawing runs along its turned long side. Used as both the motion and the
+ * rotation of the compiled object (whose pivot is the saw's center).
+ *
+ *   world = R(θ+φ)(local − c) + R(θ)(c + s − p) + p + route
+ */
+export class SawTurn {
+  readonly moves = true;
+  readonly dur: number;
+  private readonly tmp: Point = { x: 0, y: 0 };
+
+  constructor(
+    private readonly turn: { angleAt(t: number): number; readonly dur: number },
+    private readonly spin: SawSpin | null,
+    private readonly stroke: BladeMotion | null,
+    private readonly route: { offsetAt(t: number, out: Point): Point } | null,
+    private readonly center: Point,
+    private readonly pivot: Point,
+  ) {
+    this.dur = Math.max(turn.dur, spin ? 1 : 0);
+  }
+
+  angleAt(t: number): number {
+    return this.turn.angleAt(t) + (this.spin ? this.spin.angleAt(t) : 0);
+  }
+
+  offsetAt(t: number, out: Point): Point {
+    const a = this.turn.angleAt(t);
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    let x = this.center.x - this.pivot.x;
+    let y = this.center.y - this.pivot.y;
+    if (this.stroke) {
+      this.stroke.offsetAt(t, this.tmp);
+      x += this.tmp.x;
+      y += this.tmp.y;
+    }
+    out.x = cos * x - sin * y + this.pivot.x - this.center.x;
+    out.y = sin * x + cos * y + this.pivot.y - this.center.y;
+    if (this.route) {
+      this.route.offsetAt(t, this.tmp);
+      out.x += this.tmp.x;
+      out.y += this.tmp.y;
+    }
+    return out;
+  }
+}
+
+/** A saw blade's sawing: a quick back-and-forth along `axis` (unit vector), on top of its route */
+export class BladeMotion {
+  readonly moves = true;
+  private readonly tmp: Point = { x: 0, y: 0 };
+
+  constructor(
+    private readonly route: { offsetAt(t: number, out: Point): Point } | null,
+    private readonly axis: Point,
+    private readonly saw: Saw,
+  ) {}
+
+  /** Signed position along the axis, -stroke/2 … +stroke/2 */
+  strokeAt(t: number): number {
+    const s = this.saw;
+    return s.strokeMs > 0 ? (s.stroke / 2) * Math.sin((2 * Math.PI * t) / s.strokeMs) : 0;
+  }
+
+  offsetAt(t: number, out: Point): Point {
+    const k = this.strokeAt(t);
+    if (this.route) {
+      this.route.offsetAt(t, this.tmp);
+      out.x = this.tmp.x + this.axis.x * k;
+      out.y = this.tmp.y + this.axis.y * k;
+    } else {
+      out.x = this.axis.x * k;
+      out.y = this.axis.y * k;
+    }
+    return out;
+  }
+}
+
+/** A fat eight-pointed star (rolling boulder) of outer radius r */
+export function boulderShape(cx: number, cy: number, r: number): PolyPoint[] {
+  // A chunky rock: 10 short knobs around a round body. Each knob has a small flat tip at the full
+  // radius; between knobs the outline dips to a notch at 0.8 r (all corners, no curves).
+  const KNOBS = 10;
+  const pts: PolyPoint[] = [];
+  const round = (v: number) => Math.round(v * 100) / 100;
+  const at = (a: number, rr: number) => pts.push({ x: round(cx + Math.cos(a) * rr), y: round(cy + Math.sin(a) * rr) });
+  const step = (Math.PI * 2) / KNOBS;
+  for (let i = 0; i < KNOBS; i++) {
+    const a = i * step - Math.PI / 2;
+    at(a - step * 0.07, r);
+    at(a + step * 0.07, r);
+    at(a + step * 0.5, r * 0.8);
+  }
+  return pts;
+}
+
+/** A spear head pointing from `base` to `tip`, `width` wide at the base */
+export function spikeShape(base: Point, tip: Point, width: number): PolyPoint[] {
+  const len = Math.hypot(tip.x - base.x, tip.y - base.y) || 1;
+  const nx = -(tip.y - base.y) / len;
+  const ny = (tip.x - base.x) / len;
+  const h = width / 2;
+  const r = (v: number) => Math.round(v * 100) / 100;
+  return [
+    { x: r(tip.x), y: r(tip.y) },
+    { x: r(base.x + nx * h), y: r(base.y + ny * h) },
+    { x: r(base.x - nx * h), y: r(base.y - ny * h) },
+  ];
+}
+
+/**
+ * Where a blinking path / wall (#75–82) is in its cycle at time t: there (`on`) or not, and how
+ * long (ms) until that changes.
+ */
+export function blinkState(b: Blink, t: number): { on: boolean; left: number } {
+  const u = t - b.delay;
+  if (b.offMs <= 0) return { on: true, left: Infinity };
+  if (u < 0) return { on: true, left: -u + b.onMs };
+  const cycle = b.onMs + b.offMs;
+  const p = u % cycle;
+  return p < b.onMs ? { on: true, left: b.onMs - p } : { on: false, left: cycle - p };
+}
+
+/**
+ * Where a falling rock (#51) is in its cycle at time t: falling (fraction `u` of the drop, 0–1) or
+ * not there; `sinceLanding` is the ms since it last landed (Infinity before the first landing).
+ */
+export function fallState(f: Fall, t: number): { falling: boolean; u: number; sinceLanding: number } {
+  const tt = t - f.delay;
+  const period = f.waitMs + f.fallMs;
+  if (tt < 0 || period <= 0 || f.fallMs <= 0) return { falling: false, u: 0, sinceLanding: Infinity };
+  const p = tt % period;
+  const landed = tt >= period ? p : Infinity;
+  if (p < f.waitMs) return { falling: false, u: 0, sinceLanding: landed };
+  return { falling: true, u: (p - f.waitMs) / f.fallMs, sinceLanding: Infinity };
+}
+
+/**
+ * The drop: from `height` above down to the resting place, speeding up (u²). While not falling it
+ * rests at the landing place, hidden, so it never jumps within a collision check.
+ */
+export class FallMover {
+  readonly moves = true;
+
+  constructor(private readonly f: Fall) {}
+
+  offsetAt(t: number, out: Point): Point {
+    const s = fallState(this.f, t);
+    out.x = 0;
+    out.y = s.falling ? -this.f.height * (1 - s.u * s.u) : 0;
+    return out;
+  }
+}
+
+/** A falling rock tumbles a little on the way down */
+export class FallSpin {
+  readonly dur = 1;
+
+  constructor(private readonly f: Fall) {}
+
+  angleAt(t: number): number {
+    const s = fallState(this.f, t);
+    return s.falling ? s.u * s.u * Math.PI * 0.9 : 0;
+  }
+}
+
+/** Share of a thorn vine's (#83 / #84) length (from its tip) over which it narrows to a point */
+const THORN_TAPER = 0.4;
+/** Spacing of the outline points between thorns (map units) */
+const THORN_STEP = 4;
+
+/**
+ * A thorn vine's outline: `ring` (closed, [x0, y0, ...]) narrowing to a sharp point at one end (the
+ * top of a tall shape, the right end of a wide one; tilt turns it), bristling with big sharp
+ * thorns. Thorns are spaced, sized and angled by the vine's thickness with a fixed pseudo-random
+ * pattern from `seed`: mostly as long as the stem is thick, now and then a much bigger one, every
+ * one tilted its own way (a little toward the tip). Used for both drawing and collision.
+ */
+export function thornRing(ring: Float64Array, seed: number): Float64Array {
+  const n = ring.length / 2;
+  if (n < 3) return ring;
+  let area = 0;
+  let perimeter = 0;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    area += ring[j * 2] * ring[i * 2 + 1] - ring[i * 2] * ring[j * 2 + 1];
+    perimeter += Math.hypot(ring[i * 2] - ring[j * 2], ring[i * 2 + 1] - ring[j * 2 + 1]);
+    minX = Math.min(minX, ring[i * 2]); maxX = Math.max(maxX, ring[i * 2]);
+    minY = Math.min(minY, ring[i * 2 + 1]); maxY = Math.max(maxY, ring[i * 2 + 1]);
+  }
+  const tall = maxY - minY >= maxX - minX;
+  const across = Math.max(1, tall ? maxX - minX : maxY - minY);
+  // Thorns about as far apart as the stem is thick (within reason)
+  const gap = Math.min(38, Math.max(14, across * 0.8));
+  if (perimeter < gap * 2) return ring;
+  let r = (Math.abs(Math.round(seed)) % 997 + 1) * 7919;
+  const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+
+  // The outline walked evenly: where a distance along it lands, and the way it runs there
+  const at = (s: number, out: Point): Point => {
+    let d = ((s % perimeter) + perimeter) % perimeter;
+    for (let i = 0; i < n; i++) {
+      const b = (i + 1) % n;
+      const len = Math.hypot(ring[b * 2] - ring[i * 2], ring[b * 2 + 1] - ring[i * 2 + 1]);
+      if (d <= len || i === n - 1) {
+        const u = len > 0 ? Math.min(1, d / len) : 0;
+        out.x = ring[i * 2] + (ring[b * 2] - ring[i * 2]) * u;
+        out.y = ring[i * 2 + 1] + (ring[b * 2 + 1] - ring[i * 2 + 1]) * u;
+        return out;
+      }
+      d -= len;
+    }
+    return out;
+  };
+  const heading = (s: number): number => {
+    const a = at(s - 1, { x: 0, y: 0 });
+    const b = at(s + 1, { x: 0, y: 0 });
+    return Math.atan2(b.y - a.y, b.x - a.x);
+  };
+  // How far a point is from the tip end (0 there, 1 at the other end)
+  const fromTip = (q: Point): number => (tall ? (q.y - minY) / Math.max(1e-9, maxY - minY) : (maxX - q.x) / Math.max(1e-9, maxX - minX));
+
+  // Where the thorns sit along the outline: [center, half base width, length, lean]
+  const thorns: number[][] = [];
+  const q = { x: 0, y: 0 };
+  let half = gap * (0.2 + rnd() * 0.24);
+  for (let s = half + gap * rnd() * 0.5; s + half < perimeter - gap * 0.3;) {
+    const big = rnd() < 0.22;
+    const length = Math.min(60, Math.max(8, across * (big ? 1.05 + rnd() * 0.5 : 0.4 + rnd() * 0.55)));
+    const lean = (rnd() - 0.5) * 1.3;
+    // Not across a corner (the end of a stem), nor on the narrow tip itself
+    let turn = heading(s + half) - heading(s - half);
+    turn = Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn)));
+    if (turn < 0.7 && fromTip(at(s, q)) > THORN_TAPER * 0.35) thorns.push([s, half, length, lean]);
+    // On to the next thorn: past this one's base, a stretch of stem, then the next one's half base
+    const nextHalf = gap * (0.2 + rnd() * 0.24);
+    s += half + gap * (0.1 + rnd() * 0.7) + nextHalf;
+    half = nextHalf;
+  }
+
+  // The outline walked evenly, a thorn's base and tip standing in for the stretch it covers
+  const pts: number[] = [];
+  const kinds: number[] = []; // 0 = outline, 1 = thorn tip (index into thorns + 1)
+  const p = { x: 0, y: 0 };
+  let next = 0;
+  for (let s = 0; s < perimeter;) {
+    const th = thorns[next];
+    if (th && s >= th[0] - th[1]) {
+      at(th[0] - th[1], p); pts.push(p.x, p.y); kinds.push(0);
+      at(th[0], p); pts.push(p.x, p.y); kinds.push(next + 1);
+      at(th[0] + th[1], p); pts.push(p.x, p.y); kinds.push(0);
+      s = th[0] + th[1] + THORN_STEP;
+      next++;
+      continue;
+    }
+    at(s, p); pts.push(p.x, p.y); kinds.push(0);
+    s += THORN_STEP;
+  }
+  const count = pts.length / 2;
+
+  // Narrow the tip end to a point on the long axis' center line
+  const mid = tall ? (minX + maxX) / 2 : (minY + maxY) / 2;
+  const length = Math.max(1e-9, tall ? maxY - minY : maxX - minX);
+  const narrow = new Float64Array(count);
+  for (let k = 0; k < count; k++) {
+    // 0 at the tip, 1 from THORN_TAPER of the length on
+    const from = tall ? (pts[k * 2 + 1] - minY) / length : (maxX - pts[k * 2]) / length;
+    const f = Math.min(1, from / THORN_TAPER) ** 1.3;
+    narrow[k] = f;
+    if (tall) pts[k * 2] = mid + (pts[k * 2] - mid) * f;
+    else pts[k * 2 + 1] = mid + (pts[k * 2 + 1] - mid) * f;
+    // The very end draws out into a long spike
+    const spike = Math.max(0, 1 - from / 0.06) ** 2 * Math.min(26, 6 + length * 0.06);
+    if (tall) pts[k * 2 + 1] -= spike;
+    else pts[k * 2] += spike;
+  }
+
+  // Thorn tips out along the outward normal, each tilted its own way, never crossing the thorn
+  // before it (a crossing would make the outline overlap itself: a hole in the wall)
+  const sign = area >= 0 ? 1 : -1;
+  let last = -1;
+  for (let k = 0; k < count; k++) {
+    if (!kinds[k]) continue;
+    const [, , len, lean] = thorns[kinds[k] - 1];
+    const a = ((k - 1 + count) % count) * 2;
+    const c = ((k + 1) % count) * 2;
+    const dx = pts[c] - pts[a];
+    const dy = pts[c + 1] - pts[a + 1];
+    const d = Math.hypot(dx, dy) || 1;
+    // Outward normal (dy, -dx) for a ring of positive area (y down)
+    const ox = (dy / d) * sign, oy = (-dx / d) * sign;
+    const tx = dx / d, ty = dy / d;
+    const bx = pts[k * 2], by = pts[k * 2 + 1];
+    for (let tries = 0; tries < 6; tries++) {
+      const turn = lean * (1 - tries / 5);
+      let nx = ox * Math.cos(turn) + tx * Math.sin(turn);
+      let ny = oy * Math.cos(turn) + ty * Math.sin(turn);
+      // A little toward the tip
+      if (tall) ny -= 0.25;
+      else nx += 0.25;
+      const nl = Math.hypot(nx, ny) || 1;
+      const reach = len * (0.4 + 0.6 * narrow[k]) * 0.8 ** tries;
+      pts[k * 2] = bx + (nx / nl) * reach;
+      pts[k * 2 + 1] = by + (ny / nl) * reach;
+      // Its sides may cross neither the thorn before it nor the stem up to a few points past it
+      if (!sidesCross(pts, k, last < 0 ? k - 4 : Math.min(last, k - 4), k + 4, count)) break;
+    }
+    last = k;
+  }
+  // The first thorn against the last, round the ring: flattened onto the stem if they cross
+  const first = kinds.findIndex((v) => v > 0);
+  if (first >= 0 && last > first && sidesCross(pts, first, last - count - 1, first + 4, count)) {
+    pts[first * 2] = (pts[((first - 1 + count) % count) * 2] + pts[((first + 1) % count) * 2]) / 2;
+    pts[first * 2 + 1] = (pts[((first - 1 + count) % count) * 2 + 1] + pts[((first + 1) % count) * 2 + 1]) / 2;
+  }
+  return Float64Array.from(pts);
+}
+
+/** Do the two sides of the thorn with its tip at point `k` cross any edge from point `from` to `to` (indices wrap round) */
+function sidesCross(pts: number[], k: number, from: number, to: number, count: number): boolean {
+  const w = (i: number) => ((i % count) + count) % count;
+  const p = (i: number): [number, number] => [pts[w(i) * 2], pts[w(i) * 2 + 1]];
+  for (const [s0, s1] of [[k - 1, k], [k, k + 1]]) {
+    for (let j = from; j < to; j++) {
+      // Edges sharing a corner with this side don't count
+      if (w(j) === w(s0) || w(j) === w(s1) || w(j + 1) === w(s0) || w(j + 1) === w(s1)) continue;
+      if (segmentsCross(p(s0), p(s1), p(j), p(j + 1))) return true;
+    }
+  }
+  return false;
+}
+
+function segmentsCross(a: [number, number], b: [number, number], c: [number, number], d: [number, number]): boolean {
+  const o = (p: [number, number], q: [number, number], r: [number, number]) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const d1 = o(c, d, a), d2 = o(c, d, b), d3 = o(a, b, c), d4 = o(a, b, d);
+  // Points on (or within rounding of) the other line don't count: collinear stretches of stem
+  const eps = 1e-6;
+  return Math.abs(d1) > eps && Math.abs(d2) > eps && Math.abs(d3) > eps && Math.abs(d4) > eps
+    && ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+}
+
+/**
+ * A lily pad (#85) bobbing on the water: a slow drift a few px around its place, never repeating
+ * exactly (two waves of unrelated periods), and a gentle sway. `seed` offsets each pad's phase.
+ */
+export class LilyDrift {
+  readonly moves = true;
+  readonly dur = 1;
+  private readonly phase: number;
+
+  constructor(seed: number, private readonly route: { offsetAt(t: number, out: Point): Point } | null = null) {
+    this.phase = (seed * 2.399) % (Math.PI * 2);
+  }
+
+  offsetAt(t: number, out: Point): Point {
+    if (this.route) this.route.offsetAt(t, out);
+    else {
+      out.x = 0;
+      out.y = 0;
+    }
+    const s = t / 1000;
+    out.x += Math.sin(s * 0.9 + this.phase) * 5 + Math.sin(s * 0.37 + this.phase * 2) * 3;
+    out.y += Math.cos(s * 0.7 + this.phase) * 4 + Math.sin(s * 0.29 + this.phase * 3) * 3;
+    return out;
+  }
+
+  angleAt(t: number): number {
+    const s = t / 1000;
+    return Math.sin(s * 0.5 + this.phase) * 0.12;
+  }
+}

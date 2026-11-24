@@ -14,6 +14,7 @@ import { libraryFontCss } from './library-fonts';
 import { CompiledMotion } from '../core/motion';
 import { shapeCenter } from '../core/shape';
 import { zoneRing } from '../core/zone';
+import { unionOutline } from '../core/union-outline';
 import { BeltPath, beltSides } from '../core/conveyor';
 import { lightLit, type LightSource } from '../core/lighting';
 import { elecEffect, initialPower } from '../core/electric';
@@ -1571,7 +1572,7 @@ export function drawMap(
     if (o.role !== 'wall' || !map.objects[i]?.vine || !shown(i)) return;
     // The same look as the walls: their fill (laid out in the vine's own frame) and outline
     const fill = theme ? fillStyle(ctx, theme.wall.fill, o.box) : COLORS.wall;
-    drawThornVine(ctx, o, timeOf(i), i, fill, theme ? theme.wall.edge : COLORS.wallEdge);
+    drawThornVine(ctx, o, timeOf(i), fill, theme ? theme.wall.edge : COLORS.wallEdge);
   });
   // Machines (#111–114): a press's cylinder, the hubs of gears, hands and pendulums
   objects.forEach((o, i) => {
@@ -1582,9 +1583,11 @@ export function drawMap(
   map.objects.forEach((m, i) => {
     if (m.role === 'wire' && m.wire && shown(i)) drawWire(ctx, m.wire.points, !!power?.[i], opts.now ?? t, i);
   });
-  // Ice floors (#71–74): a pale blue sheen with glints and fine cracks over the floor
+  // Ice floors (#71–74): a pale blue sheen with glints and fine cracks over the floor. Ice that
+  // stays put is one sheet: pieces laid side by side join without a seam
+  drawIceSheet(ctx, map, objects, shown);
   objects.forEach((o, i) => {
-    if (o.role === 'path' && map.objects[i]?.ice && shown(i)) drawIce(ctx, o, timeOf(i), i);
+    if (o.role === 'path' && o.dynamic && map.objects[i]?.ice && shown(i)) drawIce(ctx, o, timeOf(i), i);
   });
   // Blinking paths / walls that are gone for now: a faint dashed outline where they'll come back
   if (opts.hidden) {
@@ -1873,6 +1876,109 @@ function drawCrate(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number):
 }
 
 /** Ice (#71–74), in the object's posed frame: frosty fill, diagonal glints and a few cracks */
+const ICE_FILL_STOPS: [number, string][] = [[0, 'rgba(225,245,255,0.85)'], [0.5, 'rgba(176,222,250,0.8)'], [1, 'rgba(214,240,255,0.85)']];
+/** Glint bands across ice that stays put: one every ICE_GLINT map units (diagonally), the same everywhere */
+const ICE_GLINT = 46;
+
+interface IceSheet { key: string; fill: Path2D; outline: Path2D; minX: number; minY: number; maxX: number; maxY: number; pieces: number[] }
+const iceSheets = new WeakMap<readonly CompiledObject[], IceSheet>();
+
+/**
+ * All ice that doesn't move, drawn as one sheet: filled once (overlaps aren't doubled), its sheen
+ * and glints laid out in map coordinates so they run on across pieces, and outlined only where the
+ * sheet ends, not along the seams between pieces
+ */
+function drawIceSheet(ctx: CanvasRenderingContext2D, map: MapData, objects: readonly CompiledObject[], shown: (i: number) => boolean): void {
+  const pieces: number[] = [];
+  objects.forEach((o, i) => {
+    if (o.role === 'path' && !o.dynamic && map.objects[i]?.ice && shown(i)) pieces.push(i);
+  });
+  if (!pieces.length) return;
+  const key = pieces.join(',');
+  let sheet = iceSheets.get(objects);
+  if (!sheet || sheet.key !== key) {
+    const fill = new Path2D();
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const i of pieces) {
+      const ring = objects[i].poly;
+      // Every piece wound the same way, so where pieces overlap the sheet is filled once (nonzero)
+      let area = 0;
+      for (let a = 0, b = ring.length - 2; a < ring.length; b = a, a += 2) area += ring[b] * ring[a + 1] - ring[a] * ring[b + 1];
+      const n = ring.length / 2;
+      for (let k = 0; k < n; k++) {
+        const v = (area >= 0 ? k : n - 1 - k) * 2;
+        if (k === 0) fill.moveTo(ring[v], ring[v + 1]);
+        else fill.lineTo(ring[v], ring[v + 1]);
+      }
+      fill.closePath();
+      const o = objects[i];
+      minX = Math.min(minX, o.minX);
+      minY = Math.min(minY, o.minY);
+      maxX = Math.max(maxX, o.maxX);
+      maxY = Math.max(maxY, o.maxY);
+    }
+    const outline = new Path2D();
+    const seg = unionOutline(pieces.map((i) => objects[i].poly));
+    for (let k = 0; k < seg.length; k += 4) {
+      outline.moveTo(seg[k], seg[k + 1]);
+      outline.lineTo(seg[k + 2], seg[k + 3]);
+    }
+    sheet = { key, fill, outline, minX, minY, maxX, maxY, pieces };
+    iceSheets.set(objects, sheet);
+  }
+  const { minX, minY, maxX, maxY } = sheet;
+  ctx.save();
+  ctx.clip(sheet.fill);
+  // One sheen across the whole map, so neighbouring pieces match
+  const g = ctx.createLinearGradient(0, 0, map.width, map.height);
+  for (let k = 0; k < 4; k++) for (const [at, color] of ICE_FILL_STOPS) g.addColorStop(Math.min(1, (k + at) / 4), color);
+  ctx.fillStyle = g;
+  ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
+  // Glints: soft white diagonal bands on a grid of the map, running straight on from piece to piece
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineCap = 'round';
+  for (let c = Math.floor((minX + minY) / ICE_GLINT) * ICE_GLINT; c <= maxX + maxY; c += ICE_GLINT) {
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(c - maxY, maxY);
+    ctx.lineTo(c - minY, minY);
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(c + 12 - maxY, maxY);
+    ctx.lineTo(c + 12 - minY, minY);
+    ctx.stroke();
+  }
+  // Cracks, a few per piece, placed by a fixed pseudo-random pattern so they don't jitter
+  ctx.strokeStyle = 'rgba(90,150,190,0.45)';
+  ctx.lineWidth = 1;
+  for (const i of sheet.pieces) {
+    const o = objects[i];
+    const w = o.maxX - o.minX;
+    const h = o.maxY - o.minY;
+    let r = (i + 1) * 9301;
+    const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+    const cracks = Math.max(1, Math.round((w * h) / 9000));
+    for (let c = 0; c < Math.min(cracks, 12); c++) {
+      let x = o.minX + rnd() * w;
+      let y = o.minY + rnd() * h;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let k = 0; k < 3; k++) {
+        x += (rnd() - 0.5) * 28;
+        y += (rnd() - 0.5) * 28;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(110,180,225,0.9)';
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  ctx.stroke(sheet.outline);
+}
+
 function drawIce(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, seed: number): void {
   inFrame(ctx, o, t, () => {
     const { minX, minY, maxX, maxY } = o.box;

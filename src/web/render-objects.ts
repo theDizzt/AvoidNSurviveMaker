@@ -42,12 +42,11 @@ function random(seed: number): () => number {
 // ───────────────────────── Thorn vine (#83 / #84) ─────────────────────────
 
 /**
- * A thorn vine in the walls' colors (`fill`, outline `edge`): its body with twisting stems shaded
- * along its length, thorns all around and a point at its tip (its outline already carries them),
- * and a soft shadow like the walls'.
+ * A thorn vine in the walls' colors (`fill`, outline `edge`): one solid silhouette, its big thorns
+ * and the point at its tip already in its outline, with a soft shadow like the walls'.
  */
 export function drawThornVine(
-  ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, seed: number, fill: string | CanvasGradient | CanvasPattern, edge: string,
+  ctx: CanvasRenderingContext2D, o: CompiledObject, t: number, fill: string | CanvasGradient | CanvasPattern, edge: string,
 ): void {
   ctx.save();
   enterPose(ctx, o, t);
@@ -60,42 +59,8 @@ export function drawThornVine(
   ctx.fillStyle = fill;
   ctx.fill(body);
   ctx.restore();
-  // Stems twisting along the long side, inside the body
-  const shape = o.src!.shape;
-  const b = shape.type === 'rect' ? { x: shape.x, y: shape.y, w: shape.w, h: shape.h }
-    : { x: o.box.minX, y: o.box.minY, w: o.box.maxX - o.box.minX, h: o.box.maxY - o.box.minY };
-  const tall = b.h >= b.w;
-  const len = tall ? b.h : b.w;
-  const across = tall ? b.w : b.h;
-  ctx.save();
-  ctx.clip(body);
-  const rnd = random(seed * 31 + 7);
-  const stems = Math.max(2, Math.min(6, Math.round(across / 14)));
-  ctx.lineCap = 'round';
-  for (let k = 0; k < stems; k++) {
-    const base = ((k + 0.5) / stems) * across;
-    const amp = across * (0.18 + rnd() * 0.2);
-    const wave = 40 + rnd() * 50;
-    const phase = rnd() * Math.PI * 2;
-    const at = (s: number): Point => {
-      const off = base + Math.sin(s / wave * Math.PI * 2 + phase) * amp;
-      return tall ? { x: b.x + off, y: b.y + s } : { x: b.x + s, y: b.y + off };
-    };
-    // Shade and highlight over the wall fill, whatever its color or pattern
-    for (const [width, color] of [[5, 'rgba(0,0,0,0.16)'], [1.6, 'rgba(255,255,255,0.28)']] as const) {
-      ctx.lineWidth = width;
-      ctx.strokeStyle = color;
-      ctx.beginPath();
-      for (let s = -10; s <= len + 10; s += 6) {
-        const p = at(s);
-        if (s === -10) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
-      }
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
   ctx.lineJoin = 'miter';
+  ctx.miterLimit = 10;
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = edge;
   ctx.stroke(body);
