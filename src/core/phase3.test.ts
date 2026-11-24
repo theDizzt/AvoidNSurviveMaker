@@ -81,6 +81,23 @@ describe('pulley (#52)', () => {
     return { sim, t: 10 };
   }
 
+  it('turns with circles drawn around the wheel, not only on it', () => {
+    const { sim, t } = begin('hold');
+    // A 60 px wheel circled 100 px out: past its rim, within its reach
+    let tt = t;
+    for (let k = 0; k <= 72; k++) {
+      const a = (k / 72) * Math.PI * 2;
+      sim.feed((tt += 8), 400 + Math.cos(a) * 100, 300 + Math.sin(a) * 100);
+    }
+    expect(sim.pulleyTime[2]).toBeCloseTo(1000, -1);
+    // Far away, circles do nothing
+    for (let k = 0; k <= 72; k++) {
+      const a = (k / 72) * Math.PI * 2;
+      sim.feed((tt += 8), 400 + Math.cos(a) * 200, 300 + Math.sin(a) * 200);
+    }
+    expect(sim.pulleyTime[2]).toBeCloseTo(1000, -1);
+  });
+
   it('needs a pulley of its color on the map', () => {
     expect(mapErrors(mapWith(objects('hold')))).toEqual([]);
     expect(mapErrors(mapWith([objects('hold')[1]]))).toHaveLength(1);

@@ -135,6 +135,13 @@ function viewOf(canvas: HTMLCanvasElement, map: MapData): View {
  * capped by the graphics option (graphics.ts).
  */
 export function fitCanvas(canvas: HTMLCanvasElement, map: MapData): void {
+  // data-fit="window": the whole window, whatever its shape (map editor); the map is fitted inside
+  if (canvas.dataset.fit === 'window') {
+    const cssW = Math.max(160, Math.floor(window.innerWidth));
+    const cssH = Math.max(90, Math.floor(window.innerHeight));
+    sizeCanvas(canvas, map, cssW, cssH);
+    return;
+  }
   // data-fit="screen": use the largest 16:9 area of the whole window (play screen)
   const screen = canvas.dataset.fit === 'screen';
   // data-fit="parent": the largest 16:9 area of the parent's box (theme editor preview)
@@ -145,7 +152,11 @@ export function fitCanvas(canvas: HTMLCanvasElement, map: MapData): void {
     : parent ? Math.max(90, parent.clientHeight) * SCREEN_ASPECT
       : Math.max(320, (window.innerHeight - RESERVED_HEIGHT) * SCREEN_ASPECT);
   const cssW = Math.max(160, Math.floor(Math.min(avail, byHeight, screen || parent ? Infinity : MAX_CSS_WIDTH)));
-  const cssH = Math.round(cssW / SCREEN_ASPECT);
+  sizeCanvas(canvas, map, cssW, Math.round(cssW / SCREEN_ASPECT));
+}
+
+/** Give the canvas this CSS size (backing store per devicePixelRatio) and fit the map in it, centered */
+function sizeCanvas(canvas: HTMLCanvasElement, map: MapData, cssW: number, cssH: number): void {
   const dpr = renderScale(cssW, cssH);
   canvas.style.width = `${cssW}px`;
   canvas.style.height = `${cssH}px`;

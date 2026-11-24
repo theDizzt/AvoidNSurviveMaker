@@ -59,17 +59,17 @@ const BADGE_FONTS: [BadgeFont, string][] = [['title', tr('te.title')], ['main', 
 function demoMap(): MapData {
   return {
     ...createEmptyMap(),
-    // Drawn on a 960×540 map, whatever size new maps start at
-    width: 960,
-    height: 540,
-    start: { x: 30, y: 240, w: 60, h: 60 },
-    goal: { x: 870, y: 240, w: 60, h: 60 },
+    // Drawn on a 1920×1080 map, whatever size new maps start at
+    width: 1920,
+    height: 1080,
+    start: { x: 60, y: 480, w: 120, h: 120 },
+    goal: { x: 1740, y: 480, w: 120, h: 120 },
     objects: [
-      { role: 'path', shape: { type: 'rect', x: 0, y: 200, w: 960, h: 140 } },
-      { role: 'path', shape: { type: 'ellipse', cx: 480, cy: 270, rx: 150, ry: 150 } },
-      { role: 'wall', shape: { type: 'rect', x: 330, y: 200, w: 24, h: 90 } },
-      { role: 'wall', shape: { type: 'rect', x: 610, y: 250, w: 24, h: 90 } },
-      { role: 'wall', shape: { type: 'rect', x: 470, y: 180, w: 20, h: 70 }, rotation: { pivot: { x: 480, y: 270 }, speed: 60, angle: 360, clockwise: true, repeat: 'loop', easing: 'none', delay: 0 } },
+      { role: 'path', shape: { type: 'rect', x: 0, y: 400, w: 1920, h: 280 } },
+      { role: 'path', shape: { type: 'ellipse', cx: 960, cy: 540, rx: 300, ry: 300 } },
+      { role: 'wall', shape: { type: 'rect', x: 660, y: 400, w: 48, h: 180 } },
+      { role: 'wall', shape: { type: 'rect', x: 1220, y: 500, w: 48, h: 180 } },
+      { role: 'wall', shape: { type: 'rect', x: 940, y: 360, w: 40, h: 140 }, rotation: { pivot: { x: 960, y: 540 }, speed: 60, angle: 360, clockwise: true, repeat: 'loop', easing: 'none', delay: 0 } },
     ],
     title: tr('te.sampleLevel'),
     level: 1,

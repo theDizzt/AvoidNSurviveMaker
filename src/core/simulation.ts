@@ -31,6 +31,13 @@ export const PULLEY_UNWIND_AFTER = 150;
 export const ICE_GRIP_RATE = 0.0002;
 /** Turning only counts this far (map units) from a pulley's center, where the angle is stable */
 const PULLEY_DEAD_ZONE = 3;
+/**
+ * A pulley (#52 / #95) is turned by circling the cursor anywhere within this many times its
+ * radius (and at least PULLEY_GRAB_MIN map units past its rim): a hand drawing circles on a wheel
+ * overshoots its rim, and turning only on the wheel itself let those circles count for nothing
+ */
+export const PULLEY_GRAB = 2;
+const PULLEY_GRAB_MIN = 40;
 import type { MapData, Point } from './types';
 
 export type SimStatus = 'ready' | 'playing' | 'dead' | 'cleared';
@@ -1342,12 +1349,13 @@ export class Simulation {
     }
   }
 
-  /** The angle (radians, + = clockwise) the cursor swept around wheel `i`'s center, both ends inside it */
+  /** The angle (radians, + = clockwise) the cursor swept around wheel `i`'s center, both ends within its reach */
   private turnAngle(i: number, xa: number, ya: number, xb: number, yb: number): number {
     const o = this.objects[i];
     transformAt(o, this.clock[i], tfA);
     toWorld(o, tfA, o.cx, o.cy, pA);
-    const r = Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2;
+    const rim = Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2;
+    const r = Math.max(rim * PULLEY_GRAB, rim + PULLEY_GRAB_MIN);
     const da = Math.hypot(xa - pA.x, ya - pA.y);
     const db = Math.hypot(xb - pA.x, yb - pA.y);
     if (da > r || db > r || da < PULLEY_DEAD_ZONE || db < PULLEY_DEAD_ZONE) return 0;
