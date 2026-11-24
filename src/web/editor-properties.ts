@@ -228,28 +228,36 @@ export class EditorPropertiesPanel {
     }
     const fields: HTMLElement[] = [];
     if (p.kind === 'switch' || p.kind === 'timer') {
-      fields.push(this.selectField(tr('ed.pressedBy'), p.click ? 'click' : 'touch', [['touch', tr('ed.touchingIt')], ['click', tr('ed.clickingOnIt')]], (v) => {
+      const modes: ['touch' | 'click' | 'plate', string][] = [['touch', tr('ed.touchingIt')], ['click', tr('ed.clickingOnIt')]];
+      if (p.kind === 'switch') modes.push(['plate', tr('ed.whileTouching')]);
+      fields.push(this.selectField(tr('ed.pressedBy'), p.momentary ? 'plate' : p.click ? 'click' : 'touch', modes, (v) => {
+        delete p.click;
+        delete p.momentary;
         if (v === 'click') p.click = true;
-        else delete p.click;
+        if (v === 'plate') {
+          p.momentary = true;
+          delete p.initial;
+          delete p.once;
+        }
       }));
     }
     if (p.kind === 'timer') {
       fields.push(this.numField(tr('ed.powerFor'), (p.duration ?? 3000) / 1000, (v) => (p.duration = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1));
     }
     if (fields.length) out.push(this.group(...fields));
-    if (p.kind === 'switch') {
+    if (p.kind === 'switch' && !p.momentary) {
       out.push(this.toggle(tr('ed.startsOn'), !!p.initial, (on) => {
         if (on) p.initial = true;
         else delete p.initial;
       }));
     }
-    if (p.kind === 'switch' || p.kind === 'timer') {
+    if ((p.kind === 'switch' || p.kind === 'timer') && !p.momentary) {
       out.push(this.toggle(tr('ed.canBeSwitchedBack'), !p.once, (on) => {
         if (on) delete p.once;
         else p.once = true;
       }));
     }
-    out.push(this.note(tr(p.kind === 'switch' ? 'ed.elecSwitchNote' : p.kind === 'timer' ? 'ed.elecTimerNote' : p.kind === 'pulley' ? 'ed.elecPulleyNote' : 'ed.inverterNote')));
+    out.push(this.note(tr(p.momentary ? 'ed.elecPlateNote' : p.kind === 'switch' ? 'ed.elecSwitchNote' : p.kind === 'timer' ? 'ed.elecTimerNote' : p.kind === 'pulley' ? 'ed.elecPulleyNote' : 'ed.inverterNote')));
     return out;
   }
 
@@ -754,9 +762,17 @@ export class EditorPropertiesPanel {
     const out: HTMLElement[] = [this.heading(TRIGGER_NAMES[t.kind]), this.colorPicker(t.color, (c) => (t.color = c))];
     const fields: HTMLElement[] = [];
     if (t.kind === 'switch' || t.kind === 'timer') {
-      fields.push(this.selectField(tr('ed.pressedBy'), t.click ? 'click' : 'touch', [['touch', tr('ed.touchingIt')], ['click', tr('ed.clickingOnIt')]], (v) => {
+      const modes: ['touch' | 'click' | 'plate', string][] = [['touch', tr('ed.touchingIt')], ['click', tr('ed.clickingOnIt')]];
+      if (t.kind === 'switch') modes.push(['plate', tr('ed.whileTouching')]);
+      fields.push(this.selectField(tr('ed.pressedBy'), t.momentary ? 'plate' : t.click ? 'click' : 'touch', modes, (v) => {
+        delete t.click;
+        delete t.momentary;
         if (v === 'click') t.click = true;
-        else delete t.click;
+        if (v === 'plate') {
+          t.momentary = true;
+          delete t.initial;
+          delete t.once;
+        }
       }));
     }
     if (t.kind === 'timer' || t.kind === 'hold') {
@@ -764,13 +780,13 @@ export class EditorPropertiesPanel {
         (v) => (t.duration = Math.round(Math.min(LIMITS.maxDelay, Math.max(0.05, v)) * 1000)), 0.1));
     }
     if (fields.length) out.push(this.group(...fields));
-    if (t.kind === 'switch' || t.kind === 'hold') {
+    if ((t.kind === 'switch' || t.kind === 'hold') && !t.momentary) {
       out.push(this.toggle(tr('ed.startsOn'), !!t.initial, (on) => {
         if (on) t.initial = true;
         else delete t.initial;
       }));
     }
-    if (isButton(t.kind)) {
+    if (isButton(t.kind) && !t.momentary) {
       out.push(this.toggle(tr('ed.canBeSwitchedBack'), !t.once, (on) => {
         if (on) delete t.once;
         else t.once = true;
@@ -782,7 +798,7 @@ export class EditorPropertiesPanel {
     }));
     const linked = this.host.map.objects.filter((m) => m.link?.color === t.color || (m.door?.mode === 'switch' && m.door.color === t.color) || m.laser?.switchColor === t.color).length;
     const what = {
-      switch: tr('ed.whatSwitch'),
+      switch: t.momentary ? tr('ed.whatPlate') : tr('ed.whatSwitch'),
       timer: tr('ed.whatTimer'),
       hold: tr('ed.whatHold'),
       startZone: tr('ed.whatStartZone'),

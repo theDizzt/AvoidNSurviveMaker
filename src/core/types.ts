@@ -134,6 +134,8 @@ export interface Power {
   kind: PowerKind;
   /** switch / timer: activated by clicking on it instead of touching it */
   click?: boolean;
+  /** switch: a pressure plate, powering only while the cursor is on it (no click / initial / once) */
+  momentary?: boolean;
   /** switch: starts ON */
   initial?: boolean;
   /** switch / timer: works only once */
@@ -293,6 +295,8 @@ export interface Trigger {
   color: SwitchColor;
   /** switch / timer: activate by clicking on it (instead of touching it) */
   click?: boolean;
+  /** switch: a pressure plate, its color ON only while the cursor is on it (no click / initial / once) */
+  momentary?: boolean;
   /** switch / hold: the color starts ON */
   initial?: boolean;
   /** Works only once (can't be switched back) */

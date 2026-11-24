@@ -174,6 +174,8 @@ describe('electricity (#91, #94–97)', () => {
     // (the wire leaves the wheel upward: stay in its lower half)
     let t = sweep(sim, 0, 120, 540, 400 + Math.cos(Math.PI * 0.9) * 30, 540 + Math.sin(Math.PI * 0.9) * 30, 300);
     expect(sim.status).toBe('playing');
+    // Press on it to grab it, then turn
+    sim.click(t, sim.x, sim.y);
     for (let k = 1; k <= 200; k++) {
       const a = Math.PI * 0.9 - (k / 200) * Math.PI * 0.8;
       sim.feed(t + k, 400 + Math.cos(a) * 30, 540 + Math.sin(a) * 30);

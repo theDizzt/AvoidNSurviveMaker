@@ -219,9 +219,11 @@ export function createValidateApi(t: Translator = defaultTranslate) {
     const o = obj(v, name);
     const kind = oneOf(o.kind, `${name}.kind`, TRIGGER_KINDS);
     const t: Trigger = { kind, color: colorIndex(o.color, `${name}.color`) };
-    if (o.click === true && (kind === 'switch' || kind === 'timer')) t.click = true;
-    if (o.initial === true && (kind === 'switch' || kind === 'hold')) t.initial = true;
-    if (o.once === true && kind !== 'startZone' && kind !== 'stopZone') t.once = true;
+    const momentary = o.momentary === true && kind === 'switch';
+    if (momentary) t.momentary = true;
+    if (o.click === true && (kind === 'switch' || kind === 'timer') && !momentary) t.click = true;
+    if (o.initial === true && (kind === 'switch' || kind === 'hold') && !momentary) t.initial = true;
+    if (o.once === true && kind !== 'startZone' && kind !== 'stopZone' && !momentary) t.once = true;
     if (o.revert === true) t.revert = true;
     if (kind === 'timer' || kind === 'hold') t.duration = num(o.duration, `${name}.duration`, 50, LIMITS.maxDelay);
     return t;
@@ -339,9 +341,11 @@ export function createValidateApi(t: Translator = defaultTranslate) {
       const p = obj(o.power, `${name}.power`);
       const kind = oneOf(p.kind, `${name}.power.kind`, ['switch', 'timer', 'pulley', 'inverter'] as const);
       const power: Power = { kind };
-      if (p.click === true && (kind === 'switch' || kind === 'timer')) power.click = true;
-      if (p.initial === true && kind === 'switch') power.initial = true;
-      if (p.once === true && (kind === 'switch' || kind === 'timer')) power.once = true;
+      const momentary = p.momentary === true && kind === 'switch';
+      if (momentary) power.momentary = true;
+      if (p.click === true && (kind === 'switch' || kind === 'timer') && !momentary) power.click = true;
+      if (p.initial === true && kind === 'switch' && !momentary) power.initial = true;
+      if (p.once === true && (kind === 'switch' || kind === 'timer') && !momentary) power.once = true;
       if (kind === 'timer') power.duration = num(p.duration, `${name}.power.duration`, 50, LIMITS.maxDelay);
       out.power = power;
       // Electric devices stay where they are placed (the wires are joined to them there)

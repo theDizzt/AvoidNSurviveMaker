@@ -1,20 +1,20 @@
 {
   "v": 2,
   "name": "desert13",
-  "author": "Dizzt",
+  "author": "Dizzt, Matchoi, Kukui",
   "width": 1920,
   "height": 1080,
   "start": {
-    "x": 120,
-    "y": 120,
-    "w": 90,
-    "h": 90
+    "x": 360,
+    "y": 780,
+    "w": 120,
+    "h": 120
   },
   "goal": {
-    "x": 1710,
-    "y": 870,
-    "w": 90,
-    "h": 90
+    "x": 1680,
+    "y": 100,
+    "w": 120,
+    "h": 120
   },
   "objects": [
     {
@@ -23,378 +23,614 @@
         "type": "poly",
         "points": [
           {
-            "x": 240,
-            "y": 570
+            "x": 1070,
+            "y": 140,
+            "smooth": true
           },
           {
-            "x": 120,
-            "y": 810
+            "x": 670,
+            "y": 80,
+            "smooth": true
           },
           {
-            "x": 360,
-            "y": 810
+            "x": 410,
+            "y": 80,
+            "smooth": true
+          },
+          {
+            "x": 50,
+            "y": 130,
+            "smooth": true
+          },
+          {
+            "x": 60,
+            "y": 440,
+            "smooth": true
+          },
+          {
+            "x": 180,
+            "y": 750,
+            "smooth": true
+          },
+          {
+            "x": 380,
+            "y": 970,
+            "smooth": true
+          },
+          {
+            "x": 860,
+            "y": 1040,
+            "smooth": true
+          },
+          {
+            "x": 1230,
+            "y": 1020,
+            "smooth": true
+          },
+          {
+            "x": 1750,
+            "y": 1060,
+            "smooth": true
+          },
+          {
+            "x": 1860,
+            "y": 870,
+            "smooth": true
+          },
+          {
+            "x": 1760,
+            "y": 600,
+            "smooth": true
+          },
+          {
+            "x": 1580,
+            "y": 380,
+            "smooth": true
+          },
+          {
+            "x": 1850,
+            "y": 190,
+            "smooth": true
+          },
+          {
+            "x": 1750,
+            "y": 70,
+            "smooth": true
+          },
+          {
+            "x": 1390,
+            "y": 80,
+            "smooth": true
+          },
+          {
+            "x": 1220,
+            "y": 160,
+            "smooth": true
           }
-        ]
-      }
+        ],
+        "free": true
+      },
+      "id": 1
     },
     {
-      "role": "path",
+      "role": "liquid",
       "shape": {
         "type": "poly",
         "points": [
           {
-            "x": 600,
-            "y": 570
+            "x": 840,
+            "y": 350,
+            "smooth": true
           },
           {
-            "x": 480,
-            "y": 810
-          },
-          {
-            "x": 720,
-            "y": 810
-          }
-        ]
-      }
-    },
-    {
-      "role": "path",
-      "shape": {
-        "type": "poly",
-        "points": [
-          {
-            "x": 420,
-            "y": 810
-          },
-          {
-            "x": 300,
-            "y": 570
-          },
-          {
-            "x": 540,
-            "y": 570
-          }
-        ]
-      }
-    },
-    {
-      "role": "path",
-      "shape": {
-        "type": "poly",
-        "points": [
-          {
-            "x": 960,
-            "y": 570
+            "x": 610,
+            "y": 510,
+            "smooth": true
           },
           {
             "x": 840,
-            "y": 810
+            "y": 730,
+            "smooth": true
           },
           {
-            "x": 1080,
-            "y": 810
+            "x": 1070,
+            "y": 800,
+            "smooth": true
+          },
+          {
+            "x": 1250,
+            "y": 680,
+            "smooth": true
+          },
+          {
+            "x": 1280,
+            "y": 440,
+            "smooth": true
+          },
+          {
+            "x": 1150,
+            "y": 310,
+            "smooth": true
+          },
+          {
+            "x": 860,
+            "y": 300,
+            "smooth": true
           }
-        ]
+        ],
+        "free": true
+      },
+      "id": 2,
+      "liquid": {
+        "kind": "pond"
       }
     },
     {
-      "role": "path",
+      "role": "fog",
       "shape": {
         "type": "poly",
         "points": [
+          {
+            "x": 400,
+            "y": 510,
+            "smooth": true
+          },
+          {
+            "x": 80,
+            "y": 650,
+            "smooth": true
+          },
+          {
+            "x": 200,
+            "y": 970,
+            "smooth": true
+          },
+          {
+            "x": 580,
+            "y": 1060,
+            "smooth": true
+          },
           {
             "x": 780,
-            "y": 810
+            "y": 870,
+            "smooth": true
           },
           {
-            "x": 660,
-            "y": 570
-          },
-          {
-            "x": 900,
-            "y": 570
+            "x": 600,
+            "y": 570,
+            "smooth": true
           }
-        ]
+        ],
+        "free": true
+      },
+      "id": 3,
+      "fog": {
+        "kind": "sand",
+        "density": 70
       }
     },
     {
-      "role": "path",
+      "role": "fog",
       "shape": {
         "type": "poly",
         "points": [
           {
-            "x": 1320,
-            "y": 570
+            "x": 1490,
+            "y": 20,
+            "smooth": true
           },
           {
-            "x": 1200,
-            "y": 810
+            "x": 1390,
+            "y": 560,
+            "smooth": true
           },
           {
-            "x": 1440,
-            "y": 810
+            "x": 1650,
+            "y": 830,
+            "smooth": true
+          },
+          {
+            "x": 1930,
+            "y": 680,
+            "smooth": true
+          },
+          {
+            "x": 1880,
+            "y": 130,
+            "smooth": true
+          },
+          {
+            "x": 1740,
+            "y": 20,
+            "smooth": true
           }
-        ]
+        ],
+        "free": true
+      },
+      "id": 4,
+      "fog": {
+        "kind": "sand",
+        "density": 70
       }
     },
     {
-      "role": "path",
+      "role": "fog",
       "shape": {
         "type": "poly",
         "points": [
           {
-            "x": 1140,
-            "y": 810
+            "x": 310,
+            "y": 20,
+            "smooth": true
           },
           {
-            "x": 1020,
-            "y": 570
+            "x": 520,
+            "y": 370,
+            "smooth": true
+          },
+          {
+            "x": 920,
+            "y": 500,
+            "smooth": true
+          },
+          {
+            "x": 1110,
+            "y": 330,
+            "smooth": true
+          },
+          {
+            "x": 1110,
+            "y": 90,
+            "smooth": true
+          },
+          {
+            "x": 610,
+            "y": 30,
+            "smooth": true
+          }
+        ],
+        "free": true
+      },
+      "id": 5,
+      "fog": {
+        "kind": "sand",
+        "density": 70
+      }
+    },
+    {
+      "role": "fog",
+      "shape": {
+        "type": "poly",
+        "points": [
+          {
+            "x": 1060,
+            "y": 620,
+            "smooth": true
+          },
+          {
+            "x": 970,
+            "y": 1050,
+            "smooth": true
+          },
+          {
+            "x": 1330,
+            "y": 1070,
+            "smooth": true
+          },
+          {
+            "x": 1450,
+            "y": 920,
+            "smooth": true
           },
           {
             "x": 1260,
-            "y": 570
+            "y": 660,
+            "smooth": true
           }
-        ]
+        ],
+        "free": true
+      },
+      "id": 6,
+      "fog": {
+        "kind": "sand",
+        "density": 70
       }
     },
     {
-      "role": "path",
+      "role": "coin",
       "shape": {
-        "type": "poly",
+        "type": "ellipse",
+        "cx": 1002,
+        "cy": 412,
+        "rx": 12,
+        "ry": 12
+      },
+      "motion": {
+        "type": "linear",
         "points": [
           {
-            "x": 1680,
-            "y": 570
+            "x": 982,
+            "y": 252
           },
           {
-            "x": 1560,
-            "y": 810
-          },
-          {
-            "x": 1800,
-            "y": 810
+            "x": 422,
+            "y": 222
           }
-        ]
+        ],
+        "segmentTypes": [
+          "curve",
+          "curve",
+          "linear"
+        ],
+        "speed": 1499.021033227702,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "id": 7,
+      "link": {
+        "color": 0,
+        "action": "start"
       }
     },
     {
-      "role": "path",
+      "role": "coin",
       "shape": {
-        "type": "poly",
+        "type": "ellipse",
+        "cx": 872,
+        "cy": 422,
+        "rx": 12,
+        "ry": 12
+      },
+      "motion": {
+        "type": "linear",
         "points": [
           {
-            "x": 1500,
-            "y": 810
+            "x": 550,
+            "y": 430
           },
           {
-            "x": 1380,
-            "y": 570
-          },
-          {
-            "x": 1620,
-            "y": 570
+            "x": 200,
+            "y": 300
           }
-        ]
+        ],
+        "segmentTypes": [
+          "curve",
+          "curve",
+          "linear"
+        ],
+        "speed": 1161.7666720301045,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "id": 8,
+      "link": {
+        "color": 0,
+        "action": "start"
       }
     },
     {
-      "role": "path",
+      "role": "coin",
       "shape": {
-        "type": "poly",
+        "type": "ellipse",
+        "cx": 822,
+        "cy": 532,
+        "rx": 12,
+        "ry": 12
+      },
+      "motion": {
+        "type": "linear",
         "points": [
           {
-            "x": 240,
-            "y": 510
-          },
-          {
-            "x": 120,
-            "y": 270
-          },
-          {
-            "x": 360,
-            "y": 270
-          }
-        ]
-      }
-    },
-    {
-      "role": "path",
-      "shape": {
-        "type": "poly",
-        "points": [
-          {
-            "x": 600,
-            "y": 510
-          },
-          {
-            "x": 480,
-            "y": 270
-          },
-          {
-            "x": 720,
-            "y": 270
-          }
-        ]
-      }
-    },
-    {
-      "role": "path",
-      "shape": {
-        "type": "poly",
-        "points": [
-          {
-            "x": 420,
-            "y": 270
-          },
-          {
-            "x": 300,
-            "y": 510
-          },
-          {
-            "x": 540,
-            "y": 510
-          }
-        ]
-      }
-    },
-    {
-      "role": "path",
-      "shape": {
-        "type": "poly",
-        "points": [
-          {
-            "x": 960,
-            "y": 510
+            "x": 990,
+            "y": 730
           },
           {
             "x": 840,
-            "y": 270
-          },
-          {
-            "x": 1080,
-            "y": 270
+            "y": 960
           }
-        ]
+        ],
+        "segmentTypes": [
+          "curve",
+          "curve",
+          "linear"
+        ],
+        "speed": 1161.7666720301045,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "id": 9,
+      "link": {
+        "color": 0,
+        "action": "start"
       }
     },
     {
-      "role": "path",
+      "role": "coin",
       "shape": {
-        "type": "poly",
+        "type": "ellipse",
+        "cx": 882,
+        "cy": 652,
+        "rx": 12,
+        "ry": 12
+      },
+      "motion": {
+        "type": "linear",
         "points": [
           {
-            "x": 780,
-            "y": 270
+            "x": 1190,
+            "y": 410
           },
           {
-            "x": 660,
-            "y": 510
-          },
-          {
-            "x": 900,
-            "y": 510
+            "x": 1350,
+            "y": 420
           }
-        ]
+        ],
+        "segmentTypes": [
+          "curve",
+          "curve",
+          "linear"
+        ],
+        "speed": 1595.7571926330725,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "id": 10,
+      "link": {
+        "color": 0,
+        "action": "start"
       }
     },
     {
-      "role": "path",
+      "role": "coin",
       "shape": {
-        "type": "poly",
+        "type": "ellipse",
+        "cx": 1022,
+        "cy": 662,
+        "rx": 12,
+        "ry": 12
+      },
+      "motion": {
+        "type": "linear",
         "points": [
           {
-            "x": 1320,
-            "y": 510
+            "x": 1170,
+            "y": 240
           },
           {
-            "x": 1200,
-            "y": 270
-          },
-          {
-            "x": 1440,
-            "y": 270
+            "x": 960,
+            "y": 330
           }
-        ]
+        ],
+        "segmentTypes": [
+          "curve",
+          "curve",
+          "linear"
+        ],
+        "speed": 2311.4954241037935,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "id": 11,
+      "link": {
+        "color": 0,
+        "action": "start"
       }
     },
     {
-      "role": "path",
+      "role": "coin",
       "shape": {
-        "type": "poly",
+        "type": "ellipse",
+        "cx": 1132,
+        "cy": 602,
+        "rx": 12,
+        "ry": 12
+      },
+      "motion": {
+        "type": "linear",
         "points": [
           {
-            "x": 1140,
-            "y": 270
+            "x": 1090,
+            "y": 760
           },
           {
-            "x": 1020,
-            "y": 510
-          },
-          {
-            "x": 1260,
-            "y": 510
+            "x": 1780,
+            "y": 950
           }
-        ]
+        ],
+        "segmentTypes": [
+          "curve",
+          "curve",
+          "linear"
+        ],
+        "speed": 2563.23941816802,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "id": 12,
+      "link": {
+        "color": 0,
+        "action": "start"
       }
     },
     {
-      "role": "path",
+      "role": "coin",
       "shape": {
-        "type": "poly",
+        "type": "ellipse",
+        "cx": 1112,
+        "cy": 482,
+        "rx": 12,
+        "ry": 12
+      },
+      "motion": {
+        "type": "linear",
         "points": [
           {
-            "x": 1680,
-            "y": 510
+            "x": 920,
+            "y": 350
           },
           {
-            "x": 1560,
-            "y": 270
-          },
-          {
-            "x": 1800,
-            "y": 270
+            "x": 480,
+            "y": 650
           }
-        ]
+        ],
+        "segmentTypes": [
+          "curve",
+          "curve",
+          "linear"
+        ],
+        "speed": 3917.09921702618,
+        "repeat": "pingpong",
+        "easing": "inOut",
+        "delay": 0,
+        "clockwise": true
+      },
+      "id": 13,
+      "link": {
+        "color": 0,
+        "action": "start"
       }
     },
     {
-      "role": "path",
-      "shape": {
-        "type": "poly",
-        "points": [
-          {
-            "x": 1500,
-            "y": 270
-          },
-          {
-            "x": 1380,
-            "y": 510
-          },
-          {
-            "x": 1620,
-            "y": 510
-          }
-        ]
-      }
-    },
-    {
-      "role": "path",
+      "role": "trigger",
       "shape": {
         "type": "rect",
-        "x": 120,
-        "y": 870,
-        "w": 1680,
-        "h": 90
+        "x": 1580,
+        "y": 620,
+        "w": 60,
+        "h": 60
+      },
+      "id": 14,
+      "trigger": {
+        "kind": "switch",
+        "color": 0,
+        "momentary": true
       }
     },
     {
-      "role": "path",
+      "role": "trigger",
       "shape": {
         "type": "rect",
-        "x": 120,
-        "y": 120,
-        "w": 1680,
-        "h": 90
+        "x": -480,
+        "y": -190,
+        "w": 40,
+        "h": 40
+      },
+      "id": 15,
+      "trigger": {
+        "kind": "switch",
+        "color": 0
       }
     }
   ],
@@ -421,12 +657,12 @@
     }
   },
   "id": "12",
-  "title": "?",
+  "title": "Oasis",
   "level": 13,
-  "difficulty": 2.75,
+  "difficulty": 2.25,
   "stars": {
     "three": 7000,
-    "two": 9400,
-    "one": 12800
+    "two": 11000,
+    "one": 18000
   }
 }

@@ -208,6 +208,7 @@ export class PlayController {
     // Other fingers don't matter: they never move the cursor (see runPointer)
     window.addEventListener('pointerup', (e) => {
       if (e.pointerType !== 'mouse' && e.pointerId === this.runPointer) this.abort('pointer');
+      else if (e.button === 0) this.onUp(e);
     });
     window.addEventListener('pointercancel', (e) => {
       if (e.pointerId === this.runPointer) this.abort('pointer');
@@ -281,6 +282,15 @@ export class PlayController {
   private unlock(): void {
     this.lockedRun = false;
     if (this.locked) document.exitPointerLock();
+  }
+
+  /** Letting go of the button (or the second finger) during a run lets go of a held pulley */
+  private onUp(e: PointerEvent): void {
+    const sim = this.sim;
+    if (!sim || sim.status !== 'playing' || sim.grabbed < 0) return;
+    const p = e.pointerId !== this.runPointer ? { x: sim.x - sim.offX, y: sim.y - sim.offY }
+      : this.locked ? { ...this.mouse } : clientToMap(this.el.canvas, this.map, e.clientX, e.clientY);
+    sim.release(e.timeStamp - this.t0, p.x, p.y);
   }
 
   private onDown(e: PointerEvent): void {

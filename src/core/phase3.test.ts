@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { boulderShape, fallState } from './hazards';
-import { Simulation } from './simulation';
+import { runReplay, Simulation } from './simulation';
 import type { Fall, MapData, MapObject, Motion } from './types';
 import { createEmptyMap, mapErrors, validateMap } from './validate';
 
@@ -78,24 +78,52 @@ describe('pulley (#52)', () => {
     const sim = new Simulation(map);
     sim.start(map.start.x + 10, map.start.y + 10);
     sim.feed(10, 440, 300);
-    return { sim, t: 10 };
+    // Press on the wheel: it is held from now on
+    sim.click(11, 440, 300);
+    return { sim, t: 11 };
   }
 
-  it('turns with circles drawn around the wheel, not only on it', () => {
+  it('turns only while held: pressed on the wheel, then circled however wide', () => {
+    // Not pressed: circling does nothing
+    const m = createEmptyMap();
+    m.objects = objects('hold').slice(0, 1).concat({ ...objects('hold')[1], role: 'wall' });
+    const free = new Simulation(validateMap(JSON.parse(JSON.stringify(m))));
+    free.start(m.start.x + 10, m.start.y + 10);
+    free.feed(10, 440, 300);
+    circle(free, 10, 1);
+    expect(free.pulleyTime[2]).toBe(0);
+    // Pressed next to it, not on it: still nothing
+    free.click(400, 600, 300);
+    expect(free.grabbed).toBe(-1);
+
     const { sim, t } = begin('hold');
-    // A 60 px wheel circled 100 px out: past its rim, within its reach
+    expect(sim.grabbed).toBe(0);
+    // Held, circles 150 px out (well past the 60 px rim) turn it
     let tt = t;
     for (let k = 0; k <= 72; k++) {
       const a = (k / 72) * Math.PI * 2;
-      sim.feed((tt += 8), 400 + Math.cos(a) * 100, 300 + Math.sin(a) * 100);
+      sim.feed((tt += 8), 400 + Math.cos(a) * 150, 300 + Math.sin(a) * 150);
     }
     expect(sim.pulleyTime[2]).toBeCloseTo(1000, -1);
-    // Far away, circles do nothing
+    // Let go: circling no longer turns it
+    sim.release((tt += 8), 550, 300);
+    expect(sim.grabbed).toBe(-1);
     for (let k = 0; k <= 72; k++) {
       const a = (k / 72) * Math.PI * 2;
-      sim.feed((tt += 8), 400 + Math.cos(a) * 200, 300 + Math.sin(a) * 200);
+      sim.feed((tt += 8), 400 + Math.cos(a) * 150, 300 + Math.sin(a) * 150);
     }
     expect(sim.pulleyTime[2]).toBeCloseTo(1000, -1);
+  });
+
+  it('a replay grabs and lets go at the same moments', () => {
+    const { sim, t } = begin('hold');
+    let tt = circle(sim, t, 1);
+    sim.release((tt += 8), 440, 300);
+    tt = circle(sim, tt, 1);
+    const again = runReplay(sim.map, sim.getReplay());
+    expect(again.pulleyTime[2]).toBe(sim.pulleyTime[2]);
+    expect(again.clock).toEqual(sim.clock);
+    void tt;
   });
 
   it('needs a pulley of its color on the map', () => {
@@ -124,11 +152,13 @@ describe('pulley (#52)', () => {
   it('holds when let go, or unwinds', () => {
     const hold = begin('hold');
     let at = circle(hold.sim, hold.t, 1);
+    hold.sim.release(at + 1, 440, 300);
     hold.sim.feed(at + 600, 440, 300);
     expect(hold.sim.pulleyTime[2]).toBeCloseTo(1000, -1);
 
     const unwind = begin('unwind');
     at = circle(unwind.sim, unwind.t, 1);
+    unwind.sim.release(at + 1, 440, 300);
     unwind.sim.feed(at + 600, 440, 300);
     // 150 ms grace, then back at full speed: about 450 ms of the 1000 unwound
     expect(unwind.sim.pulleyTime[2]).toBeGreaterThan(450);

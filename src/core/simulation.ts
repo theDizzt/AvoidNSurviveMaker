@@ -32,12 +32,10 @@ export const ICE_GRIP_RATE = 0.0002;
 /** Turning only counts this far (map units) from a pulley's center, where the angle is stable */
 const PULLEY_DEAD_ZONE = 3;
 /**
- * A pulley (#52 / #95) is turned by circling the cursor anywhere within this many times its
- * radius (and at least PULLEY_GRAB_MIN map units past its rim): a hand drawing circles on a wheel
- * overshoots its rim, and turning only on the wheel itself let those circles count for nothing
+ * A pulley (#52 / #95) is grabbed by pressing the mouse button this close to its center (times its
+ * radius); held, it turns as the cursor circles around its center, however wide, until released
  */
-export const PULLEY_GRAB = 2;
-const PULLEY_GRAB_MIN = 40;
+export const PULLEY_GRAB = 1.25;
 import type { MapData, Point } from './types';
 
 export type SimStatus = 'ready' | 'playing' | 'dead' | 'cleared';
@@ -62,8 +60,10 @@ export interface Replay {
   /** Version 2 uses the recorded step for every mechanism; older replays retain map-specific fallbacks. */
   simulationVersion?: 2;
   samples: ReplaySample[];
-  /** Clicks during the run (click-activated switches), in time order */
+  /** Clicks during the run (click-activated switches, grabbing a pulley), in time order */
   clicks?: ReplaySample[];
+  /** Mouse button releases during the run that let go of a pulley (mouse position), in time order */
+  releases?: ReplaySample[];
   abort?: { reason: AbortReason };
 }
 
@@ -95,7 +95,7 @@ const SNAPSHOT_SKIP = new Set([
 ]);
 
 /** Arrays of entries that are never changed once added: copied shallowly */
-const SNAPSHOT_SHALLOW = new Set(['samples', 'clicks', 'beams', 'pendingBeams']);
+const SNAPSHOT_SHALLOW = new Set(['samples', 'clicks', 'releases', 'beams', 'pendingBeams']);
 
 /** Deep copy of run state: numbers, strings, typed arrays, arrays and plain objects only */
 function copyState(v: unknown, key: string): unknown {
@@ -231,6 +231,9 @@ export class Simulation {
   private readonly clockB: Float64Array;
   private readonly openB: Float64Array;
   private clicks: ReplaySample[] = [];
+  private releases: ReplaySample[] = [];
+  /** The pulley (#52) or electric pulley (#95) held by the mouse button; -1 = none */
+  grabbed = -1;
 
   // ── Electricity (#91, #94–97) ──
   /** The wires, devices and the objects wired to them (null on maps without any) */
@@ -502,6 +505,8 @@ export class Simulation {
     this.portalCooldown = -1;
     this.samples = [{ t: 0, x, y }];
     this.clicks = [];
+    this.releases = [];
+    this.grabbed = -1;
     // Check whether we already overlap something at the moment of starting
     this.checkSegment(0, x, y, 0, x, y);
     return true;
@@ -884,7 +889,23 @@ export class Simulation {
       const p = this.map.objects[i].power!;
       if (p.click && (p.kind === 'switch' || p.kind === 'timer') && pointInPoly(this.x, this.y, this.objects[i].poly)) this.powerActivate(i, this.time);
     }
+    // Pressing on a pulley grabs it
+    for (const i of [...this.pulleys, ...this.devices]) {
+      if (this.objects[i].role === 'power' && this.map.objects[i].power!.kind !== 'pulley') continue;
+      if (this.hidden[i] || this.wheelDistance(i, this.x, this.y) > this.wheelRadius(i) * PULLEY_GRAB) continue;
+      this.grabbed = i;
+      break;
+    }
     this.updateDerived(this.time);
+  }
+
+  /** The mouse button let go at time t (mouse at x, y): a held pulley is released */
+  release(t: number, x: number, y: number): void {
+    if (this.status !== 'playing' || this.grabbed < 0) return;
+    if (t > this.time) this.feed(t, x, y);
+    if (this.status !== 'playing') return;
+    this.releases.push({ t: this.time, x: this.x - this.offX, y: this.y - this.offY });
+    this.grabbed = -1;
   }
 
   /** When the mouse is idle and no events arrive, advance time assuming the cursor stayed put */
@@ -907,6 +928,7 @@ export class Simulation {
     if (!this.legacyStepPolicy) r.simulationVersion = 2;
     if (this.simulationStepMs !== 1) r.simulationStepMs = this.simulationStepMs;
     if (this.clicks.length) r.clicks = this.clicks.slice();
+    if (this.releases.length) r.releases = this.releases.slice();
     if (this.abortReason) r.abort = { reason: this.abortReason };
     return r;
   }
@@ -1234,6 +1256,8 @@ export class Simulation {
     this.turnPulleys(xa, ya, xb, yb, tb);
     const dt = tb - ta;
     const out: number[] = [];
+    /** Colors of pressure plates just stepped off */
+    const plates: number[] = [];
     for (const i of this.triggers) {
       if (this.hidden[i]) continue;
       const trig = this.map.objects[i].trigger!;
@@ -1265,6 +1289,16 @@ export class Simulation {
       const was = this.inside[i] === 1;
       const entered = !was && touched;
       this.inside[i] = insideB ? 1 : 0;
+      if (trig.momentary) {
+        // Pressure plate: ON as it is stepped on, OFF once nothing of its color is pressed any more
+        if (entered) {
+          this.used[i] = 1;
+          this.channels[trig.color] = 1;
+        }
+        // Stepped off (or only swept across it within this step)
+        if (!insideB && (was || entered)) plates.push(trig.color);
+        continue;
+      }
       if (trig.kind === 'hold') {
         if (insideB && was && !crossed) this.holdAcc[i] += dt;
         else if (insideB) this.holdAcc[i] = dt * (1 - (out.length ? Math.max(...out) : 0));
@@ -1278,6 +1312,16 @@ export class Simulation {
         }
       } else if (entered && !trig.click) {
         this.activate(i, tb);
+      }
+    }
+    for (const c of plates) {
+      const held = this.triggers.some((j) => {
+        const t = this.map.objects[j].trigger!;
+        return t.momentary && t.color === c && this.inside[j] === 1 && !this.hidden[j];
+      });
+      if (!held) {
+        this.channels[c] = 0;
+        this.timerEnd[c] = Infinity;
       }
     }
     // Electric switches and timers (#94 / #96) touched on the way: they never move
@@ -1296,7 +1340,9 @@ export class Simulation {
       }
       const entered = this.inside[i] !== 1 && touched;
       this.inside[i] = insideB ? 1 : 0;
-      if (entered && !p.click) this.powerActivate(i, tb);
+      // Electric pressure plate: powers while the cursor is on it
+      if (p.momentary) this.powerOn[i] = touched ? 1 : 0;
+      else if (entered && !p.click) this.powerActivate(i, tb);
     }
     this.updateDerived(tb);
   }
@@ -1331,34 +1377,45 @@ export class Simulation {
    * the segment inside it); that winds its color's linked objects forward (clockwise) or back.
    */
   private turnPulleys(xa: number, ya: number, xb: number, yb: number, tb: number): void {
+    const i = this.grabbed;
+    if (i < 0) return;
+    if (this.hidden[i]) {
+      this.grabbed = -1;
+      return;
+    }
     // Electric pulleys (#95) power their wires while turned, either way
-    for (const i of this.devices) {
-      if (this.map.objects[i].power!.kind !== 'pulley') continue;
+    if (this.objects[i].role === 'power') {
       const d = this.turnAngle(i, xa, ya, xb, yb);
-      if (d === 0) continue;
+      if (d === 0) return;
       this.lastTurn[i] = tb;
       this.pulleyAngle[i] += d;
+      return;
     }
-    for (const i of this.pulleys) {
-      if (this.hidden[i]) continue;
-      const p = this.map.objects[i].pulley!;
-      const d = this.turnAngle(i, xa, ya, xb, yb);
-      if (d === 0) continue;
-      this.lastTurn[i] = tb;
-      this.windPulley(i, (d / (Math.PI * 2)) * p.turnMs);
-    }
+    const p = this.map.objects[i].pulley!;
+    const d = this.turnAngle(i, xa, ya, xb, yb);
+    if (d === 0) return;
+    this.lastTurn[i] = tb;
+    this.windPulley(i, (d / (Math.PI * 2)) * p.turnMs);
   }
 
-  /** The angle (radians, + = clockwise) the cursor swept around wheel `i`'s center, both ends within its reach */
-  private turnAngle(i: number, xa: number, ya: number, xb: number, yb: number): number {
+  /** Where wheel `i`'s center is now (into pA) and how far (x, y) is from it */
+  private wheelDistance(i: number, x: number, y: number): number {
     const o = this.objects[i];
     transformAt(o, this.clock[i], tfA);
     toWorld(o, tfA, o.cx, o.cy, pA);
-    const rim = Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2;
-    const r = Math.max(rim * PULLEY_GRAB, rim + PULLEY_GRAB_MIN);
+    return Math.hypot(x - pA.x, y - pA.y);
+  }
+
+  private wheelRadius(i: number): number {
+    const o = this.objects[i];
+    return Math.min(o.box.maxX - o.box.minX, o.box.maxY - o.box.minY) / 2;
+  }
+
+  /** The angle (radians, + = clockwise) the cursor swept around held wheel `i`'s center */
+  private turnAngle(i: number, xa: number, ya: number, xb: number, yb: number): number {
+    const db = this.wheelDistance(i, xb, yb);
     const da = Math.hypot(xa - pA.x, ya - pA.y);
-    const db = Math.hypot(xb - pA.x, yb - pA.y);
-    if (da > r || db > r || da < PULLEY_DEAD_ZONE || db < PULLEY_DEAD_ZONE) return 0;
+    if (da < PULLEY_DEAD_ZONE || db < PULLEY_DEAD_ZONE) return 0;
     let d = Math.atan2(yb - pA.y, xb - pA.x) - Math.atan2(ya - pA.y, xa - pA.x);
     if (d > Math.PI) d -= Math.PI * 2;
     else if (d < -Math.PI) d += Math.PI * 2;
@@ -1570,20 +1627,25 @@ export function runReplay(map: MapData, replay: Replay, checkBudget: () => void 
   const sim = new Simulation(map, undefined, replay.simulationStepMs ?? 1, replay.simulationVersion !== 2);
   const [first, ...rest] = replay.samples;
   if (!first || first.t !== 0 || !sim.start(first.x, first.y)) return sim;
-  const clicks = replay.clicks ?? [];
+  // Button presses and releases, in time order (a press before a release at the same time)
+  const buttons = [
+    ...(replay.clicks ?? []).map((c) => ({ ...c, up: false })),
+    ...(replay.releases ?? []).map((c) => ({ ...c, up: true })),
+  ].sort((a, b) => a.t - b.t || Number(a.up) - Number(b.up));
+  const press = (b: (typeof buttons)[number]) => (b.up ? sim.release(b.t, b.x, b.y) : sim.click(b.t, b.x, b.y));
   let k = 0;
   for (const s of rest) {
     checkBudget();
-    // Clicks happen after the samples up to their time
-    while (k < clicks.length && clicks[k].t < s.t) {
+    // Buttons happen after the samples up to their time
+    while (k < buttons.length && buttons[k].t < s.t) {
       checkBudget();
-      sim.click(clicks[k].t, clicks[k].x, clicks[k].y); k++;
+      press(buttons[k++]);
     }
     sim.feed(s.t, s.x, s.y);
   }
-  while (k < clicks.length) {
+  while (k < buttons.length) {
     checkBudget();
-    sim.click(clicks[k].t, clicks[k].x, clicks[k].y); k++;
+    press(buttons[k++]);
   }
   if (replay.abort) sim.abort(replay.abort.reason);
   return sim;
