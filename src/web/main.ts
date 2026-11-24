@@ -17,7 +17,7 @@ import { CampaignUI, fitRotatedGrid, themeFromKey, themeKey } from './campaign-u
 import { levelKey, recordClear, themeUnlocked, totalStars } from './progress';
 import { filledSlots, themedLevel, type ThemeEntry } from './localized/theme-pack';
 import { OFFICIAL_THEMES, allThemes, badgeFor, levelThemeIn, musicFor, themeBadge, themeMusic } from './theme-registry';
-import { applyLowSpecOptions, FRAME_LIMITS, GRAPHICS_LEVELS, onOptionsChange, options, POLLING_RATES, resetGraphicsOptions, resetOptions, setOption } from './options';
+import { applyLowSpecOptions, BACKGROUND_FPS, FRAME_LIMITS, GRAPHICS_LEVELS, RENDER_SCALES, onOptionsChange, options, POLLING_RATES, resetGraphicsOptions, resetOptions, setOption } from './options';
 import { refreshSkinGate, setSkinGate } from './skin';
 import { CustomizeUI } from './customize-ui';
 import { PlayController } from './play';
@@ -504,7 +504,16 @@ frameLimitTile.addEventListener('click', () => {
   setOption('frameLimit', FRAME_LIMITS[(FRAME_LIMITS.indexOf(options.frameLimit) + 1) % FRAME_LIMITS.length]);
 });
 let appliedGraphics = options.graphics;
+let appliedRenderScale = options.renderScale;
+$('opt-render-scale').addEventListener('click', () => {
+  setOption('renderScale', RENDER_SCALES[(RENDER_SCALES.indexOf(options.renderScale) + 1) % RENDER_SCALES.length]);
+});
+$('opt-background-fps').addEventListener('click', () => {
+  setOption('backgroundFps', BACKGROUND_FPS[(BACKGROUND_FPS.indexOf(options.backgroundFps) + 1) % BACKGROUND_FPS.length]);
+});
 const syncPerformance = () => {
+  $('opt-render-scale-value').textContent = `${options.renderScale}%`;
+  $('opt-background-fps-value').textContent = options.backgroundFps ? `${options.backgroundFps} FPS` : t('options.backgroundFpsAuto');
   pollingTile.dataset.level = options.pollingRate ? 'capped' : 'max';
   $('opt-polling-value').textContent = options.pollingRate === -1 ? t('options.pollingAuto')
     : options.pollingRate ? `${options.pollingRate} Hz` : t('options.pollingMax');
@@ -514,8 +523,9 @@ const syncPerformance = () => {
   document.documentElement.classList.toggle('gfx-low', options.graphics === 'low');
   $('opt-graphics-value').textContent = $('opt-graphics-level-value').textContent = t(`options.graphics.${options.graphics}`);
   // A new resolution: every canvas refits on resize
-  if (options.graphics !== appliedGraphics) {
+  if (options.graphics !== appliedGraphics || options.renderScale !== appliedRenderScale) {
     appliedGraphics = options.graphics;
+    appliedRenderScale = options.renderScale;
     window.dispatchEvent(new Event('resize'));
   }
 };

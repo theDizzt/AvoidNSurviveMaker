@@ -1,4 +1,4 @@
-import { GRAPHICS_LEVELS, options, setOption, type GraphicsLevel } from './options';
+import { applyOptions, graphicsPreset, GRAPHICS_LEVELS, options, type GraphicsLevel } from './options';
 
 /** Frames are judged over windows this long (ms) */
 const WINDOW_MS = 3000;
@@ -31,7 +31,10 @@ export class AutoQuality {
       this.reset(now);
       return null;
     }
-    if (gap >= PAUSE_MS) return null;
+    if (!Number.isFinite(gap) || gap <= 0 || gap >= PAUSE_MS) {
+      this.reset(now);
+      return null;
+    }
     this.frames++;
     this.total += gap;
     if (now - this.start < WINDOW_MS) return null;
@@ -42,7 +45,21 @@ export class AutoQuality {
     if (fps >= expected * 0.75) return null;
     const next = GRAPHICS_LEVELS[GRAPHICS_LEVELS.indexOf(options.graphics) + 1];
     if (!next) return null;
-    setOption('graphics', next);
+    const preset = graphicsPreset(next);
+    // Automatic downshifts must not re-enable effects the player disabled or raise existing caps.
+    applyOptions({
+      graphics: next,
+      renderScale: Math.min(options.renderScale, preset.renderScale) as typeof options.renderScale,
+      frameLimit: Math.min(options.frameLimit || Infinity, preset.frameLimit) as typeof options.frameLimit,
+      backgroundFps: Math.min(options.backgroundFps || Infinity, preset.backgroundFps) as typeof options.backgroundFps,
+      antialias: options.antialias && preset.antialias,
+      shadows: options.shadows && preset.shadows,
+      transparency: options.transparency && preset.transparency,
+      cursorTrail: options.cursorTrail && preset.cursorTrail,
+      decorativeEffects: options.decorativeEffects && preset.decorativeEffects,
+      animatedBackground: options.animatedBackground && preset.animatedBackground,
+      interfaceEffects: options.interfaceEffects && preset.interfaceEffects,
+    });
     this.settleUntil = now + SETTLE_MS;
     return next;
   }

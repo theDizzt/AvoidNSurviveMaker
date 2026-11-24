@@ -23,9 +23,9 @@ export function renderScale(cssW: number, cssH: number): number {
   const dpr = window.devicePixelRatio || 1;
   const byPixels = Math.sqrt(q.maxPixels / Math.max(1, cssW * cssH));
   // Supersampling: extra pixels up to the cap, but never fewer than the device's own
-  if (q.supersample > 1) return Math.max(dpr, Math.min(dpr * q.supersample, byPixels));
-  // Never below half a pixel per CSS px, so text and edges stay legible
-  return Math.max(0.5, Math.min(dpr, q.maxDpr, byPixels));
+  if (q.supersample > 1) return Math.max(dpr, Math.min(dpr * q.supersample, byPixels)) * options.renderScale / 100;
+  // The quality preset has a half-pixel floor; explicit render scaling can reduce it further.
+  return Math.max(0.5, Math.min(dpr, q.maxDpr, byPixels)) * options.renderScale / 100;
 }
 
 /**
@@ -51,7 +51,7 @@ export class FrameLimiter {
 
 /** Frame rate of the animated menu background */
 export function backdropFps(): number {
-  return LEVELS[options.graphics].backdropFps;
+  return options.backgroundFps || LEVELS[options.graphics].backdropFps;
 }
 
 /**

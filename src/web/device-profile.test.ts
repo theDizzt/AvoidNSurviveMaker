@@ -30,7 +30,7 @@ describe('recommendOptions', () => {
   });
 
   it('steps down for integrated graphics, small machines and phones', () => {
-    expect(recommendOptions(dev({ gpu: 'Intel(R) UHD Graphics 620' })).graphics).toBe('high');
+    expect(recommendOptions(dev({ gpu: 'Intel(R) UHD Graphics 620' })).graphics).toBe('medium');
     expect(recommendOptions(dev({ gpu: 'Intel(R) UHD Graphics 620', cores: 4 })).graphics).toBe('medium');
     expect(recommendOptions(dev({ gpu: 'Adreno (TM) 740', mobile: true })).graphics).toBe('medium');
   });

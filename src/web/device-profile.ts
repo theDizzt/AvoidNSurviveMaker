@@ -1,4 +1,4 @@
-import type { GraphicsLevel, Options } from './options';
+import { graphicsPreset, type GraphicsLevel, type GraphicsOptions, type Options } from './options';
 import { gpuName } from './resource-monitor';
 
 /**
@@ -27,8 +27,8 @@ export function readDevice(): DeviceInfo {
   const dpr = window.devicePixelRatio || 1;
   const media = (q: string) => typeof matchMedia === 'function' && matchMedia(q).matches;
   return {
-    cores: nav.hardwareConcurrency || 0,
-    memoryGb: nav.deviceMemory || 0,
+    cores: Number.isFinite(nav.hardwareConcurrency) && nav.hardwareConcurrency > 0 ? nav.hardwareConcurrency : 0,
+    memoryGb: Number.isFinite(nav.deviceMemory) && (nav.deviceMemory ?? 0) > 0 ? nav.deviceMemory! : 0,
     gpu: gpuName(),
     screenPixels: Math.round(screen.width * dpr) * Math.round(screen.height * dpr),
     mobile: media('(pointer: coarse)') && !media('(any-pointer: fine)'),
@@ -49,28 +49,32 @@ export function gpuClass(gpu: string | null): GpuClass {
   return 'unknown';
 }
 
-/** Graphics options that suit this device */
-export function recommendOptions(d: DeviceInfo): Partial<Options> {
+/** Heuristic starting point, refined by AutoQuality during actual play; not a hardware benchmark. */
+export function recommendOptions(d: DeviceInfo): GraphicsOptions & Pick<Options, 'pollingRate' | 'showDebug'> {
   const gpu = gpuClass(d.gpu);
   const lowCpu = (d.cores > 0 && d.cores <= 2) || (d.memoryGb > 0 && d.memoryGb <= 2);
   const midCpu = (d.cores > 0 && d.cores <= 4) || (d.memoryGb > 0 && d.memoryGb <= 4);
 
-  // Same as the Low Spec button
-  if (gpu === 'software' || lowCpu) {
-    return {
-      graphics: 'low', frameLimit: 60, pollingRate: -1, autoQuality: true,
-      cursorTrail: false, decorativeEffects: false, animatedBackground: false, interfaceEffects: false, transparency: false,
-    };
-  }
-
   let graphics: GraphicsLevel;
-  if (gpu === 'weak' || midCpu || d.mobile) graphics = 'medium';
-  // Supersampling only where it stays within the Ultra pixel cap (1080p / 1440p screens)
-  else if (gpu === 'discrete' && d.cores >= 8 && d.screenPixels * 2.25 <= 3840 * 2160 * 1.05) graphics = 'ultra';
+  // Missing RAM/GPU information is not proof of a powerful device.
+  const pixelsKnown = Number.isFinite(d.screenPixels) && d.screenPixels > 0;
+  const strongGpu = /\brtx\b|radeon.*\brx\s*[6-9]\d{3}\b|apple m\d+ (max|ultra)/i.test(d.gpu ?? '');
+  if (gpu === 'software' || gpu === 'weak' || lowCpu) graphics = 'low';
+  else if (gpu === 'unknown' || gpu === 'integrated' || midCpu || d.mobile || d.cores <= 0) graphics = 'medium';
+  // Brand alone does not justify supersampling; require several positive signals.
+  else if (strongGpu && d.cores >= 8 && d.memoryGb >= 8 && pixelsKnown &&
+    d.screenPixels * 2.25 <= 3840 * 2160 * 1.05) graphics = 'ultra';
   else graphics = 'high';
 
-  const out: Partial<Options> = { graphics, frameLimit: 0, autoQuality: true };
-  if (d.reducedMotion) Object.assign(out, { animatedBackground: false, interfaceEffects: false });
+  const out = { ...graphicsPreset(graphics), pollingRate: -1 as const, showDebug: false };
+  // Pixel load matters independently of CPU count. Reduce resolution, not collision accuracy.
+  if (pixelsKnown && d.screenPixels >= 3840 * 2160 && graphics !== 'ultra') {
+    out.renderScale = graphics === 'high' ? 85 : 75;
+    out.backgroundFps = 15;
+  }
+  if (d.reducedMotion) Object.assign(out, {
+    animatedBackground: false, interfaceEffects: false, cursorTrail: false, decorativeEffects: false,
+  });
   return out;
 }
 

@@ -1,4 +1,13 @@
 {
+  "options.autoQualityHint": "游戏帧率持续低于目标（最高 60 FPS）的 75% 时，降低画质，并调整渲染比例、帧率限制和效果。不会自动提高画质或开启已关闭的效果，不影响判定和记录。",
+  "options.autoQualityLowered": "画质已降为 {level}，同时调整了分辨率、帧率限制和效果。可在选项 → 图形中修改。",
+  "device.applied": "已根据设备设置全部图形选项（画质：{level}）。运行缓慢时会继续自动降低，可在选项 → 图形中调整。",
+  "device.autoHint": "根据 CPU、内存、GPU 和分辨率重新设置画质、渲染比例、游戏与背景帧率、阴影、抗锯齿、透明度、轨迹及效果。信息不足时采用保守设置，并尊重减少动态效果的系统偏好。信息不会离开浏览器。",
+  "options.renderScale": "渲染比例",
+  "options.renderScaleHint": "将当前画质的画布分辨率调整为 100、85、75 或 50%。降低可减少绘制负担，但图像会变模糊。不影响游戏判定和记录。",
+  "options.backgroundFps": "菜单背景帧率",
+  "options.backgroundFpsAuto": "跟随画质",
+  "options.backgroundFpsHint": "仅调整菜单背景动画的帧率。可跟随画质，或选择 60、30、15、5 FPS。关闭背景动画时不生效。",
   "options.graphicsOpen": "点击打开全部设置",
   "options.quality": "画质",
   "options.graphicsResetSub": "恢复图形默认值",

@@ -26,7 +26,7 @@ function saveDecision(v: Decision): void {
 export function applyDeviceOptions(): string {
   const patch = recommendOptions(readDevice());
   applyOptions(patch);
-  return t(`options.graphics.${patch.graphics ?? 'high'}`);
+  return t(`options.graphics.${patch.graphics}`);
 }
 
 /** Ask whether the device may be checked; resolves true when the player agrees. */
