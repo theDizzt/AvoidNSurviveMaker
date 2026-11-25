@@ -252,7 +252,7 @@ const THORN_STEP = 4;
  * pattern from `seed`: mostly as long as the stem is thick, now and then a much bigger one, every
  * one tilted its own way (a little toward the tip). Used for both drawing and collision.
  */
-export function thornRing(ring: Float64Array, seed: number): Float64Array {
+export function thornRing(ring: Float64Array, seed: number, referenceShape = false): Float64Array {
   const n = ring.length / 2;
   if (n < 3) return ring;
   let area = 0;
@@ -265,6 +265,30 @@ export function thornRing(ring: Float64Array, seed: number): Float64Array {
     minY = Math.min(minY, ring[i * 2 + 1]); maxY = Math.max(maxY, ring[i * 2 + 1]);
   }
   const tall = maxY - minY >= maxX - minX;
+  if (referenceShape) {
+    // Trace of the supplied vine silhouette (155 x 389). The same polygon is
+    // used for rendering and collision; horizontal vines point to the right.
+    const outline = [
+      90, 0, 82, 60, 124, 66, 91, 82, 96, 92, 131, 87,
+      103, 112, 97, 132, 131, 152, 91, 153, 87, 168,
+      128, 169, 98, 190, 101, 198, 136, 205, 98, 219,
+      96, 237, 132, 254, 99, 259, 106, 295, 149, 292,
+      114, 320, 116, 331, 155, 340, 116, 353, 83, 389,
+      52, 364, 31, 349, 0, 341, 32, 331, 34, 318,
+      7, 287, 47, 293, 54, 278, 27, 264, 61, 257,
+      63, 246, 34, 248, 66, 226, 59, 212, 24, 207,
+      62, 189, 65, 179, 23, 177, 65, 149, 34, 124,
+      59, 128, 58, 119, 26, 116, 60, 111, 22, 102,
+      51, 92, 61, 74, 30, 41, 70, 53,
+    ];
+    const result = new Float64Array(outline.length);
+    for (let i = 0; i < outline.length; i += 2) {
+      const cross = outline[i] / 155, along = outline[i + 1] / 389;
+      result[i] = tall ? minX + cross * (maxX - minX) : maxX - along * (maxX - minX);
+      result[i + 1] = tall ? minY + along * (maxY - minY) : minY + cross * (maxY - minY);
+    }
+    return result;
+  }
   const across = Math.max(1, tall ? maxX - minX : maxY - minY);
   // Thorns about as far apart as the stem is thick (within reason)
   const gap = Math.min(38, Math.max(14, across * 0.8));

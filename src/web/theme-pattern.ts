@@ -818,6 +818,88 @@ export function createPatternTile(f: Extract<Fill, { type: 'pattern' }>): HTMLCa
       }
       break;
     }
+    case 'waves': {
+      // Periodic swells and narrow foam crests, seamless in both directions.
+      for (let row = -1; row <= 4; row++) {
+        const y = row * s / 4;
+        for (const [offset, width, alpha] of [[0.035, 0.055, 0.12], [0, 0.012, 0.65], [-0.018, 0.005, 0.28]]) {
+          g.globalAlpha = alpha;
+          g.strokeStyle = f.color;
+          g.lineWidth = s * width;
+          g.beginPath();
+          for (let k = 0; k <= 64; k++) {
+            const x = k / 64;
+            const yy = y + s * (offset + 0.035 * Math.sin(x * Math.PI * 2 + row * Math.PI / 2));
+            if (k === 0) g.moveTo(x * s, yy);
+            else g.lineTo(x * s, yy);
+          }
+          g.stroke();
+        }
+      }
+      break;
+    }
+    case 'caustics': {
+      // Soft, intersecting light ripples seen below tropical water.
+      g.strokeStyle = f.color;
+      for (let layer = 0; layer < 2; layer++) {
+        g.save();
+        if (layer) { g.translate(s, 0); g.rotate(Math.PI / 2); }
+        for (let row = -1; row <= 4; row++) {
+          for (const [width, alpha] of [[0.05, 0.05], [0.012, 0.17]]) {
+            g.lineWidth = s * width;
+            g.globalAlpha = alpha;
+            g.beginPath();
+            for (let k = 0; k <= 64; k++) {
+              const x = k / 64;
+              const y = row / 4 + 0.065 * Math.sin(x * Math.PI * 2 + row * Math.PI / 2 + layer);
+              if (k === 0) g.moveTo(x * s, y * s);
+              else g.lineTo(x * s, y * s);
+            }
+            g.stroke();
+          }
+        }
+        g.restore();
+      }
+      break;
+    }
+    case 'floodedRock':
+    case 'pittedStone': {
+      const rock = rgbOf(f.background);
+      const dark = rgbOf(mix(f.background, '#000000', 0.65));
+      crackedTile(tile, 18, 1019, (cell, edge, grain, out) => {
+        const tone = 0.88 + (cell % 5) * 0.045 + grain * 0.1;
+        for (let c = 0; c < 3; c++) out[c] = rock[c] * tone;
+        if (edge < tile.width * 0.009) mixInto(out, out, dark, 0.8);
+      });
+      const random = seeded(1021);
+      for (let i = 0; i < 38; i++) {
+        const x = random() * s, y = random() * s;
+        const rx = s * (0.012 + random() * 0.045), ry = rx * (0.45 + random() * 0.4);
+        wrapped(s, (dx, dy) => {
+          g.globalAlpha = 0.55;
+          g.fillStyle = f.color;
+          g.beginPath(); g.ellipse(x + dx, y + dy + s * 0.005, rx, ry, 0, 0, Math.PI * 2); g.fill();
+          g.fillStyle = `rgb(${dark.join(',')})`;
+          g.beginPath(); g.ellipse(x + dx, y + dy, rx * 0.9, ry * 0.85, 0, 0, Math.PI * 2); g.fill();
+        });
+      }
+      if (f.pattern === 'floodedRock') {
+        g.globalAlpha = 0.16;
+        g.strokeStyle = '#67bdd0';
+        g.lineWidth = s * 0.008;
+        for (let row = -1; row <= 4; row++) {
+          g.beginPath();
+          for (let k = 0; k <= 64; k++) {
+            const x = k / 64;
+            const y = row / 4 + Math.sin(x * Math.PI * 2 + row * Math.PI / 2) * 0.045;
+            if (k === 0) g.moveTo(x * s, y * s);
+            else g.lineTo(x * s, y * s);
+          }
+          g.stroke();
+        }
+      }
+      break;
+    }
     case 'cloudBank': {
       // One sky scene, stretched to the surface bounds by the renderer.
       const sky = g.createLinearGradient(0, 0, 0, s);

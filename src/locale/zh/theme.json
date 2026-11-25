@@ -1,4 +1,8 @@
 {
+  "pattern.floodedRock": "淹没的洞穴岩石",
+  "pattern.waves": "海浪",
+  "pattern.caustics": "水下光纹",
+  "pattern.pittedStone": "凹蚀岩石",
   "pattern.cloudBank": "晴空与低层云",
   "pattern.egyptian": "古埃及",
   "pattern.sandBrick": "砂岩砖",

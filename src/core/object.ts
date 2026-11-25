@@ -64,7 +64,7 @@ export function compileTiltedAbout(o: MapObject, tiltCenter?: Point): CompiledOb
   const wall = o.role === 'wall';
   // Machines (#111–114) are drawn from their box: their outline is the machine itself
   const rect = o.shape.type === 'rect' ? o.shape : null;
-  const box = o.vine && wall ? ringBounds(thornRing(plain.poly, center.x * 13 + center.y * 7))
+  const box = o.vine && wall ? ringBounds(thornRing(plain.poly, center.x * 13 + center.y * 7, !!rect))
     : wall && rect && o.gear ? ringBounds(gearRing(rect, o.gear))
       : wall && rect && o.hand ? ringBounds(handRing(rect))
         : wall && rect && o.pendulum ? ringBounds(pendulumRing(rect))

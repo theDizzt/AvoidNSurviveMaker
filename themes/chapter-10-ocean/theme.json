@@ -2,7 +2,7 @@
     "format":  1,
     "id":  "ocean",
     "name":  "Ocean - Title TBD",
-    "description":  "Deep blue water, coral silhouettes and luminous currents. Chapter title to be announced.",
+    "description":  "From sunlit sandy shores through tropical waters to the deep sea and flooded caves.",
     "author":  "Avoid N Survive",
     "released":  "2026-11-17",
     "unlockStars":  455,
@@ -14,23 +14,29 @@
     "style":  {
                   "maze":  {
                                "wall":  {
-                                            "edge":  "#5fdddf",
+                                            "anim":  {
+                                                         "amount":  1,
+                                                         "angle":  0,
+                                                         "speed":  7,
+                                                         "type":  "scroll"
+                                                     },
+                                            "edge":  "#b2e9eb",
                                             "fill":  {
-                                                         "background":  "#102e47",
-                                                         "color":  "#4385c7",
-                                                         "pattern":  "dots",
-                                                         "size":  16,
+                                                         "background":  "#168fb5",
+                                                         "color":  "#e1ffff",
+                                                         "pattern":  "waves",
+                                                         "size":  180,
                                                          "type":  "pattern"
                                                      }
                                         },
                                "path":  {
-                                            "edge":  "#4385c7",
+                                            "edge":  "#fff0cb",
                                             "fill":  {
-                                                         "angle":  90,
-                                                         "from":  "#102e47",
-                                                         "style":  "linear",
-                                                         "to":  "#4385c7",
-                                                         "type":  "gradient"
+                                                         "background":  "#efd39a",
+                                                         "color":  "#b58b52",
+                                                         "pattern":  "sand",
+                                                         "size":  64,
+                                                         "type":  "pattern"
                                                      }
                                         }
                            },
@@ -44,7 +50,175 @@
                                 "secondary":  "#4385c7",
                                 "font":  "title",
                                 "numberColor":  "#5fdddf"
-                            }
+                            },
+                  "designs":  [
+                                  {
+                                      "levels":  [
+                                                     1,
+                                                     6
+                                                 ],
+                                      "maze":  {
+                                                   "wall":  {
+                                                                "anim":  {
+                                                                             "amount":  1,
+                                                                             "angle":  0,
+                                                                             "speed":  7,
+                                                                             "type":  "scroll"
+                                                                         },
+                                                                "edge":  "#b2e9eb",
+                                                                "fill":  {
+                                                                             "background":  "#168fb5",
+                                                                             "color":  "#e1ffff",
+                                                                             "pattern":  "waves",
+                                                                             "size":  180,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            },
+                                                   "path":  {
+                                                                "edge":  "#fff0cb",
+                                                                "fill":  {
+                                                                             "background":  "#efd39a",
+                                                                             "color":  "#b58b52",
+                                                                             "pattern":  "sand",
+                                                                             "size":  64,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            }
+                                               },
+                                      "name":  "Beach",
+                                      "id":  "beach",
+                                      "i18n":  {
+                                                   "zh":  "海滩",
+                                                   "ko":  "해변"
+                                               }
+                                  },
+                                  {
+                                      "levels":  [
+                                                     7,
+                                                     13
+                                                 ],
+                                      "maze":  {
+                                                   "wall":  {
+                                                                "anim":  {
+                                                                             "amount":  1,
+                                                                             "angle":  0,
+                                                                             "speed":  3,
+                                                                             "type":  "scroll"
+                                                                         },
+                                                                "edge":  "#8fdedc",
+                                                                "fill":  {
+                                                                             "background":  "#087f98",
+                                                                             "color":  "#98f4e0",
+                                                                             "pattern":  "caustics",
+                                                                             "size":  220,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            },
+                                                   "path":  {
+                                                                "anim":  {
+                                                                             "amount":  1,
+                                                                             "angle":  0,
+                                                                             "speed":  5,
+                                                                             "type":  "scroll"
+                                                                         },
+                                                                "edge":  "#ffffff",
+                                                                "fill":  {
+                                                                             "background":  "#247cc9",
+                                                                             "color":  "#78d9ff",
+                                                                             "pattern":  "waves",
+                                                                             "size":  110,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            }
+                                               },
+                                      "name":  "Tropical Waters",
+                                      "id":  "tropical",
+                                      "i18n":  {
+                                                   "zh":  "热带海水",
+                                                   "ko":  "바닷물 속"
+                                               }
+                                  },
+                                  {
+                                      "levels":  [
+                                                     14,
+                                                     18
+                                                 ],
+                                      "maze":  {
+                                                   "wall":  {
+                                                                "anim":  {
+                                                                             "amount":  1,
+                                                                             "angle":  0,
+                                                                             "speed":  1,
+                                                                             "type":  "scroll"
+                                                                         },
+                                                                "edge":  "#173c58",
+                                                                "fill":  {
+                                                                             "background":  "#061c34",
+                                                                             "color":  "#266783",
+                                                                             "pattern":  "caustics",
+                                                                             "size":  280,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            },
+                                                   "path":  {
+                                                                "anim":  {
+                                                                             "amount":  1,
+                                                                             "angle":  0,
+                                                                             "speed":  3,
+                                                                             "type":  "scroll"
+                                                                         },
+                                                                "edge":  "#ffffff",
+                                                                "fill":  {
+                                                                             "background":  "#102e60",
+                                                                             "color":  "#326eac",
+                                                                             "pattern":  "waves",
+                                                                             "size":  130,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            }
+                                               },
+                                      "name":  "Deep Sea",
+                                      "id":  "deep-sea",
+                                      "i18n":  {
+                                                   "zh":  "深海",
+                                                   "ko":  "심해"
+                                               }
+                                  },
+                                  {
+                                      "levels":  [
+                                                     19,
+                                                     21
+                                                 ],
+                                      "maze":  {
+                                                   "wall":  {
+                                                                "edge":  "#16343d",
+                                                                "fill":  {
+                                                                             "background":  "#06151f",
+                                                                             "color":  "#123c48",
+                                                                             "pattern":  "floodedRock",
+                                                                             "size":  160,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            },
+                                                   "path":  {
+                                                                "edge":  "#91a6af",
+                                                                "fill":  {
+                                                                             "background":  "#384d5b",
+                                                                             "color":  "#708b93",
+                                                                             "pattern":  "pittedStone",
+                                                                             "size":  85,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            }
+                                               },
+                                      "name":  "Flooded Cave",
+                                      "id":  "flooded-cave",
+                                      "i18n":  {
+                                                   "zh":  "深海洞穴",
+                                                   "ko":  "심해 동굴"
+                                               }
+                                  }
+                              ]
               },
     "screens":  {
                     "select":  {
@@ -173,13 +347,13 @@
                                }
                 },
     "i18n":  {
-        "ko":  {
-            "name":  "바다 - 제목 미정",
-            "description":  "짙푸른 물, 산호의 실루엣, 빛나는 해류. 챕터 제목은 추후 공개됩니다."
-        },
-        "zh":  {
-            "name":  "Ocean - Title TBD",
-            "description":  "Deep blue water, coral silhouettes and luminous currents. Chapter title to be announced."
-        }
-    }
+                 "ko":  {
+                            "name":  "바다 - 제목 미정",
+                            "description":  "파도치는 모래사장에서 열대 바닷속과 심해를 지나 침수된 해저 동굴로 내려갑니다."
+                        },
+                 "zh":  {
+                            "name":  "Ocean - Title TBD",
+                            "description":  "从阳光下的沙滩穿过热带海水，深入深海与淹没的洞穴。"
+                        }
+             }
 }
