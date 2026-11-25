@@ -1037,8 +1037,8 @@ export class ThemeEditor {
     OFFICIAL_THEMES.forEach((t, i) => {
       chapters.append(new Option(tr('te.chapterOption', { n: i + 1, name: t.info.name }), `o${i}`));
       for (const d of t.info.style.designs ?? []) {
-        const o = new Option(subThemeLabel(d.name), `o${i}`);
-        o.disabled = true;
+        const range = d.levels ? ` (${d.levels[0]}–${d.levels[1]})` : '';
+        const o = new Option(subThemeLabel(d.name) + range, `o${i}#${d.id}`);
         chapters.append(o);
       }
     });
@@ -1047,14 +1047,21 @@ export class ThemeEditor {
     CUSTOM_THEME_PRESETS.forEach((t, i) => unused.append(new Option(t.info.name, `u${i}`)));
     source.append(chapters, unused);
     if (customStoredTheme()) source.append(new Option(tr('te.customPackOption', { name: customStoredTheme()!.info.name }), 'custom'));
-    source.addEventListener('change', () => {
+    source.addEventListener('change', async () => {
       const v = source.value;
       source.value = '';
       if (!v || !confirm(tr('te.replaceTheThemeBeingEdited'))) return;
       if (v === 'blank') void this.load({ info: blankThemeInfo(), levels: [], images: {} });
       else if (v === 'custom') void this.load(customStoredTheme()!);
       else if (v.startsWith('u')) void this.load(CUSTOM_THEME_PRESETS[Number(v.slice(1))]);
-      else void this.load(OFFICIAL_THEMES[Number(v.slice(1))]);
+      else {
+        const [chapter, designId] = v.slice(1).split('#');
+        await this.load(OFFICIAL_THEMES[Number(chapter)]);
+        if (designId) {
+          this.formTab = 'maze';
+          this.selectNode(designId);
+        }
+      }
     });
 
     const design = this.nodeDesign();
@@ -1080,7 +1087,8 @@ export class ThemeEditor {
     }
     this.form.replaceChildren(
       tabs,
-      ...(this.formTab === 'info' ? [this.group(this.field(tr('te.load'), source, true)), files] : []),
+      this.group(this.field(tr('te.load'), source, true)),
+      ...(this.formTab === 'info' ? [files] : []),
       this.themeTree(),
       ...(this.formTab === 'maze'
         ? this.mazeSections(design)
