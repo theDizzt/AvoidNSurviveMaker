@@ -40,12 +40,15 @@ flowchart TB
 ## 2. Core (`src/core`)
 
 ### 맵 모델
-- **`types.ts`**: `MapData`(형식 v2). 맵은 크기, START 와 GOAL 사각형, `MapObject` 목록을 가집니다. 각 오브젝트는 **모양 × 역할 × 동작** 입니다.
+- **`types.ts`**: `schema/`의 타입을 다시 내보내는 호환 진입점입니다. `MapData`(형식 v2)는 크기, START 와 GOAL 사각형, `MapObject` 목록을 가집니다. 각 오브젝트는 **모양 × 역할 × 동작** 입니다.
   - 모양: rect, circle, polygon, freeform (`shape.ts` 가 모든 모양을 하나의 닫힌 다각형으로 바꾸며, 그리기와 충돌에 함께 사용)
   - 역할: `path`, `wall`, `coin`, `dark`, `trigger`(스위치), `door`, `laser`, `mirror`, `portal`, `text`, `safe`
   - 동작: 경로 이동과 회전(`motion.ts`), 가시·톱날·바위(`hazards.ts`), 스위치 연결(`switches.ts`)
 - 맵별 선택 항목: 모양(`theme`: 벽과 길 채우기), 별 기준 시간, 어둠, 레벨 번호와 제목.
-- **`validate.ts`**: 외부 JSON 이 `MapData` 가 되는 유일한 통로입니다. 모든 필드를 검사하고 v1 형식을 변환합니다.
+- **`validate.ts`**: 외부 JSON 검증 API와 기본값을 다시 내보내는 호환 진입점입니다. `createValidateApi(t)`는 번역기가 독립적인 검증 API를 만듭니다.
+- **`schema/`**: `common.ts`는 좌표·모양, `motion.ts`는 이동·회전, `theme.ts`는 표면 스타일을 정의합니다. `objects/`에는 오브젝트 또는 관련 기능군별 타입·기본값·검증을 함께 둡니다. 전선과 전기 장치는 `electric.ts`, 상호 배타적인 기계 벽은 `machines.ts`에서 관리합니다.
+- **`schema/object.ts`**: 공통 오브젝트 필드를 읽고 개별 검증을 순서대로 호출합니다. 얼음→점멸, 가시→낙하→바위→톱날→덩굴→기계, 명시적 조명→횃불 기본값의 처리 순서를 유지해야 합니다.
+- **`schema/map.ts`**: 맵·팩 검증, v1 변환, ID 정리, 오브젝트 간 연결 오류와 맵 전체 경고를 담당합니다. `validation.ts`는 번역기를 전달받는 공통 필드 판독기와 `MapValidationError`, `limits.ts`는 공통 제한값을 제공합니다. 스키마 내부 타입 참조는 `import type`을 사용합니다.
 - **`share.ts`**: 공유 링크(`#m=…`)를 위한 맵 ⇄ URL 코드(deflate-raw + base64url).
 
 ### 시뮬레이션 (`simulation.ts`)

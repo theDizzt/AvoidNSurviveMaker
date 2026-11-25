@@ -55,7 +55,16 @@ npm run build     # dist/ 에 정적 사이트 생성 — GitHub Pages, Vercel �
 ```
 src/
   core/            # DOM 의존성 없음
-    types.ts       # 맵 스키마 (MapData v2): 오브젝트 = 모양 × 역할 × 이동/회전
+    types.ts       # schema/ 타입의 호환 진입점 (MapData v2)
+    schema/
+      common.ts    # 좌표·모양 공통 타입
+      motion.ts    # 이동·회전 타입, 기본값, 검증
+      object.ts    # MapObject와 순서가 보장된 개별 검증 조합
+      map.ts       # MapData·MapPack, 맵 전체 검증·변환·경고
+      theme.ts     # 표면 스타일 타입과 검증
+      validation.ts # 번역기를 주입받는 공통 필드 판독기
+      limits.ts    # 공통 제한값
+      objects/     # 오브젝트·기능군별 타입, 기본값, 검증
     geometry.ts    # 선분/다각형 교차, 점-다각형 포함 판정, 사각형 헬퍼
     shape.ts       # 사각형 / 원 / 다각형 / 자유 곡선 → 그리기와 충돌에 함께 쓰는 하나의 다각형
     motion.ts      # 경로(직선, 곡선, 원), 반복, 이징, 회전 — 시간에 대한 닫힌 식
@@ -63,7 +72,7 @@ src/
     simulation.ts  # 고정 1 ms 틱 시뮬레이션과 리플레이
     account.ts     # 닉네임 / 이메일 / 비밀번호 규칙, Name#0042 형식
     theme.ts       # 테마 프리셋과 색상 헬퍼
-    validate.ts    # 외부 맵 검증과 경고
+    validate.ts    # 외부 맵 검증·경고·기본값 API의 호환 진입점
     share.ts       # 맵 <-> URL 공유 코드 (deflate-raw + base64url)
     levels.ts      # 내장 레벨
   web/
