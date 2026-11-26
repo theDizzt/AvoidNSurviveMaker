@@ -12,6 +12,10 @@ export interface SurfaceStyle {
   fill: Fill;
   /** Outline color */
   edge: string;
+  /** Paths: omitted preserves the original recessed appearance. */
+  relief?: 'raised' | 'recessed';
+  /** Paths: animated surf on the surrounding water. */
+  surf?: boolean;
   /** Animated look (drawn over the surface every frame) */
   anim?: SurfaceAnim;
   /**
@@ -76,6 +80,8 @@ export function createThemeSchema(context: ValidationContext) {
   function surface(v: unknown, name: string): SurfaceStyle {
     const o = obj(v, name);
     const out: SurfaceStyle = { fill: fill(o.fill, `${name}.fill`), edge: color(o.edge, `${name}.edge`) };
+    if (o.relief !== undefined) out.relief = oneOf(o.relief, `${name}.relief`, ['raised', 'recessed'] as const);
+    if (o.surf === true) out.surf = true;
     const anim = surfaceAnim(o.anim);
     if (anim) out.anim = anim;
     if (o.line !== undefined) {

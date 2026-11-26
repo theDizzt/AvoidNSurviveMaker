@@ -173,6 +173,14 @@ export function renderThemePanel(
         label(t('common.background'), colorInput(f.background, (background) => set({ background }))),
       );
     }
+    if (key === 'path') {
+      fields.push(label(t('themePanel.relief'), select(style.relief ?? 'recessed', [
+        ['recessed', t('themePanel.recessed')], ['raised', t('themePanel.raised')],
+      ], (value) => update(key, (s) => { s.relief = value; }))));
+      fields.push(label(t('themePanel.surf'), select(style.surf ? 'on' : 'off', [
+        ['off', t('themePanel.animNone')], ['on', t('themePanel.surf')],
+      ], (value) => update(key, (s) => { s.surf = value === 'on'; }))));
+    }
     // Animation: pulse / color fade over the surface, or its pattern scrolling
     const an = style.anim;
     const setAnim = (patch: Partial<NonNullable<SurfaceStyle['anim']>>) => update(key, (s) => {

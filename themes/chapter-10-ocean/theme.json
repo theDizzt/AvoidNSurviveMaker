@@ -37,7 +37,9 @@
                                                          "pattern":  "sand",
                                                          "size":  64,
                                                          "type":  "pattern"
-                                                     }
+                                                     },
+                                            "relief":  "raised",
+                                            "surf":  true
                                         }
                            },
                   "badge":  {
@@ -82,7 +84,9 @@
                                                                              "pattern":  "sand",
                                                                              "size":  64,
                                                                              "type":  "pattern"
-                                                                         }
+                                                                         },
+                                                                "relief":  "raised",
+                                                                "surf":  true
                                                             }
                                                },
                                       "name":  "Beach",
@@ -128,7 +132,8 @@
                                                                              "pattern":  "waves",
                                                                              "size":  110,
                                                                              "type":  "pattern"
-                                                                         }
+                                                                         },
+                                                                "relief":  "raised"
                                                             }
                                                },
                                       "name":  "Tropical Waters",
@@ -174,7 +179,8 @@
                                                                              "pattern":  "waves",
                                                                              "size":  130,
                                                                              "type":  "pattern"
-                                                                         }
+                                                                         },
+                                                                "relief":  "raised"
                                                             }
                                                },
                                       "name":  "Deep Sea",
@@ -208,7 +214,8 @@
                                                                              "pattern":  "pittedStone",
                                                                              "size":  85,
                                                                              "type":  "pattern"
-                                                                         }
+                                                                         },
+                                                                "relief":  "recessed"
                                                             }
                                                },
                                       "name":  "Flooded Cave",

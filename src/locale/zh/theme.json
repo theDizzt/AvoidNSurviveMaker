@@ -1,4 +1,8 @@
 {
+  "themePanel.relief": "道路高低",
+  "themePanel.raised": "凸起",
+  "themePanel.recessed": "凹陷",
+  "themePanel.surf": "岸边浪花",
   "pattern.floodedRock": "淹没的洞穴岩石",
   "pattern.waves": "海浪",
   "pattern.caustics": "水下光纹",

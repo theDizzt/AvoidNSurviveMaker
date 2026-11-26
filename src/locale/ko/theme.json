@@ -1,4 +1,8 @@
 {
+  "themePanel.relief": "길 높낮이",
+  "themePanel.raised": "돌출",
+  "themePanel.recessed": "움푹 들어감",
+  "themePanel.surf": "가장자리 물보라",
   "pattern.floodedRock": "침수된 동굴 바위",
   "pattern.waves": "바다 물결",
   "pattern.caustics": "수중 빛무늬",

@@ -372,6 +372,7 @@ interface StaticLayer {
   scale: number;
   /** Scratch canvas for animated surfaces (theme `anim`) */
   anim?: HTMLCanvasElement;
+  pathMask?: HTMLCanvasElement;
   /** Secret-wall overlay at exactly the same resolution as the wall mass. */
   secret?: HTMLCanvasElement;
   /** Scratch canvas for conveyor belts (#69), drawn under the wall mass every frame */
@@ -440,7 +441,7 @@ function freeStaticLayer(st: StaticLayer): void {
     freeCanvas(secretLayers.get(sg));
     secretLayers.delete(sg);
   }
-  for (const c of [st.layer, st.walls, st.anim, st.secret, st.belts, st.dyn?.floor, st.dyn?.outside, st.dyn?.wallPieces, st.dyn?.frame, st.dyn?.composite]) freeCanvas(c);
+  for (const c of [st.layer, st.walls, st.anim, st.pathMask, st.secret, st.belts, st.dyn?.floor, st.dyn?.outside, st.dyn?.wallPieces, st.dyn?.frame, st.dyn?.composite]) freeCanvas(c);
 }
 
 /**
@@ -657,7 +658,7 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   if (line && paths) paintFloorLine(f, wallCanvas, line, scale);
   const [layer, s] = offscreen(w, h);
   s.drawImage(floor, 0, 0);
-  drawWallMass(s, wallCanvas, scale);
+  drawWallMass(s, wallCanvas, scale, undefined, theme?.path.relief === 'raised');
   if (!needsComposite(map, objects)) {
     for (const c of [floor, outside, wallPieces]) freeCanvas(c);
     return { layer, walls: wallCanvas, scale };
@@ -665,7 +666,67 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
   return { layer, walls: wallCanvas, scale, dyn: { floor, outside, wallPieces, frame: offscreen(w, h)[0], composite: offscreen(w, h)[0], valid: false, conceal: false, pieces: new Map(), stamp: 0 } };
 }
 
-/** 0 → 1 → 0 once per cycle (`speed` cycles per second) */
+/** Raised paths and shoreline foam follow the current wall/floor boundary. */
+function drawPathEdges(ctx: CanvasRenderingContext2D, map: MapData, st: StaticLayer, walls: HTMLCanvasElement, t: number): void {
+  const mask = st.pathMask ??= offscreen(walls.width, walls.height)[0];
+  const m = mask.getContext('2d')!;
+  m.globalCompositeOperation = 'source-over';
+  m.clearRect(0, 0, mask.width, mask.height);
+  m.fillStyle = '#ffffff';
+  m.fillRect(0, 0, mask.width, mask.height);
+  m.globalCompositeOperation = 'destination-out';
+  m.drawImage(walls, 0, 0);
+  m.globalCompositeOperation = 'source-over';
+  const canvas = st.anim ??= offscreen(walls.width, walls.height)[0];
+  const g = canvas.getContext('2d')!;
+  const reset = () => {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, canvas.width, canvas.height);
+  };
+  const paint = (color: string) => {
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = color;
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.globalCompositeOperation = 'source-over';
+    ctx.drawImage(canvas, 0, 0, map.width, map.height);
+  };
+  if (map.theme?.path.relief === 'raised') {
+    if (options.shadows) {
+      reset();
+      g.drawImage(mask, 0, 4 * st.scale);
+      g.globalCompositeOperation = 'destination-out';
+      g.drawImage(mask, 0, 0);
+      paint('rgba(4,24,38,0.48)');
+    }
+    reset();
+    g.drawImage(mask, 0, 0);
+    g.globalCompositeOperation = 'destination-out';
+    g.drawImage(mask, st.scale, 1.5 * st.scale);
+    paint('rgba(255,255,255,0.55)');
+  }
+  if (map.theme?.path.surf) {
+    // Two foam fronts wash out from the sand and dissolve before the next swell.
+    for (let front = 0; front < 2; front++) {
+      const phase = options.graphics === 'low' ? (front + 0.3) / 2 : ((t / 2400 + front / 2) % 1 + 1) % 1;
+      const radius = (2 + phase * 10) * st.scale;
+      reset();
+      growMask(g, mask, radius);
+      g.globalCompositeOperation = 'destination-out';
+      const inner = Math.max(0, radius - (1.4 + (1 - phase)) * st.scale);
+      g.drawImage(mask, 0, 0);
+      for (let k = 0; k < GROW_STEPS; k++) {
+        const a = k * Math.PI * 2 / GROW_STEPS;
+        g.drawImage(mask, Math.cos(a) * inner, Math.sin(a) * inner);
+      }
+      g.globalCompositeOperation = 'destination-in';
+      g.drawImage(walls, 0, 0);
+      paint(`rgba(235,255,255,${0.65 * (1 - phase)})`);
+    }
+  }
+}
+
 export function animCycle(t: number, speed: number): number {
   return (1 - Math.cos((t / 1000) * speed * Math.PI * 2)) / 2;
 }
@@ -745,7 +806,7 @@ const SHADOW_OFFSET = 4;
 let shadowScratch: [HTMLCanvasElement, CanvasRenderingContext2D] | null = null;
 
 /** The wall mass onto the floor: a flat shadow, then the walls */
-function drawWallMass(s: CanvasRenderingContext2D, walls: HTMLCanvasElement, scale: number, area?: PixelRect): void {
+function drawWallMass(s: CanvasRenderingContext2D, walls: HTMLCanvasElement, scale: number, area?: PixelRect, raised = false): void {
   const d = SHADOW_DOWNSCALE;
   const W = walls.width;
   const H = walls.height;
@@ -783,7 +844,7 @@ function drawWallMass(s: CanvasRenderingContext2D, walls: HTMLCanvasElement, sca
   s.save();
   s.setTransform(1, 0, 0, 1, 0, 0);
   s.imageSmoothingEnabled = true;
-  if (x1 > x0 && y1 > y0 && options.shadows) s.drawImage(shadow, x0 / d, y0 / d, (x1 - x0) / d, (y1 - y0) / d, x0, y0 + off, x1 - x0, y1 - y0);
+  if (!raised && x1 > x0 && y1 > y0 && options.shadows) s.drawImage(shadow, x0 / d, y0 / d, (x1 - x0) / d, (y1 - y0) / d, x0, y0 + off, x1 - x0, y1 - y0);
   // No rim around the walls: it was a blurred shadow in the edge color, the costliest part left
   s.drawImage(walls, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
   s.restore();
@@ -1409,7 +1470,7 @@ export function drawMap(
         c.drawImage(dyn.floor, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
         // The floor line (theme path `line`) around moving walls and doors too, under them
         if (floorLine) paintMovingLine(c, walls, floorLine, scale, r);
-        drawWallMass(c, dyn.frame, scale, r);
+        drawWallMass(c, dyn.frame, scale, r, theme?.path.relief === 'raised');
         c.restore();
       }
     }
@@ -1420,6 +1481,7 @@ export function drawMap(
   // Animated floor / walls: drawn over the surfaces, masked by this frame's wall mass. Off at low
   // graphics quality: a whole-screen layer more every frame
   if ((theme?.path.anim || theme?.wall.anim) && options.graphics !== 'low') drawSurfaceAnims(ctx, map, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t);
+  if (theme?.path.relief === 'raised' || theme?.path.surf) drawPathEdges(ctx, map, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t);
   // Conveyor belts (#69): on the floor, under the walls that cross them
   if (objects.some((o, i) => o.role === 'conveyor' && shown(i))) drawBelts(ctx, map, objects, st, dyn && (moving || conceal) ? dyn.frame : st.walls, opts.now ?? t, shown);
   // Ponds and radioactive water (#86 / #87); lily pads (#85) float on them
