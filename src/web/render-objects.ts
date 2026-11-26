@@ -1,11 +1,13 @@
 import { compilePressCylinder, toWorld, transformAt, type CompiledObject, type Transform } from '../core/object';
-import type { Aura, MapData, MapObject, Point, Power, Rad, Spot } from '../core/types';
+import type { Aura, LiquidKind, MapData, MapObject, Point, Power, Rad, Spot } from '../core/types';
+import { pointInPoly } from '../core/geometry';
+import { unionOutline } from '../core/union-outline';
 import { auraRadius, auraReach } from '../core/radiation';
 import { WIRE_WIDTH } from '../core/electric';
 import { libraryFontCss } from './library-fonts';
 
 /**
- * Drawing for thorn vines (#83 / #84), lily pads (#85), ponds and radioactive water (#86 / #87),
+ * Drawing for thorn vines (#83 / #84), lily pads (#85), liquids (#86 / #87 / #118–120),
  * spotlights (#88–90), wires (#91), electric devices (#94–97) and radiation (#115–117). Everything is
  * in map units.
  */
@@ -119,10 +121,73 @@ export function drawThornVine(
   ctx.restore();
 }
 
-// ───────────────────────── Liquids (#86 / #87) and lily pads (#85) ─────────────────────────
+// ─────────────────── Liquids (#86 / #87 / #118–120) and lily pads (#85) ───────────────────
 
-const LIQUID_COLOR = { pond: '#2f86d4', toxic: '#62e82a' } as const;
-const LIQUID_BANK = { pond: 'rgba(36,92,150,0.85)', toxic: 'rgba(48,140,20,0.85)' } as const;
+const LIQUID_COLOR: Record<LiquidKind, string> = { pond: '#2f86d4', toxic: '#62e82a', lava: '#c8200e', sulfur: '#cfae34', oil: '#121014' };
+const LIQUID_BANK: Record<LiquidKind, string> = {
+  pond: 'rgba(36,92,150,0.85)', toxic: 'rgba(48,140,20,0.85)', lava: 'rgba(52,22,16,0.92)', sulfur: 'rgba(168,136,52,0.88)', oil: 'rgba(14,12,16,0.8)',
+};
+/** Ripples drift across these (oil has its own slow, heavy swell; lava none) */
+const RIPPLING = new Set<LiquidKind>(['pond', 'toxic', 'sulfur']);
+/**
+ * The bright rim of lava (#118): many thin layers of stroke (map units wide, half of each shows
+ * inside), widest first, going from orange through yellow to almost white at the very edge, so
+ * together they make a smooth gradient
+ */
+const LAVA_RIM: readonly [number, string][] = Array.from({ length: 18 }, (_, k) => {
+  const u = k / 17;
+  const width = 2 + 70 * (1 - u) ** 1.6;
+  const g = Math.round(70 + 180 * u);
+  const b = Math.round(10 + 170 * u ** 3);
+  return [width, `rgba(255,${g},${b},${(0.1 + 0.25 * u).toFixed(3)})`];
+});
+/** Oil's (#120) rainbow sheen: bands this far apart (map units) */
+const OIL_BAND = 70;
+interface LavaRim { key: string; rim: Path2D }
+
+/** A ring carried through a matrix */
+function worldRing(poly: Float64Array, m: DOMMatrix): Float64Array {
+  const out = new Float64Array(poly.length);
+  for (let j = 0; j < poly.length; j += 2) {
+    const p = m.transformPoint({ x: poly[j], y: poly[j + 1] });
+    out[j] = p.x;
+    out[j + 1] = p.y;
+  }
+  return out;
+}
+const lavaRims = new WeakMap<readonly CompiledObject[], LavaRim>();
+
+/** The outer outline of all the lava together (seams between touching pools left out), cached */
+function lavaRim(objects: readonly CompiledObject[], list: number[], mats: DOMMatrix[]): Path2D {
+  const key = list.join(',');
+  const hit = lavaRims.get(objects);
+  if (hit && hit.key === key) return hit.rim;
+  const seg = unionOutline(list.map((i, k) => worldRing(objects[i].box.poly, mats[k])));
+  const rim = new Path2D();
+  for (let k = 0; k < seg.length; k += 4) {
+    rim.moveTo(seg[k], seg[k + 1]);
+    rim.lineTo(seg[k + 2], seg[k + 3]);
+  }
+  lavaRims.set(objects, { key, rim });
+  return rim;
+}
+
+/** Short wavelets drifting across rows `gap` apart */
+function ripples(g: CanvasRenderingContext2D, b: Bounds, s: number, gap: number, speed: number): void {
+  g.beginPath();
+  for (let y = Math.floor(b.minY / gap) * gap; y < b.maxY + gap; y += gap) {
+    const row = Math.round(y / gap);
+    const shift = ((s * speed + row * 37) % 120) - 60;
+    for (let x = Math.floor(b.minX / 120) * 120 + shift; x < b.maxX; x += 120) {
+      g.moveTo(x, y);
+      g.quadraticCurveTo(x + 10, y - 3 - Math.sin(s * 1.7 + row) * 1.5, x + 20, y);
+      g.quadraticCurveTo(x + 30, y + 3, x + 40, y);
+    }
+  }
+  g.stroke();
+}
+
+interface Bounds { minX: number; minY: number; maxX: number; maxY: number }
 /** The color field is drawn at this fraction of map resolution and blurred, so touching liquids blend */
 const FIELD_SCALE = 1 / 10;
 
@@ -175,8 +240,10 @@ function liquidField(map: MapData, objects: readonly CompiledObject[], list: num
 }
 
 /**
- * Ponds and radioactive water: one blended color field cut to the liquids' outlines, ripples and
- * bubbles moving on top and a bank just outside. Radioactive water glows. `walls` sets the
+ * Liquids: one blended color field cut to the liquids' outlines, each kind's surface moving on
+ * top and a bank just outside. Ponds and radioactive water ripple, radioactive water glows and
+ * bubbles; lava (#118) is deep red going yellow-hot toward its rim; a sulfur spring (#119) boils
+ * and steams; oil (#120) is black with a slow, heavy, rainbow-sheened swell. `walls` sets the
  * scratch layer's resolution.
  */
 export function drawLiquids(
@@ -195,7 +262,9 @@ export function drawLiquids(
   g.globalCompositeOperation = 'source-over';
   g.clearRect(0, 0, scratch.width, scratch.height);
   g.setTransform(scale, 0, 0, scale, 0, 0);
+  const kindOf = (i: number): LiquidKind => objects[i].src!.liquid?.kind ?? 'pond';
   const union = new Path2D();
+  const mats: DOMMatrix[] = [];
   const paths = list.map((i) => {
     const p = new Path2D();
     const m = new DOMMatrix();
@@ -207,15 +276,33 @@ export function drawLiquids(
     const ring = new Path2D();
     ringPath(ring, o.box.poly);
     const tilt = o.tilt ? new DOMMatrix().translate(o.cx, o.cy).rotate((o.tilt * 180) / Math.PI).translate(-o.cx, -o.cy) : new DOMMatrix();
-    p.addPath(ring, m.multiply(tilt));
+    const full = m.multiply(tilt);
+    mats.push(full);
+    p.addPath(ring, full);
     union.addPath(p);
     return p;
   });
-  // Banks: only the half outside the water stays (the water covers the rest)
+  /** The liquids of the kinds `pick` takes, as one path, their bounds, and where they are in `list` */
+  const group = (pick: (k: LiquidKind) => boolean) => {
+    const path = new Path2D();
+    const b: Bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    const at: number[] = [];
+    list.forEach((i, k) => {
+      if (!pick(kindOf(i))) return;
+      path.addPath(paths[k]);
+      at.push(k);
+      const o = objects[i];
+      const tb = o.travelBounds ?? o;
+      b.minX = Math.min(b.minX, tb.minX); b.minY = Math.min(b.minY, tb.minY);
+      b.maxX = Math.max(b.maxX, tb.maxX); b.maxY = Math.max(b.maxY, tb.maxY);
+    });
+    return { path, b, at, w: b.maxX - b.minX, h: b.maxY - b.minY };
+  };
+  // Banks: only the half outside the liquid stays (the liquid covers the rest)
   g.lineJoin = 'round';
   g.lineWidth = 7;
   list.forEach((i, k) => {
-    g.strokeStyle = LIQUID_BANK[objects[i].src!.liquid?.kind ?? 'pond'];
+    g.strokeStyle = LIQUID_BANK[kindOf(i)];
     g.stroke(paths[k]);
   });
   g.save();
@@ -223,33 +310,23 @@ export function drawLiquids(
   g.imageSmoothingEnabled = true;
   const field = liquidField(map, objects, list, timeOf);
   g.drawImage(field, 0, 0, field.width / FIELD_SCALE, field.height / FIELD_SCALE);
-  // Ripples drifting across all water alike, so blended water stays seamless
   const s = now / 1000;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const i of list) {
-    const o = objects[i];
-    const tr = o.travelBounds ?? o;
-    minX = Math.min(minX, tr.minX); minY = Math.min(minY, tr.minY);
-    maxX = Math.max(maxX, tr.maxX); maxY = Math.max(maxY, tr.maxY);
+
+  // Ripples drifting across all water alike, so blended water stays seamless
+  const wet = group((k) => RIPPLING.has(k));
+  if (wet.at.length) {
+    g.save();
+    g.clip(wet.path, 'nonzero');
+    g.lineWidth = 1.6;
+    g.strokeStyle = 'rgba(255,255,255,0.22)';
+    ripples(g, wet.b, s, 22, 18);
+    g.restore();
   }
-  g.lineWidth = 1.6;
-  g.strokeStyle = 'rgba(255,255,255,0.22)';
-  g.beginPath();
-  for (let y = Math.floor(minY / 22) * 22; y < maxY + 22; y += 22) {
-    const row = Math.round(y / 22);
-    const shift = ((s * 18 + row * 37) % 120) - 60;
-    for (let x = Math.floor(minX / 120) * 120 + shift; x < maxX; x += 120) {
-      // A short wavelet
-      g.moveTo(x, y);
-      g.quadraticCurveTo(x + 10, y - 3 - Math.sin(s * 1.7 + row) * 1.5, x + 20, y);
-      g.quadraticCurveTo(x + 30, y + 3, x + 40, y);
-    }
-  }
-  g.stroke();
+
   // Radioactive water: a pulsing glow and bubbles rising in it
   list.forEach((i, k) => {
+    if (kindOf(i) !== 'toxic') return;
     const o = objects[i];
-    if (o.src!.liquid?.kind !== 'toxic') return;
     g.save();
     g.clip(paths[k]);
     g.fillStyle = `rgba(210,255,150,${0.12 + 0.1 * Math.sin(s * 2.4 + i)})`;
@@ -275,22 +352,175 @@ export function drawLiquids(
     g.globalAlpha = 1;
     g.restore();
   });
+
+  // Lava: dark crust drifting over the red middle, the rim glowing orange to white-yellow
+  const lava = group((k) => k === 'lava');
+  let rim: Path2D | null = null;
+  if (lava.at.length) {
+    g.save();
+    g.clip(lava.path, 'nonzero');
+    const { b, w, h } = lava;
+    const rnd = random(lava.at.length * 31 + 7);
+    const count = Math.min(60, Math.max(4, Math.round((w * h) / 9000)));
+    for (let n = 0; n < count; n++) {
+      const x = b.minX + ((rnd() * w + s * (4 + rnd() * 5)) % w);
+      const y = b.minY + rnd() * h + Math.sin(s * 0.4 + n) * 6;
+      const r = 10 + rnd() * 18;
+      const blob = g.createRadialGradient(x, y, 0, x, y, r);
+      blob.addColorStop(0, 'rgba(80,8,4,0.45)');
+      blob.addColorStop(1, 'rgba(80,8,4,0)');
+      g.fillStyle = blob;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    rim = lavaRim(objects, lava.at.map((k) => list[k]), lava.at.map((k) => mats[k]));
+    g.lineJoin = g.lineCap = 'round';
+    g.globalAlpha = 0.85 + 0.15 * Math.sin(s * 1.6);
+    for (const [width, color] of LAVA_RIM) {
+      g.lineWidth = width;
+      g.strokeStyle = color;
+      g.stroke(rim);
+    }
+    // Hot bubbles that well up and burst
+    g.lineWidth = 1.4;
+    g.strokeStyle = '#ffd650';
+    for (let n = 0; n < Math.ceil(count / 2); n++) {
+      const period = 2.2 + rnd() * 2.6;
+      const t = s / period + rnd();
+      const cycle = Math.floor(t);
+      const u = (t - cycle) / 0.35;
+      if (u > 1) continue;
+      const at = random(n * 613 + cycle * 97);
+      const x = b.minX + at() * w;
+      const y = b.minY + at() * h;
+      g.globalAlpha = 1 - u;
+      g.beginPath();
+      g.arc(x, y, 2 + u * (3 + at() * 4), 0, Math.PI * 2);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+    g.restore();
+  }
+
+  // Sulfur spring: bubbles boil up, swell and pop all over
+  const sulfur = group((k) => k === 'sulfur');
+  if (sulfur.at.length) {
+    g.save();
+    g.clip(sulfur.path, 'nonzero');
+    const { b, w, h } = sulfur;
+    const rnd = random(sulfur.at.length * 53 + 3);
+    const count = Math.min(140, Math.max(8, Math.round((w * h) / 1400)));
+    for (let n = 0; n < count; n++) {
+      const period = 0.9 + rnd() * 1.2;
+      const t = s / period + rnd();
+      // Each cycle a bubble comes up somewhere new
+      const cycle = Math.floor(t);
+      const u = t - cycle;
+      const at = random(n * 977 + cycle * 131);
+      const x = b.minX + at() * w;
+      const y = b.minY + at() * h;
+      const r = 2.5 + at() * 6;
+      g.beginPath();
+      if (u < 0.8) {
+        g.globalAlpha = 1;
+        g.fillStyle = 'rgba(255,248,205,0.75)';
+        g.strokeStyle = 'rgba(110,82,14,0.7)';
+        g.lineWidth = 1;
+        g.arc(x, y, r * (0.3 + u), 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+      } else {
+        // Popped: a fading ring
+        const p = (u - 0.8) / 0.2;
+        g.globalAlpha = 1 - p;
+        g.strokeStyle = 'rgba(255,250,215,0.9)';
+        g.lineWidth = 1;
+        g.arc(x, y, r * (1.1 + p * 1.4), 0, Math.PI * 2);
+        g.stroke();
+      }
+    }
+    g.globalAlpha = 1;
+    g.restore();
+  }
+
+  // Oil: a rainbow sheen sliding over the black, and a slow, thick swell
+  const oil = group((k) => k === 'oil');
+  if (oil.at.length) {
+    g.save();
+    g.clip(oil.path, 'nonzero');
+    const { b, w, h } = oil;
+    const len = w + h;
+    const sheen = g.createLinearGradient(b.minX, b.minY, b.maxX, b.maxY);
+    const hues = ['rgba(150,90,255,0.2)', 'rgba(60,200,190,0.16)', 'rgba(230,190,60,0.15)', 'rgba(255,90,160,0.13)'];
+    // Bands OIL_BAND apart, moving along the diagonal
+    const phase = (s * 12) % (OIL_BAND * 2);
+    for (let d = -OIL_BAND * 2 + phase, k = 0; d < len + OIL_BAND * 2; d += OIL_BAND, k++) {
+      const at = d / len;
+      if (at < 0 || at > 1) continue;
+      sheen.addColorStop(at, k % 2 ? 'rgba(0,0,0,0)' : hues[(k >> 1) % hues.length]);
+    }
+    g.globalCompositeOperation = 'screen';
+    g.fillStyle = sheen;
+    g.fillRect(b.minX, b.minY, w, h);
+    g.globalCompositeOperation = 'source-over';
+    g.lineWidth = 3.2;
+    g.strokeStyle = 'rgba(255,255,255,0.06)';
+    ripples(g, b, s * 0.35, 30, 8);
+    g.lineWidth = 1;
+    g.strokeStyle = 'rgba(255,255,255,0.16)';
+    ripples(g, b, s * 0.35, 30, 8);
+    g.restore();
+  }
   g.restore();
-  // Drawn over the wall mass too: on a map with paths, water outside them is a moat that lily pads cross
+  // Drawn over the wall mass too: on a map with paths, liquid outside them is a moat that lily pads cross
   ctx.drawImage(scratch, 0, 0, map.width, map.height);
-  // Radioactive water glows out over its banks
   ctx.save();
+  ctx.lineJoin = 'round';
+  // Radioactive water glows out over its banks, lava too
   ctx.globalCompositeOperation = 'lighter';
   list.forEach((i, k) => {
-    if (objects[i].src!.liquid?.kind !== 'toxic') return;
+    if (kindOf(i) !== 'toxic') return;
     const pulse = 0.5 + 0.5 * Math.sin(s * 2.4 + i);
-    ctx.lineJoin = 'round';
     for (const [w, a] of [[26, 0.05], [14, 0.08]] as const) {
       ctx.lineWidth = w;
       ctx.strokeStyle = `rgba(110,255,60,${a + pulse * 0.04})`;
       ctx.stroke(paths[k]);
     }
   });
+  if (rim) {
+    const pulse = 0.5 + 0.5 * Math.sin(s * 1.6);
+    for (const [w, a] of [[34, 0.05], [18, 0.08]] as const) {
+      ctx.lineWidth = w;
+      ctx.strokeStyle = `rgba(255,120,30,${a + pulse * 0.04})`;
+      ctx.stroke(rim);
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  // Steam curling up off a sulfur spring, from points inside it
+  if (sulfur.at.length) {
+    const { b, w, h } = sulfur;
+    const rings = sulfur.at.map((k) => worldRing(objects[list[k]].box.poly, mats[k]));
+    const rnd = random(sulfur.at.length * 71 + 19);
+    const count = Math.min(24, Math.max(3, Math.round((w * h) / 10000)));
+    for (let n = 0; n < count; n++) {
+      const period = 2.5 + rnd() * 2;
+      const t = s / period + rnd();
+      const cycle = Math.floor(t);
+      const u = t - cycle;
+      const at = random(n * 389 + cycle * 61);
+      const x0 = b.minX + at() * w;
+      const y0 = b.minY + at() * h;
+      if (!rings.some((r) => pointInPoly(x0, y0, r))) continue;
+      const x = x0 + Math.sin(u * 5 + n) * 5;
+      const y = y0 - u * 46;
+      const r = 5 + u * 14;
+      const puff = ctx.createRadialGradient(x, y, 0, x, y, r);
+      const a = Math.sin(u * Math.PI) * 0.4;
+      puff.addColorStop(0, `rgba(255,252,232,${a})`);
+      puff.addColorStop(1, 'rgba(255,252,232,0)');
+      ctx.fillStyle = puff;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+  }
   ctx.restore();
 }
 

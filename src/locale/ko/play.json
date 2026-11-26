@@ -80,7 +80,7 @@
   "play.why.left": "커서가 게임 화면 밖으로 나감",
   "play.why.blur": "플레이 중에 게임 창을 벗어남",
   "play.why.pointer": "포인터 입력이 끊김",
-  "play.why.liquid": "물에 빠짐",
+  "play.why.liquid": "액체에 빠짐",
   "play.why.shock": "전선에 감전됨",
   "play.why.radiation": "방사능에 피폭됨"
 }

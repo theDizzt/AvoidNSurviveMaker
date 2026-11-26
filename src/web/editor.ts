@@ -15,7 +15,7 @@ import { flattenShape, normalizeTilt, polyOutline, rotatePoint, shapeBounds, sha
 import { conveyorOutline, DEFAULT_BELT_SPEED, DEFAULT_BELT_WIDTH } from '../core/conveyor';
 import { initialPower, WIRE_WIDTH, wireOutline } from '../core/electric';
 import { encodeMap } from './localized/share';
-import type { FogKind, MapData, MapObject, Point, PolyPoint, PowerKind, Rect, Shape, TriggerKind } from '../core/types';
+import type { FogKind, Liquid, MapData, MapObject, Point, PolyPoint, PowerKind, Rect, Shape, TriggerKind } from '../core/types';
 import { switchColor } from './localized/colors';
 import { boulderShape, spikeShape } from '../core/hazards';
 import { BeamCaster } from '../core/laser';
@@ -616,15 +616,20 @@ export class Editor {
       });
     }
 
-    // Water: lily pad, pond, radioactive water
+    // Liquids: lily pad, pond, radioactive water, lava, sulfur spring, oil
     row = section(tr('ed.catWater'));
     const lilyTool: ObjectTool = { kind: 'object', role: 'lily', behavior: 'static', shape: 'ellipse' };
     const lilyIcon = '<path d="M12 12 L19.5 6.5 A9 9 0 1 1 12 3 Z" fill="#4caf50"/><path d="M12 12 L6 8 M12 12 L5.5 15 M12 12 L12 20.5 M12 12 L18.5 16" stroke="#2e7d32" stroke-width="1" fill="none"/>';
     addButton(row, lilyTool, `${svg(lilyIcon)}<span class="pal-num">85</span>`, tr('ed.palLily'), 'pal-lily');
-    const liquidTool = (liquid: 'pond' | 'toxic'): ObjectTool => ({ kind: 'object', role: 'liquid', behavior: 'static', shape: 'free', liquid });
+    const liquidTool = (liquid: Liquid['kind']): ObjectTool => ({ kind: 'object', role: 'liquid', behavior: 'static', shape: 'free', liquid });
     const waveIcon = (fill: string) => `<path d="M3 9 C3 4 9 3 13 4.5 S 21 6 21 12 S 15 21 10 20 S 3 15 3 9 Z" fill="${fill}"/><path d="M6 11 Q8 9.5 10 11 T14 11 T18 11" fill="none" stroke="#fff" stroke-width="1.3" stroke-opacity="0.8"/>`;
     addButton(row, liquidTool('pond'), `${svg(waveIcon('#3d8fd6'))}<span class="pal-num">86</span>`, `${tr('ed.palPond')} — ${tr('ed.clickPointsEnter')}`, 'pal-pond');
     addButton(row, liquidTool('toxic'), `${svg(`${waveIcon('#6cf53a')}<circle cx="15" cy="15" r="1.6" fill="#eaffd0"/>`)}<span class="pal-num">87</span>`, `${tr('ed.palToxic')} — ${tr('ed.clickPointsEnter')}`, 'pal-toxic');
+    const lavaIcon = '<defs><radialGradient id="pal-lava-g"><stop offset="0.35" stop-color="#d8261a"/><stop offset="1" stop-color="#ffd23a"/></radialGradient></defs>'
+      + '<path d="M3 9 C3 4 9 3 13 4.5 S 21 6 21 12 S 15 21 10 20 S 3 15 3 9 Z" fill="url(#pal-lava-g)"/>';
+    addButton(row, liquidTool('lava'), `${svg(lavaIcon)}<span class="pal-num">118</span>`, `${tr('ed.palLava')} — ${tr('ed.clickPointsEnter')}`, 'pal-lava');
+    addButton(row, liquidTool('sulfur'), `${svg(`${waveIcon('#d2b13a')}<circle cx="9" cy="14.5" r="1.7" fill="#fff6c8"/><circle cx="15.5" cy="15.5" r="1.2" fill="#fff6c8"/>`)}<span class="pal-num">119</span>`, `${tr('ed.palSulfur')} — ${tr('ed.clickPointsEnter')}`, 'pal-sulfur');
+    addButton(row, liquidTool('oil'), `${svg('<path d="M3 9 C3 4 9 3 13 4.5 S 21 6 21 12 S 15 21 10 20 S 3 15 3 9 Z" fill="#17151a"/><path d="M7 10 Q10 8 13 9.5" fill="none" stroke="#9a7cff" stroke-width="1.3" stroke-opacity="0.8"/><path d="M10 14 Q13 12.5 16 14" fill="none" stroke="#5fd0c0" stroke-width="1.1" stroke-opacity="0.6"/>')}<span class="pal-num">120</span>`, `${tr('ed.palOil')} — ${tr('ed.clickPointsEnter')}`, 'pal-oil');
 
     // Traps: spike, boulder, falling rock, grinders and saw blades
     row = section(tr('ed.catTraps'));

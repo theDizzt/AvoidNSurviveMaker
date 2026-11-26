@@ -51,7 +51,8 @@
                                 "showTitle":  true,
                                 "secondary":  "#4385c7",
                                 "font":  "title",
-                                "numberColor":  "#5fdddf"
+                                "numberColor":  "#5fdddf",
+                                "numberFx": { "tube": "#ff855c", "outline": "#123b54", "outlineWidth": 1.5 }
                             },
                   "designs":  [
                                   {

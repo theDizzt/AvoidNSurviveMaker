@@ -1,4 +1,10 @@
 {
+  "pattern.fossilStrata": "유황 화석 지층",
+  "pattern.sulfurFloor": "유황 퇴적 바닥",
+  "pattern.oilFossil": "석유 화석 동굴",
+  "pattern.oilStone": "석유 암반",
+  "pattern.gemVein": "보석·석영 광맥",
+  "pattern.mineFloor": "갱도 바닥",
   "themePanel.relief": "길 높낮이",
   "themePanel.raised": "돌출",
   "themePanel.recessed": "움푹 들어감",
@@ -262,6 +268,7 @@
   "themePanel.animScrollSpeed": "속도 (px/초)",
   "themePanel.animAmount": "세기 %",
   "fx.vine": "덩굴",
+  "fx.tube": "튜브",
   "pattern.snowDirt": "눈 쌓인 흙길",
   "pattern.snowPile": "소복한 눈"
 }

@@ -55,7 +55,8 @@ import { MAX_OBJECT_ID } from '../object-ids';
  *   wall) that carries the cursor and luggage along its centerline (see `conveyor`).
  * luggage: a wooden crate (#70), deadly like a wall, carried along the conveyor belt it sits on;
  *   it stops against walls, doors and luggage that doesn't move, and at the end of a one-way belt.
- * liquid: a pond (#86) or radioactive water (#87), deadly except on a lily pad (see `liquid`).
+ * liquid: a pond (#86), radioactive water (#87), lava (#118), a sulfur spring (#119) or oil
+ *   (#120), deadly except on a lily pad (see `liquid`).
  * lily: a lily pad (#85) floating on a liquid: safe floor (like a belt, it doesn't turn the rest
  *   of the map into wall) that also keeps the cursor out of the liquid under it.
  * spot: a spotlight (#88–90), a harmless cone of light (see `spot`).

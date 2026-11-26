@@ -10,6 +10,7 @@ import { compileMap } from '../core/object';
 import { CompiledMotion } from '../core/motion';
 import { GEAR_TEETH } from '../core/machines';
 import { DEFAULT_MAGNET } from '../core/magnet';
+import { LIQUID_KINDS } from '../core/schema/objects/liquid';
 
 import type { ElecAction, Easing, FogKind, Liquid, LinkAction, MapData, MapObject, Motion, MotionType, Rect, Repeat, Role, Rotation } from '../core/types';
 import { SWITCH_COLORS, switchColor } from './localized/colors';
@@ -78,12 +79,12 @@ export class EditorPropertiesPanel {
     ];
   }
 
-  /** Pond (#86) / radioactive water (#87) */
+  /** Pond (#86) / radioactive water (#87) / lava (#118) / sulfur spring (#119) / oil (#120) */
   private liquidProps(o: MapObject): HTMLElement[] {
     const l = o.liquid ?? (o.liquid = { kind: 'pond' });
     return [
       this.heading(liquidName(l.kind)),
-      this.group(this.selectField<Liquid['kind']>(tr('ed.liquidKind'), l.kind, [['pond', tr('ed.namePond')], ['toxic', tr('ed.nameToxic')]], (v) => (l.kind = v), true)),
+      this.group(this.selectField<Liquid['kind']>(tr('ed.liquidKind'), l.kind, LIQUID_KINDS.map((k): [Liquid['kind'], string] => [k, liquidName(k)]), (v) => (l.kind = v), true)),
       this.note(tr('ed.liquidNote')),
     ];
   }

@@ -2,7 +2,7 @@
     "format":  1,
     "id":  "cavern",
     "name":  "Cavern - Title TBD",
-    "description":  "Faceted crystals and narrow passages below the surface. Chapter title to be announced.",
+    "description":  "Descend through sulfur beds rich in bones and fossils, oil-bearing caverns, and mines of quartz and gemstones.",
     "author":  "Avoid N Survive",
     "released":  "2026-11-17",
     "unlockStars":  525,
@@ -14,23 +14,23 @@
     "style":  {
                   "maze":  {
                                "wall":  {
-                                            "edge":  "#a59be0",
+                                            "edge":  "#433b29",
                                             "fill":  {
-                                                         "background":  "#252238",
-                                                         "color":  "#64c4b1",
-                                                         "pattern":  "diagonal",
-                                                         "size":  16,
+                                                         "background":  "#685634",
+                                                         "color":  "#b5a05a",
+                                                         "pattern":  "fossilStrata",
+                                                         "size":  224,
                                                          "type":  "pattern"
                                                      }
                                         },
                                "path":  {
-                                            "edge":  "#64c4b1",
+                                            "edge":  "#e1c991",
                                             "fill":  {
-                                                         "angle":  90,
-                                                         "from":  "#252238",
-                                                         "style":  "linear",
-                                                         "to":  "#64c4b1",
-                                                         "type":  "gradient"
+                                                         "background":  "#c9ad70",
+                                                         "color":  "#927a44",
+                                                         "pattern":  "sulfurFloor",
+                                                         "size":  160,
+                                                         "type":  "pattern"
                                                      }
                                         }
                            },
@@ -44,7 +44,111 @@
                                 "secondary":  "#64c4b1",
                                 "font":  "title",
                                 "numberColor":  "#a59be0"
-                            }
+                            },
+                  "designs":  [
+                                  {
+                                      "levels":  [
+                                                     1,
+                                                     7
+                                                 ],
+                                      "maze":  {
+                                                   "wall":  {
+                                                                "edge":  "#433b29",
+                                                                "fill":  {
+                                                                             "background":  "#685634",
+                                                                             "color":  "#b5a05a",
+                                                                             "pattern":  "fossilStrata",
+                                                                             "size":  224,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            },
+                                                   "path":  {
+                                                                "edge":  "#e1c991",
+                                                                "fill":  {
+                                                                             "background":  "#c9ad70",
+                                                                             "color":  "#927a44",
+                                                                             "pattern":  "sulfurFloor",
+                                                                             "size":  160,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            }
+                                               },
+                                      "name":  "Sulfur Fossil Strata",
+                                      "id":  "sulfur-fossils",
+                                      "i18n":  {
+                                                   "zh":  "硫磺化石地层",
+                                                   "ko":  "유황 화석 지층"
+                                               }
+                                  },
+                                  {
+                                      "levels":  [
+                                                     8,
+                                                     14
+                                                 ],
+                                      "maze":  {
+                                                   "wall":  {
+                                                                "edge":  "#191f20",
+                                                                "fill":  {
+                                                                             "background":  "#343832",
+                                                                             "color":  "#696b54",
+                                                                             "pattern":  "oilFossil",
+                                                                             "size":  240,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            },
+                                                   "path":  {
+                                                                "edge":  "#a5ad97",
+                                                                "fill":  {
+                                                                             "background":  "#7c8170",
+                                                                             "color":  "#555c50",
+                                                                             "pattern":  "oilStone",
+                                                                             "size":  180,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            }
+                                               },
+                                      "name":  "Oil Fossil Cavern",
+                                      "id":  "oil-cavern",
+                                      "i18n":  {
+                                                   "zh":  "石油化石洞穴",
+                                                   "ko":  "석유 화석 동굴"
+                                               }
+                                  },
+                                  {
+                                      "levels":  [
+                                                     15,
+                                                     21
+                                                 ],
+                                      "maze":  {
+                                                   "wall":  {
+                                                                "edge":  "#77768e",
+                                                                "fill":  {
+                                                                             "background":  "#292a3b",
+                                                                             "color":  "#626176",
+                                                                             "pattern":  "gemVein",
+                                                                             "size":  240,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            },
+                                                   "path":  {
+                                                                "edge":  "#b5b4bb",
+                                                                "fill":  {
+                                                                             "background":  "#85858d",
+                                                                             "color":  "#555665",
+                                                                             "pattern":  "mineFloor",
+                                                                             "size":  160,
+                                                                             "type":  "pattern"
+                                                                         }
+                                                            }
+                                               },
+                                      "name":  "Gem and Quartz Mine",
+                                      "id":  "quartz-mine",
+                                      "i18n":  {
+                                                   "zh":  "宝石与石英矿道",
+                                                   "ko":  "보석과 석영 갱도"
+                                               }
+                                  }
+                              ]
               },
     "screens":  {
                     "select":  {
@@ -173,13 +277,13 @@
                                }
                 },
     "i18n":  {
-        "ko":  {
-            "name":  "동굴 - 제목 미정",
-            "description":  "땅 아래의 각진 수정과 좁은 통로. 챕터 제목은 추후 공개됩니다."
-        },
-        "zh":  {
-            "name":  "Cavern - Title TBD",
-            "description":  "Faceted crystals and narrow passages below the surface. Chapter title to be announced."
-        }
-    }
+                 "ko":  {
+                            "name":  "동굴 - 제목 미정",
+                            "description":  "뼈와 화석이 드러난 유황 지층에서 석유가 고인 화석 동굴을 지나, 보석과 석영이 박힌 갱도로 내려갑니다."
+                        },
+                 "zh":  {
+                            "name":  "Cavern - Title TBD",
+                            "description":  "穿过埋藏骨骼与化石的硫磺地层、积聚石油的洞穴，深入宝石与石英矿道。"
+                        }
+             }
 }

@@ -675,7 +675,7 @@ export class ThemeEditor {
    */
   private fxFields(current: TextEffects | undefined, apply: (fx: TextEffects | undefined) => void): HTMLElement[] {
     const fx: TextEffects = { ...current };
-    type ColorKey = 'outline' | 'shadow' | 'glow' | 'gradient' | 'depthColor' | 'vine';
+    type ColorKey = 'outline' | 'shadow' | 'glow' | 'gradient' | 'depthColor' | 'vine' | 'tube';
     type NumKey = 'outlineWidth' | 'depth' | 'shadowX' | 'shadowY' | 'shadowBlur' | 'glowSize';
     interface Extra { key: NumKey; def: number; min: number; max: number; step: number; title: string; optional?: boolean }
     const row = (label: string, key: ColorKey, def: string, extras: Extra[] = []) => {
@@ -746,6 +746,7 @@ export class ThemeEditor {
       row(tr('fx.gradient'), 'gradient', '#ff7a3a'),
       row(tr('fx.depth'), 'depthColor', '#1a2233', [{ key: 'depth', def: 4, min: 1, max: 30, step: 1, title: tr('fx.depthSize') }]),
       row(tr('fx.vine'), 'vine', '#3f8f2f'),
+      row(tr('fx.tube'), 'tube', '#ff855c'),
     ];
   }
 

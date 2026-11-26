@@ -1,6 +1,6 @@
 import { type ValidationContext } from './validation';
 
-export type PatternKind = 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal' | 'egyptian' | 'sandBrick' | 'bark' | 'woodGrain' | 'thicket' | 'mud' | 'soil' | 'snow' | 'snowDirt' | 'snowPile' | 'ice' | 'iceCrystal' | 'concrete' | 'epoxy' | 'clouds' | 'cloudBank' | 'waves' | 'caustics' | 'pittedStone' | 'floodedRock' | 'basalt' | 'hotrock' | 'magma';
+export type PatternKind = 'fossilStrata' | 'sulfurFloor' | 'oilFossil' | 'oilStone' | 'gemVein' | 'mineFloor' | 'realisticBark' | 'realisticGrain' | 'vectorBark' | 'vectorGrain' | 'vectorLeaves' | 'vectorSoil' | 'vectorSnow' | 'vectorIce' | 'vectorRock' | 'vectorLava' | 'stripes' | 'diagonal' | 'dots' | 'grid' | 'checker' | 'wood' | 'grass' | 'sand' | 'metal' | 'egyptian' | 'sandBrick' | 'bark' | 'woodGrain' | 'thicket' | 'mud' | 'soil' | 'snow' | 'snowDirt' | 'snowPile' | 'ice' | 'iceCrystal' | 'concrete' | 'epoxy' | 'clouds' | 'cloudBank' | 'waves' | 'caustics' | 'pittedStone' | 'floodedRock' | 'basalt' | 'hotrock' | 'magma';
 
 /** Colors are '#rrggbb'. Gradients and patterns are laid out in the object's own frame, so they move and rotate with it. */
 export type Fill =
@@ -53,7 +53,7 @@ export interface Theme {
 export function createThemeSchema(context: ValidationContext) {
   const { obj, num, oneOf, color } = context;
 
-  const PATTERNS = ['stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'soil', 'snow', 'snowDirt', 'snowPile', 'ice', 'iceCrystal', 'concrete', 'epoxy', 'clouds', 'cloudBank', 'waves', 'caustics', 'pittedStone', 'floodedRock', 'basalt', 'hotrock', 'magma'] as const satisfies readonly PatternKind[];
+  const PATTERNS = ['fossilStrata', 'sulfurFloor', 'oilFossil', 'oilStone', 'gemVein', 'mineFloor', 'realisticBark', 'realisticGrain', 'vectorBark', 'vectorGrain', 'vectorLeaves', 'vectorSoil', 'vectorSnow', 'vectorIce', 'vectorRock', 'vectorLava', 'stripes', 'diagonal', 'dots', 'grid', 'checker', 'wood', 'grass', 'sand', 'metal', 'egyptian', 'sandBrick', 'bark', 'woodGrain', 'thicket', 'mud', 'soil', 'snow', 'snowDirt', 'snowPile', 'ice', 'iceCrystal', 'concrete', 'epoxy', 'clouds', 'cloudBank', 'waves', 'caustics', 'pittedStone', 'floodedRock', 'basalt', 'hotrock', 'magma'] as const satisfies readonly PatternKind[];
 
   function fill(v: unknown, name: string): Fill {
     const o = obj(v, name);

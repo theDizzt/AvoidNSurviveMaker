@@ -7,7 +7,7 @@ export { MAP_VERSION, PACK_VERSION } from './schema/map';
 export type { PatternKind, Fill, SurfaceStyle, SurfaceAnim, Theme } from './schema/theme';
 export type { Magnet } from './schema/objects/magnet';
 export type { Aura, Rad } from './schema/objects/radiation';
-export type { Liquid } from './schema/objects/liquid';
+export type { Liquid, LiquidKind } from './schema/objects/liquid';
 export type { Spot } from './schema/objects/spot';
 export type { Wire, PowerKind, Power, ElecAction } from './schema/objects/electric';
 export type { Conveyor } from './schema/objects/conveyor';

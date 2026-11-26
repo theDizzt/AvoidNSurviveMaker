@@ -64,8 +64,8 @@ export function objectLights(objects: readonly CompiledObject[], time: number, s
       }
       return;
     }
-    // Radioactive water glows all over
-    if (m.role === 'liquid' && m.liquid?.kind === 'toxic') {
+    // Radioactive water and lava (#118) glow all over
+    if (m.role === 'liquid' && (m.liquid?.kind === 'toxic' || m.liquid?.kind === 'lava')) {
       const tf = transformAt(o, state.clock?.[i] ?? time, pose);
       for (let y = o.minY + TOXIC_GLOW_GAP / 2; y < o.maxY; y += TOXIC_GLOW_GAP) {
         for (let x = o.minX + TOXIC_GLOW_GAP / 2; x < o.maxX; x += TOXIC_GLOW_GAP) {

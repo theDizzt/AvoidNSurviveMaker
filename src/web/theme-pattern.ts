@@ -1,4 +1,7 @@
 import type { Fill } from '../core/types';
+import { drawVectorPattern } from './vector-pattern';
+import { drawWoodPattern } from './wood-pattern';
+import { drawCavernPattern } from './cavern-pattern';
 
 export const PATTERN_RES = 4;
 
@@ -81,11 +84,14 @@ export function createPatternTile(f: Extract<Fill, { type: 'pattern' }>): HTMLCa
   tile.width = tile.height = Math.ceil(s * PATTERN_RES);
   const g = tile.getContext('2d');
   if (!g) return tile;
+  if (drawWoodPattern(tile, f)) return tile;
   g.scale(PATTERN_RES, PATTERN_RES);
   g.fillStyle = f.background;
   g.fillRect(0, 0, s, s);
   g.fillStyle = f.color;
   g.strokeStyle = f.color;
+  if (drawVectorPattern(g, f)) return tile;
+  if (drawCavernPattern(g, f)) return tile;
   switch (f.pattern) {
     case 'egyptian': {
       // Decorative ankh, sun and pyramid motifs; no font or image dependency.

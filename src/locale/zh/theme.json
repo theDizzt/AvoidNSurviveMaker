@@ -1,4 +1,10 @@
 {
+  "pattern.fossilStrata": "硫磺化石地层",
+  "pattern.sulfurFloor": "硫磺沉积层",
+  "pattern.oilFossil": "石油化石洞穴",
+  "pattern.oilStone": "含油岩层",
+  "pattern.gemVein": "宝石与石英矿脉",
+  "pattern.mineFloor": "矿道地面",
   "themePanel.relief": "道路高低",
   "themePanel.raised": "凸起",
   "themePanel.recessed": "凹陷",
@@ -255,6 +261,7 @@
   "themePanel.animScrollSpeed": "速度（px/秒）",
   "themePanel.animAmount": "强度 %",
   "fx.vine": "藤蔓",
+  "fx.tube": "游泳圈",
   "pattern.snowDirt": "积雪土路",
   "pattern.snowPile": "厚积雪"
 }

@@ -1,4 +1,10 @@
 {
+  "pattern.fossilStrata": "Sulfur fossil strata",
+  "pattern.sulfurFloor": "Sulfur sediment",
+  "pattern.oilFossil": "Oil fossil cavern",
+  "pattern.oilStone": "Oil-bearing rock",
+  "pattern.gemVein": "Gem and quartz veins",
+  "pattern.mineFloor": "Mine floor",
   "themePanel.relief": "Path relief",
   "themePanel.raised": "Raised",
   "themePanel.recessed": "Recessed",
@@ -262,6 +268,7 @@
   "themePanel.animScrollSpeed": "Speed (px/s)",
   "themePanel.animAmount": "Strength %",
   "fx.vine": "Vines",
+  "fx.tube": "Swim ring",
   "pattern.snowDirt": "Snowy dirt road",
   "pattern.snowPile": "Piled snow"
 }

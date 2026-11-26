@@ -33,7 +33,7 @@ export interface ObjectTool {
   turret?: 'gun' | 'missile';
   /** role 'path': ice floor (#71–74, #100–110) */
   ice?: boolean;
-  /** role 'liquid': pond (#86) or radioactive water (#87) */
+  /** role 'liquid': pond (#86), radioactive water (#87), lava (#118), sulfur spring (#119), oil (#120) */
   liquid?: Liquid['kind'];
   /** role 'power': which electric device (#94–97) */
   power?: PowerKind;
@@ -86,6 +86,13 @@ export const SPECIAL_IDS = {
   metal: 98, magnet: 99, gear: 111, press: 112, hand: 113, pendulum: 114, radZone: 115, radBox: 116, radDrum: 117,
 } as const;
 
+/** Liquids: pond (#86), radioactive water (#87), lava (#118), sulfur spring (#119), oil (#120) */
+export const LIQUID_IDS: Record<Liquid['kind'], number> = { pond: 86, toxic: 87, lava: 118, sulfur: 119, oil: 120 };
+
+export const LIQUID_NAMES: Record<Liquid['kind'], string> = {
+  pond: tr('ed.namePond'), toxic: tr('ed.nameToxic'), lava: tr('ed.nameLava'), sulfur: tr('ed.nameSulfur'), oil: tr('ed.nameOil'),
+};
+
 /** Ice (#71–74, #100–110): the first id of each behavior; rectangle, circle, polygon, freeform, then the ring sector */
 export const ICE_IDS = { static: 71, moving: 101, rotating: 106 } as const;
 
@@ -95,7 +102,7 @@ export const POWER_NAMES: Record<PowerKind, string> = {
   switch: tr('ed.nameElecSwitch'), pulley: tr('ed.nameElecPulley'), timer: tr('ed.nameElecTimer'), inverter: tr('ed.nameInverter'),
 };
 
-export const liquidName = (kind: Liquid['kind'] | undefined) => tr(kind === 'toxic' ? 'ed.nameToxic' : 'ed.namePond');
+export const liquidName = (kind: Liquid['kind'] | undefined) => LIQUID_NAMES[kind ?? 'pond'];
 
 export const radName = (kind: Rad['kind'] | undefined) => tr(kind === 'box' ? 'ed.nameRadBox' : kind === 'drum' ? 'ed.nameRadDrum' : 'ed.nameRadZone');
 
@@ -209,7 +216,7 @@ export function objectToolId(o: MapObject): number {
   if (o.hand) return SPECIAL_IDS.hand;
   if (o.pendulum) return SPECIAL_IDS.pendulum;
   if (o.role === 'lily') return SPECIAL_IDS.lily;
-  if (o.role === 'liquid') return o.liquid?.kind === 'toxic' ? SPECIAL_IDS.toxic : SPECIAL_IDS.pond;
+  if (o.role === 'liquid') return LIQUID_IDS[o.liquid?.kind ?? 'pond'];
   if (o.role === 'spot') return o.rotation ? SPECIAL_IDS.rotatingSpot : o.motion ? SPECIAL_IDS.movingSpot : SPECIAL_IDS.spot;
   if (o.role === 'wire') return SPECIAL_IDS.wire;
   if (o.role === 'metal') return SPECIAL_IDS.metal;

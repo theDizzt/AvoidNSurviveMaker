@@ -685,6 +685,9 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 .pal-lily svg, .pal-spot svg, .pal-wire svg { stroke: none; }
 .pal-pond svg { stroke: #245c96; stroke-width: 0.8; }
 .pal-toxic svg { stroke: #2f8a12; stroke-width: 0.8; }
+.pal-lava svg { stroke: #8a1a0e; stroke-width: 0.8; }
+.pal-sulfur svg { stroke: #8a6e14; stroke-width: 0.8; }
+.pal-oil svg { stroke: #000; stroke-width: 0.8; }
 .pal-rad svg { stroke: #3b3a30; stroke-width: 0.8; }
 .pal-magnet svg { stroke-width: 0.8; }
 .pal-power svg { stroke: #1d2027; stroke-width: 0.6; }

@@ -67,6 +67,21 @@ describe('liquids and lily pads (#85–87)', () => {
     expect(sim.endReason).toBe('liquid');
   });
 
+  it('lava, a sulfur spring and oil (#118–120) are deadly freeform liquids too', () => {
+    for (const kind of ['lava', 'sulfur', 'oil'] as const) {
+      const m = mapWith({
+        role: 'liquid', shape: { type: 'poly', free: true, points: [{ x: 400, y: 400, smooth: true }, { x: 800, y: 380, smooth: true }, { x: 820, y: 700, smooth: true }, { x: 420, y: 720, smooth: true }] }, liquid: { kind },
+      });
+      expect(m.objects[0].liquid).toEqual({ kind });
+      const sim = new Simulation(m);
+      sim.start(120, 540);
+      sweep(sim, 0, 120, 540, 600, 540, 500);
+      expect(sim.status, kind).toBe('dead');
+      expect(sim.endReason).toBe('liquid');
+    }
+    expect(() => mapWith({ ...pond, liquid: { kind: 'tar' as never } })).toThrow();
+  });
+
   it('is safe on a lily pad, which keeps round', () => {
     const lily: MapObject = { role: 'lily', shape: { type: 'rect', x: 340, y: 460, w: 200, h: 160 } };
     const m = mapWith(pond, lily);

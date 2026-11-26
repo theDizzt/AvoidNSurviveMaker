@@ -80,7 +80,7 @@
   "play.why.left": "The cursor left the game area",
   "play.why.blur": "The window lost focus",
   "play.why.pointer": "The pointer stopped (lifted or switched)",
-  "play.why.liquid": "Fell into the water",
+  "play.why.liquid": "Fell into a liquid",
   "play.why.shock": "Touched a live wire",
   "play.why.radiation": "Exposed to radiation"
 }

@@ -36,24 +36,52 @@
       "wall": {
         "fill": {
           "type": "pattern",
-          "pattern": "bark",
+          "pattern": "realisticBark",
           "color": "#24180f",
           "background": "#5e4229",
-          "size": 64
+          "size": 192
         },
         "edge": "#1a120b"
       },
       "path": {
         "fill": {
           "type": "pattern",
-          "pattern": "woodGrain",
+          "pattern": "realisticGrain",
           "color": "#a8743f",
           "background": "#e6c592",
-          "size": 64
+          "size": 192
         },
         "edge": "#7a5230"
       }
-    }
+    },
+    "designs": [
+      {
+        "id": "legacy",
+        "name": "Legacy",
+        "maze": {
+          "wall": {
+            "fill": {
+              "type": "pattern",
+              "pattern": "bark",
+              "color": "#24180f",
+              "background": "#5e4229",
+              "size": 64
+            },
+            "edge": "#1a120b"
+          },
+          "path": {
+            "fill": {
+              "type": "pattern",
+              "pattern": "woodGrain",
+              "color": "#a8743f",
+              "background": "#e6c592",
+              "size": 64
+            },
+            "edge": "#7a5230"
+          }
+        }
+      }
+    ]
   },
   "cover": "cover.png",
   "music": "audio/bgm.mp3",

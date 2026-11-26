@@ -18,7 +18,7 @@ import { unionOutline } from '../core/union-outline';
 import { BeltPath, beltSides } from '../core/conveyor';
 import { lightLit, type LightSource } from '../core/lighting';
 import { elecEffect, initialPower } from '../core/electric';
-import { drawLily, drawMachine, drawMagnet, drawMagnetField, drawMetalBox, drawRadAura, drawRadWaste, drawRadZone, drawLiquids, drawPowerDevice, drawSpotBeam, drawSpotFixture, drawThornVine, drawWire } from './render-objects';
+import { drawLily, drawMachine, drawMagnet, drawMagnetField, drawMetalBox, drawRadAura, drawRadWaste, drawRadZone, drawLiquids, drawPowerDevice, drawSpotBeam, drawSpotFixture, drawWire } from './render-objects';
 import { renderScale } from './graphics';
 import { options } from './options';
 
@@ -411,12 +411,12 @@ function isPanelDoor(m: MapObject | undefined): boolean {
   return m?.role === 'door' && !!m.door && m.shape.type === 'rect';
 }
 
-/** Walls drawn on their own instead of as part of the wall mass: grinders / saws, thorn vines (#83 / #84) */
+/** Grinders / saws keep their own appearance; vines share the wall mass. */
 function ownLook(m: MapObject | undefined): boolean {
-  return !!m?.saw || !!m?.vine;
+  return !!m?.saw;
 }
 
-/** A moving path or wall (not a grinder / saw or thorn vine) that cuts into or adds to the wall mass */
+/** A moving path or wall (not a grinder / saw) that cuts into or adds to the wall mass */
 function movesWallMass(map: MapData, o: CompiledObject, i: number): boolean {
   return o.dynamic && (o.role === 'path' || (o.role === 'wall' && !ownLook(map.objects[i])));
 }
@@ -622,6 +622,12 @@ function buildStaticLayer(map: MapData, objects: readonly CompiledObject[], scal
     p.fill('nonzero');
     p.globalCompositeOperation = 'source-over';
   }
+  // Vines are solid hazards even where a wall-piercing path crosses them. Union them after
+  // those cuts, with the same world-aligned fill and shared outer rim as the surrounding wall.
+  p.beginPath();
+  for (const o of objects) if (o.role === 'wall' && !o.dynamic && o.src?.vine) traceStatic(p, o);
+  p.fill('nonzero');
+  sealSeams(p, scale);
   // Wall mass
   const [wallCanvas, g] = offscreen(w, h);
   g.drawImage(outside, 0, 0);
@@ -1401,7 +1407,8 @@ export function drawMap(
       });
       const walls = new Path2D();
       objects.forEach((o, i) => {
-        if (o.dynamic && o.role === 'wall' && !isSaw(i) && shown(i)) tracePosed(walls, o, timeOf(i));
+        // Reapply static vines too: moving wall-piercing paths must not erase their silhouettes.
+        if (o.role === 'wall' && (o.dynamic || o.src?.vine) && !isSaw(i) && shown(i)) tracePosed(walls, o, timeOf(i));
       });
       map.objects.forEach((m, i) => {
         if (!isDoor(m) || !shown(i)) return;
@@ -1629,13 +1636,6 @@ export function drawMap(
       if (o.role === 'magnet' && m && shown(i)) drawMagnet(ctx, o, timeOf(i), magnetOn(m, i));
     });
   }
-  // Thorn vines (#83 / #84)
-  objects.forEach((o, i) => {
-    if (o.role !== 'wall' || !map.objects[i]?.vine || !shown(i)) return;
-    // The same look as the walls: their fill (laid out in the vine's own frame) and outline
-    const fill = theme ? fillStyle(ctx, theme.wall.fill, o.box) : COLORS.wall;
-    drawThornVine(ctx, o, timeOf(i), fill, theme ? theme.wall.edge : COLORS.wallEdge);
-  });
   // Machines (#111–114): a press's cylinder, the hubs of gears, hands and pendulums
   objects.forEach((o, i) => {
     const m = map.objects[i];
@@ -2635,6 +2635,7 @@ export interface TextFx {
   shadowBlur?: number;
   glowSize?: number;
   vine?: string;
+  tube?: string;
 }
 
 /** One line of text with its effects, centered on `y` (needs textBaseline 'middle') */
@@ -2681,6 +2682,7 @@ export function fillTextFx(ctx: CanvasRenderingContext2D, line: string, x: numbe
   for (let k = depth; k >= 1; k--) solid(k * 0.6, k * 0.8, fx.depthColor ?? '#000000');
   // Vine: the stretches behind the letters first
   if (fx.vine) drawVine(ctx, line, x, y, size, fx.vine, false);
+  if (fx.tube) drawTextTube(ctx, line, x, y, size, fx.tube, false);
   if (fx.glow) {
     // Glow without blur: two wide translucent strokes in the glow color around the letters
     const spread = size * 0.18 * (fx.glowSize ?? 1);
@@ -2713,6 +2715,39 @@ export function fillTextFx(ctx: CanvasRenderingContext2D, line: string, x: numbe
   ctx.fillText(line, x, y);
   // …and the stretches in front, so it seems wound around them
   if (fx.vine) drawVine(ctx, line, x, y, size, fx.vine, true);
+  if (fx.tube) drawTextTube(ctx, line, x, y, size, fx.tube, true);
+  ctx.restore();
+}
+
+/** An open swim ring around the text's waist, split around the glyph drawing pass. */
+function drawTextTube(ctx: CanvasRenderingContext2D, line: string, x: number, y: number, size: number, color: string, front: boolean): void {
+  const width = ctx.measureText(line).width;
+  if (!line.trim() || width <= 0) return;
+  const right = ctx.textAlign === 'right' || (ctx.textAlign === 'end' && ctx.direction !== 'rtl')
+    || (ctx.textAlign === 'start' && ctx.direction === 'rtl');
+  const cx = ctx.textAlign === 'center' ? x : right ? x - width / 2 : x + width / 2;
+  const cy = y + size * 0.17;
+  const rx = width / 2 + size * 0.09, ry = size * 0.18;
+  const thickness = Math.max(2, size * 0.15);
+  const start = front ? 0 : Math.PI, end = start + Math.PI;
+  ctx.save();
+  ctx.lineCap = 'butt';
+  const arc = (a: number, b: number, stroke: string, weight: number, offset = 0) => {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + offset, rx, ry, 0, a, b);
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = weight;
+    ctx.stroke();
+  };
+  arc(start, end, tint(color, -0.5), thickness + Math.max(1, size * 0.025));
+  arc(start, end, front ? color : tint(color, -0.18), thickness);
+  // White panels follow the ring's curvature, with the hollow center left transparent.
+  for (const fraction of [0.22, 0.76]) {
+    const angle = start + Math.PI * fraction;
+    arc(angle - 0.16, angle + 0.16, front ? '#fff5df' : '#d8d4c4', thickness);
+  }
+  ctx.globalAlpha *= 0.6;
+  arc(start + 0.12, end - 0.12, tint(color, 0.75), thickness * 0.2, -thickness * 0.27);
   ctx.restore();
 }
 
