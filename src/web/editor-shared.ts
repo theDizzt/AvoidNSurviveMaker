@@ -2,7 +2,7 @@ import { t as tr } from './i18n';
 
 import { type Transform } from '../core/object';
 
-import type { Easing, FogKind, Liquid, MapObject, Rad, Motion, MotionType, Point, PowerKind, Rect, Repeat, Role, Shape, TriggerKind, ZoneShape } from '../core/types';
+import type { Easing, FogKind, Liquid, MapObject, Rad, Motion, MotionType, Point, PowerKind, Rect, Repeat, Role, Shape, TriggerKind, Turret, ZoneShape } from '../core/types';
 import { switchColor } from './localized/colors';
 
 import { DEFAULT_BOULDER_WAVE, DEFAULT_MOTION } from './localized/validate';
@@ -29,8 +29,10 @@ export interface ObjectTool {
   ring?: boolean;
   /** role 'torch': the carryable kind (#58) */
   carry?: boolean;
-  /** role 'turret': gun turret (#60) or missile launcher (#61) */
-  turret?: 'gun' | 'missile';
+  /** role 'turret': gun turret (#60), missile launcher (#61), fixed (#121) / rotating (#122) turret */
+  turret?: Turret['kind'];
+  /** role 'turret', fixed / rotating: how many barrels (#123–126) */
+  barrels?: 1 | 2 | 4;
   /** role 'path': ice floor (#71–74, #100–110) */
   ice?: boolean;
   /** role 'liquid': pond (#86), radioactive water (#87), lava (#118), sulfur spring (#119), oil (#120) */
@@ -96,6 +98,18 @@ export const LIQUID_NAMES: Record<Liquid['kind'], string> = {
 /** Ice (#71–74, #100–110): the first id of each behavior; rectangle, circle, polygon, freeform, then the ring sector */
 export const ICE_IDS = { static: 71, moving: 101, rotating: 106 } as const;
 
+/** Fixed / rotating turrets by barrel count: #121 / #122, two-way #123 / #124, four-way #125 / #126 */
+export const TURRET_IDS = { fixed: { 1: 121, 2: 123, 4: 125 }, spin: { 1: 122, 2: 124, 4: 126 } } as const;
+
+/** Palette / panel name of a turret kind */
+export function turretName(kind: Turret['kind'] | undefined, barrels: number | undefined): string {
+  if (kind === 'missile') return tr('ed.nameMissile');
+  if (kind !== 'fixed' && kind !== 'spin') return tr('ed.nameTurret');
+  const n = barrels === 2 || barrels === 4 ? barrels : 1;
+  if (kind === 'fixed') return tr(n === 4 ? 'ed.nameFixedTurret4' : n === 2 ? 'ed.nameFixedTurret2' : 'ed.nameFixedTurret');
+  return tr(n === 4 ? 'ed.nameSpinTurret4' : n === 2 ? 'ed.nameSpinTurret2' : 'ed.nameSpinTurret');
+}
+
 export const POWER_IDS: Record<PowerKind, number> = { switch: 94, pulley: 95, timer: 96, inverter: 97 };
 
 export const POWER_NAMES: Record<PowerKind, string> = {
@@ -147,7 +161,7 @@ export function toolLabel(t: ObjectTool): string {
   if (t.role === 'spot') return withBehavior(t.behavior, tr('ed.nameSpot'));
   if (t.role === 'fog') return fogName(t.fog);
   if (t.role === 'torch') return tr(t.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch');
-  if (t.role === 'turret') return tr(t.turret === 'missile' ? 'ed.nameMissile' : 'ed.nameTurret');
+  if (t.role === 'turret') return turretName(t.turret, t.barrels);
   if (t.special === 'disc' || t.special === 'blade') return withBehavior(t.behavior === 'moving' || t.behavior === 'rotating' ? t.behavior : 'static', tr(t.special === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (t.role !== 'path' && t.role !== 'wall') return ROLE_NAMES[t.role];
   const shape = t.shape === 'sector' ? tr(t.ring ? 'ed.shapeRing' : 'ed.shapeSector') : SHAPES.find(([k]) => k === t.shape)![1];
@@ -179,7 +193,7 @@ export function describeObject(o: MapObject): string {
   if (o.role === 'power') return POWER_NAMES[o.power?.kind ?? 'switch'];
   if (o.role === 'pulley') return tr('ed.colorName', { color: switchColor(o.pulley?.color ?? 0).name, name: tr('ed.namePulley') });
   if (o.role === 'fog') return withBehavior(beh, fogName(o.fog?.kind));
-  if (o.role === 'turret') return withBehavior(beh, tr(o.turret?.kind === 'missile' ? 'ed.nameMissile' : 'ed.nameTurret'));
+  if (o.role === 'turret') return withBehavior(beh, turretName(o.turret?.kind, o.turret?.barrels));
   if (o.role === 'torch') return withBehavior(beh, tr(o.torch?.carry ? 'ed.nameCarryTorch' : 'ed.nameTorch'));
   if (o.saw) return withBehavior(o.rotation ? 'rotating' : o.motion ? 'moving' : 'static', tr(o.saw.kind === 'disc' ? 'ed.nameDisc' : 'ed.nameBlade'));
   if (o.role === 'laser' || o.role === 'portal') return withBehavior(beh, tr('ed.colorName', { color: switchColor((o.laser ?? o.portal)!.color).name, name: ROLE_NAMES[o.role] }));
@@ -207,7 +221,11 @@ export function objectToolId(o: MapObject): number {
   if (o.role === 'conveyor') return SPECIAL_IDS.conveyor;
   if (o.role === 'luggage') return SPECIAL_IDS.luggage;
   if (o.role === 'pulley') return SPECIAL_IDS.pulley;
-  if (o.role === 'turret') return o.turret?.kind === 'missile' ? SPECIAL_IDS.missile : SPECIAL_IDS.turret;
+  if (o.role === 'turret') {
+    const k = o.turret?.kind;
+    if (k === 'fixed' || k === 'spin') return TURRET_IDS[k][o.turret?.barrels ?? 1];
+    return k === 'missile' ? SPECIAL_IDS.missile : SPECIAL_IDS.turret;
+  }
   if (o.fall) return SPECIAL_IDS.fall;
   if (o.role === 'trigger') return TRIGGER_IDS[o.trigger?.kind ?? 'switch'];
   if (o.vine) return o.motion ? SPECIAL_IDS.movingVine : SPECIAL_IDS.vine;

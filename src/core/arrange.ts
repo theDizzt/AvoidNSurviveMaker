@@ -99,6 +99,11 @@ export function turnObjects(objs: readonly MapObject[], t: Turn): MapObject[] {
     if (out.spike) out.spike.angle = turnAngle(out.spike.angle);
     if (out.laser) out.laser.angle = turnAngle(out.laser.angle);
     if (out.turret) out.turret.angle = turnAngle(out.turret.angle);
+    // A mirrored rotating turret turns the other way
+    if (out.turret?.kind === 'spin' && (t === 'flipH' || t === 'flipV')) {
+      if (out.turret.ccw) delete out.turret.ccw;
+      else out.turret.ccw = true;
+    }
     if (out.motion) {
       const dx = after.x - before.x;
       const dy = after.y - before.y;

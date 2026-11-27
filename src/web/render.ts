@@ -3140,7 +3140,41 @@ function drawTurret(ctx: CanvasRenderingContext2D, o: CompiledObject, t: number,
     ctx.translate(cx, cy);
     ctx.rotate(a);
     ctx.lineWidth = 1.2;
-    if (tu.kind === 'gun') {
+    if (tu.kind === 'fixed' || tu.kind === 'spin') {
+      // Fixed (#121) / rotating (#122) turret: 1, 2 or 4 barrels round a square (fixed) or round (rotating) head
+      const n = tu.barrels ?? 1;
+      for (let j = 0; j < n; j++) {
+        ctx.save();
+        ctx.rotate((j * Math.PI * 2) / n);
+        ctx.fillStyle = '#23262e';
+        ctx.fillRect(4 * k, -4 * k, 28 * k, 8 * k);
+        ctx.fillStyle = '#121419';
+        ctx.fillRect(27 * k, -5 * k, 5 * k, 10 * k);
+        ctx.restore();
+      }
+      ctx.beginPath();
+      if (tu.kind === 'fixed') ctx.roundRect(-12 * k, -12 * k, 24 * k, 24 * k, 3 * k);
+      else ctx.arc(0, 0, 14 * k, 0, Math.PI * 2);
+      const hg = ctx.createRadialGradient(-4 * k, -4 * k, 2 * k, 0, 0, 15 * k);
+      hg.addColorStop(0, '#9aa3b4');
+      hg.addColorStop(1, '#4a505d');
+      ctx.fillStyle = hg;
+      ctx.fill();
+      ctx.strokeStyle = '#1d2027';
+      ctx.stroke();
+      if (tu.kind === 'spin') {
+        // A yellow ring: it turns by itself
+        ctx.strokeStyle = '#f0b429';
+        ctx.lineWidth = 2 * k;
+        ctx.beginPath();
+        ctx.arc(0, 0, 9.5 * k, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = tu.always ? '#f0b429' : '#e04848';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.5 * k, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (tu.kind === 'gun') {
       // Barrel, then the head over its root
       ctx.fillStyle = '#23262e';
       ctx.fillRect(4 * k, -4.5 * k, 28 * k, 9 * k);

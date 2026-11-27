@@ -22,10 +22,10 @@
                                                      },
                                             "edge":  "#b2e9eb",
                                             "fill":  {
-                                                         "background":  "#168fb5",
-                                                         "color":  "#e1ffff",
-                                                         "pattern":  "waves",
-                                                         "size":  180,
+                                                         "background":  "#3cb9cc",
+                                                         "color":  "#c8f4f3",
+                                                         "pattern":  "waterSurface",
+                                                         "size":  256,
                                                          "type":  "pattern"
                                                      }
                                         },
@@ -70,10 +70,10 @@
                                                                          },
                                                                 "edge":  "#b2e9eb",
                                                                 "fill":  {
-                                                                             "background":  "#168fb5",
-                                                                             "color":  "#e1ffff",
-                                                                             "pattern":  "waves",
-                                                                             "size":  180,
+                                                                             "background":  "#3cb9cc",
+                                                                             "color":  "#c8f4f3",
+                                                                             "pattern":  "waterSurface",
+                                                                             "size":  256,
                                                                              "type":  "pattern"
                                                                          }
                                                             },

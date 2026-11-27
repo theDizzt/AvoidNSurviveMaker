@@ -48,6 +48,7 @@ const PATTERNS: [PatternKind, string][] = [
   ['clouds', t('pattern.clouds')],
   ['cloudBank', t('pattern.cloudBank')],
   ['waves', t('pattern.waves')],
+  ['waterSurface', t('pattern.waterSurface')],
   ['caustics', t('pattern.caustics')],
   ['pittedStone', t('pattern.pittedStone')],
   ['floodedRock', t('pattern.floodedRock')],

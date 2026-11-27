@@ -22,7 +22,7 @@ import { TEXT_BASE_FONTS } from './render';
 import { fontPicker } from './font-picker';
 
 import type { EditorSelection } from '../core/editor-document';
-import { POWER_NAMES, liquidName, radName, TRIGGER_NAMES, isButton, describeObject, objectToolId, ZONE_IDS, sizeText, REPEAT_OPTIONS, ROUTE_REPEAT_OPTIONS, EASING_OPTIONS, ROUTE_OPTIONS, DIRECTION_OPTIONS, newMotion, Command } from './editor-shared';
+import { POWER_NAMES, turretName, liquidName, radName, TRIGGER_NAMES, isButton, describeObject, objectToolId, ZONE_IDS, sizeText, REPEAT_OPTIONS, ROUTE_REPEAT_OPTIONS, EASING_OPTIONS, ROUTE_OPTIONS, DIRECTION_OPTIONS, newMotion, Command } from './editor-shared';
 
 export interface EditorPropertiesHost {
   readonly map: MapData;
@@ -1041,6 +1041,7 @@ export class EditorPropertiesPanel {
   /** Turret (#60) / missile launcher (#61): range, rate of fire, shot speed, aiming and anti-materiel rounds */
   turretProps(o: MapObject): HTMLElement[] {
     const t = o.turret!;
+    if (t.kind === 'fixed' || t.kind === 'spin') return this.multiTurretProps(o);
     const gun = t.kind === 'gun';
     const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
     const deg = (v: number) => {
@@ -1066,6 +1067,46 @@ export class EditorPropertiesPanel {
       ),
       this.toggle(tr('ed.turretPierce'), t.pierce, (on) => (t.pierce = on)),
       this.note(tr(gun ? 'ed.turretNote' : 'ed.missileNote')),
+    ];
+  }
+
+  /** Fixed (#121) / rotating (#122) turret, with 1, 2 or 4 barrels (#123–126) */
+  private multiTurretProps(o: MapObject): HTMLElement[] {
+    const t = o.turret!;
+    const spin = t.kind === 'spin';
+    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+    const deg = (v: number) => {
+      const a = ((Math.round(v) % 360) + 360) % 360;
+      return a > 180 ? a - 360 : a;
+    };
+    return [
+      this.heading(turretName(t.kind, t.barrels)),
+      this.group(
+        this.selectField<'1' | '2' | '4'>(tr('ed.turretBarrels'), String(t.barrels ?? 1) as '1' | '2' | '4', [['1', tr('ed.turretBarrels1')], ['2', tr('ed.turretBarrels2')], ['4', tr('ed.turretBarrels4')]], (v) => {
+          if (v === '1') delete t.barrels;
+          else t.barrels = Number(v) as 2 | 4;
+        }, true),
+        this.numField(tr('ed.turretRange'), t.range, (v) => (t.range = Math.round(clamp(v, 1, LIMITS.maxTurretRange))), 10),
+        this.numField(tr('ed.turretFireS'), t.fireMs / 1000, (v) => (t.fireMs = Math.round(clamp(v, LIMITS.minFireMs / 1000, LIMITS.maxDelay / 1000) * 1000)), 0.1),
+        this.numField(tr('ed.turretBulletSpeed'), t.speed, (v) => (t.speed = Math.round(clamp(v, 1, LIMITS.maxSpeed))), 10),
+        this.numField(tr(spin ? 'ed.turretSpinCenter' : 'ed.turretAngle'), t.angle, (v) => (t.angle = deg(v)), 15),
+        ...(spin
+          ? [
+            this.numField(tr('ed.turretTurnSpeed'), t.turnSpeed, (v) => (t.turnSpeed = Math.round(clamp(v, 0, LIMITS.maxRotSpeed))), 15),
+            this.selectField<'cw' | 'ccw'>(tr('ed.turretSpinDir'), t.ccw ? 'ccw' : 'cw', [['cw', tr('ed.clockwise')], ['ccw', tr('ed.counterClockwise')]], (v) => {
+              if (v === 'ccw') t.ccw = true;
+              else delete t.ccw;
+            }),
+            this.numField(tr('ed.turretArc'), t.arc, (v) => (t.arc = Math.round(clamp(v, 0, 360))), 15),
+          ]
+          : [this.numField(tr('ed.turretSight'), t.arc, (v) => (t.arc = Math.round(clamp(v, 0, 360))), 15)]),
+      ),
+      this.toggle(tr('ed.turretPierce'), t.pierce, (on) => (t.pierce = on)),
+      this.toggle(tr('ed.turretAlways'), !!t.always, (on) => {
+        if (on) t.always = true;
+        else delete t.always;
+      }),
+      this.note(tr(spin ? 'ed.spinTurretNote' : 'ed.fixedTurretNote')),
     ];
   }
 

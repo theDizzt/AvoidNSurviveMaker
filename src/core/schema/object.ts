@@ -169,7 +169,7 @@ export function createObjectSchema(context: ValidationContext) {
   const { motion, rotation, DEFAULT_MOTION, defaultRotation } = createMotionSchema(context);
   const { validateCoin } = createCoinSchema(context);
   const { validateCrystal } = createCrystalSchema(context);
-  const { validateTurret, DEFAULT_GUN, DEFAULT_MISSILE } = createTurretSchema(context);
+  const { validateTurret, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_FIXED, DEFAULT_SPIN } = createTurretSchema(context);
   const { validateConveyor } = createConveyorSchema(context);
   const { validateLuggage } = createLuggageSchema(context);
   const { validateElectric } = createElectricSchema(context);
@@ -264,5 +264,5 @@ export function createObjectSchema(context: ValidationContext) {
     return out;
   }
 
-  return { mapObject, DEFAULT_MOTION, defaultRotation, DEFAULT_BOULDER_WAVE, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_ICE_GRIP, DEFAULT_BLINK, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_SPOT, DEFAULT_TORCH_LIGHT, DEFAULT_SECRET_RADIUS };
+  return { mapObject, DEFAULT_MOTION, defaultRotation, DEFAULT_BOULDER_WAVE, DEFAULT_FALL, DEFAULT_PULLEY, DEFAULT_ICE_GRIP, DEFAULT_BLINK, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_FIXED, DEFAULT_SPIN, DEFAULT_SPOT, DEFAULT_TORCH_LIGHT, DEFAULT_SECRET_RADIUS };
 }

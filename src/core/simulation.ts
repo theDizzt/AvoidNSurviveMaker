@@ -1622,6 +1622,11 @@ export class Simulation {
     status: 'dead' | 'cleared', reason: EndReason | null, f: number,
     ta: number, xa: number, ya: number, tb: number, xb: number, yb: number,
   ): void {
+    // Commit what this tick shows (motion clocks, doors, laser beams) so the final frame draws
+    // what the run ended on, e.g. a laser that switched on in this very tick
+    this.clock.set(this.clockB);
+    for (const d of this.doors) this.doorOpen[d] = this.openB[d];
+    if (this.caster.any) this.beams = this.pendingBeams;
     this.status = status;
     this.endReason = reason;
     this.endTime = ta + (tb - ta) * f;

@@ -78,6 +78,26 @@ function wrap(a: number): number {
   return a;
 }
 
+/**
+ * A rotating turret's (#122 / #124 / #126) barrel turn from its rest direction at its own time
+ * (ms, radians): all the way round at `turnSpeed`, or back and forth across `arc` starting toward
+ * its turning direction.
+ */
+export function spinAim(t: Turret, time: number): number {
+  const sign = t.ccw ? -1 : 1;
+  const p = (t.turnSpeed * Math.PI * Math.max(0, time)) / 180_000;
+  if (t.arc >= 360) return wrap(sign * p);
+  const half = (t.arc * Math.PI) / 360;
+  if (half <= 0) return 0;
+  const m = p % (4 * half);
+  return sign * (m < half ? m : m < 3 * half ? 2 * half - m : m - 4 * half);
+}
+
+/** Barrels of a fixed / rotating turret (#121–126), evenly spaced round it */
+export function barrelCount(t: Turret): number {
+  return t.kind === 'fixed' || t.kind === 'spin' ? t.barrels ?? 1 : 1;
+}
+
 /** Where the barrel / tube rests and where the turret's center is at time t (map space) */
 export function turretPose(o: CompiledObject, t: Turret, time: number, out: { x: number; y: number; rest: number }): void {
   transformAt(o, time, tf);
@@ -193,8 +213,22 @@ export class TurretSystem {
         if (inRange && tb >= this.nextFire[i] && Math.abs(wrap(want - this.aim[i])) <= AIM_TOLERANCE) {
           this.fire(i, t, x, y, rest + this.aim[i], tb);
         }
-      } else if (inRange && tb >= this.nextFire[i]) {
-        this.fire(i, t, x, y, rest, tb);
+      } else if (t.kind === 'missile') {
+        if (inRange && tb >= this.nextFire[i]) this.fire(i, t, x, y, rest, tb);
+      } else {
+        // Fixed (#121) / rotating (#122) turrets: shots go straight out of every barrel
+        if (t.kind === 'spin') this.aim[i] = spinAim(t, st.timeOf(i));
+        if (tb < this.nextFire[i]) continue;
+        const n = barrelCount(t);
+        const base = rest + this.aim[i];
+        let shoot = t.always === true || (inRange && (t.kind === 'spin' || t.arc >= 360));
+        if (!shoot && inRange) {
+          // A fixed barrel only sees the cursor inside its sector
+          const half = (t.arc * Math.PI) / 360;
+          const to = Math.atan2(cy - y, cx - x);
+          for (let k = 0; k < n && !shoot; k++) shoot = Math.abs(wrap(to - base - (k * Math.PI * 2) / n)) <= half;
+        }
+        if (shoot) for (let k = 0; k < n; k++) this.fire(i, t, x, y, base + (k * Math.PI * 2) / n, tb);
       }
     }
   }

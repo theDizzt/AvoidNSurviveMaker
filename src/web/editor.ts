@@ -19,7 +19,7 @@ import type { FogKind, Liquid, MapData, MapObject, Point, PolyPoint, PowerKind, 
 import { switchColor } from './localized/colors';
 import { boulderShape, spikeShape } from '../core/hazards';
 import { BeamCaster } from '../core/laser';
-import { createEmptyMap, DEFAULT_BLINK, DEFAULT_FALL, DEFAULT_ICE_GRIP, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_PULLEY, DEFAULT_SECRET_RADIUS, DEFAULT_SPOT, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS, validateMap } from './localized/validate';
+import { createEmptyMap, DEFAULT_BLINK, DEFAULT_FALL, DEFAULT_ICE_GRIP, DEFAULT_GUN, DEFAULT_MISSILE, DEFAULT_FIXED, DEFAULT_SPIN, DEFAULT_PULLEY, DEFAULT_SECRET_RADIUS, DEFAULT_SPOT, DEFAULT_TORCH_LIGHT, defaultRotation, LIMITS, validateMap } from './localized/validate';
 import { DEFAULT_AURA } from '../core/radiation';
 import { DEFAULT_MAGNET } from '../core/magnet';
 import { DEFAULT_GEAR, DEFAULT_PENDULUM, DEFAULT_PRESS, gearRing, handRing, pendulumRing } from '../core/machines';
@@ -32,7 +32,8 @@ import { DEFAULT_BADGE, DEFAULT_DESIGN } from './localized/theme-pack';
 
 import { checkSymmetry, mirrorPoint, SYMMETRY_MODES, type SymmetryMode, type SymmetryReport } from '../core/symmetry';
 import { drawFogAreas } from './fog';
-import { Behavior, ObjectTool, Tool, SHAPES, ICE_IDS, SPECIAL_IDS, type ShapeKind, GROUPS, ICONS, isButton, isSquare, toolLabel, objectToolId, zoneToolId, type ZoneTool, sizeText, Hit, Handle, Drag, MAP_SIZES, GRID, HANDLE_PX, PIVOT_SNAP_PX, ROTATE_HANDLE_PX, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP, IDENTITY, newMotion, EditorElements, clone, CommandId, Command, ARROWS, SHORTCUTS, rectFromCorners, rectCorners } from './editor-shared';
+import { Behavior, ObjectTool, Tool, SHAPES, ICE_IDS, SPECIAL_IDS, type ShapeKind, GROUPS, ICONS, isButton, isSquare, toolLabel, turretName, objectToolId, zoneToolId, type ZoneTool, sizeText, Hit, Handle, Drag, MAP_SIZES, GRID, HANDLE_PX, PIVOT_SNAP_PX, ROTATE_HANDLE_PX, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP, IDENTITY, newMotion, EditorElements, clone, CommandId, Command, ARROWS, SHORTCUTS, rectFromCorners, rectCorners } from './editor-shared';
+import { barrelCount } from '../core/turret';
 import { EditorDocument, type EditorSelection as Selection } from '../core/editor-document';
 import * as editCommands from '../core/editor-commands';
 import { loadEditorDraft, saveEditorDraft, loadEditorPreference, saveEditorPreference } from './editor-storage';
@@ -695,7 +696,20 @@ export class Editor {
     addButton(row, mirror, `${svg('<path d="M4 20 L20 4" stroke-width="4" stroke="#8fa3bf"/><path d="M4 20 L20 4" stroke-width="1.4" stroke="#fff"/>')}<span class="pal-num">38</span>`, tr('ed.palMirror'), 'pal-mirror');
     const turretTool = (kind: 'gun' | 'missile'): ObjectTool => ({ kind: 'object', role: 'turret', behavior: 'static', shape: 'rect', turret: kind });
     addButton(row, turretTool('gun'), `${svg('<rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="11" cy="12" r="5" fill="#fff"/><path d="M11 12 L22 12" stroke-width="3.2" stroke-linecap="round"/><circle cx="11" cy="12" r="2.2"/>')}<span class="pal-num">60</span>`, tr('ed.palTurret'), 'pal-turret');
+    // Fixed / rotating turrets (#121–126): a square or round head with 1, 2 or 4 barrels
+    const multiTurret = (kind: 'fixed' | 'spin', barrels: 1 | 2 | 4): ObjectTool => ({ kind: 'object', role: 'turret', behavior: 'static', shape: 'rect', turret: kind, barrels });
+    const turretIcon = (kind: 'fixed' | 'spin', n: number) => {
+      const guns = Array.from({ length: n }, (_, k) => `<path d="M12 12 L21.5 12" stroke-width="3" stroke-linecap="round" transform="rotate(${(k * 360) / n} 12 12)"/>`).join('');
+      const head = kind === 'fixed' ? '<rect x="7.5" y="7.5" width="9" height="9" rx="1.2" fill="#fff"/>' : '<circle cx="12" cy="12" r="5" fill="#fff"/><path d="M5.2 7 A8 8 0 0 1 9 4.6" fill="none" stroke="#f0b429" stroke-width="1.6"/>';
+      return svg(`<rect x="3" y="3" width="18" height="18" rx="2.5"/>${guns}${head}<circle cx="12" cy="12" r="2"/>`);
+    };
     addButton(row, turretTool('missile'), `${svg('<rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M12 4.5 C14 6.5 14.4 9 14.4 12 L14.4 16 L9.6 16 L9.6 12 C9.6 9 10 6.5 12 4.5 Z" fill="#fff"/><path d="M10.2 17 L12 20.5 L13.8 17 Z" fill="#ff8a1f"/>')}<span class="pal-num">61</span>`, tr('ed.palMissile'), 'pal-turret');
+    addButton(row, multiTurret('fixed', 1), `${turretIcon('fixed', 1)}<span class="pal-num">121</span>`, turretName('fixed', 1), 'pal-turret');
+    addButton(row, multiTurret('spin', 1), `${turretIcon('spin', 1)}<span class="pal-num">122</span>`, turretName('spin', 1), 'pal-turret');
+    addButton(row, multiTurret('fixed', 2), `${turretIcon('fixed', 2)}<span class="pal-num">123</span>`, turretName('fixed', 2), 'pal-turret');
+    addButton(row, multiTurret('spin', 2), `${turretIcon('spin', 2)}<span class="pal-num">124</span>`, turretName('spin', 2), 'pal-turret');
+    addButton(row, multiTurret('fixed', 4), `${turretIcon('fixed', 4)}<span class="pal-num">125</span>`, turretName('fixed', 4), 'pal-turret');
+    addButton(row, multiTurret('spin', 4), `${turretIcon('spin', 4)}<span class="pal-num">126</span>`, turretName('spin', 4), 'pal-turret');
 
     // Switches and devices: switches, event zones, portal, door, pulley
     row = section(tr('ed.catDevices'));
@@ -1660,7 +1674,11 @@ export class Editor {
     if (tool.role === 'secret') o.secret = { radius: DEFAULT_SECRET_RADIUS };
     if (tool.special === 'fall') o.fall = { ...DEFAULT_FALL };
     if (tool.role === 'pulley') o.pulley = { color: this.lastColor, ...DEFAULT_PULLEY };
-    if (tool.role === 'turret') o.turret = { ...(tool.turret === 'missile' ? DEFAULT_MISSILE : DEFAULT_GUN) };
+    if (tool.role === 'turret') {
+      const k = tool.turret;
+      o.turret = { ...(k === 'missile' ? DEFAULT_MISSILE : k === 'fixed' ? DEFAULT_FIXED : k === 'spin' ? DEFAULT_SPIN : DEFAULT_GUN) };
+      if ((k === 'fixed' || k === 'spin') && (tool.barrels === 2 || tool.barrels === 4)) o.turret.barrels = tool.barrels;
+    }
     if (tool.role === 'laser') o.laser = { color: this.lastColor, angle: 0, on: true };
     if (tool.role === 'portal') {
       const same = this.map.objects.filter((m) => m.portal?.color === this.lastColor).length;
@@ -2838,16 +2856,20 @@ export class Editor {
       ctx.fill();
       ctx.stroke();
       ctx.setLineDash([]);
-      if (tu.kind === 'gun' && tu.arc < 360) {
-        const a = (tu.angle * Math.PI) / 180;
+      // The barrel's arc (#60), a fixed turret's sight sectors (#121), a rotating turret's sweep (#122)
+      if ((tu.kind === 'gun' || tu.kind === 'fixed' || tu.kind === 'spin') && tu.arc < 360) {
+        const n = barrelCount(tu);
         const half = (tu.arc * Math.PI) / 360;
         ctx.fillStyle = 'rgba(224,72,72,0.12)';
-        ctx.beginPath();
-        ctx.moveTo(c.x, c.y);
-        ctx.arc(c.x, c.y, tu.range, a - half, a + half);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        for (let k = 0; k < n; k++) {
+          const a = (tu.angle * Math.PI) / 180 + (k * Math.PI * 2) / n;
+          ctx.beginPath();
+          ctx.moveTo(c.x, c.y);
+          ctx.arc(c.x, c.y, tu.range, a - half, a + half);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
       }
       ctx.restore();
     }

@@ -77,6 +77,102 @@ function mixInto(out: number[], a: readonly number[], b: readonly number[], k: n
   out[2] = a[2] + (b[2] - a[2]) * t;
 }
 
+/**
+ * Clear shallow water seen from above (chapter 10 beach): a net of wobbly bright light lines
+ * (`color`) over the water (`background`), thickening where they meet; each cell holds a darker
+ * pool set a little down and right of its middle, and a few small air bubbles drift about.
+ */
+function waterSurfaceTile(tile: HTMLCanvasElement, f: Extract<Fill, { type: 'pattern' }>): void {
+  const W = tile.width;
+  const g = tile.getContext('2d');
+  if (!g || W <= 0) return;
+  const TAU = Math.PI * 2;
+  // One cell center jittered inside each square of a 3 × 3 grid: cells of even size, no big gaps
+  const G = 3;
+  const n = G * G;
+  const random = seeded(10101);
+  const px = Array.from({ length: n }, (_, k) => ((k % G) + 0.15 + random() * 0.7) * (W / G));
+  const py = Array.from({ length: n }, (_, k) => (Math.floor(k / G) + 0.15 + random() * 0.7) * (W / G));
+  const phase = Array.from({ length: 6 }, () => random() * TAU);
+  const water = rgbOf(f.background);
+  const light = rgbOf(f.color);
+  const deep = rgbOf(mix(f.background, '#0a4f66', 0.22));
+  const lit = rgbOf(mix(f.background, f.color, 0.14));
+  // F1, F2 and F3: distances to the nearest three cell centers, round the wrapping tile
+  const near = [0, 0, 0];
+  const nearest = (x: number, y: number): void => {
+    let d1 = Infinity, d2 = Infinity, d3 = Infinity;
+    for (let k = 0; k < n; k++) {
+      let dx = Math.abs(x - px[k]);
+      let dy = Math.abs(y - py[k]);
+      dx %= W; dy %= W;
+      if (dx > W / 2) dx = W - dx;
+      if (dy > W / 2) dy = W - dy;
+      const dd = dx * dx + dy * dy;
+      if (dd < d1) { d3 = d2; d2 = d1; d1 = dd; } else if (dd < d2) { d3 = d2; d2 = dd; } else if (dd < d3) d3 = dd;
+    }
+    near[0] = Math.sqrt(d1); near[1] = Math.sqrt(d2); near[2] = Math.sqrt(d3);
+  };
+  // Wobble: whole waves per tile in both directions, so the warp repeats with the tile
+  const warpX = (x: number, y: number) => x + W * (0.035 * Math.sin((TAU * 2 * y) / W + phase[0]) + 0.018 * Math.sin((TAU * (3 * y + x)) / W + phase[1]));
+  const warpY = (x: number, y: number) => y + W * (0.035 * Math.sin((TAU * 2 * x) / W + phase[2]) + 0.018 * Math.sin((TAU * (3 * x - y)) / W + phase[3]));
+  const line = W * 0.0055;
+  const fillet = W * 0.009;
+  const pool = W * 0.016;
+  const shift = W * 0.01;
+  const img = g.createImageData(W, W);
+  const d = img.data;
+  const out = [0, 0, 0];
+  const soft = Math.max(1, W / 400);
+  for (let y = 0; y < W; y++) {
+    for (let x = 0; x < W; x++) {
+      const wx = warpX(x, y), wy = warpY(x, y);
+      // How far into its cell this point lies, from the light line round it
+      nearest(wx, wy);
+      const edge = (near[1] - near[0]) / 2;
+      // Lines swell into rounded knots where three cells meet
+      const knot = (near[2] - near[0]) / 2;
+      const width = line * (1 + 0.35 * Math.sin((TAU * (x + 2 * y)) / W + phase[4])) + fillet * Math.exp(-knot / fillet);
+      // The darker pool: the same cell shape, shrunk and shifted
+      nearest(wx - shift, wy - shift);
+      const inner = (near[1] - near[0]) / 2;
+      mixInto(out, lit, water, (edge - width) / (W * 0.012));
+      mixInto(out, out, deep, (inner - pool - width) / soft);
+      mixInto(out, out, light, (width - edge) / soft + 0.5);
+      const i = (y * W + x) * 4;
+      d[i] = out[0]; d[i + 1] = out[1]; d[i + 2] = out[2]; d[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  // Small air bubbles in clusters, outlined in the light color
+  const s = f.size;
+  // (the context is already scaled to the tile's size units)
+  g.save();
+  g.strokeStyle = f.color;
+  g.fillStyle = mix(f.background, f.color, 0.35);
+  for (let c = 0; c < 3; c++) {
+    const cx = random() * s, cy = random() * s;
+    const count = 2 + Math.floor(random() * 4);
+    for (let b = 0; b < count; b++) {
+      const r = s * (0.006 + random() * 0.012);
+      const bx = cx + (random() - 0.5) * s * 0.05;
+      const by = cy + (random() - 0.5) * s * 0.05;
+      g.lineWidth = s * 0.003;
+      wrapped(s, (dx, dy) => {
+        g.globalAlpha = 0.85;
+        g.beginPath();
+        g.arc(bx + dx, by + dy, r, 0, TAU);
+        g.stroke();
+        g.globalAlpha = 0.5;
+        g.beginPath();
+        g.arc(bx + dx - r * 0.3, by + dy - r * 0.3, r * 0.3, 0, TAU);
+        g.fill();
+      });
+    }
+  }
+  g.restore();
+}
+
 /** Shared tile renderer for the game and editor swatches. */
 export function createPatternTile(f: Extract<Fill, { type: 'pattern' }>): HTMLCanvasElement {
   const s = f.size;
@@ -1023,6 +1119,10 @@ export function createPatternTile(f: Extract<Fill, { type: 'pattern' }>): HTMLCa
         // The crust glows red near its edge
         mixInto(out, out, lava, Math.exp(-(edge - gap) / (W * 0.02)) * 0.7);
       });
+      break;
+    }
+    case 'waterSurface': {
+      waterSurfaceTile(tile, f);
       break;
     }
     case 'concrete': {
