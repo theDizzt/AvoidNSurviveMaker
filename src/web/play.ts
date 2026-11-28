@@ -484,7 +484,7 @@ export class PlayController {
     }
 
     if (sim.status === 'playing') {
-      const target = now - this.t0 - IDLE_MARGIN_MS;
+      const target = now - this.t0// - IDLE_MARGIN_MS;
       if (target > sim.time) {
         const simStart = performance.now();
         sim.advanceTo(target);
