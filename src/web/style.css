@@ -96,6 +96,7 @@
   /* 1 = Transparency option off: panels become opaque (see .no-transparency) */
   --opaque: 0;
   color-scheme: light;
+  --cursor-url:url("")
 }
 /* Chinese: every hanzi from the Chinese fonts (main text → ZhMain, titles → ZhTitle), the rest from the UI fonts */
 :root:lang(zh) {
@@ -307,7 +308,7 @@ main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; paddin
 }
 #play-canvas { cursor: crosshair; }
 /* During a run the system cursor is replaced by the 8×8 virtual cursor drawn on the canvas */
-.play-view.running, .play-view.running * { cursor: none !important; }
+.play-view.running, .play-view.running * { cursor: var(--cursor-url), auto !important; }
 /* Pointer skin #0: no skin, the system cursor stays visible during a run */
 .play-view.running.native-cursor, .play-view.running.native-cursor * { cursor: default !important; }
 

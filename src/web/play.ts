@@ -170,7 +170,7 @@ export class PlayController {
     el.canvas.before(this.bgLayer);
     this.cursorLayer = document.createElement('canvas');
     this.cursorLayer.className = 'play-cursor';
-    this.cursorLayer.style.visibility = 'hidden';
+    this.cursorLayer.style.display = 'none';
     this.cursorLayer.style.width = `${CURSOR_SPRITE_PX}px`;
     this.cursorLayer.style.height = `${CURSOR_SPRITE_PX}px`;
     this.cursorLayer.setAttribute('aria-hidden', 'true');
@@ -415,7 +415,7 @@ export class PlayController {
     const sim = this.sim;
     const show = this.visible && !!sim && sim.status === 'playing' && skin.pointer !== 0 && !this.coveredCursor && !!this.mapTransform;
     if (!show) {
-      if (this.cursorShown) st.visibility = 'hidden';
+      if (this.cursorShown) st.display = 'none';
       this.cursorShown = false;
       return;
     }
@@ -425,26 +425,18 @@ export class PlayController {
       this.cursorScaleY = canvas.clientHeight / canvas.height;
       this.cursorLeft = canvas.offsetLeft;
       this.cursorTop = canvas.offsetTop;
-      const pixels = Math.ceil(CURSOR_SPRITE_PX * (window.devicePixelRatio || 1));
+      const pixels = CURSOR_SPRITE_PX;
       const key = `${pixels}:${skin.pointer}:${skin.primary}:${skin.accent}`;
       if (key !== this.cursorSpriteKey) {
         layer.width = layer.height = pixels;
-        const scale = pixels / CURSOR_SPRITE_PX;
-        this.cursorCtx.setTransform(scale, 0, 0, scale, 0, 0);
+        this.cursorCtx.setTransform(1, 0, 0, 1, 0, 0);
         drawPointer(this.cursorCtx, skin, CURSOR_SPRITE_PX / 2, CURSOR_SPRITE_PX / 2, 1, CURSOR_PX);
+        const cursorImg = this.cursorLayer.toDataURL()
+        document.documentElement.style.setProperty('--cursor-url', `url('${cursorImg}') ${CURSOR_SPRITE_PX/2} ${CURSOR_SPRITE_PX/2}`);
         this.cursorSpriteKey = key;
       }
     }
     if (!this.cursorSpriteKey) return;
-    const m = this.mapTransform!;
-    const x = this.cursorLeft + (m.a * sim.x + m.c * sim.y + m.e) * this.cursorScaleX - CURSOR_SPRITE_PX / 2;
-    const y = this.cursorTop + (m.b * sim.x + m.d * sim.y + m.f) * this.cursorScaleY - CURSOR_SPRITE_PX / 2;
-    const position = `translate3d(${x}px, ${y}px, 0)`;
-    if (position !== this.cursorPosition) {
-      st.transform = position;
-      this.cursorPosition = position;
-    }
-    if (!this.cursorShown) st.visibility = 'visible';
     this.cursorShown = true;
   }
 
